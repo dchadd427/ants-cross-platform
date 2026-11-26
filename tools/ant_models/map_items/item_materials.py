@@ -154,8 +154,8 @@ def register_item_materials() -> None:
         MaterialSpec("item_mush_spot", (0.30, 0.88, 0.54, 1.0), 0.00, 0.56, texture_family="organic_flesh", normal_scale=0.32),
         MaterialSpec("item_mush_stem", (0.66, 0.63, 0.58, 1.0), 0.00, 0.72, texture_family="wood", normal_scale=0.40),
         # --- Rocks, Moss, Anthills & Gameplay Gear ---
-        MaterialSpec("item_stone_granite", (0.56, 0.56, 0.54, 1.0), 0.02, 0.84, texture_family="stone", normal_scale=0.58),
-        MaterialSpec("item_stone_quartz", (0.66, 0.66, 0.64, 1.0), 0.03, 0.42, texture_family="stone", normal_scale=0.14),
+        MaterialSpec("item_stone_granite", (0.56, 0.56, 0.54, 1.0), 0.01, 0.90, texture_family="stone", normal_scale=0.62),
+        MaterialSpec("item_stone_quartz", (0.66, 0.66, 0.64, 1.0), 0.02, 0.64, texture_family="stone", normal_scale=0.24),
         MaterialSpec("item_stone_moss", (0.28, 0.76, 0.16, 1.0), 0.00, 0.88, texture_family="soil", normal_scale=0.64),
         MaterialSpec("item_soil_mound", (0.64, 0.54, 0.44, 1.0), 0.00, 0.92, texture_family="soil", normal_scale=0.78),
         MaterialSpec("item_soil_grey", (0.68, 0.65, 0.58, 1.0), 0.00, 0.92, texture_family="soil", normal_scale=0.78),

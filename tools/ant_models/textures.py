@@ -585,21 +585,22 @@ def _build_leaf_vein_pack(size: int) -> TexturePack:
 
 
 def _build_stone_pack(size: int) -> TexturePack:
-    """Weathered fractured granite/rock: crystalline mineral facets, fissures, and gritty pores."""
-    f1, edge = _tile_voronoi_f1_f2(size, 14, seed=801)
-    f2_fine = _tile_pores(size, 32, seed=802)
-    grit = _tile_noise(size, 44, 44, seed=803)
-    mottle = _tile_noise(size, 8, 8, seed=804)
-    crack = _smoothstep(0.02, 0.16, edge)
-    height = np.clip(0.36 * crack + 0.26 * (1.0 - f1) + 0.20 * grit + 0.18 * mottle, 0.0, 1.0)
-    albedo = 0.70 + 0.12 * crack + 0.10 * mottle + 0.08 * (1.0 - f2_fine)
-    rough_mult = 0.68 + 0.22 * (1.0 - crack) + 0.10 * grit
+    """Natural weathered granite & river-stone micro-grain: fine mineral speckles, subtle strata & organic grit (zero cobble tiles)."""
+    macro = _tile_noise(size, 6, 6, seed=804)
+    mid = _tile_noise(size, 16, 14, seed=801)
+    fine = _tile_noise(size, 36, 36, seed=803)
+    speck = _tile_noise(size, 56, 56, seed=805)
+    pores = _tile_pores(size, 34, seed=802)
+    pit = _smoothstep(0.10, 0.34, pores)
+    height = np.clip(0.32 * macro + 0.28 * mid + 0.22 * fine + 0.18 * pit, 0.0, 1.0)
+    albedo = 0.74 + 0.11 * macro + 0.08 * mid + 0.05 * speck + 0.04 * pit
+    rough_mult = 0.68 + 0.18 * (1.0 - pit) + 0.14 * (1.0 - speck)
     return TexturePack(
         family="stone",
         size=size,
-        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.66, 1.0)),
-        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=5.6)),
-        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.65, 1.0)),
+        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.68, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=3.4)),
+        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.62, 1.0)),
     )
 
 

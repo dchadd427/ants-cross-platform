@@ -279,18 +279,22 @@ def build_bigrock4() -> SceneBuilder:
         return out
 
     def _rose_porphyry_color(pos: np.ndarray, nrm: np.ndarray) -> np.ndarray:
-        up = np.clip(nrm[:, 1] * 0.6 + 0.4, 0.0, 1.0)[:, None]
-        f1 = np.sin(pos[:, 0] * 24.0 + pos[:, 2] * 20.0) * np.cos(pos[:, 1] * 26.0 - pos[:, 0] * 16.0)
-        f2 = np.sin(pos[:, 0] * 42.0 - pos[:, 2] * 38.0) * np.cos(pos[:, 2] * 34.0 + pos[:, 1] * 44.0)
-        crimson = np.array([[0.80, 0.24, 0.36]], dtype=np.float64)
-        rose = np.array([[1.00, 0.56, 0.66]], dtype=np.float64)
-        cream = np.array([[1.00, 0.90, 0.88]], dtype=np.float64)
-        plum = np.array([[0.48, 0.16, 0.26]], dtype=np.float64)
-        w_rose = np.clip(f1 * 0.85 + 0.52, 0.0, 1.0)[:, None]
-        w_cream = np.clip((f2 - 0.30) * 3.5, 0.0, 1.0)[:, None]
-        col = plum * (1.0 - up) + (crimson * (1.0 - w_rose) + rose * w_rose) * up
-        col = col * (1.0 - w_cream * 0.78) + cream * (w_cream * 0.78)
-        return np.clip(col, 0.10, 1.0)
+        up = np.clip(nrm[:, 1] * 0.55 + 0.45, 0.0, 1.0)[:, None]
+        # Fine crisp porphyry granite mineral grain (dusty rose-mauve feldspar + warm beige quartz + dark plum biotite), zero meaty streaks!
+        f1 = np.sin(pos[:, 0] * 38.0 + pos[:, 2] * 34.0) * np.cos(pos[:, 1] * 44.0 - pos[:, 0] * 28.0)
+        f2 = np.sin(pos[:, 0] * 68.0 - pos[:, 2] * 62.0) * np.cos(pos[:, 2] * 58.0 + pos[:, 1] * 72.0)
+        f3 = np.sin((pos[:, 0] + pos[:, 1] * 0.8) * 92.0) * np.cos((pos[:, 2] - pos[:, 0] * 0.7) * 86.0)
+        dusty_rose = np.array([[0.82, 0.44, 0.50]], dtype=np.float64)
+        pale_pink = np.array([[0.96, 0.66, 0.70]], dtype=np.float64)
+        warm_quartz = np.array([[0.90, 0.86, 0.80]], dtype=np.float64)
+        biotite = np.array([[0.46, 0.28, 0.34]], dtype=np.float64)
+        w_pink = np.clip(f1 * 0.65 + 0.50, 0.0, 1.0)[:, None]
+        w_quartz = np.clip((f2 - 0.12) * 2.6, 0.0, 1.0)[:, None]
+        w_dark = np.clip((f3 - 0.48) * 3.0, 0.0, 1.0)[:, None]
+        col = biotite * (1.0 - up) + (dusty_rose * (1.0 - w_pink) + pale_pink * w_pink) * up
+        col = col * (1.0 - w_quartz * 0.68) + warm_quartz * (w_quartz * 0.68)
+        col = col * (1.0 - w_dark * 0.38) + biotite * (w_dark * 0.38)
+        return np.clip(col, 0.14, 1.0)
 
     return _sculpt_rock(
         "item_bigrock4",

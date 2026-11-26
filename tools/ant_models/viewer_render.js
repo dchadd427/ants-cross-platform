@@ -329,6 +329,18 @@
   }
   vec3 acesFilm(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
   vec3 linearToSrgb(vec3 c) { return mix(c * 12.92, 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c)); }
+  // Lightweight mobile-friendly 3D world-space value noise for seamless stone mineral grain, quartz sparkle & organic food micro-relief
+  float hash31(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.yzx + 33.33); return fract((p.x + p.y) * p.z); }
+  float noise3(vec3 p) {
+    vec3 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float n00 = mix(hash31(i), hash31(i + vec3(1.0, 0.0, 0.0)), f.x);
+    float n10 = mix(hash31(i + vec3(0.0, 1.0, 0.0)), hash31(i + vec3(1.0, 1.0, 0.0)), f.x);
+    float n01 = mix(hash31(i + vec3(0.0, 0.0, 1.0)), hash31(i + vec3(1.0, 0.0, 1.0)), f.x);
+    float n11 = mix(hash31(i + vec3(0.0, 1.0, 1.0)), hash31(i + vec3(1.0, 1.0, 1.0)), f.x);
+    return mix(mix(n00, n10, f.y), mix(n01, n11, f.y), f.z);
+  }
+  float fbm3(vec3 p) { return noise3(p) * 0.55 + noise3(p * 2.13 + vec3(13.7, 7.1, 4.3)) * 0.30 + noise3(p * 4.41 + vec3(5.2, 19.4, 11.8)) * 0.15; }
 
   void main() {
     if (v_worldPos.y < -0.006) discard;
@@ -340,48 +352,85 @@
     if (!gl_FrontFacing) N = -N;
     float normSlope = 0.0;
     if (u_hasNormalTex == 1 && u_normalScale > 0.0) N = applyNormalMap(N, v_worldPos, v_uv, normSlope);
+    // Subtle 3D world-space micro-perturbation for geological stone (5) & wet organic food (6) — zero UV seams!
+    float stoneGrain = 0.5, stoneFine = 0.5;
+    if (u_matKind == 5) {
+      stoneGrain = fbm3(v_worldPos * 16.0);
+      stoneFine = noise3(v_worldPos * 58.0);
+      float gx = fbm3(v_worldPos * 22.0 + vec3(0.012, 0.0, 0.0)) - fbm3(v_worldPos * 22.0 - vec3(0.012, 0.0, 0.0));
+      float gz = fbm3(v_worldPos * 22.0 + vec3(0.0, 0.0, 0.012)) - fbm3(v_worldPos * 22.0 - vec3(0.0, 0.0, 0.012));
+      float pert = mix(0.24, 0.10, 1.0 - smoothstep(0.38, 0.72, u_roughness));
+      N = normalize(N + vec3(-gx, 0.0, -gz) * pert);
+    } else if (u_matKind == 6) {
+      float ripX = noise3(v_worldPos * 24.0 + vec3(0.015, 0.0, 0.0)) - noise3(v_worldPos * 24.0 - vec3(0.015, 0.0, 0.0));
+      float ripZ = noise3(v_worldPos * 24.0 + vec3(0.0, 0.0, 0.015)) - noise3(v_worldPos * 24.0 - vec3(0.0, 0.0, 0.015));
+      N = normalize(N + vec3(-ripX, 0.0, -ripZ) * 0.055);
+    }
     vec3 V = u_isOrtho == 1 ? normalize(u_viewDir) : normalize(u_cameraPos - v_worldPos);
 
     vec4 baseSample = texture(u_baseTex, v_uv);
     vec4 mrSample = texture(u_mrTex, v_uv);
     float rough = clamp(u_roughness * mrSample.g, 0.04, 0.98);
     float met = clamp(u_metallic * mrSample.b, 0.0, 1.0);
+    if (u_matKind == 5) {
+      rough = clamp(rough + (stoneGrain - 0.5) * 0.14 + (stoneFine - 0.5) * 0.08, 0.46, 0.96);
+    } else if (u_matKind == 4) {
+      float fMicro = noise3(v_worldPos * 42.0);
+      rough = clamp(rough + (fMicro - 0.5) * 0.10, 0.12, 0.96);
+    }
     float microCav = 1.0;
     if (u_hasNormalTex == 1) {
       float pitDepth = smoothstep(0.56, 0.96, mrSample.g);
-      microCav = clamp(1.0 - (pitDepth * 0.55 + clamp(normSlope, 0.0, 1.0) * 0.52) * mix(0.16, 0.05, met), 0.80, 1.0);
+      microCav = clamp(1.0 - (pitDepth * 0.58 + clamp(normSlope, 0.0, 1.0) * 0.56) * mix(0.22, 0.05, met), 0.74, 1.0);
     }
+    if (u_matKind == 5) {
+      microCav *= mix(0.86, 1.08, stoneGrain) * mix(0.93, 1.06, stoneFine);
+    } else if (u_matKind == 4) {
+      microCav *= mix(0.92, 1.05, noise3(v_worldPos * 32.0));
+    }
+    // Preserve pure grayscale AO on ants while honoring true dark/saturated sculptor vertex tints on map items!
     vec3 bakedCol = clamp(v_color, 0.0, 1.0);
     float vMax = max(max(bakedCol.r, bakedCol.g), bakedCol.b);
+    float vMin = min(min(bakedCol.r, bakedCol.g), bakedCol.b);
+    float isGrayAo = smoothstep(0.014, 0.003, vMax - vMin) * smoothstep(0.40, 0.46, vMax);
     vec3 vChroma = vMax > 1e-4 ? (bakedCol / vMax) : vec3(1.0);
-    vec3 albedo = max(u_baseColor * baseSample.rgb * vChroma * microCav, 0.0);
+    vec3 vAlbedoMul = mix(bakedCol, vChroma, isGrayAo);
+    vec3 albedo = max(u_baseColor * baseSample.rgb * vAlbedoMul * microCav, 0.0);
 
-    // Clearcoat for glossy glass/wet/tomato/eye (1), chitin carapace (2), and subtle waxy cuticle on foliage (3)
-    float coatW = u_matKind == 1 ? 0.42 * (1.0 - smoothstep(0.16, 0.44, rough))
-                : (u_matKind == 2 ? 0.38 : (u_matKind == 3 ? 0.14 : 0.0));
-    float coatR = u_matKind == 2 ? 0.26 : (u_matKind == 3 ? 0.36 : 0.14);
+    // Clearcoat for glossy glass/candy (1), chitin (2), foliage (3), and wet fried-egg/liquid glaze (6)
+    float coatW = u_matKind == 1 ? 0.46 * (1.0 - smoothstep(0.16, 0.46, rough))
+                : (u_matKind == 2 ? 0.38 : (u_matKind == 3 ? 0.14 : (u_matKind == 6 ? 0.68 : 0.0)));
+    float coatR = u_matKind == 2 ? 0.26 : (u_matKind == 3 ? 0.36 : (u_matKind == 6 ? 0.085 : 0.13));
     float keyCoat = u_matKind == 2 ? 0.50 : coatW;
     vec3 coatTint = u_matKind == 2 ? mix(vec3(1.0), clamp(albedo * 1.9 + vec3(0.24), 0.0, 1.0), 0.38) : vec3(1.0);
     float keyDot = max(dot(N, u_keyDir), 0.0);
     float spotFocus = mix(u_spotParams.x, u_spotParams.y, pow(keyDot, u_spotParams.z));
     vec3 F0 = mix(vec3(0.045), albedo, met), specAcc = vec3(0.0);
     vec3 Lo = evalLight(u_keyDir, u_keyColor * spotFocus, N, V, albedo, met, rough, F0, keyCoat, coatR, coatTint, specAcc)
-            + evalLight(u_fillDir, u_fillColor, N, V, albedo, met, rough, F0, coatW * 0.18, coatR, coatTint, specAcc)
-            + evalLight(u_rimDir, u_rimColor, N, V, albedo, met, rough, F0, coatW * 0.24, coatR, coatTint, specAcc);
+            + evalLight(u_fillDir, u_fillColor, N, V, albedo, met, rough, F0, coatW * 0.22, coatR, coatTint, specAcc)
+            + evalLight(u_rimDir, u_rimColor, N, V, albedo, met, rough, F0, coatW * 0.28, coatR, coatTint, specAcc);
+    if (u_matKind == 5) {
+      // Subtle real quartz / mica crystal micro-glints catching key light on weathered granite & river stone!
+      vec3 Hk = normalize(V + u_keyDir);
+      float glintMask = smoothstep(0.82, 0.96, noise3(v_worldPos * 105.0));
+      float glint = pow(max(dot(N, Hk), 0.0), 112.0) * glintMask * 0.28;
+      Lo += u_keyColor * glint;
+    }
 
     vec3 bakedAo = vec3(vMax);
     vec3 aoSoft = mix(vec3(1.0), bakedAo, 0.78);
-    float aoScalar = dot(aoSoft, vec3(0.2126, 0.7152, 0.0722)) * microCav;
+    vec3 aoEff = mix(vec3(0.92), aoSoft, isGrayAo);
+    float aoScalar = dot(aoEff, vec3(0.2126, 0.7152, 0.0722)) * min(microCav, 1.0);
     float geoAo = mix(0.80, 1.0, smoothstep(0.0, 0.26, v_worldPos.y)) * mix(0.78, 1.0, smoothstep(-0.46, 0.50, N.y));
-    vec3 directAo = mix(vec3(1.0), aoSoft, u_alpha < 0.99 ? 0.16 : 0.56);
+    vec3 directAo = mix(vec3(1.0), aoSoft, isGrayAo * (u_alpha < 0.99 ? 0.16 : 0.56));
 
     vec3 R = reflect(-V, N); float NoV = max(dot(N, V), 0.0);
     float specOccl = clamp(pow(NoV + aoScalar, exp2(-16.0 * rough - 1.0)) - 1.0 + aoScalar, 0.0, 1.0);
-    vec3 ambDiff = mix(u_groundColor * 0.96, u_skyColor * 1.05, N.y * 0.5 + 0.5) * albedo * (1.0 - met) * 0.22 * u_lightMix.x * aoSoft * geoAo;
+    vec3 ambDiff = mix(u_groundColor * 0.96, u_skyColor * 1.05, N.y * 0.5 + 0.5) * albedo * (1.0 - met) * 0.22 * u_lightMix.x * aoEff * geoAo;
     float envAtten = (1.0 - rough) * (1.0 - rough);
     vec3 F_env = F0 + (max(vec3(1.0 - rough), F0) - F0) * pow(1.0 - NoV, 5.0);
     vec3 envSpec = studioEnv(R, rough) * F_env * mix(0.10, 0.84, envAtten) * mix(envAtten, 1.0, met) * specOccl * geoAo * u_lightMix.y;
-    vec3 envCoat = studioEnv(R, coatR) * coatTint * ((0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coatW) * (u_matKind == 2 ? 0.09 : 0.24) * specOccl * u_lightMix.y;
+    vec3 envCoat = studioEnv(R, coatR) * coatTint * ((0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coatW) * (u_matKind == 2 ? 0.09 : (u_matKind == 6 ? 0.34 : 0.24)) * specOccl * u_lightMix.y;
 
     // Physically-motivated Subsurface Scattering (SSS) & soft micro-velvet sheen per organic material class!
     vec3 sssBounce = vec3(0.0);
@@ -389,28 +438,33 @@
     if (u_matKind == 2) {
       float wrapKey = clamp((rawKeyN + 0.24) / 1.24, 0.0, 1.0);
       float termBand = wrapKey * (1.0 - keyDot);
-      sssBounce = (albedo * vec3(1.16, 1.08, 0.92) + vec3(0.008, 0.008, 0.006)) * termBand * 0.16 * aoSoft * geoAo * min(u_lightMix.x, 1.15);
+      sssBounce = (albedo * vec3(1.16, 1.08, 0.92) + vec3(0.008, 0.008, 0.006)) * termBand * 0.16 * aoEff * geoAo * min(u_lightMix.x, 1.15);
     } else if (u_matKind == 3) {
-      // Botanical foliage & flower petals: backlit chlorophyll/petal transmission + soft translucent terminator glow!
       float wrapLeaf = clamp((rawKeyN + 0.38) / 1.38, 0.0, 1.0);
       float termLeaf = wrapLeaf * (1.0 - keyDot * 0.85);
       vec3 backH = normalize(u_keyDir + N * 0.42);
       float backTrans = pow(clamp(dot(V, -backH), 0.0, 1.0), 2.8) * 0.45 + pow(clamp(dot(V, -u_rimDir), 0.0, 1.0), 3.0) * 0.28;
       vec3 leafTint = albedo * vec3(1.22, 1.18, 0.72) + vec3(0.012, 0.018, 0.004);
-      sssBounce = leafTint * (termLeaf * 0.22 + backTrans * 0.34) * u_keyColor * 0.28 * aoSoft * geoAo * min(u_lightMix.x, 1.2);
+      sssBounce = leafTint * (termLeaf * 0.22 + backTrans * 0.34) * u_keyColor * 0.28 * aoEff * geoAo * min(u_lightMix.x, 1.2);
     } else if (u_matKind == 4) {
-      // Soft food, bakery crust, skin & fabric: warm amber-rose subsurface terminator wrap + soft crust/velvet sheen!
-      float wrapSoft = clamp((rawKeyN + 0.34) / 1.34, 0.0, 1.0);
-      float termSoft = wrapSoft * (1.0 - keyDot * 0.88);
-      float velvet = pow(1.0 - NoV, 3.6) * rough * 0.14;
-      vec3 warmSss = albedo * vec3(1.26, 1.04, 0.82) + vec3(0.012, 0.006, 0.003);
-      sssBounce = (warmSss * termSoft * 0.20 * u_keyColor * 0.26 + (albedo * 0.7 + vec3(0.18)) * velvet) * aoSoft * geoAo * min(u_lightMix.x, 1.2);
+      // Soft food, bakery crust, spreads & skin: warm amber-rose subsurface wrap + gentle micro-velvet sheen!
+      float wrapSoft = clamp((rawKeyN + 0.36) / 1.36, 0.0, 1.0);
+      float termSoft = wrapSoft * (1.0 - keyDot * 0.86);
+      float velvet = pow(1.0 - NoV, 3.4) * rough * 0.15;
+      vec3 warmSss = albedo * vec3(1.28, 1.06, 0.80) + vec3(0.014, 0.007, 0.003);
+      sssBounce = (warmSss * termSoft * 0.24 * u_keyColor * 0.28 + (albedo * 0.72 + vec3(0.16)) * velvet) * aoEff * geoAo * min(u_lightMix.x, 1.2);
+    } else if (u_matKind == 6) {
+      // Translucent wet food & liquids (fried egg yolks/whites, cola, honey nectar, sauces): luminous internal SSS glow!
+      float wrapWet = clamp((rawKeyN + 0.44) / 1.44, 0.0, 1.0);
+      float rimTrans = pow(1.0 - NoV, 2.2) * 0.38;
+      vec3 deepGlow = albedo * vec3(1.36, 1.08, 0.62) + albedo * albedo * 0.35;
+      sssBounce = deepGlow * (wrapWet * 0.28 + rimTrans * 0.32) * u_keyColor * 0.26 * aoEff * geoAo * min(u_lightMix.x, 1.2);
     }
     float fresnelRim = pow(1.0 - NoV, 3.0) * smoothstep(-0.28, 0.72, N.y);
     float rimMask = mix(0.45, 1.0, clamp(dot(N, u_rimDir) * 0.55 + 0.55, 0.0, 1.0));
-    vec3 rimTint = mix(u_envRimTint, albedo * 1.45 + u_envRimTint * 0.30, (u_matKind == 2 || u_matKind == 3) ? 0.58 : 0.22);
-    float rimStr = u_matKind == 1 ? 0.28 : (u_matKind == 3 ? 0.22 : 0.17);
-    vec3 rimGlow = rimTint * fresnelRim * rimMask * rimStr * u_rimBoost * aoSoft * geoAo;
+    vec3 rimTint = mix(u_envRimTint, albedo * 1.45 + u_envRimTint * 0.30, (u_matKind == 2 || u_matKind == 3 || u_matKind == 6) ? 0.58 : 0.22);
+    float rimStr = u_matKind == 6 ? 0.34 : (u_matKind == 1 ? 0.28 : (u_matKind == 3 ? 0.22 : (u_matKind == 5 ? 0.12 : 0.17)));
+    vec3 rimGlow = rimTint * fresnelRim * rimMask * rimStr * u_rimBoost * aoEff * geoAo;
 
     vec3 outCol = linearToSrgb(acesFilm((Lo * directAo + ambDiff + envSpec + envCoat + sssBounce + rimGlow + u_emissive) * u_lightMix.z));
     if (u_lightMix.w > 0.001) {
@@ -519,11 +573,16 @@
   function matKindFor(mat) {
     const n = mat.name || "";
     if (
+      n.startsWith("item_egg_") || n === "item_cola_spill" || n === "item_milk_spill"
+      || n === "item_nectar_gold" || n.startsWith("item_jello") || n === "item_pizza_sauce"
+      || n === "item_water_puddle"
+    ) return 6;
+    if (n === "item_stone_granite" || n === "item_stone_quartz") return 5;
+    if (
       n.startsWith("eye_") || n.startsWith("glass_") || n.startsWith("item_tomato")
-      || n.startsWith("item_jello") || n.startsWith("item_candy") || n === "item_mustard"
-      || n === "item_pickle" || n.startsWith("item_skit_") || n.startsWith("item_egg_")
-      || n === "item_cola_spill" || n === "item_milk_spill" || n === "item_nectar_gold"
-      || n === "item_bowl_yellow" || n === "item_pizza_sauce" || n === "item_pretzel_crust"
+      || n.startsWith("item_candy") || n === "item_mustard"
+      || n === "item_pickle" || n.startsWith("item_skit_")
+      || n === "item_bowl_yellow" || n === "item_pretzel_crust"
       || (mat.metallic < 0.35 && mat.roughness < 0.24 && !mat.normalTex)
     ) return 1;
     if (n.startsWith("chitin_")) return 2;
@@ -540,6 +599,7 @@
       || n === "item_doll_skin" || n === "item_frog_green" || n.startsWith("item_wax_")
       || n.startsWith("item_twinkie") || n.startsWith("item_cracker") || n === "item_cream_white"
       || n === "item_pb_swirl" || n === "item_steak_paste" || n === "item_fish_green"
+      || n === "item_potted_fill" || n === "item_pizza_dough" || n === "item_chocolate"
       || n.startsWith("item_pez_")
     ) return 4;
     return 0;
