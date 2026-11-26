@@ -10,6 +10,7 @@
     FIRE_VS, FIRE_FS, buildFireParticles,
     SPARK_VS, SPARK_FS, buildSparkParticles,
     FUR_PROFILES, FUR_VS, FUR_FS,
+    GROUND_VS, GROUND_FS, buildGroundMesh,
     evalJelloWobble,
   } = window.__antFx;
 
@@ -632,14 +633,17 @@
   function evaluateWorldMats(inst, opts) {
     const m = inst.model, bi = m.blinkInfo;
     const isClosed = opts.blinkMode === "closed", isPulsing = !isClosed && inst.blink && inst.blink.active;
-    const actionAnims = selectActionAnims(m, opts.clipName).anims;
-    const hasAction = actionAnims.length > 0 && (opts.idleAnim || opts.fixedIdleTime !== null);
+    const clipName = inst.clipName || opts.clipName;
+    const actionAnims = selectActionAnims(m, clipName).anims;
+    const hasAction = actionAnims.length > 0 && (opts.idleAnim || opts.fixedIdleTime !== null || Number.isFinite(inst.animTime));
     if (!hasAction && (!bi || !bi.hasBlink || (!isClosed && !isPulsing))) return m.baseWorldMats;
 
     const overrides = new Map();
     if (hasAction) {
+      const rawT = Number.isFinite(inst.animTime)
+        ? inst.animTime
+        : (opts.fixedIdleTime !== null ? opts.fixedIdleTime : (inst.idleTime || 0));
       for (const anim of actionAnims) {
-        const rawT = opts.fixedIdleTime !== null ? opts.fixedIdleTime : (inst.idleTime || 0);
         applyAnimChannels(overrides, anim.channels, ((rawT % anim.duration) + anim.duration) % anim.duration);
       }
     }
@@ -687,8 +691,10 @@
       this.fireProg = createProgram(gl, FIRE_VS, FIRE_FS);
       this.sparkProg = createProgram(gl, SPARK_VS, SPARK_FS);
       this.furProg = createProgram(gl, FUR_VS, FUR_FS);
+      this.groundProg = createProgram(gl, GROUND_VS, GROUND_FS);
       this.fireParticles = buildFireParticles(gl);
       this.sparkParticles = buildSparkParticles(gl);
+      this.groundMesh = buildGroundMesh(gl, 48.0);
       this.emptyVao = gl.createVertexArray();
       this.fallbacks = createFallbackTextures(gl);
       this.plinth = null; this.plinthKey = "";
@@ -719,6 +725,12 @@
         "u_keyColor", "u_fillColor", "u_rimColor", "u_envRimTint", "u_lightMix", "u_rimBoost",
         "u_shellFrac", "u_furLength", "u_furDroop", "u_furDensity", "u_isCotton",
         "u_silhouette", "u_silhouetteColor",
+      ]);
+      this.uGround = getUniforms(gl, this.groundProg, [
+        "u_viewProj", "u_cameraPos", "u_keyDir", "u_fillDir", "u_keyColor", "u_fillColor",
+        "u_skyColor", "u_groundColor", "u_bgTop", "u_bgMid", "u_bgBot", "u_viewport", "u_lightMix",
+        "u_shadows[0]", "u_shadowCount", "u_clearings[0]", "u_clearingCount",
+        "u_glows[0]", "u_glowCount", "u_zone", "u_zoneRot", "u_theme", "u_time",
       ]);
       gl.useProgram(this.pbrProg);
       gl.uniform1i(this.uPbr.u_baseTex, 0);
@@ -798,9 +810,46 @@
       }
       gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
       const camera = this.computeCamera(scene, cam, opts.width, opts.height, opts.overrideProj, opts);
-      const { keyDir, fillDir, rimDir } = this.cameraLights(camera, lp);
+      const lightCam = opts.worldSun ? { viewDir: [0.36, 0.56, 0.74] } : camera;
+      const { keyDir, fillDir, rimDir } = this.cameraLights(lightCam, lp);
 
-      if (opts.showPlinth !== false && !opts.transparent) {
+      if (opts.ground && !opts.transparent) {
+        const g = opts.ground;
+        gl.disable(gl.BLEND); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK); gl.frontFace(gl.CCW);
+        gl.useProgram(this.groundProg);
+        gl.uniformMatrix4fv(this.uGround.u_viewProj, false, camera.viewProj);
+        gl.uniform3fv(this.uGround.u_cameraPos, camera.eye);
+        gl.uniform3fv(this.uGround.u_keyDir, keyDir);
+        gl.uniform3fv(this.uGround.u_fillDir, fillDir);
+        gl.uniform3fv(this.uGround.u_keyColor, lp.keyColor);
+        gl.uniform3fv(this.uGround.u_fillColor, lp.fillColor);
+        gl.uniform3fv(this.uGround.u_skyColor, pal.sky);
+        gl.uniform3fv(this.uGround.u_groundColor, pal.ground);
+        gl.uniform3fv(this.uGround.u_bgTop, pal.bgTop);
+        gl.uniform3fv(this.uGround.u_bgMid, pal.bgMid);
+        gl.uniform3fv(this.uGround.u_bgBot, pal.bgBot);
+        gl.uniform2f(this.uGround.u_viewport, opts.width, opts.height);
+        gl.uniform4fv(this.uGround.u_lightMix, lp.lightMix);
+        const sArr = g.shadows || [], sCount = Math.min(sArr.length, 48), sData = new Float32Array(48 * 4);
+        for (let i = 0; i < sCount; i++) sData.set(sArr[i], i * 4);
+        gl.uniform4fv(this.uGround["u_shadows[0]"], sData);
+        gl.uniform1i(this.uGround.u_shadowCount, sCount);
+        const cArr = g.clearings || [], cCount = Math.min(cArr.length, 8), cData = new Float32Array(8 * 4);
+        for (let i = 0; i < cCount; i++) cData.set(cArr[i], i * 4);
+        gl.uniform4fv(this.uGround["u_clearings[0]"], cData);
+        gl.uniform1i(this.uGround.u_clearingCount, cCount);
+        const glwArr = g.glows || [], glwCount = Math.min(glwArr.length, 6), glwData = new Float32Array(6 * 4);
+        for (let i = 0; i < glwCount; i++) glwData.set(glwArr[i], i * 4);
+        gl.uniform4fv(this.uGround["u_glows[0]"], glwData);
+        gl.uniform1i(this.uGround.u_glowCount, glwCount);
+        gl.uniform4fv(this.uGround.u_zone, g.zone || [0, 0, 0, 0]);
+        gl.uniform1f(this.uGround.u_zoneRot, g.zoneRot || 0);
+        gl.uniform1i(this.uGround.u_theme, g.theme || 0);
+        gl.uniform1f(this.uGround.u_time, g.time || 0);
+        gl.bindVertexArray(this.groundMesh.vao);
+        gl.drawElements(gl.TRIANGLES, this.groundMesh.count, gl.UNSIGNED_SHORT, 0);
+        gl.bindVertexArray(null);
+      } else if (opts.showPlinth !== false && !opts.transparent) {
         const plinth = this.ensurePlinth(scene.plinthSpanX, scene.plinthRadius);
         gl.disable(gl.BLEND); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK); gl.frontFace(gl.CCW);
         gl.useProgram(this.plinthProg);
@@ -881,10 +930,11 @@
             }
             if (Boolean(mat.isTranslucent) !== wantBlend) continue;
             let bc = mat.baseColor;
-            if (mat.name === "chitin_team") bc = [team.team[0], team.team[1], team.team[2], bc[3]];
-            else if (mat.name === "chitin_dark") bc = [team.dark[0], team.dark[1], team.dark[2], bc[3]];
+            const instTeam = inst.teamColors || team;
+            if (mat.name === "chitin_team") bc = [instTeam.team[0], instTeam.team[1], instTeam.team[2], bc[3]];
+            else if (mat.name === "chitin_dark") bc = [instTeam.dark[0], instTeam.dark[1], instTeam.dark[2], bc[3]];
             else if (mat.name === "chitin_highlight") {
-              bc = [team.team[0] * 0.66 + 0.28, team.team[1] * 0.66 + 0.31, team.team[2] * 0.66 + 0.24, bc[3]];
+              bc = [instTeam.team[0] * 0.66 + 0.28, instTeam.team[1] * 0.66 + 0.31, instTeam.team[2] * 0.66 + 0.24, bc[3]];
             }
             if (mat.doubleSided) gl.disable(gl.CULL_FACE); else { gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK); }
             const nodeMat = worldMats[item.nodeIndex] || item.worldMat;

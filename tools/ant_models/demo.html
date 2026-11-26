@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="robots" content="noindex">
+  <meta name="description" content="Interactive 3D backyard RTS map scenarios combining animated Ants (1998) units with 3D map items across sunlit lawn, picnic blanket, and patio scenes.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23183825'/%3E%3Ccircle cx='16' cy='12' r='5' fill='%23e0b029'/%3E%3Ccircle cx='16' cy='21' r='6' fill='%23297040'/%3E%3C/svg%3E">
+  <title>3D Map Scenarios Demo — Ants (1998)</title>
+  <link rel="stylesheet" href="viewer.css">
+  <link rel="stylesheet" href="demo.css">
+  <script src="viewer_gltf.js" defer></script>
+  <script src="viewer_fx.js" defer></script>
+  <script src="viewer_render.js" defer></script>
+  <script src="demo.js" defer></script>
+</head>
+<body>
+  <div class="app-shell demo-app-shell">
+    <header class="app-topbar">
+      <div class="topbar-left">
+        <h1 class="brand-title">Ants 3D</h1>
+        <nav class="segmented view-tabs" aria-label="Viewer mode">
+          <a class="view-tab" id="tab-compare" href="./">Compare 1998</a>
+          <a class="view-tab" id="tab-studio" href="viewer.html">3D Studio</a>
+          <a class="view-tab" id="tab-items" href="items.html">Map Items</a>
+          <a class="view-tab" id="tab-demo" href="demo.html" aria-current="page">Map Demo</a>
+        </nav>
+      </div>
+
+      <div
+        class="topbar-toolbar"
+        id="demo-toolbar"
+        role="toolbar"
+        aria-label="Backyard map scenario selector"
+        focusgroup="toolbar wrap"
+        aria-controls="demo-stage"
+      >
+        <div class="segmented demo-scenario-group" id="scenario-group" role="group" aria-label="Map scenario">
+          <button type="button" data-scenario="picnic" aria-pressed="true" title="Picnic Feast Raid scenario (1)">Picnic Raid</button>
+          <button type="button" data-scenario="toys" aria-pressed="false" title="Toybox Backyard Skirmish scenario (2)">Toybox Skirmish</button>
+          <button type="button" data-scenario="colony" aria-pressed="false" title="Backyard Colony Base scenario (3)">Colony Base</button>
+          <button type="button" data-scenario="melee" aria-pressed="false" title="Four-Team Backyard Melee scenario (4)">4-Team Melee</button>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <span class="badge demo-scene-badge" id="badge-scene-stats" title="Active animated ants and 3D map items">Loading&hellip;</span>
+        <button
+          type="button"
+          class="panel-toggle-btn"
+          id="btn-toggle-panel"
+          aria-expanded="true"
+          aria-controls="inspector-panel"
+          title="Show or hide scene controls"
+        >
+          <span>Controls</span>
+          <span class="panel-chevron" aria-hidden="true">&#x276F;</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <div class="stage-column">
+        <main class="stage-wrap demo-stage-wrap" id="demo-stage">
+          <canvas
+            id="demo-canvas"
+            tabindex="0"
+            aria-label="Interactive 3D backyard Ants map scenario viewport. Left-drag to orbit, right-drag or shift-drag to pan, scroll or pinch to zoom. Press arrow keys to orbit, plus or minus to zoom, Space to pause or resume, R to reset camera, and 1 through 4 to switch scenarios."
+          ></canvas>
+
+          <div class="demo-hud-card" id="demo-hud-card" aria-live="polite">
+            <div class="demo-hud-head">
+              <h2 class="demo-hud-title" id="hud-title">Picnic Feast Raid</h2>
+              <div class="demo-team-chips" id="hud-teams" aria-label="Teams in scenario"></div>
+            </div>
+            <p class="demo-hud-desc" id="hud-desc">
+              Green workers forage across a gingham picnic blanket while Red raiders contest a dropping Combat Power Nectar.
+            </p>
+          </div>
+
+          <div class="demo-hint" aria-hidden="true">
+            Drag: Orbit &middot; Right-Drag / Shift+Drag: Pan &middot; Scroll / Pinch: Zoom &middot; 1&ndash;4: Scenarios &middot; Space: Pause &middot; R: Reset
+          </div>
+
+          <div class="empty-overlay" id="demo-loading">
+            <div class="empty-card">
+              <h2 id="demo-loading-title">Loading 3D Backyard Scene&hellip;</h2>
+              <p id="demo-loading-msg">Streaming animated ant classes and 3D map item models.</p>
+            </div>
+          </div>
+        </main>
+
+        <div
+          class="playback-dock demo-dock"
+          id="demo-dock"
+          role="toolbar"
+          aria-label="Playback, camera angle, and projection controls"
+          focusgroup="toolbar wrap"
+          aria-controls="demo-stage"
+        >
+          <div class="dock-group" role="group" aria-label="Playback controls">
+            <button
+              type="button"
+              id="btn-play"
+              class="play-btn"
+              aria-pressed="true"
+              aria-label="Play or pause scene animations"
+              title="Play or pause scene animations (Space)"
+            >
+              <svg class="icon-pause" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="3" y="2.5" width="3.5" height="11" rx="1" fill="currentColor"/><rect x="9.5" y="2.5" width="3.5" height="11" rx="1" fill="currentColor"/></svg>
+              <svg class="icon-play" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4.2 2.6L13.2 8L4.2 13.4Z" fill="currentColor"/></svg>
+            </button>
+
+            <button
+              type="button"
+              id="btn-orbit"
+              class="dock-toggle-btn"
+              aria-pressed="false"
+              title="Toggle gentle cinematic camera orbit (T)"
+            >Orbit</button>
+          </div>
+
+          <span class="dock-sep" role="separator" aria-orientation="vertical"></span>
+
+          <div class="dock-group">
+            <div class="segmented" role="group" aria-label="Camera angle preset">
+              <button type="button" data-cam="rts" aria-pressed="true" title="Classic 1998 RTS 45 degree tactical angle">RTS 45&deg;</button>
+              <button type="button" data-cam="hero" aria-pressed="false" title="Low backyard hero camera angle">Low Hero</button>
+              <button type="button" data-cam="closeup" aria-pressed="false" title="Zoomed close-up of the central skirmish">Close-Up</button>
+              <button type="button" data-cam="top" aria-pressed="false" title="High tactical top-down map overview">Top-Down</button>
+            </div>
+          </div>
+
+          <span class="dock-sep" role="separator" aria-orientation="vertical"></span>
+
+          <div class="dock-group" role="group" aria-label="Projection and reset">
+            <div class="segmented" role="group" aria-label="Camera projection">
+              <button type="button" data-proj="perspective" aria-pressed="true" title="Natural 3D perspective camera">Persp</button>
+              <button type="button" data-proj="ortho" aria-pressed="false" title="Isometric-feel orthographic camera">Ortho</button>
+            </div>
+            <button type="button" id="btn-reset" class="icon-btn" aria-label="Reset camera view" title="Reset camera view (R)">
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3.2 7.8a4.8 4.8 0 1 1 1.2 3.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M2.2 4.3v3.8h3.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="inspector-backdrop" id="inspector-backdrop" hidden></div>
+      <aside class="inspector-panel" id="inspector-panel" aria-label="Scene lighting, display, and landmark focus controls">
+        <div class="inspector-drawer-head">
+          <span class="inspector-drawer-title">Scene Controls</span>
+          <button type="button" id="btn-close-panel" class="icon-btn" aria-label="Close controls panel">&times;</button>
+        </div>
+
+        <section class="inspector-section" aria-label="Lighting preset">
+          <div class="inspector-section-head">
+            <span class="inspector-heading">Lighting</span>
+            <kbd class="hotkey-chip" aria-hidden="true">L</kbd>
+          </div>
+          <div class="lighting-stepper">
+            <button type="button" id="btn-light-prev" class="stepper-btn" aria-label="Previous lighting preset" title="Previous lighting preset">&#x276E;</button>
+            <select id="select-lighting" class="inspector-select action-select" aria-label="3D lighting preset" title="Switch 3D lighting preset (L)"></select>
+            <button type="button" id="btn-light-next" class="stepper-btn" aria-label="Next lighting preset" title="Next lighting preset (L)">&#x276F;</button>
+          </div>
+        </section>
+
+        <section class="inspector-section" aria-label="Display options">
+          <div class="inspector-section-head">
+            <span class="inspector-heading">Scene Options</span>
+          </div>
+          <div class="toggle-list">
+            <button type="button" class="toggle-row" id="btn-patrols" aria-pressed="true" title="Toggle live foraging and patrol paths">
+              <span class="toggle-label">Live Ant Patrols</span>
+              <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+            </button>
+            <button type="button" class="toggle-row" id="btn-pixel-mode" aria-pressed="false" title="Render scene at nostalgic low-resolution pixel scale (P)">
+              <span class="toggle-label">1998 Pixel Mode</span>
+              <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+            </button>
+            <button type="button" class="toggle-row" id="btn-hud" aria-pressed="true" title="Show or hide scenario caption card">
+              <span class="toggle-label">Scene Caption</span>
+              <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+            </button>
+          </div>
+        </section>
+
+        <section class="inspector-section" aria-label="Jump to featured landmarks">
+          <div class="inspector-section-head">
+            <span class="inspector-heading">Focus Landmark</span>
+            <span class="inspector-readout" id="focus-readout">Overview</span>
+          </div>
+          <div class="demo-focus-grid" id="demo-focus-grid"></div>
+        </section>
+
+        <div class="inspector-foot">
+          <details class="inspector-details" open>
+            <summary>
+              <span>Scene Breakdown</span>
+              <span class="details-summary-meta" id="meta-fps">&mdash;</span>
+            </summary>
+            <dl class="meta-list" aria-label="Active scenario statistics">
+              <div class="meta-row">
+                <dt>Units</dt>
+                <dd id="meta-ants">&mdash;</dd>
+              </div>
+              <div class="meta-row">
+                <dt>Map Items</dt>
+                <dd id="meta-items">&mdash;</dd>
+              </div>
+              <div class="meta-row">
+                <dt>Triangles</dt>
+                <dd id="meta-tris">&mdash;</dd>
+              </div>
+              <div class="meta-row">
+                <dt>Camera</dt>
+                <dd id="meta-cam">&mdash;</dd>
+              </div>
+            </dl>
+          </details>
+          <p role="status" class="status-region" id="status-region">Loading 3D map scenario&hellip;</p>
+        </div>
+      </aside>
+    </div>
+  </div>
+</body>
+</html>

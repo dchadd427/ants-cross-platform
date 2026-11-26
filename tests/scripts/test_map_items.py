@@ -161,7 +161,7 @@ class MapItemsTests(unittest.TestCase):
         node = shutil.which("node")
         if not node:
             self.skipTest("node is not installed")
-        for fname in ("compare.js", "items.js", "viewer_fx.js", "viewer_render.js", "viewer_touch.js"):
+        for fname in ("compare.js", "demo.js", "items.js", "viewer_fx.js", "viewer_render.js", "viewer_touch.js"):
             js_path = os.path.join(REPO, "tools", "ant_models", fname)
             run = subprocess.run([node, "--check", js_path], capture_output=True, text=True, check=False)
             self.assertEqual(run.returncode, 0, f"JS syntax check failed for {fname}:\n{run.stderr}")
