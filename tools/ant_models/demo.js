@@ -7,6 +7,7 @@
   } = window.__antRender;
   const { buildCarriedLunchboxMat, buildHeistsForMap, updateHeists } = window.__demoHeist;
   const { buildBorderGrassMesh } = window.__demoBorder;
+  const { buildGroundScatterMesh, buildAtmoParticles } = window.__demoAtmo;
 
   const $ = (id) => document.getElementById(id);
 
@@ -567,10 +568,14 @@
         };
         itemEntries.push({ inst, spec, x: spec.x, z: spec.z, radius });
       }
-      if (activeMap && activeMap.scene && activeMap.scene.borderGrass) {
-        activeMap.scene.borderGrass.dispose();
+      if (activeMap && activeMap.scene) {
+        if (activeMap.scene.borderGrass) activeMap.scene.borderGrass.dispose();
+        if (activeMap.scene.groundScatter) activeMap.scene.groundScatter.dispose();
+        if (activeMap.scene.atmoParticles) activeMap.scene.atmoParticles.dispose();
       }
       const borderGrass = buildBorderGrassMesh(renderer.gl, mapData, mapsCatalog.water_tile_index);
+      const groundScatter = buildGroundScatterMesh(renderer.gl, mapData, mapsCatalog.water_tile_index);
+      const atmoParticles = buildAtmoParticles(renderer.gl, mapData);
 
       const lunchboxModel = await modelCache.get("item:lunchbox");
       const thiefModel = await modelCache.get("ant:thief");
@@ -619,6 +624,8 @@
         scene: {
           instances: [],
           borderGrass,
+          groundScatter,
+          atmoParticles,
           target: [mapData.cols * 0.5, 0.3, mapData.rows * 0.5],
           fitRadius: BASE_FIT_RADIUS,
           halfWidth: BASE_FIT_RADIUS * 1.35,
@@ -1213,9 +1220,15 @@
 
     fpsAccum += dt;
     fpsFrames++;
-    if (fpsAccum >= 0.6) {
+    if (fpsAccum >= 0.5) {
       const fps = Math.round(fpsFrames / fpsAccum);
-      $("meta-fps").textContent = `${fps} fps`;
+      const fpsText = `${fps} fps`;
+      $("meta-fps").textContent = fpsText;
+      const badgeFps = $("badge-fps");
+      if (badgeFps) {
+        badgeFps.textContent = fpsText;
+        badgeFps.dataset.tier = fps >= 50 ? "ok" : (fps >= 32 ? "warn" : "low");
+      }
       $("meta-cam").textContent = `(${cam.target[0].toFixed(1)}, ${cam.target[2].toFixed(1)}) · ${Math.round(cam.pitch)}° · ${cam.zoom.toFixed(2)}×`;
       fpsAccum = 0;
       fpsFrames = 0;

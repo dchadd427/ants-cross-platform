@@ -14,6 +14,7 @@
     SHADOW_VS, SHADOW_FS,
     TILE_GROUND_VS, TILE_GROUND_FS, buildTileGroundMesh,
     BORDER_GRASS_VS, BORDER_GRASS_FS, drawBorderGrassMesh,
+    createAtmoDrawer,
     evalJelloWobble,
   } = window.__antFx;
 
@@ -682,6 +683,7 @@
       this.shadowProg = createProgram(gl, SHADOW_VS, SHADOW_FS);
       this.tileGroundProg = createProgram(gl, TILE_GROUND_VS, TILE_GROUND_FS);
       this.borderGrassProg = createProgram(gl, BORDER_GRASS_VS, BORDER_GRASS_FS);
+      this.atmoDrawer = createAtmoDrawer(gl, createProgram);
       this.uBorderGrass = getUniforms(gl, this.borderGrassProg, [
         "u_viewProj", "u_time", "u_keyDir", "u_fillDir", "u_keyColor", "u_fillColor", "u_skyColor", "u_groundColor", "u_lightMix",
       ]);
@@ -1010,6 +1012,9 @@
         if (scene.borderGrass) {
           drawBorderGrassMesh(gl, this.borderGrassProg, this.uBorderGrass, scene.borderGrass, camera.viewProj, keyDir, fillDir, lp, pal, opts.tileGround.time);
         }
+        if (scene.groundScatter) {
+          drawBorderGrassMesh(gl, this.borderGrassProg, this.uBorderGrass, scene.groundScatter, camera.viewProj, keyDir, fillDir, lp, pal, opts.tileGround.time);
+        }
       } else if (opts.showPlinth !== false && !opts.transparent) {
         const plinth = this.ensurePlinth(scene.plinthSpanX, scene.plinthRadius);
         gl.disable(gl.BLEND); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK); gl.frontFace(gl.CCW);
@@ -1262,6 +1267,7 @@
           gl.drawElements(gl.TRIANGLES, this.sparkParticles.coreRange.count, gl.UNSIGNED_SHORT, this.sparkParticles.coreRange.offset);
         }
       }
+      if (scene.atmoParticles && !isSil) this.atmoDrawer.draw(scene.atmoParticles, camera, opts.lighting, opts.tileGround ? opts.tileGround.time : 0);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindVertexArray(null); gl.frontFace(gl.CCW); gl.depthMask(true); gl.disable(gl.BLEND);
     }

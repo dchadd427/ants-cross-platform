@@ -58,6 +58,36 @@
   font-variant-numeric: tabular-nums;
 }
 
+.demo-fps-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--bg-badge);
+  color: var(--ink-primary);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.demo-fps-badge::before {
+  content: "";
+  inline-size: 7px;
+  block-size: 7px;
+  border-radius: 50%;
+  background: #38c468;
+  box-shadow: 0 0 6px rgba(56, 196, 104, 0.55);
+}
+
+.demo-fps-badge[data-tier="warn"]::before {
+  background: #e5a93b;
+  box-shadow: 0 0 6px rgba(229, 169, 59, 0.55);
+}
+
+.demo-fps-badge[data-tier="low"]::before {
+  background: #e05353;
+  box-shadow: 0 0 6px rgba(224, 83, 83, 0.55);
+}
+
 /* Floating translucent scenario header card */
 .demo-hud-card {
   position: absolute;

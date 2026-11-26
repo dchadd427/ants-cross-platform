@@ -667,19 +667,24 @@
       lawnAlb *= hedgeAo * (0.91 + 0.18 * blades);
 
       float sh = (dOut < 2.6) ? sampleTileShadow(v_worldPos) : 1.0;
+      // Gentle drifting dappled backyard canopy/cloud sunlight across the grass lawn
+      vec2 wP = p * 0.095 + vec2(u_time * 0.018, u_time * 0.011);
+      float canopy = smoothstep(0.22, 0.78, tgNoise(wP) * 0.65 + tgNoise(wP * 2.1 + vec2(4.7, 1.9)) * 0.35);
       float NoL = max(u_keyDir.y, 0.0);
       float NoF = max(u_fillDir.y, 0.0);
       float keyNorm = max(u_keyDir.y, 0.28);
-      float sunFactor = (NoL / keyNorm) * mix(1.0 - u_shadowStrength, 1.0, sh);
+      float sunFactor = (NoL / keyNorm) * mix(1.0 - u_shadowStrength, 1.0, sh) * mix(0.84, 1.09, canopy);
       vec3 shadowCool = mix(vec3(0.88, 0.92, 1.02), vec3(1.0), sh);
-      vec3 lit = lawnAlb * (u_keyColor * sunFactor * 0.28 + u_skyColor * 0.24 * u_lightMix.x * shadowCool + u_fillColor * NoF * 0.16);
+      vec3 dappleTint = mix(vec3(0.95, 0.98, 1.04), vec3(1.04, 1.01, 0.95), canopy);
+      vec3 lit = lawnAlb * (u_keyColor * dappleTint * sunFactor * 0.28 + u_skyColor * 0.24 * u_lightMix.x * shadowCool + u_fillColor * NoF * 0.16);
       vec3 outCol = tgToSrgb(tgAces(lit * 1.06 * u_lightMix.z));
       if (u_lightMix.w > 0.001) {
         vec3 flatGrass = tgToSrgb(tgAces(lawnAlb * 1.25)) * mix(1.0 - u_shadowStrength * 0.55, 1.0, sh);
         outCol = mix(outCol, flatGrass, u_lightMix.w);
       }
-      // In Game View / Top-Down (ortho): 100% lush green grass to the edge; in 3D persp: gentle distant horizon mist far out
-      float fade = (u_isOrtho != 0) ? 0.0 : smoothstep(26.0, 58.0, dOut);
+      // In Game View / Top-Down (ortho): 100% lush green grass; in 3D persp: warm atmospheric horizon haze
+      float camDist = length(v_worldPos - u_cameraPos);
+      float fade = (u_isOrtho != 0) ? 0.0 : clamp(smoothstep(24.0, 56.0, dOut) + smoothstep(26.0, 82.0, camDist) * 0.26, 0.0, 1.0);
       fragColor = vec4(mix(outCol, skyMatch, fade), 1.0);
       return;
     }
@@ -849,21 +854,32 @@
       float med = tgFbm(p * 2.6);
       float fine = tgNoise(p * 13.5) * 0.6 + tgNoise(p * 34.0) * 0.4;
 
-      // 1. Warm packed backyard clay/dirt (g): smooth organic soil + scattered warm pebbles (no harsh pixel noise!)
-      float peb = smoothstep(0.76, 0.90, tgNoise(p * 9.5 + vec2(4.2, 1.7)));
-      vec3 colDirt = mix(vec3(0.215, 0.146, 0.124), vec3(0.320, 0.228, 0.192), macro * 0.65 + med * 0.35);
-      colDirt = mix(colDirt, vec3(0.38, 0.30, 0.25), peb * 0.35) * (0.94 + 0.12 * fine);
+      // 1. Lived-in backyard clay/dirt (g): rich humus mottling, gravel pebbles, organic mulch flecks, fine soil cracks & subtle edge moss
+      float peb = smoothstep(0.75, 0.90, tgNoise(p * 9.5 + vec2(4.2, 1.7)));
+      float mulch = smoothstep(0.77, 0.91, tgNoise(p * 18.0 + vec2(8.3, 3.1)));
+      float crack = pow(clamp(1.0 - abs(2.0 * tgNoise(p * 4.4 + vec2(med * 1.15, -macro * 0.8)) - 1.0), 0.0, 1.0), 7.5);
+      float edgeDist = min(min(p.x, u_mapSize.x - p.x), min(p.y, u_mapSize.y - p.y));
+      float edgeMoss = smoothstep(3.8, 0.0, edgeDist) * smoothstep(0.42, 0.78, macro * 0.6 + med * 0.4);
+      vec3 colDirt = mix(vec3(0.195, 0.132, 0.112), vec3(0.328, 0.232, 0.190), macro * 0.62 + med * 0.38);
+      colDirt = mix(colDirt, vec3(0.39, 0.31, 0.25), peb * 0.38);
+      colDirt = mix(colDirt, vec3(0.115, 0.076, 0.058), mulch * 0.42 + crack * 0.22);
+      colDirt = mix(colDirt, vec3(0.105, 0.195, 0.055), edgeMoss * 0.32) * (0.92 + 0.16 * fine);
 
-      // 2. Dark moist mud road (m): velvety rich loam with damp specular sheen catching angled sunlight/moonlight/neon!
+      // 2. Dark moist mud road (m): organic trampled garden loam with embedded grit flecks & subtle damp sheen
       float mudWet = smoothstep(0.34, 0.72, tgFbm(p * 1.45 + vec2(9.1, 3.3)));
-      vec3 colMud = mix(vec3(0.058, 0.055, 0.059), vec3(0.095, 0.088, 0.090), med) * mix(1.0, 0.76, mudWet);
+      float mudGrit = smoothstep(0.76, 0.92, tgNoise(p * 21.0 + vec2(1.4, 6.2)));
+      vec3 colMud = mix(vec3(0.056, 0.050, 0.050), vec3(0.102, 0.088, 0.084), med * 0.7 + fine * 0.3) * mix(1.0, 0.76, mudWet);
+      colMud = mix(colMud, vec3(0.165, 0.135, 0.115), mudGrit * 0.28);
 
-      // 3. Fine beach sand (d): silky cream-ivory sand with gentle wind-blown dune ripples & quartz sparkle!
+      // 3. Fine beach sand (d): natural warm ivory sand with wind ripples & scattered shell/mineral flecks
       float dune = 0.5 + 0.5 * sin(p.x * 6.8 + p.y * 4.2 + tgNoise(p * 2.2) * 3.1);
-      vec3 colSand = mix(vec3(0.56, 0.50, 0.43), vec3(0.72, 0.66, 0.58), dune * 0.55 + macro * 0.45) * (0.96 + 0.08 * fine);
+      vec3 colSand = mix(vec3(0.54, 0.48, 0.41), vec3(0.72, 0.65, 0.57), dune * 0.52 + macro * 0.48) * (0.94 + 0.12 * fine);
+      colSand = mix(colSand, vec3(0.42, 0.36, 0.30), mulch * 0.18);
 
-      // 4. Cool weathered slate stone (s): layered backyard shale/stone with subtle mineral variation
-      vec3 colSlate = mix(vec3(0.20, 0.21, 0.31), vec3(0.35, 0.36, 0.48), med * 0.7 + fine * 0.3);
+      // 4. Cool weathered slate stone (s): layered backyard shale with subtle hairline fissures & faint mossy crevices
+      vec3 colSlate = mix(vec3(0.19, 0.20, 0.29), vec3(0.35, 0.36, 0.47), med * 0.65 + fine * 0.35);
+      colSlate = mix(colSlate, vec3(0.10, 0.11, 0.16), crack * 0.30);
+      colSlate = mix(colSlate, vec3(0.12, 0.20, 0.08), crack * smoothstep(0.45, 0.80, macro) * 0.26);
 
       albedo = colDirt * wG + colMud * wM + colSand * wS + colSlate * wL;
       rough = wG * 0.86 + wM * mix(0.56, 0.24, mudWet) + wS * 0.76 + wL * 0.48;
@@ -896,12 +912,18 @@
       specBoost = 0.03;
     }
 
+    // Gentle drifting dappled backyard canopy/cloud sunlight breaking up flat studio brightness!
+    vec2 windP = p * 0.095 + vec2(u_time * 0.018, u_time * 0.011);
+    float canopy = smoothstep(0.22, 0.78, tgNoise(windP) * 0.65 + tgNoise(windP * 2.1 + vec2(4.7, 1.9)) * 0.35);
+    float dappleSun = mix(0.84, 1.10, canopy);
+    vec3 dappleTint = mix(vec3(0.95, 0.98, 1.04), vec3(1.04, 1.01, 0.95), canopy);
+
     float NoL = max(dot(N, u_keyDir), 0.0);
     float NoF = max(dot(N, u_fillDir), 0.0);
     float keyNorm = max(u_keyDir.y, 0.28);
-    float sunFactor = (NoL / keyNorm) * mix(1.0 - u_shadowStrength, 1.0, sh);
+    float sunFactor = (NoL / keyNorm) * mix(1.0 - u_shadowStrength, 1.0, sh) * dappleSun;
     vec3 shadowCool = mix(vec3(0.88, 0.91, 1.03), vec3(1.0), sh);
-    vec3 lit = albedo * (u_keyColor * sunFactor * 0.27 + u_skyColor * 0.23 * u_lightMix.x * shadowCool + u_fillColor * NoF * 0.16);
+    vec3 lit = albedo * (u_keyColor * dappleTint * sunFactor * 0.27 + u_skyColor * 0.23 * u_lightMix.x * shadowCool + u_fillColor * NoF * 0.16);
 
     // Real GGX microfacet specular reaction to sunlight, moonlight, sunset & neon (wet mud, banks, sand glints, slate!)
     if (u_pbrFloor != 0) {
@@ -927,6 +949,10 @@
     }
 
     vec3 outCol = tgToSrgb(tgAces(lit * 1.06 * u_lightMix.z));
+    if (u_isOrtho == 0 && u_lightMix.w < 0.5) {
+      float haze = smoothstep(24.0, 80.0, length(v_worldPos - u_cameraPos)) * 0.24;
+      outCol = mix(outCol, skyMatch, haze);
+    }
     if (u_lightMix.w > 0.001) {
       vec3 flatCol = (u_pbrFloor != 0 ? tgToSrgb(tgAces(albedo * 1.25)) : texSrgb) * mix(1.0 - u_shadowStrength * 0.62, 1.0, sh);
       outCol = mix(outCol, flatCol, u_lightMix.w);
@@ -1091,6 +1117,92 @@
     gl.bindVertexArray(null);
   }
 
+  // --- Floating 3D Backyard Atmosphere Motes (Sunlit Pollen / Dandelion Fluff / Night Fireflies — 1 Draw Call) ---
+  const ATMO_VS = `#version 300 es
+  layout(location = 0) in vec2 a_corner;
+  layout(location = 1) in vec4 a_origin; // xyz = anchor, w = base radius
+  layout(location = 2) in vec4 a_seed;   // x = phase, y = speed, z = driftR, w = kind
+  uniform mat4 u_viewProj;
+  uniform vec3 u_camRight, u_camUp;
+  uniform float u_time, u_scaleBoost;
+  out vec2 v_uv;
+  out vec3 v_meta; // x = pulse, y = kind, z = heightNorm
+  void main() {
+    float ph = a_seed.x, sp = a_seed.y, dr = a_seed.z, kind = a_seed.w;
+    float tt = u_time * sp + ph;
+    vec3 drift = vec3(
+      sin(tt * 0.72 + ph * 1.3) * dr + cos(tt * 0.31) * dr * 0.45,
+      sin(tt * 0.95 + ph * 0.7) * 0.38 + cos(tt * 0.44 + kind * 6.28) * 0.18,
+      cos(tt * 0.66 - ph * 1.1) * dr + sin(tt * 0.29) * dr * 0.45
+    );
+    vec3 wp = a_origin.xyz + drift;
+    wp.y = max(0.22, wp.y);
+    float pulse = 0.5 + 0.5 * sin(u_time * (1.4 + kind * 2.2) + ph * 3.7);
+    float rad = a_origin.w * u_scaleBoost * (0.78 + 0.36 * pulse);
+    vec3 p = wp + (u_camRight * a_corner.x + u_camUp * a_corner.y) * rad;
+    gl_Position = u_viewProj * vec4(p, 1.0);
+    v_uv = a_corner;
+    v_meta = vec3(pulse, kind, clamp(wp.y / 3.8, 0.0, 1.0));
+  }`;
+
+  const ATMO_FS = `#version 300 es
+  precision highp float;
+  in vec2 v_uv;
+  in vec3 v_meta;
+  uniform vec3 u_colA, u_colB;
+  uniform float u_alpha;
+  out vec4 fragColor;
+  void main() {
+    float r2 = dot(v_uv, v_uv);
+    if (r2 > 1.0) discard;
+    float core = exp(-r2 * 6.5);
+    float halo = exp(-r2 * 1.9) * 0.45;
+    float blink = mix(0.45, 1.0, v_meta.x * v_meta.x);
+    vec3 c = mix(u_colA, u_colB, v_meta.y);
+    float a = clamp((core + halo) * u_alpha * blink * (1.0 - v_meta.z * 0.28), 0.0, 0.92);
+    if (a < 0.008) discard;
+    fragColor = vec4(c * (1.0 + core * 0.55), a);
+  }`;
+
+  function createAtmoDrawer(gl, compileFn) {
+    const prog = compileFn(gl, ATMO_VS, ATMO_FS);
+    const u = {};
+    for (const k of ["u_viewProj", "u_camRight", "u_camUp", "u_time", "u_scaleBoost", "u_colA", "u_colB", "u_alpha"]) {
+      u[k] = gl.getUniformLocation(prog, k);
+    }
+    const PAL = {
+      daylight:  { a: [1.00, 0.95, 0.72], b: [0.98, 0.99, 0.90], alpha: 0.42, boost: 1.00, add: false },
+      golden:    { a: [1.00, 0.78, 0.34], b: [1.00, 0.92, 0.56], alpha: 0.58, boost: 1.15, add: true },
+      night:     { a: [0.85, 1.00, 0.32], b: [1.00, 0.86, 0.26], alpha: 0.82, boost: 1.28, add: true },
+      moonlight: { a: [0.74, 0.96, 0.56], b: [0.66, 0.88, 1.00], alpha: 0.68, boost: 1.15, add: true },
+      neon:      { a: [0.22, 0.95, 1.00], b: [1.00, 0.28, 0.86], alpha: 0.74, boost: 1.20, add: true },
+      overcast:  { a: [0.92, 0.95, 0.92], b: [0.98, 0.98, 0.94], alpha: 0.34, boost: 0.95, add: false },
+      classic:   { a: [1, 1, 1], b: [1, 1, 1], alpha: 0.0, boost: 1.0, add: false },
+    };
+    return {
+      draw(mesh, camera, lighting, time) {
+        if (!mesh || !mesh.count) return;
+        const p = PAL[lighting] || PAL.daylight;
+        if (p.alpha <= 0.001) return;
+        gl.useProgram(prog);
+        gl.enable(gl.DEPTH_TEST); gl.depthMask(false); gl.disable(gl.CULL_FACE);
+        gl.enable(gl.BLEND);
+        gl.blendFuncSeparate(gl.SRC_ALPHA, p.add ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+        const vd = camera.viewDir;
+        const rx = vd[2], rz = -vd[0], rL = Math.hypot(rx, rz) || 1;
+        const camRight = [rx / rL, 0, rz / rL];
+        const camUp = [vd[1] * camRight[2], vd[2] * camRight[0] - vd[0] * camRight[2], -vd[1] * camRight[0]];
+        gl.uniformMatrix4fv(u.u_viewProj, false, camera.viewProj);
+        gl.uniform3fv(u.u_camRight, camRight); gl.uniform3fv(u.u_camUp, camUp);
+        gl.uniform1f(u.u_time, time || 0); gl.uniform1f(u.u_scaleBoost, p.boost);
+        gl.uniform3fv(u.u_colA, p.a); gl.uniform3fv(u.u_colB, p.b); gl.uniform1f(u.u_alpha, p.alpha);
+        gl.bindVertexArray(mesh.vao);
+        gl.drawElements(gl.TRIANGLES, mesh.count, gl.UNSIGNED_SHORT, 0);
+        gl.bindVertexArray(null);
+      },
+    };
+  }
+
   window.__antFx = {
     FIRE_VS, FIRE_FS, buildFireParticles,
     SPARK_VS, SPARK_FS, buildSparkParticles,
@@ -1099,6 +1211,7 @@
     SHADOW_VS, SHADOW_FS,
     TILE_GROUND_VS, TILE_GROUND_FS, buildTileGroundMesh,
     BORDER_GRASS_VS, BORDER_GRASS_FS, drawBorderGrassMesh,
+    createAtmoDrawer,
     evalJelloWobble,
   };
 })();
