@@ -29,8 +29,7 @@ Work that is not released yet is written in the same template under a heading th
 ## Next
 
 **For players:**
-- **Empty lobbies in the Games list.** The list is never bare: dashed "Open lobby" cards fill what the open rooms leave of its first two rows (one row while matches are in progress), and each card's **Host here** is Quick host (it asks Public or Invite only first). Real rooms take the places in order.
-- **Live scores in the Games list.** Each match in progress shows every side's score, live (in a 187 match the kills), as a strip under its names; press it to open a scoreboard with bars and the leader marked. Only what every player sees in the game's score boxes, and matches with Fog of War stay off the list.
+- **Games list.** Dashed Open lobby cards fill the empty places (Host here), and a live match shows its scores in a strip that opens a scoreboard.
 - **Copy link on a phone.** A live view and a replay have the button in the top bar on a phone now (a share symbol, 44 px; on a computer it says Copy link as before). It opens the phone's share sheet where there is one, otherwise copies the match's address and says Copied!. The bar shows Matches and Full instead of All matches and Fullscreen on a narrow phone, so that all five buttons fit in one row.
 
 **Fixes:**
