@@ -26,6 +26,11 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**Fixes:**
+- The menu's "players online" counts the same people as the Players list, not only those in a room or a match.
+
 ## v0.21.5 - 2026-11-24 - The Podium results, messages on phones and smarter bots
 
 **For players:**

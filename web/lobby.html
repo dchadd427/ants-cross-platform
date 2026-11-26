@@ -1344,7 +1344,12 @@
                 return response.json();
             }, function (e) { clearTimeout(timer); throw e; });
         }
+        // The "N online" of the line counts the people on the site, as the Players list does (web/home/players.js tells hereNow); the game server's own count (in a room or a match) is used only
+        // while the list has no count (no hub, not connected yet).
+        var hereNow = null, lastStats = null;
         function showStats(stats) {
+            lastStats = stats;
+            if (stats && hereNow !== null) stats = { matches: stats.matches, players: hereNow, played: stats.played, today: stats.today, since: stats.since };
             var line = $('stats');
             if (!stats) { line.hidden = true; return; }
             var words = statsWords(stats);
@@ -1370,6 +1375,7 @@
         // THE TWO SCREENS (web/home/home.js, docs/HOME_SCREEN.md): Home or the Room is a class of <body>; the client, the model and the session storage above are not touched by it
         var Home = window.AntsHome.mount({ doc: document, win: window, host: $('home'), room: $('lobby'), page: {
             info: function () { return { client: !!client, model: model, offline: offline }; }, make: function () { connect({ code: newCode(), name: myName(), own: true }); }, how: openHow, stalled: stalled,
+            hereNow: function (n) { var v = wholeNumber(n); if (v === hereNow) return; hereNow = v; if (lastStats) showStats(lastStats); },
             client: function () { return client; }, join: probe, typed: joinTyped, name: myName, handing: function () { return handing; }, cancel: function () { if (lastProbe && lastProbe !== client) lastProbe.leave(); }, hold: inert, holds: function () { return !!client && !handing; },
             leave: function () { if (handing) return; var old = client; client = null; model = null; offline = 'none'; painted = {}; if (old) old.leave(); forgetSession(); leaveBack(); hideBanner(); render(); } } });
 
