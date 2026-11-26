@@ -5,7 +5,7 @@ The game lays the screen out itself, in units of whole device pixels (include/an
   titles      sc_victory_26 / _22, sc_defeat_26 / _22 ("Victory!" and "Defeat"), sc_gameover_36 / _26 ("Game Over": the waiting page) and sc_matchstats_15 ("Match Stats"), in the playful cast-metal
               letters; the number is the height of a capital
   lettering   sc_others ("other players..."), the headings of the second page (sc_g_damage, sc_g_food, sc_g_special, and under them sc_s_done, sc_s_taken, sc_s_trips, sc_s_points, sc_s_bombs,
-              sc_s_fires, sc_s_raids, sc_s_loot) and the gold labels of the wells (sc_k_winner, sc_k_colony, sc_k_play, sc_k_mvp, sc_k_blood, sc_k_raid, sc_k_stand): the windows' lit switch word
+              sc_s_fires, sc_s_raids, sc_s_loot) and the gold labels of the wells (sc_k_winner, sc_k_colony, sc_k_play, sc_k_mvp, sc_k_blood, sc_k_thief, sc_k_stand): the windows' lit switch word
   every one is cut to what it holds. Its manifest place is (x, y): where the alignment point of the line is in the sprite (the end of the line for the headings that stand over a column, the middle
               for the gold labels that are centered, its start for the rest) and where its baseline is, counted from the sprite's top left. The playful titles are cut as wide to the right of the
               line's middle as to the left of it, so that the middle of the sprite is the middle of the line (a centered title), and their x is where the line starts (a title that stands at the left)
@@ -67,7 +67,7 @@ LINES = (
     ('sc_k_play', 'PLAY OF THE GAME', 'gold', 10.0, None, 'start'),
     ('sc_k_mvp', 'MVP', 'gold', 9.5, None, 'middle'),
     ('sc_k_blood', 'FIRST BLOOD', 'gold', 9.5, None, 'middle'),
-    ('sc_k_raid', 'BIGGEST RAID', 'gold', 9.5, None, 'middle'),
+    ('sc_k_thief', 'TOP THIEF', 'gold', 9.5, None, 'middle'),
     ('sc_k_stand', 'LAST STAND', 'gold', 9.5, None, 'middle'),
 )
 PLAYFUL = tuple(n for n, _, material, *_ in LINES if material == 'playful')

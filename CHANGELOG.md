@@ -29,7 +29,10 @@ Work that is not released yet is written in the same template under a heading th
 ## Next
 
 **For players:**
+- **Top Thief** replaces Biggest raid on the results screen: the player with the most raids whose loot got home. 187 keeps Last stand.
+- **Games list.** Dashed Open lobby cards fill the empty places (Host here), and a live match shows its scores in a strip that opens a scoreboard.
 - **Copy link on a phone.** A live view and a replay have the button in the top bar on a phone now (a share symbol, 44 px; on a computer it says Copy link as before). It opens the phone's share sheet where there is one, otherwise copies the match's address and says Copied!. The bar shows Matches and Full instead of All matches and Fullscreen on a narrow phone, so that all five buttons fit in one row.
+- **Kills first on the Podium.** The results show Killed before Lost (then Hatched), for the winner and for each of the other players.
 - **Computer players fight for the flower and get stuck less on ISLANDS.** Hard bots strike at the ants of other teams that wait with them at a flower's strip when they have the edge, and win more of the flower's power-ups (ISLANDS: 3.3 a bot and match against 2.9). An ant with food or loot that meets another team's ant at the one tile of a bridge's landing steps back and lets it pass, and an ant that holds a load far from home gets its bridge from one Swimmer. Standing on a power-up when hurt and fighting only with an edge were built and measured too; they did not win, so they are off. Bots only.
 
 **Fixes:**

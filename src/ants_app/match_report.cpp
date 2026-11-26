@@ -13,7 +13,8 @@
 //   MVP            the seat of the winning side with the highest mvp_share (ties: the lower seat); no MVP when that share is 0. `value` is that share (thousandths). The three things are the damage done, the kills and the points that the seat's hill gained (MatchStats::banked, a thief's loot
 //                  included, so loot is not a thing of its own).
 //   First blood    the first kill, by turn and then by the order they were counted, whose killer is a real team that is not its victim's own. A death by drowning has no killer and is nobody's. None when there is none.
-//   Biggest raid   the raid that took the most points (more than 0; ties: the earlier). Not in 187, which has the Last stand instead: of the seats that are not on the winning side and ran out of ants for good during the match
+//   Top Thief      the seat with the most raids whose loot got home (stats.raids_home: a raid on a hill with nothing, and a Thief that was killed on the way, are begun and never home; more than 0; ties: the lower seat). The
+//                  card says the raids and their points (stats.loot_home). Not in 187, which has the Last stand instead: of the seats that are not on the winning side and ran out of ants for good during the match
 //                  (no ant, no egg, no hatch: stats.out_turn), the one that did LAST; none when none did. (A seat that was wiped out and came back from an egg did not run out.)
 //   Play of the game  the busiest 10 seconds that have a play to tell: two neighboring buckets of 100 turns (b and b + 1, for every b; a bucket that the match did not reach is empty) with the most activity, the activity being
 //                  the sum of count times weight (death 14, bomb 10, theft 6, fire 5, hit 2: the activity curve's). The earlier window wins a tie; a window under 28 (two deaths) is no window; when the busiest has no play to tell
@@ -260,6 +261,8 @@ MatchReport make_match_report(const replay::MatchStats& st, const sim::MatchResu
         report.food_points[s] = st.food_points[s];
         report.bombs_set[s] = st.bombs_planted[s];
         report.fires_lit[s] = st.fires_lit[s];
+        report.raids_home[s] = st.raids_home[s];
+        report.loot_home[s] = st.loot_home[s];
     }
     for (const MatchStats::Raid& raid : st.raids) {
         if (raid.thief >= kSeats) continue;
@@ -303,12 +306,12 @@ MatchReport make_match_report(const replay::MatchStats& st, const sim::MatchResu
             }
         }
     } else {
-        // Biggest raid: the raid with the most points, when it took any
-        int32_t most = 0;
-        for (const MatchStats::Raid& raid : st.raids) {
-            if (raid.thief >= kSeats || raid.points <= most) continue;      // (strictly: the earlier of two equal raids stays)
-            most = raid.points;
-            report.biggest_raid = MatchReport::Honor{true, raid.thief, raid.points, raid.turn};
+        // Top Thief: the seat with the most raids whose loot got home, when any did
+        uint32_t most = 0;
+        for (size_t s = 0; s < kSeats; ++s) {
+            if (st.raids_home[s] <= most) continue;                         // (strictly: the lower seat keeps a tie)
+            most = st.raids_home[s];
+            report.top_thief = MatchReport::Honor{true, static_cast<uint8_t>(s), static_cast<int64_t>(most), 0};
         }
     }
 

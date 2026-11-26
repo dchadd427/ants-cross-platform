@@ -235,7 +235,7 @@ void check_podium(const hud_art::Art& art, const Case& c) {
                 check(hw.y >= std::max(p.winner_well.bottom(), p.others_well.bottom()) + 6, at + ": honor " + std::to_string(i) + " is under the wells");
                 if (i > 0) check(hw.x >= p.honor[i - 1].right() + 8 && hw.y == p.honor[i - 1].y && hw.w == p.honor[i - 1].w, at + ": the honors stand side by side, as wide as one another");
                 check(p.honor_label_base < p.honor_ant_y && p.honor_ant_h >= 24 && p.honor_ant_y + p.honor_ant_h <= p.honor_name_base - 4 && p.honor_name_base < p.honor_detail_base && p.honor_detail_base + 3 <= hw.h, at + ": a card holds the label, an ant, the name and the detail, in that order");
-                const LayoutRect honor_label = ink_letters(art, i == 0 ? "sc_k_mvp" : i == 1 ? "sc_k_blood" : (c.is_187 ? "sc_k_stand" : "sc_k_raid"), hw.x + hw.w / 2, hw.y + p.honor_label_base);
+                const LayoutRect honor_label = ink_letters(art, i == 0 ? "sc_k_mvp" : i == 1 ? "sc_k_blood" : (c.is_187 ? "sc_k_stand" : "sc_k_thief"), hw.x + hw.w / 2, hw.y + p.honor_label_base);
                 check(contains(hw, honor_label), at + ": the label of honor " + std::to_string(i) + " is in its card " + str(honor_label));
             }
             check(p.honor[0].x >= p.content.x && p.honor[2].right() + 6 <= p.content.right() + 4, at + ": the honors stand inside the column");

@@ -841,7 +841,10 @@ void Room::replay_begin(const net::StartMsg& start) {
     head.recorder_seat = replay::kNoSeat;                        // (the server plays nobody)
     recorder_ = std::make_unique<replay::Recorder>(std::move(head), spec_.max_recording_bytes);
     session_->runner().set_on_executed([this](const net::TurnMsg& turn) {
-        if (recorder_ != nullptr && sim_ != nullptr) recorder_->on_turn(turn, *sim_);
+        if (recorder_ == nullptr || sim_ == nullptr) return;
+        recorder_->on_turn(turn, *sim_);
+        const uint32_t turns = recorder_->turns();
+        if (!live_id_.empty() && (turns == 1 || turns % net::kTurnsPerSecond == 0)) publish_live_scores();       // (after the first turn, so that a match that has run is never "no score yet", and then once a second)
     });
     if (live_board_ != nullptr) {
         unsigned people = 0;                                         // (the seats of the match that people hold, counted once from the room's slots, never from names: the board shows a match of two or more people late)
@@ -851,6 +854,25 @@ void Room::replay_begin(const net::StartMsg& start) {
         }
         live_id_ = live_board_->begin(*recorder_, people);           // (from now on a visitor can watch the match, late when people play it: live_board.hpp)
     }
+}
+
+// The score boxes of the match for the live list: what every player of the match sees on the screen (HUD::render_score_box: the display score of the seat, its own and its ally's together, from 0 to 999999, and no number for
+// a seat that has left), and which seats are one side. Read from the referee's engine after a turn, with the engine's public readers only; nothing is changed, so the match, the hashes and the recording are what they were.
+// Cost: for each seat of the match three small reads, once a second, and one search of the board's few running matches.
+void Room::publish_live_scores() {
+    if (live_board_ == nullptr || live_id_.empty() || sim_ == nullptr) return;
+    LiveScores scores;
+    scores.known = true;
+    const uint8_t roster = sim_->roster_mask();
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        scores.side[seat] = seat;
+        if ((roster & (1u << seat)) == 0) continue;
+        scores.box[seat] = sim_->get_display_score(seat);
+        const uint8_t ally = sim_->alliance_of(seat);
+        if (ally < sim::MAX_PLAYERS && ally != seat && (roster & (1u << ally)) != 0) scores.side[seat] = std::min(seat, ally);
+        if (sim_->is_player_dropped(seat)) scores.covered = static_cast<uint8_t>(scores.covered | (1u << seat));
+    }
+    live_board_->set_scores(live_id_, scores);
 }
 
 void Room::live_end(const std::string& kept_file) {
@@ -1261,7 +1283,10 @@ RoomStatus Room::status(uint32_t now_ms) const {
     s.joined = static_cast<uint8_t>(from_record_ ? seats_in(roster_) : lobby_.players());       // (a room made from a record has no lobby that knows its players: the roster of its match does)
     if (sim_ != nullptr) {                                                                // (what the match started with, and where the referee's engine stands: for the tests)
         s.teams = sim::start_teams_text(start_teams_);
-        for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) s.allies[seat] = sim_->alliance_of(seat);
+        for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+            s.allies[seat] = sim_->alliance_of(seat);
+            if ((sim_->roster_mask() & (1u << seat)) != 0) s.scores[seat] = std::max(0, std::min(sim_->get_display_score(seat), LiveScores::kBoxMax));
+        }
     }
     s.bots_only = spec_.bots_only;
     s.bot_controller = bot_controller_ != nullptr;
