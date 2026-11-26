@@ -1243,6 +1243,136 @@ void run_replay_tests() {
         ASSERT_TRUE(r.status == 404 && replay_json_of(r).get("ended").as_bool_or(false) && replay_json_of(r).get("replay").str().empty());
     } TEST_END();
 
+    TEST_CASE("S3.178b The Live List Carries The Score Boxes Of A Match, As The Game Draws Them (The Referee's Display Scores, With Allies On One Side), From The First Turn On And Not Before, In Every Game Mode (In 187 The Boxes Count Kills), With No Delay; A Match With Fog Of War Is Not On The List At All, So No Score Of It Is") {
+        ReplayClock clock;
+        World w;
+        std::string why;
+        ASSERT_TRUE(w.mgr.enable_replays(replay_config("live-scores", &clock), false, why));
+        const auto bots_room = [&w](const char* code, uint8_t mode, bool teams) {
+            RoomSpec s = spec_of(code, 4);
+            s.mode = mode;
+            if (teams) s.teams = sim::StartTeams{true, 0, 2};                                             // (Green + Blue against Red + Black)
+            s.bots = {ai::BotSpec{0, "standard", ai::Level::Hard}, ai::BotSpec{1, "standard", ai::Level::Hard}, ai::BotSpec{2, "standard", ai::Level::Hard}, ai::BotSpec{3, "standard", ai::Level::Hard}};
+            s.bots_only = true;
+            s.early_start = false;
+            s.reconnect = false;
+            s.wait_ms = 1000;
+            s.run_ms = 20u * 60u * 1000u;
+            return w.mgr.create_room(s, w.now).ok;
+        };
+        ASSERT_TRUE(bots_room("SC-FFA", 0, false) && bots_room("SC-TEAM", 0, true) && bots_room("SC-187", 1, false));
+        RoomSpec fog = spec_of("SC-FOG", 2);                                                              // (Fog of War, no bots with it: two people)
+        fog.fog = true;
+        ASSERT_TRUE(w.mgr.create_room(fog, w.now).ok);
+        w.connect("Ann", "SC-FOG");
+        w.connect("Bea", "SC-FOG");
+        const auto live = [&w]() { return replay_json_of(public_call(w.mgr, "GET", "/live")); };
+        // the first looks, a turn or less apart: the matches are listed as they start, before their first turn, and say no score; from the first turn on they always do (the first sample is taken after turn 1, not a second in)
+        bool seen_start = false;
+        for (int guard = 0; guard < 3000; ++guard) {
+            const ctl::JsonValue j = live();
+            size_t past = 0;
+            for (size_t i = 0; i < j.get("live").size(); ++i) {
+                const ctl::JsonValue& e = j.get("live").at(i);
+                const int64_t turns = e.get("turns").as_int_or(-1);
+                ASSERT_TRUE((e.find("scores") != nullptr && e.find("sides") != nullptr) == (turns > 0));
+                ASSERT_TRUE((e.find("scores") == nullptr) == (e.find("sides") == nullptr));
+                seen_start = seen_start || turns == 0;
+                if (turns >= 40) ++past;
+            }
+            if (j.get("live").size() == 3 && past == 3) break;
+            w.run(10);
+        }
+        ASSERT_TRUE(seen_start);
+        for (int guard = 0; guard < 6000 && (w.status("SC-FFA").ticks < 3000 || w.status("SC-187").ticks < 3000 || w.status("SC-TEAM").ticks < 3000); ++guard) w.run(50);
+        ASSERT_TRUE(w.status("SC-FFA").state == RoomState::Running && w.status("SC-TEAM").state == RoomState::Running && w.status("SC-187").state == RoomState::Running);
+        // stop at a moment when every match has just taken its sample (a turn that is a whole second: the boxes of the list are then the engine's of this very turn)
+        for (int guard = 0; guard < 4000; ++guard) {
+            if (w.status("SC-FFA").ticks % 20 == 0 && w.status("SC-TEAM").ticks % 20 == 0 && w.status("SC-187").ticks % 20 == 0) break;
+            w.run(10);
+        }
+        const ctl::JsonValue j = live();
+        std::string ffa_id;
+        ASSERT_TRUE(j.get("live").size() == 3 && j.get("count").as_int_or(0) == 3);                       // (the match with Fog of War is not among them, whatever it has run)
+        ASSERT_TRUE(w.status("SC-FOG").state == RoomState::Running && w.status("SC-FOG").fog && w.status("SC-FOG").turns > 100 && w.mgr.live_board().running() == 3);
+        for (const char* code : {"SC-FFA", "SC-TEAM", "SC-187"}) {
+            const RoomStatus s = w.status(code);
+            ASSERT_MSG(s.ticks % 20 == 0, code);
+            const ctl::JsonValue* found = nullptr;
+            for (size_t i = 0; i < j.get("live").size(); ++i) {
+                const ctl::JsonValue& e = j.get("live").at(i);
+                const bool is187 = e.get("mode").str() == "187";
+                const bool team = e.get("sides").size() == 4 && e.get("sides").at(0).as_int_or(9) == e.get("sides").at(2).as_int_or(8);
+                if (is187 == (std::string(code) == "SC-187") && team == (std::string(code) == "SC-TEAM")) found = &e;
+            }
+            ASSERT_MSG(found != nullptr, code);
+            if (std::string(code) == "SC-FFA") ffa_id = found->get("id").str();
+            ASSERT_TRUE(found->get("scores").is_array() && found->get("scores").size() == 4 && found->get("sides").is_array() && found->get("sides").size() == 4);
+            ASSERT_MSG(found->get("turns").as_int_or(-1) == static_cast<int64_t>(s.ticks), code);
+            bool any = false;
+            for (size_t seat = 0; seat < 4; ++seat) {
+                ASSERT_MSG(found->get("scores").at(seat).is_int() && found->get("scores").at(seat).as_int_or(-1) == s.scores[seat], std::string(code) + " seat " + std::to_string(seat));         // (the number of the score box: the referee's display score)
+                any = any || s.scores[seat] > 0;
+                const int ally = s.allies[seat] < 4 ? s.allies[seat] : static_cast<int>(seat);
+                ASSERT_MSG(found->get("sides").at(seat).as_int_or(-1) == std::min<int>(static_cast<int>(seat), ally), std::string(code) + " seat " + std::to_string(seat));                   // (allies share their lower seat's number)
+            }
+            ASSERT_MSG(any, code);                                                                        // (four computer players have scored, or killed, in a hundred seconds: the numbers are no zeros that nothing gave)
+        }
+        {   // the team match: Green + Blue and Red + Black are two sides, and the two seats of a side show one number (the box adds the ally's score)
+            const RoomStatus s = w.status("SC-TEAM");
+            ASSERT_TRUE(s.teams == "0+2" && s.allies[0] == 2 && s.allies[2] == 0 && s.scores[0] == s.scores[2] && s.scores[1] == s.scores[3]);
+        }
+        // the answer says nothing else of the match's insides: no key but the nine of the entry, and nothing of the room
+        for (size_t i = 0; i < j.get("live").size(); ++i) {
+            const ctl::JsonValue& e = j.get("live").at(i);
+            ASSERT_TRUE(e.find("scores") != nullptr && e.find("sides") != nullptr && e.find("delay") == nullptr && e.find("people") == nullptr && e.find("code") == nullptr);
+        }
+        for (const char* secret : {"SC-FFA", "SC-TEAM", "SC-187", "SC-FOG", "127.0.0.1"}) ASSERT_TRUE(public_call(w.mgr, "GET", "/live").body.find(secret) == std::string::npos);
+        {   // a seat whose box is covered in the game (it left the match) has no number in the answer, null in the place of its own; the others keep theirs (the board's sample, put in by hand: the room's next one replaces it)
+            LiveScores covered;
+            covered.known = true;
+            covered.box = {{5, 6, 7, 8}};
+            covered.side = {{0, 1, 2, 3}};
+            covered.covered = 0x02;
+            w.mgr.live_board().set_scores(ffa_id, covered);
+            const ctl::JsonValue after = live();
+            const ctl::JsonValue* entry = nullptr;
+            for (size_t i = 0; i < after.get("live").size(); ++i) if (after.get("live").at(i).get("id").str() == ffa_id) entry = &after.get("live").at(i);
+            ASSERT_TRUE(entry != nullptr && entry->get("scores").size() == 4);
+            const ctl::JsonValue& boxes = entry->get("scores");
+            ASSERT_TRUE(boxes.at(0).as_int_or(-1) == 5 && boxes.at(1).is_null() && boxes.at(2).as_int_or(-1) == 7 && boxes.at(3).as_int_or(-1) == 8);
+        }
+        ASSERT_TRUE(w.mgr.close_room("SC-FOG", w.now));
+        ASSERT_EQ(live().get("live").size(), size_t{3});
+    } TEST_END();
+
+    TEST_CASE("S3.178c A Seat That Really Leaves A Running Match Has Its Score Box Covered In The Game, So Its Number Is Null On The Live List While The Others Keep Theirs; The Match Of People Is Shown 30 Seconds Late And Its Numbers Are Not") {
+        ReplayClock clock;
+        World w;
+        std::string why;
+        ASSERT_TRUE(w.mgr.enable_replays(replay_config("live-left", &clock), false, why));
+        ASSERT_TRUE(w.mgr.create_room(spec_of("LEFT-3", 3), w.now).ok);
+        w.connect("Ann", "LEFT-3");
+        w.connect("Bob", "LEFT-3");
+        Client& cat = w.connect("Cat", "LEFT-3");
+        const auto entry = [&w]() { return replay_json_of(public_call(w.mgr, "GET", "/live")); };
+        for (int guard = 0; guard < 3000 && (entry().get("live").size() != 1 || entry().get("live").at(0).get("turns").as_int_or(0) < 100); ++guard) w.run(50);
+        ctl::JsonValue j = entry();
+        ASSERT_TRUE(j.get("live").size() == 1 && j.get("live").at(0).get("players").size() == 3);
+        const ctl::JsonValue* scores = &j.get("live").at(0).get("scores");
+        ASSERT_TRUE(scores->size() == 3 && scores->at(0).is_int() && scores->at(1).is_int() && scores->at(2).is_int());       // (three people at the table: three boxes, none covered; the match is shown 30 s late, its numbers are not)
+        ASSERT_TRUE(w.status("LEFT-3").state == RoomState::Running);
+        w.net.cut(cat.server_end);                                                                       // (Cat leaves: a room that holds no seats drops the seat, and the game covers its box)
+        w.run(4000);
+        ASSERT_MSG(w.status("LEFT-3").state == RoomState::Running, std::string("state ") + room_state_name(w.status("LEFT-3").state));
+        j = entry();
+        ASSERT_TRUE(j.get("live").size() == 1);
+        scores = &j.get("live").at(0).get("scores");
+        ASSERT_TRUE(scores->size() == 3 && scores->at(0).is_int() && scores->at(1).is_int());                       // (the two who stay keep their numbers)
+        ASSERT_TRUE(scores->at(2).is_null());                                                            // (the seat that left has none: its box is covered)
+        ASSERT_EQ(j.get("live").at(0).get("players").size(), size_t{3});                                 // (the list of players is the match's, as it began)
+    } TEST_END();
+
     TEST_CASE("S3.176b A Match With No Person, Or One Person, Is Shown As It Is (The Header Says A Delay Of 0 And The Snapshot Ends At The Turns Run); The People Of A Match Are The Seats That People Hold, Computer Players Are Not Counted (Two People And A Computer Player Is Shown Late)") {
         ReplayClock clock;
         ServerLimits limits;

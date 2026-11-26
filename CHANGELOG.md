@@ -30,10 +30,11 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - **Top Thief** replaces Biggest raid on the results screen: the player with the most raids whose loot got home. 187 keeps Last stand.
-- **Copy link on a phone.** A live view and a replay have the button in the top bar on a phone now (a share symbol, 44 px; on a computer it says Copy link as before). It opens the phone's share sheet where there is one, otherwise copies the match's address and says Copied!. The bar shows Matches and Full instead of All matches and Fullscreen on a narrow phone, so that all five buttons fit in one row.
+- **Games list.** Dashed Open lobby cards fill the empty places (Host here), and a live match shows its scores in a strip that opens a scoreboard.
+- **Copy link on a phone.** A live view and a replay have the button in the top bar (a share symbol, 44 px; a computer still says Copy link). It opens the phone's share sheet, or copies the match's address and says Copied!. A narrow phone's bar says Matches and Full (not All matches and Fullscreen), so all five buttons fit.
 
 **Fixes:**
-- On a phone, a live view's "Jump to live" no longer covers the clock beside the play button: the clock keeps its room, the button goes under it when the row is short, and Picture sits beside the camera button. The speed buttons and Picture are 44 px high.
+- On a phone, a live view's "Jump to live" no longer covers the clock: the button goes under it when the row is short, and Picture sits beside the camera button. Speed buttons and Picture are 44 px high.
 - The menu's "players online" counts the same people as the Players list, not only those in a room or a match.
 
 ## v0.21.5 - 2026-11-24 - The Podium results, messages on phones and smarter bots

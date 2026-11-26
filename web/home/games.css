@@ -38,12 +38,10 @@
 .glegend .gdot { width: 12px; height: 12px; }
 .glegend .gdot.player { --c: #79bf93; } .glegend .gdot.bot { --c: #d4707f; }
 .gjoin { min-width: 72px; min-height: 44px; }
-.gempty, .goff { display: grid; justify-items: center; gap: 6px; padding: 22px 16px 18px; text-align: center; background: #080d12; border: 1px solid #17382f; border-radius: 4px; }
-.gempty[hidden], .goff[hidden], .glist[hidden], .glegend[hidden], .gpnote[hidden], .gjoining[hidden] { display: none; }
-.gempty .ant { --k: 2; margin: 0 auto 4px; filter: brightness(0) invert(1); opacity: .13; animation: none; }       /* (a shadow of the ant of an open color) */
+.goff { display: grid; justify-items: center; gap: 6px; padding: 22px 16px 18px; text-align: center; background: #080d12; border: 1px solid #17382f; border-radius: 4px; }
+.goff[hidden], .glist[hidden], .glegend[hidden], .gpnote[hidden], .gjoining[hidden] { display: none; }
 .gemtitle { margin: 0; font-size: 22px; line-height: 1.2; }
 .gemline { margin: 0 0 4px; font-size: 15px; line-height: 1.35; color: #a8cfc0; }
-.gemhost { min-height: 48px; margin-top: 8px; }
 .gcodelink { appearance: none; -webkit-appearance: none; flex: none; min-width: 44px; min-height: 44px; margin: -12px 0; padding: 0 2px; font: inherit; font-size: 16px; color: var(--gold); background: none; border: 0; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .gcodelink[aria-expanded="true"] { color: var(--cream); }
 .gcodelink:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
@@ -78,12 +76,6 @@
 .glockbox::after { top: 20px; width: 15px; height: 12px; margin-left: -7.5px; background: currentColor; border-radius: 2px; }       /* (the body) */
 .gprivtag { display: inline-block; padding: 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .06em; line-height: 18px; text-transform: uppercase; color: #cfe3da; background: #24342f; border: 1px solid #4a6a5f; border-radius: 3px; }
 .gmore { grid-column: 1 / -1; padding: 10px 12px; font-size: 15px; text-align: center; color: #8fb0a3; border: 1px dashed #34514a; border-radius: 4px; }
-/* (private rooms but nothing to join: the empty card is a slim strip over the locked cards) */
-.gempty.gslim { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t b" "l b"; justify-items: start; align-items: center; gap: 2px 14px; min-height: 0; margin: 0 0 12px; padding: 12px 14px; text-align: left; background: #080d12; border: 1px solid #17382f; }
-.gslim .ant { display: none; }
-.gempty.gslim .gemtitle { grid-area: t; font-size: 17px; line-height: 1.3; }
-.gempty.gslim .gemline { grid-area: l; margin: 0; font-size: 14px; }
-.gempty.gslim .gemhost { grid-area: b; justify-self: end; min-height: 44px; }
 
 /* ---- the confirm card: the question, what it is about, the answer that changes nothing ---- */
 .gshade { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 16px; background: rgba(5, 10, 8, .72); }
@@ -134,10 +126,57 @@
 @media (max-width: 700px) { .vbtn { min-height: 40px; } }
 
 /* ---- a phone upright and a short window ---- */
-@media (max-width: 720px) { .gempty.gslim { grid-template-columns: minmax(0, 1fr); grid-template-areas: "t" "l" "b"; } .gempty.gslim .gemhost { justify-self: start; margin-top: 14px; } .gphead { align-items: center; } .gptitle { flex: 1 1 auto; } .gcodelink { order: 1; } .gpcount { order: 2; flex: 1 0 100%; margin-left: 0; text-align: left; } .gpop { padding: 12px 12px 14px; } .gitem { gap: 10px; padding: 8px 8px; } .gmap { width: 52px; height: 52px; } .gname { font-size: 19px; } .gcode .joinbox input { min-width: 0; } }
+@media (max-width: 720px) { .gphead { align-items: center; } .gptitle { flex: 1 1 auto; } .gcodelink { order: 1; } .gpcount { order: 2; flex: 1 0 100%; margin-left: 0; text-align: left; } .gpop { padding: 12px 12px 14px; } .gitem { gap: 10px; padding: 8px 8px; } .gmap { width: 52px; height: 52px; } .gname { font-size: 19px; } .gcode .joinbox input { min-width: 0; } }
 @media (max-height: 500px) and (orientation: landscape) { .gphead { align-items: center; } .gptitle { font-size: 20px; } .gpop { padding: 10px 14px 12px; } .gcbtns .btn { min-height: 44px; } .gconfirm { padding: 12px 16px; } .gctitle { font-size: 22px; } .gcline { margin-bottom: 10px; } }
 @media (max-height: 350px), (max-width: 260px) { .gshade { padding: 8px; } .gmark { margin-bottom: 6px; } .gmark.shadow .ant { --k: 1; } .gcline { margin-bottom: 8px; } .gcbtns .gyes.big { min-height: 48px; font-size: 22px; } .gcnote { margin: 6px 0; } .gbar, .gconfirm .gitem { margin-bottom: 10px; } }       /* (a short window or a zoomed phone: the none card fits without a scroll) */
 @media (max-width: 260px) { .gconfirm { padding: 10px; } .gctitle { margin-bottom: 6px; font-size: 20px; } .gcline { font-size: 14px; } .gcnote { font-size: 13px; } }
-@media (max-height: 460px) { .gempty { padding: 8px 12px; gap: 2px; } .gempty .ant { display: none; } .gemtitle { font-size: 20px; } .gemhost { min-height: 44px; margin-top: 4px; } }       /* (a sideways phone: the empty state keeps its Host a game in view) */
 
 .gfog { display: inline-block; box-sizing: border-box; padding: 0 6px; font-size: 12px; letter-spacing: .06em; line-height: 16px; text-transform: uppercase; white-space: nowrap; color: #cfe3ee; background: #14232c; border: 1px solid #4a7388; border-radius: 3px; }       /* (Fog of War: the look of the 187 tag in a cool color) */
+
+/* ---- the empty cards (lobby slots): dashed, a plus where a map's picture would be, "Open lobby", four open seats and Host here (Quick host) ---- */
+.glist .gitem.gslot, .glist .gitem + .gitem.gslot { border: 1px dashed #2f7a5e; background: #060d0f; }
+.gslot .gname { color: #cfe6dc; }
+.gsay { font-size: 15px; color: #a8cfc0; }
+.gslot .gjoin { min-width: 72px; }
+.glist .gslot .gmap { position: relative; box-sizing: border-box; background: none; border: 2px dashed #2f7a5e; box-shadow: none; }
+.gslot .gmap::before, .gslot .gmap::after { content: ""; position: absolute; left: 50%; top: 50%; background: #4fae8a; }
+.gslot .gmap::before { width: 22px; height: 2px; margin: -1px 0 0 -11px; }
+.gslot .gmap::after { width: 2px; height: 22px; margin: -11px 0 0 -1px; }
+
+/* ---- the scores of a match in progress: a strip that is one button (a square of each side's color and its number, the leader's in gold, one thin bar by shares) and the scoreboard that it opens (each side: squares, names, a bar against the best, the number; the leader marked) ---- */
+.gnote { margin-left: 4px; font-size: 14px; font-weight: 400; color: #7fa596; }
+.gnote[hidden], .gscore[hidden], .gboard[hidden] { display: none; }
+.gscore { grid-column: 1 / -1; display: grid; min-width: 0; margin-top: 4px; border-top: 1px solid #17382f; }
+.gsum { appearance: none; -webkit-appearance: none; display: grid; grid-template-columns: minmax(0, 1fr) 44px; grid-template-areas: "n c" "f c"; align-items: center; gap: 5px 0; box-sizing: border-box; width: 100%; min-height: 44px; margin: 0; padding: 7px 0 4px; font: inherit; text-align: left; color: var(--cream); background: none; border: 0; border-radius: 3px; cursor: pointer; }
+.gsum:focus-visible { outline: 3px solid var(--gold); outline-offset: -2px; }
+.gnums { grid-area: n; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; font-size: 15px; line-height: 20px; }
+.gfoot { grid-area: f; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.glabel, .ghead { font-size: 12px; letter-spacing: .06em; line-height: 14px; text-transform: uppercase; color: #7fa596; }
+.gshare { flex: 1 1 auto; display: flex; gap: 2px; height: 6px; overflow: hidden; background: #0d171f; border-radius: 3px; }
+.gshare:empty { display: none; }       /* (no score yet: the label stands alone) */
+.gshare i { display: block; height: 100%; min-width: 3px; background: var(--c); }
+.gwait { font-size: 14px; color: #7fa596; }
+.gvs { font-size: 13px; color: #7fa596; }
+.gpair { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.gn { font-variant-numeric: tabular-nums; color: var(--cream); }
+.gn.glead { font-weight: 700; color: var(--gold); }
+.gout { opacity: .55; }
+.gsq { display: inline-block; flex: none; box-sizing: border-box; width: 12px; height: 12px; border-radius: 2px; background: var(--c); box-shadow: 0 0 0 1px #000; --c: #8a8693; }
+.gsq.bot { background: transparent; border: 2px solid var(--c); box-shadow: none; }
+.gsq.c0, .gshare i.c0, .gtrack i.c0 { --c: #79bf93; } .gsq.c1, .gshare i.c1, .gtrack i.c1 { --c: #d4707f; } .gsq.c2, .gshare i.c2, .gtrack i.c2 { --c: #8f8fd6; } .gsq.c3, .gshare i.c3, .gtrack i.c3 { --c: #b3afb9; } .gsq.cn, .gshare i.cn, .gtrack i.cn { --c: #8a8693; }
+.gshare i.d0, .gtrack i.d0 { --c2: #79bf93; } .gshare i.d1, .gtrack i.d1 { --c2: #d4707f; } .gshare i.d2, .gtrack i.d2 { --c2: #8f8fd6; } .gshare i.d3, .gtrack i.d3 { --c2: #b3afb9; } .gshare i.dn, .gtrack i.dn { --c2: #8a8693; }
+.gshare i.two { background: linear-gradient(90deg, var(--c) 0 50%, var(--c2) 50% 100%); }
+.gtrack i.two { background: linear-gradient(180deg, var(--c) 0 50%, var(--c2) 50% 100%); }
+.gchev { grid-area: c; justify-self: center; width: 9px; height: 9px; margin-top: -3px; border: solid #7fa596; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.ghead { grid-area: n; display: none; grid-template-columns: minmax(0, 1fr) auto; }
+.gopen .gchev { margin-top: 3px; transform: rotate(-135deg); }
+.gopen .ghead { display: grid; }
+.gopen .gnums, .gopen .gfoot, .gopen .gdots, .gopen .gwho { display: none; }
+.gboard { display: grid; gap: 4px; min-width: 0; padding: 0 0 6px; }
+.gside { display: grid; grid-template-columns: minmax(0, 52%) minmax(0, 1fr) auto; align-items: center; gap: 8px; font-size: 15px; line-height: 22px; }
+.gpl { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.gpl b { min-width: 0; font-weight: 400; overflow-wrap: anywhere; color: var(--cream); }
+.gtrack { display: block; height: 10px; overflow: hidden; background: #0d171f; border-radius: 2px; }
+.gtrack i { display: block; height: 100%; min-width: 3px; border-radius: 2px; background: var(--c); }
+.gside .gn { min-width: 56px; text-align: right; }
+.gside.glead .gn::before { content: "\25B2  "; font-size: 10px; vertical-align: 2px; }

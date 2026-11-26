@@ -1,0 +1,131 @@
+{
+ "note": "Mutants of the score boxes in the answer of GET /live (docs/SERVER_REPLAYS.md, \"Live matches\") for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the room samples the referee's score boxes after the first turn and every second, the board keeps and cleans the sample, and the door writes it next to the players, against test_live_board (LB1.11) and test_server (S3.178b, and S3.178c for a seat that really leaves). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/live_scores_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "live_board_drops_the_sample",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "    it->scores = kept;\n",
+   "new": "    (void)kept;\n",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.11"
+  },
+  {
+   "id": "live_list_entry_loses_the_scores",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "        m.scores = it->scores;\n",
+   "new": "",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.11"
+  },
+  {
+   "id": "live_board_does_not_cut_a_box_to_its_range",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "kept.box[seat] = std::max(0, std::min(scores.box[seat], LiveScores::kBoxMax));",
+   "new": "kept.box[seat] = scores.box[seat];",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.11"
+  },
+  {
+   "id": "live_board_numbers_a_seat_that_does_not_play",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "        if ((it->roster & (1u << seat)) == 0) continue;                      // (only the seats of the match have a number)\n",
+   "new": "",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.11"
+  },
+  {
+   "id": "live_board_takes_an_ally_that_is_not_in_the_match",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "if (side < LiveScores::kSeats && (it->roster & (1u << side)) != 0) kept.side[seat] = side;",
+   "new": "if (side < LiveScores::kSeats) kept.side[seat] = side;",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.11"
+  },
+  {
+   "id": "live_board_calls_an_unknown_sample_known",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "    kept.known = scores.known;\n",
+   "new": "    kept.known = true;\n",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.11"
+  },
+  {
+   "id": "room_never_samples_the_boxes",
+   "file": "src/ants_server/room.cpp",
+   "old": "if (!live_id_.empty() && (turns == 1 || turns % net::kTurnsPerSecond == 0)) publish_live_scores();",
+   "new": "if (turns == 0) publish_live_scores();",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.178b ./build/tests/test_server/test_server",
+   "expect": "S3.178b"
+  },
+  {
+   "id": "room_waits_a_second_for_its_first_sample",
+   "file": "src/ants_server/room.cpp",
+   "old": "(turns == 1 || turns % net::kTurnsPerSecond == 0)",
+   "new": "(turns % net::kTurnsPerSecond == 0)",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.178b ./build/tests/test_server/test_server",
+   "expect": "S3.178b"
+  },
+  {
+   "id": "room_gives_the_seat_its_ally_as_the_side",
+   "file": "src/ants_server/room.cpp",
+   "old": "scores.side[seat] = std::min(seat, ally);",
+   "new": "scores.side[seat] = ally;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.178b ./build/tests/test_server/test_server",
+   "expect": "S3.178b"
+  },
+  {
+   "id": "room_gives_the_seats_own_score_and_not_the_box",
+   "file": "src/ants_server/room.cpp",
+   "old": "scores.box[seat] = sim_->get_display_score(seat);",
+   "new": "scores.box[seat] = sim_->get_player_score(seat);",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.178b ./build/tests/test_server/test_server",
+   "expect": "S3.178b"
+  },
+  {
+   "id": "door_gives_a_covered_seat_a_number",
+   "file": "src/ants_server/control.cpp",
+   "old": "(m.scores.covered & (1u << seat)) != 0 ? JsonValue::make_null() : JsonValue::make_int(m.scores.box[seat])",
+   "new": "JsonValue::make_int(m.scores.box[seat])",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.178b ./build/tests/test_server/test_server",
+   "expect": "S3.178b"
+  },
+  {
+   "id": "door_gives_scores_before_the_first_sample",
+   "file": "src/ants_server/control.cpp",
+   "old": "            if (m.scores.known) {                                                        // (the score boxes, live",
+   "new": "            if (true) {                                                                  // (the score boxes, live",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.178b ./build/tests/test_server/test_server",
+   "expect": "S3.178b"
+  },
+  {
+   "id": "room_never_covers_a_seat_that_left",
+   "file": "src/ants_server/room.cpp",
+   "old": "if (sim_->is_player_dropped(seat)) scores.covered = static_cast<uint8_t>(scores.covered | (1u << seat));",
+   "new": "",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.178c ./build/tests/test_server/test_server",
+   "expect": "S3.178c"
+  },
+  {
+   "id": "room_covers_the_seats_that_stay",
+   "file": "src/ants_server/room.cpp",
+   "old": "if (sim_->is_player_dropped(seat)) scores.covered = static_cast<uint8_t>(scores.covered | (1u << seat));",
+   "new": "if (!sim_->is_player_dropped(seat)) scores.covered = static_cast<uint8_t>(scores.covered | (1u << seat));",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.178c ./build/tests/test_server/test_server",
+   "expect": "S3.178c"
+  }
+ ]
+}

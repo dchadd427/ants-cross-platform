@@ -89,7 +89,8 @@ const tap = (b) => { if (b && !b.disabled) { b.click(); if (b.env && b.env.doc &
 const pressEscape = (env) => (env.doc.listeners.keydown || []).forEach((fn) => fn({ key: 'Escape' }));
 const pressElsewhere = (env, target) => (env.doc.capturing.click || []).concat(env.doc.listeners.click || []).forEach((fn) => fn({ target }));
 const popOf = (env) => home(env, 'gpop');
-const rowsOf = (env) => find(popOf(env), 'gitem').filter((e) => e.tagName === 'li');
+const rowsOf = (env) => find(popOf(env), 'gitem').filter((e) => e.tagName === 'li' && classes(e).indexOf('gslot') === -1);       // (the cards of rooms and matches: the empty cards, the lobby slots, are slotsOf)
+const slotsOf = (env) => find(popOf(env), 'gslot');
 const joinOf = (li) => li.findAll((e) => e.tagName === 'button')[0];
 const lockedCards = (env) => find(popOf(env), 'gpriv');
 const textOf = (e) => e.textContent;
@@ -119,6 +120,6 @@ const roomAs = (names, me, flags, o) => roomMessage(seatsOf(names), Object.assig
 
 const done = (title) => { console.log(title + ': ' + checks + ' checks, ' + failures + ' failed'); process.exit(failures === 0 ? 0 : 1); };
 const broke = (e) => { console.log('FAIL the check itself broke: ' + (e && e.stack || e)); process.exit(1); };
-return { GUEST, check, same, flush, fakeSite, row, locked, lockedCards, listOf, page, wait, classes, find, first, home, tap, hostCard, chooseHost, pressEscape, pressElsewhere, popOf, rowsOf, joinOf, textOf, toastOf, toastTextOf, toastButtons, pillOf, dialogOf, visibilities, leaves, seatsOf,
+return { GUEST, check, same, flush, fakeSite, row, locked, lockedCards, listOf, page, wait, classes, find, first, home, tap, hostCard, chooseHost, pressEscape, pressElsewhere, popOf, rowsOf, slotsOf, joinOf, textOf, toastOf, toastTextOf, toastButtons, pillOf, dialogOf, visibilities, leaves, seatsOf,
          PUBLIC, PRIVATE, STARTING, myRoom, guestRoom, roomAs, Games, PopoverGames, H, NET0, KEY, E, C, hex, roomMessage, welcome, reject, helloBytes, helloName, helloRoom, grouped, runLobby, RULES0, lobbyDir, done, broke };
 };
