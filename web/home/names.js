@@ -1,9 +1,10 @@
-// The sheet "Your name", the guest's name chip and its note (docs/HUB_NICKNAMES.md; docs/HOME_CHAT.md, "Your name"). A person who is logged in chooses a nickname and an optional tag there (the chat menu's button opens it); a guest
+// The sheet "Your name", the guest's name chip and the welcome card (docs/HUB_NICKNAMES.md; docs/HOME_CHAT.md, "Your name"). A person who is logged in chooses a nickname and an optional tag there (the chat menu's button opens it); a guest
 // types the name that the games show as "Name (Guest)", which this browser keeps (front/player_name.js). The hub checks every name (the `name` frame: hub/nicknames.py) and the page only says what the hub said: each field has the word of
 // its refusal, and the page owns the sentences. Nothing here is markup: every text is set as text, and a name is drawn by AntsNameLetters.paint.
 //   * ES5, no module system: a page gets AntsHomeNames, node gets module.exports (tests/scripts/web_home_names_check.js runs the model parts and the sheet against a fake page).
-//   * mount({ doc, win, dock, bar (the node that holds the login chip), login (the chip), person (front/player_name.js), letters (AntsNameLetters), later (setTimeout) }) puts the guest's chip before the login chip, opens the sheet
-//     when the chat menu's button (the dock's tap `names`) or the chip is pressed, and returns { open, close, state }.
+//   * mount({ doc, win, dock, bar (the node that holds the login chip), login (the chip), person (front/player_name.js), letters (AntsNameLetters), calm (true when Home shows and nothing else holds the page), later (setTimeout) })
+//     puts the guest's chip before the login chip, opens the sheet when the chat menu's button (the dock's tap `names`) or the chip is pressed, shows the welcome card to a guest who has no name and has not answered it,
+//     and returns { open, close, state }.
 (function (root, factory) {
     var api = factory();
     if (typeof module === 'object' && module.exports) module.exports = api;
@@ -11,7 +12,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    var NOTE_KEY = 'ants.guestnote';                 // localStorage: '1' once the guest has set a name or closed the note: it never shows again in this browser
+    var WELCOME_KEY = 'ants.guestwelcome';           // localStorage: '1' once the guest has answered the welcome (a name, Not now, the sheet opened) or logged in: the card never shows again in this browser
     var CHECK_MS = 350;                              // the wait after the last key before the hub is asked
     var NICK_MIN = 3, NICK_MAX = 16, TAG_MIN = 2, TAG_MAX = 5;
     var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -26,7 +27,9 @@
         guestRules: ['You cannot use the name of a player who is logged in.', 'Your name stays in this browser. Another browser starts over.', 'Names are public and are kept with match results.'],
         guestBox: 'Guests cannot chat in the lobby or get messages.', loginWith: 'Log in with Discord',
         menuFirst: 'You show as ', menuFirstEnd: ', your Discord name.', menuChoose: 'Choose a nickname', menuChange: 'Nickname and tag', menuNick: 'Nickname ', menuTag: ' \u00b7 Tag ', menuNoTag: ' \u00b7 No tag',
-        popTitle: 'Please set a name', popOthers: function (name) { return 'Others see ' + name + ' now.'; },
+        othersSee: function (name) { return 'Others see ' + name + ' now.'; },
+        welcomeTitle: 'Welcome to Ants & Uncles', welcomeLine: 'Chatting needs a Discord sign-in. You can play and watch without one.', welcomeDiscord: 'Sign in with Discord to chat',
+        welcomeSet: 'Set a display name', welcomeSetSmall: 'if you don\u2019t want to chat', welcomeNotNow: 'Not now',
         chipLabel: function (shown) { return 'You show as ' + shown + '. Set a name.'; }, chipLabelSet: function (name) { return 'Your name: ' + name + ' (Guest). Change it.'; },
         free: function (name) { return name + ' is free.'; }, fine: 'That name is fine.', same: 'That is your name now.', checking: 'Checking...',
         offline: 'Could not check just now. Try again in a moment.'
@@ -82,12 +85,13 @@
     function mount(env) {
         var doc = env.doc, win = env.win, dock = env.dock, bar = env.bar, login = env.login, person = env.person, letters = env.letters || win.AntsNameLetters;
         var later = env.later || function (fn, ms) { return win.setTimeout(fn, ms); }, cancel = env.cancel || function (h) { win.clearTimeout(h); };
-        var seq = 0, pending = 0, timer = null, sheet = null, chip = null, chipAv = null, chipName = null, pop = null, shownNote = false, loginOn = false;
+        var seq = 0, pending = 0, timer = null, sheet = null, chip = null, chipAv = null, chipName = null, card = null, quiet = [], spent = false, loginOn = false;
         function el(tag, cls, text) { var e = doc.createElement(tag); if (cls) e.className = cls; if (text !== undefined && text !== null) e.textContent = text; return e; }
         function put(node, kids) { kids.forEach(function (k) { if (k) node.appendChild(k); }); return node; }
         function storage() { try { return win.localStorage; } catch (e) { return null; } }
-        function noteClosed() { try { var s = storage(); return !!s && s.getItem(NOTE_KEY) === '1'; } catch (e) { return false; } }
-        function closeNote() { try { var s = storage(); if (s) s.setItem(NOTE_KEY, '1'); } catch (e) { /* a browser that keeps nothing: the note comes back with the page */ } shownNote = false; if (pop) { pop.remove ? pop.remove() : pop.parentNode && pop.parentNode.removeChild(pop); pop = null; } }
+        function answered() { try { var s = storage(); return !!s && s.getItem(WELCOME_KEY) === '1'; } catch (e) { return false; } }
+        function answer() { try { var s = storage(); if (s) s.setItem(WELCOME_KEY, '1'); } catch (e) { /* a browser that keeps nothing: the card comes back with the next page, and not again in this one */ } spent = true; }
+        function calm() { try { return !env.calm || env.calm() === true; } catch (e) { return true; } }
         function you() { return dock && dock.you ? dock.you() : null; }
         function now() { return Math.floor((win.Date ? win.Date.now() : Date.now()) / 1000); }
         var time = { date: function (s) { return dayOf(s, win); }, words: function (s) { return inWords(s, now()); } };
@@ -99,7 +103,7 @@
         function guestHere() { return live() && !you() && loginOn && !!login; }       // (the hub's welcome says that it has a login: the Log in button may not be shown yet when the welcome comes)
         function shownName() { return person.guestShown(); }
         function paintChip() {
-            if (!guestHere()) { if (chip) chip.hidden = true; if (pop) closePopFor(); return; }
+            if (!guestHere()) { if (chip) chip.hidden = true; if (live() && you()) answer(); quitWelcome(); return; }
             if (!chip) {
                 chip = el('button', 'btn nm-gchip'); chip.type = 'button';
                 chipAv = el('span', 'gc-av'); chipName = el('span', 'gc-cn'); chip.appendChild(chipAv); chip.appendChild(chipName);
@@ -111,27 +115,43 @@
             chipAv.textContent = initial(label);
             chipName.textContent = label;
             chip.setAttribute('aria-label', typed ? TEXT.chipLabelSet(typed) : TEXT.chipLabel(shownName()));
-            if (!typed && !noteClosed() && !sheet) showNote(); else if (pop) closePopFor();
+            if (typed || answered() || spent || sheet || !calm()) quitWelcome(); else showWelcome();
         }
-        function closePopFor() { if (pop) { if (pop.parentNode) pop.parentNode.removeChild(pop); pop = null; } }
-        // The note under the chip: "Please set a name" until a name is saved or it is closed
-        function showNote() {
-            if (pop || !chip) return;
-            pop = el('div', 'nm-pop'); pop.setAttribute('role', 'status');
-            put(pop, [el('span', 'nm-pop-t', TEXT.popTitle), el('span', 'nm-pop-s', TEXT.popOthers(shownName()))]);
-            var x = el('button', 'rs-x'); x.type = 'button'; x.setAttribute('aria-label', TEXT.close);
-            x.addEventListener('click', function (e) { if (e && e.stopPropagation) e.stopPropagation(); closeNote(); });
-            pop.appendChild(x);
-            pop.addEventListener('click', function () { open(); });
-            doc.body.appendChild(pop);
-            placePop();
+        // ---- the welcome card: a guest's first visit, with no name set ----
+        function quitWelcome(back) {                       // the card goes, the page behind it wakes; back: the focus goes to the chip
+            var c = card;
+            if (!c) return;
+            card = null;
+            quiet.forEach(function (n) { n.removeAttribute('inert'); }); quiet = [];
+            if (c.parentNode) c.parentNode.removeChild(c);
+            if (back && chip && chip.focus) chip.focus();
         }
-        function placePop() {
-            if (!pop || !chip || !chip.getBoundingClientRect) return;
-            var r = chip.getBoundingClientRect(), w = pop.getBoundingClientRect().width || 268, vw = (doc.documentElement && doc.documentElement.clientWidth) || win.innerWidth || 1000;
-            var left = Math.max(10, Math.min(r.left + r.width / 2 - 36, vw - 10 - w));
-            pop.style.left = left + 'px'; pop.style.top = Math.round(r.bottom + 10) + 'px';
-            pop.style.setProperty('--ax', Math.round(r.left + r.width / 2 - left) + 'px');
+        function showWelcome() {
+            if (card) return;
+            var shade = el('div', 'nm-wshade'), box = el('div', 'nm-welcome'), btns = el('div', 'nm-wbtns'), title = el('h2', 'nm-wtitle', TEXT.welcomeTitle), line = el('p', 'nm-wline', TEXT.welcomeLine);
+            box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-labelledby', 'nm-wt'); box.setAttribute('aria-describedby', 'nm-wl'); box.setAttribute('tabindex', '-1');
+            title.id = 'nm-wt'; line.id = 'nm-wl';
+            var dc = el('button', 'btn nm-wdc'), mark = el('i', 'gc-dc'), set = el('button', 'btn nm-wset'), not = el('button', 'nm-wnot', TEXT.welcomeNotNow);
+            dc.type = set.type = not.type = 'button'; mark.setAttribute('aria-hidden', 'true');
+            put(dc, [mark, el('span', '', TEXT.welcomeDiscord)]);
+            put(set, [el('span', '', TEXT.welcomeSet), el('small', '', TEXT.welcomeSetSmall)]); set.setAttribute('aria-label', TEXT.welcomeSet + ', ' + TEXT.welcomeSetSmall);
+            dc.addEventListener('click', function () { spent = true; quitWelcome(true); if (login && login.click) login.click(); });       // (the same login as the page's Log in buttons; the card is answered once the person is logged in)
+            set.addEventListener('click', function () { quitWelcome(false); open(); });                                                     // (opening the sheet answers the welcome)
+            not.addEventListener('click', function () { answer(); quitWelcome(true); });
+            put(btns, [dc, set, not]); put(box, [title, line, btns]); shade.appendChild(box);
+            shade.addEventListener('keydown', function (e) {
+                if (!e) return;
+                if (e.key === 'Escape') { if (e.stopPropagation) e.stopPropagation(); answer(); quitWelcome(true); return; }
+                if (e.key !== 'Tab') return;
+                var order = [dc, set, not], at = order.indexOf(doc.activeElement);                                                        // (the card itself is -1: its first Tab goes where the page sends it, to the first button)
+                if (e.shiftKey ? at <= 0 : at === order.length - 1) { if (e.preventDefault) e.preventDefault(); order[e.shiftKey ? order.length - 1 : 0].focus(); }
+            });
+            shade.addEventListener('click', function (e) { if (e && e.target === shade) box.focus(); });                                    // (a press beside the card keeps the focus in it, so that Escape and Tab still work)
+            var kids = doc.body.children || [], i;
+            for (i = 0; i < kids.length; i++) if (!kids[i].hasAttribute('inert')) { kids[i].setAttribute('inert', ''); quiet.push(kids[i]); }      // (the page behind takes no key, tap or reader)
+            doc.body.appendChild(shade);
+            card = shade;
+            box.focus();
         }
 
         // ---- the sheet ----
@@ -139,7 +159,7 @@
             if (sheet) return;
             var me = you(), mode = me ? 'login' : 'guest';
             if (mode === 'guest' && !guestHere()) return;
-            closePopFor();
+            if (mode === 'guest') { answer(); quitWelcome(false); }
             var s = sheet = { mode: mode, nick: null, tag: null, answer: null, typed: { nick: '', tag: '' }, node: null, saving: false };
             var back = el('div', 'rs-back nm-back'), box = el('div', 'rs nm-sheet'); box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-labelledby', 'nm-title');
             var top = el('div', 'rs-top'), h = el('h3', '', TEXT.title); h.id = 'nm-title'; top.appendChild(h);
@@ -205,7 +225,7 @@
             if (s.mode === 'guest') {
                 var typed = person.typed();
                 name = shown || (typed ? typed + ' (Guest)' : shownName());
-                note = shown || typed ? TEXT.guestNote : TEXT.popOthers(shownName());
+                note = shown || typed ? TEXT.guestNote : TEXT.othersSee(shownName());
             } else {
                 var current = me && me.nick ? (me.tag ? '[' + me.tag + '] ' : '') + me.nick : '';       // (how the person shows now, when they have a nickname)
                 name = shown || current || (me ? me.name : '');
@@ -269,7 +289,7 @@
             if (s.mode === 'guest') {
                 var name = s.typed.nick.replace(/^ +| +$/g, '');
                 if (!person.setTyped(name)) return;
-                closeNote(); close(); paintChip(); notify();
+                close(); paintChip(); notify();
                 return;
             }
             s.saving = true; s.save.disabled = true;
@@ -285,10 +305,9 @@
             else if (kind === 'live' || kind === 'you' || kind === 'lost') { if (kind === 'live') loginOn = !!m && m.login === true; paintChip(); if (sheet && sheet.mode === 'login' && !you()) close(); }
             else if (kind === 'shown') paintChip();
         });
-        if (win.addEventListener) win.addEventListener('resize', function () { placePop(); });
         paintChip();
-        return { open: open, close: close, state: function () { return { sheet: !!sheet, chip: !!chip && !chip.hidden, note: !!pop }; }, heard: heard };
+        return { open: open, close: close, state: function () { return { sheet: !!sheet, chip: !!chip && !chip.hidden, welcome: !!card }; }, heard: heard };
     }
 
-    return { NOTE_KEY: NOTE_KEY, TEXT: TEXT, WHY: WHY, dayOf: dayOf, inWords: inWords, say: say, mount: mount };
+    return { WELCOME_KEY: WELCOME_KEY, TEXT: TEXT, WHY: WHY, dayOf: dayOf, inWords: inWords, say: say, mount: mount };
 });

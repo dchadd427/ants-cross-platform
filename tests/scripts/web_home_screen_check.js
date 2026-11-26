@@ -6,7 +6,7 @@
 //   3. the room that Quick host makes, shown at "/#room" (the test makes it as Quick host does after its question: env.makeRoom); Home, Back and Forward never touch the socket, the room or the seat; a link opens the Room;
 //      a reload keeps the screen and the seat; Leave leaves the room and makes the next one a new one;
 //   4. START while a guest sits on Home (the highest risk): the hidden Room takes the hand-off (the key is written, the game page opens) and Home says "Opening the game" at once;
-//   5. the notices that stay global (the Rejoin strip, a refusal) with Home up, the Menu (its links, its numbers, Escape, a press elsewhere), the map list's inert, and what Home never does.
+//   5. the notices that stay global (the Rejoin strip, a refusal) with Home up, the Menu (its links, its numbers, Escape, a press elsewhere), the map list's inert, the guest's welcome card (only on a calm Home), and what Home never does.
 // tests/scripts/test_web_home_screen.py runs this with node (the quick tier). usage: node web_home_screen_check.js web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
 const fs = require('fs');
@@ -645,6 +645,37 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     check('... (a second short of a minute after the second START: not yet)', two.length === 2);
     env.advance(1);
     check('... the failure comes a minute after the second START', two.length === 3 && two[2] === FAILED);
+}
+
+{   // the welcome card of a guest (web/home/names.js; tests/scripts/web_home_names_check.js runs the card against a fake dock): the page lets it show only while Home is the screen and nothing holds the page
+    const Names = require(path.join(lobbyDir, 'home', 'names.js'));
+    const withNames = (env) => {      // the dock comes (a fake that is live, knows nobody and tells its taps what the real one does), then the sheet's own files, then the hub's welcome says that it has a login
+        const taps = [], Node = env.$('home').constructor, parts = (files) => env.body.children.filter((c) => (c.tagName === 'script' && files.indexOf(c.src) !== -1) || (c.tagName === 'link' && files.indexOf(c.href) !== -1));
+        env.advance(0);
+        env.win.AntsHomeChat = { mount() { return { root: new Node(env, 'section', 'gchat'), shown(on) { taps.forEach((fn) => fn('shown', !!on)); }, open() {}, tap: (fn) => taps.push(fn), state: () => 'live', you: () => null, send: () => true }; } };
+        parts(['home/chat.js', 'home/chat.css']).forEach((c) => c.onload && c.onload({}));
+        env.advance(0);
+        env.win.AntsHomeNames = Names;
+        parts(['home/names.js', 'home/names.css']).forEach((c) => c.onload && c.onload({}));
+        taps.forEach((fn) => fn('live', { login: true }));
+        return { card: () => env.body.findAll((e) => classes(e).indexOf('nm-welcome') !== -1)[0] || null, chip: () => env.$('home').findAll((e) => classes(e).indexOf('nm-gchip') !== -1)[0] || null };
+    };
+    const home = runLobby('', {}, { stayHome: true, lazy: true });
+    const onHome = withNames(home);
+    check('welcome: a guest on a calm Home sees the card, and the chip is behind it', !!onHome.chip() && !!onHome.card());
+
+    const room = runLobby('', {}, { lazy: true });
+    const inRoom = withNames(room);
+    check('welcome: not while the page holds a room (the chip is there all the same)', room.screen() === 'room' && !!inRoom.chip() && inRoom.card() === null);
+    room.roomBar('leave').click();
+    check('welcome: ... and it comes when the page shows Home', room.screen() === 'home' && !!inRoom.card());
+
+    const held = runLobby('', {}, { stayHome: true, lazy: true });
+    const menu = held.$('home').findAll((e) => classes(e).indexOf('hmenu') !== -1)[0];
+    menu.click();
+    held.body.findAll((e) => classes(e).indexOf('hmenubox') !== -1)[0].children[3].click();       // (How it works: a dialog that holds the page)
+    const behindDialog = withNames(held);
+    check('welcome: not while a dialog of the page holds it (How it works is open)', held.$('how').hidden === false && !!behindDialog.chip() && behindDialog.card() === null);
 }
 
 {   // what Home never does: no network of its own, no storage, no markup, nothing that is the page's room (the client, the model, the session)

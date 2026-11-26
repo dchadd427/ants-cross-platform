@@ -1274,6 +1274,20 @@
    "old": "function screenOf(hasRoom) { return hasRoom ? 'room' : 'home'; }",
    "new": "function screenOf(hasRoom) { return 'home'; }",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "the_welcome_shows_over_the_room",
+   "file": "web/home/home.js",
+   "old": "calm: function () { return screen === 'home' && !held && !going && !stalled; }",
+   "new": "calm: function () { return !held && !going && !stalled; }",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "the_welcome_shows_over_a_dialog",
+   "file": "web/home/home.js",
+   "old": "calm: function () { return screen === 'home' && !held && !going && !stalled; }",
+   "new": "calm: function () { return screen === 'home' && !going && !stalled; }",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
   }
  ]
 }

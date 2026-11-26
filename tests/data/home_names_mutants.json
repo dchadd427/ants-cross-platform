@@ -1,23 +1,9 @@
 {
- "note": "Mutants of the sheet 'Your name', the guest's chip and its note (web/home/names.js; docs/HUB_NICKNAMES.md 'The page') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_home_names_check.js: the note that a guest closes or answers by a name and never sees again, who has the chip, when the hub is asked (after the last key, a guest check or both fields), what Save sends and when it is on, an answer that is not the last question's, what is said under a field (the name that was taken, the two dates of a wait, a word that the page does not know), the preview with the tag, a name that the person keeps, the sheet that goes with the login; every one must be caught (tools/mutate.py tests/data/home_names_mutants.json --keep-going --jobs 1).",
+ "note": "Mutants of the sheet 'Your name', the guest's chip and the welcome card (web/home/names.js; docs/HOME_CHAT.md 'Your name') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_home_names_check.js: the welcome that a guest answers by a name, a login, Set a display name, Not now or Escape and never sees again (in this browser and in this page), who has the chip and the card, where the card shows, what each of its buttons does, its focus, its Tab and its inert page, when the hub is asked (after the last key, a guest check or both fields), what Save sends and when it is on, an answer that is not the last question's, what is said under a field (the name that was taken, the two dates of a wait, a word that the page does not know), the preview with the tag, a name that the person keeps, the sheet that goes with the login; every one must be caught (tools/mutate.py tests/data/home_names_mutants.json --keep-going --jobs 1).",
  "baseline": {
   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
  },
  "mutants": [
-  {
-   "id": "note_comes_back_after_it_was_closed",
-   "file": "web/home/names.js",
-   "old": "try { var s = storage(); if (s) s.setItem(NOTE_KEY, '1'); }",
-   "new": "try { var s = storage(); if (s) s.getItem(NOTE_KEY); }",
-   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
-  },
-  {
-   "id": "note_shows_for_a_guest_who_set_a_name",
-   "file": "web/home/names.js",
-   "old": "if (!typed && !noteClosed() && !sheet) showNote();",
-   "new": "if (!noteClosed() && !sheet) showNote();",
-   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
-  },
   {
    "id": "chip_for_a_person_who_is_logged_in",
    "file": "web/home/names.js",
@@ -131,13 +117,6 @@
    "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
   },
   {
-   "id": "the_guest_note_is_not_closed_by_a_name",
-   "file": "web/home/names.js",
-   "old": "closeNote(); close(); paintChip(); notify();",
-   "new": "close(); paintChip(); notify();",
-   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
-  },
-  {
    "id": "a_login_may_open_a_guest_sheet",
    "file": "web/home/names.js",
    "old": "if (mode === 'guest' && !guestHere()) return;",
@@ -177,6 +156,174 @@
    "file": "web/home/names.js",
    "old": "note = !current || (shown && shown !== current) ? TEXT.firstNote",
    "new": "note = !current || shown ? TEXT.firstNote",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "welcome_is_not_remembered_after_an_answer",
+   "file": "web/home/names.js",
+   "old": "if (s) s.setItem(WELCOME_KEY, '1'); }",
+   "new": "if (s) s.getItem(WELCOME_KEY); }",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "welcome_shows_for_a_guest_who_set_a_name",
+   "file": "web/home/names.js",
+   "old": "if (typed || answered() || spent || sheet || !calm()) quitWelcome();",
+   "new": "if (answered() || spent || sheet || !calm()) quitWelcome();",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "welcome_comes_back_after_an_answer_in_this_browser",
+   "file": "web/home/names.js",
+   "old": "if (typed || answered() || spent || sheet || !calm()) quitWelcome();",
+   "new": "if (typed || spent || sheet || !calm()) quitWelcome();",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "welcome_comes_back_in_the_page_that_answered_it",
+   "file": "web/home/names.js",
+   "old": "if (typed || answered() || spent || sheet || !calm()) quitWelcome();",
+   "new": "if (typed || answered() || sheet || !calm()) quitWelcome();",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "welcome_shows_where_home_is_not_calm",
+   "file": "web/home/names.js",
+   "old": "if (typed || answered() || spent || sheet || !calm()) quitWelcome();",
+   "new": "if (typed || answered() || spent || sheet) quitWelcome();",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "a_login_does_not_answer_the_welcome",
+   "file": "web/home/names.js",
+   "old": "if (live() && you()) answer();",
+   "new": "if (live() && you()) quitWelcome();",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "set_a_display_name_does_not_answer_the_welcome",
+   "file": "web/home/names.js",
+   "old": "if (mode === 'guest') { answer(); quitWelcome(false); }",
+   "new": "if (mode === 'guest') { quitWelcome(false); }",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "the_sheet_leaves_the_welcome_open",
+   "file": "web/home/names.js",
+   "old": "if (mode === 'guest') { answer(); quitWelcome(false); }",
+   "new": "if (mode === 'guest') { answer(); }",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "set_a_display_name_opens_nothing",
+   "file": "web/home/names.js",
+   "old": "set.addEventListener('click', function () { quitWelcome(false); open(); });",
+   "new": "set.addEventListener('click', function () { quitWelcome(false); });",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "not_now_does_not_answer_the_welcome",
+   "file": "web/home/names.js",
+   "old": "not.addEventListener('click', function () { answer(); quitWelcome(true); });",
+   "new": "not.addEventListener('click', function () { quitWelcome(true); });",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "not_now_leaves_the_card_open",
+   "file": "web/home/names.js",
+   "old": "not.addEventListener('click', function () { answer(); quitWelcome(true); });",
+   "new": "not.addEventListener('click', function () { answer(); });",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "escape_does_not_answer_the_welcome",
+   "file": "web/home/names.js",
+   "old": "if (e.stopPropagation) e.stopPropagation(); answer(); quitWelcome(true); return; }",
+   "new": "if (e.stopPropagation) e.stopPropagation(); quitWelcome(true); return; }",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "escape_is_not_heard",
+   "file": "web/home/names.js",
+   "old": "if (e.key === 'Escape') {",
+   "new": "if (e.key === 'Esc') {",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "sign_in_does_not_press_the_login",
+   "file": "web/home/names.js",
+   "old": "spent = true; quitWelcome(true); if (login && login.click) login.click(); });",
+   "new": "spent = true; quitWelcome(true); });",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "sign_in_answers_the_welcome_for_good",
+   "file": "web/home/names.js",
+   "old": "dc.addEventListener('click', function () { spent = true;",
+   "new": "dc.addEventListener('click', function () { answer();",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "the_card_does_not_take_the_focus",
+   "file": "web/home/names.js",
+   "old": "card = shade;\n            box.focus();",
+   "new": "card = shade;",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "the_focus_does_not_go_back_to_the_chip",
+   "file": "web/home/names.js",
+   "old": "if (back && chip && chip.focus) chip.focus();",
+   "new": "if (false) chip.focus();",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "the_page_behind_the_card_is_not_inert",
+   "file": "web/home/names.js",
+   "old": "{ kids[i].setAttribute('inert', ''); quiet.push(kids[i]); }",
+   "new": "{ quiet.push(kids[i]); }",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "the_page_stays_inert_after_the_card",
+   "file": "web/home/names.js",
+   "old": "quiet.forEach(function (n) { n.removeAttribute('inert'); }); quiet = [];",
+   "new": "quiet = [];",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "tab_leaves_the_card",
+   "file": "web/home/names.js",
+   "old": "if (e.shiftKey ? at <= 0 : at === order.length - 1) {",
+   "new": "if (false) {",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "shift_tab_on_the_first_button_leaves_the_card",
+   "file": "web/home/names.js",
+   "old": "if (e.shiftKey ? at <= 0 : at === order.length - 1) {",
+   "new": "if (e.shiftKey ? at < 0 : at === order.length - 1) {",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "tab_inside_the_card_is_taken_from_the_browser",
+   "file": "web/home/names.js",
+   "old": "if (e.shiftKey ? at <= 0 : at === order.length - 1) {",
+   "new": "if (e.shiftKey ? at <= 0 : at >= 0) {",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "a_press_beside_the_card_loses_the_focus",
+   "file": "web/home/names.js",
+   "old": "if (e && e.target === shade) box.focus();",
+   "new": "if (false) box.focus();",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "the_card_has_no_title_for_a_reader",
+   "file": "web/home/names.js",
+   "old": "box.setAttribute('aria-labelledby', 'nm-wt'); ",
+   "new": "",
    "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
   }
  ]

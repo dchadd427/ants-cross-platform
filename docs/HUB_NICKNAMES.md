@@ -72,7 +72,7 @@ What may stand in a name is what the game's font draws: the Latin letters (A-Z, 
 ## The page
 
 * **Logged in.** The chat menu's name chip opens the sheet "Your name": a live preview ("How others see you"), the nickname field and the tag field, each with its counter, the hub's answer under the field, the rules, and Save. The preview is `[TAG] Nickname`. Save is allowed when the hub said both fields are fine.
-* **Guest.** A chip with a dashed ring in the top bar (under 375 px it takes the Discord mark's place) and the note "Please set a name" until a name is set or the note is closed; after that, never again in this browser (`localStorage`, `ants.guestnote`). The same sheet without the tag. The name is kept in this browser (`ants.guestname`) and nowhere else; another browser starts over.
+* **Guest.** A chip with a dashed ring in the top bar (under 375 px it takes the Discord mark's place) and, on the first visit with no name set, a welcome card that offers the Discord login or this sheet ([HOME_CHAT.md](HOME_CHAT.md), "Your name"). The same sheet without the tag. The name is kept in this browser (`ants.guestname`) and nowhere else; another browser starts over.
 * **Rooms.** The room's seats follow the current room layout: rows on the wide page and tiles on a phone, with the tag and "(Guest)" dimmer than the name, four players included.
 
 ## In the game
