@@ -1,5 +1,5 @@
 // Tests of the numbers of the results screen besides the original's four (match_report.hpp, live_match_stats.hpp, docs/REPLAYS.md "The match pages"):
-//   MR1  the honors and the Play of the game, on made-up counts of the stats pass (the MVP rule, First blood, Biggest raid, Last stand, the play's window, its credit, its floor and its ties)
+//   MR1  the honors and the Play of the game, on made-up counts of the stats pass (the MVP rule, First blood, Top Thief, Last stand, the play's window, its credit, its floor and its ties)
 //   MR2  the live pass against the recording's pass: a match that is counted while it is played says what the replay of its own recording says, field by field (four computer players on three maps, a game on one machine,
 //        a match of the network, a catch-up through the lock-step runner in slices of every size, the lists of bombs and fires on a world made by hand)
 //   MR3  a tick or a turn that the pass did not see, a match that was not played from its first turn: the report is not ok; and counting changes nothing (the state hash, the file, the engine's queues of cues)
@@ -231,6 +231,8 @@ std::string differs(const MatchStats& a, const MatchStats& b) {
     SAME(wipe_turn);
     SAME(wipes);
     SAME(out_turn);
+    SAME(raids_home);
+    SAME(loot_home);
     SAME(bombs_planted);
     SAME(fires_lit);
     SAME(hit_credit);
@@ -266,10 +268,12 @@ std::string differs(const MatchReport& a, const MatchReport& b) {
     SAME(fires_lit);
     SAME(raids);
     SAME(loot);
+    SAME(raids_home);
+    SAME(loot_home);
 #undef SAME
     if (!same_honor(a.mvp, b.mvp)) return "mvp";
     if (!same_honor(a.first_blood, b.first_blood)) return "first_blood";
-    if (!same_honor(a.biggest_raid, b.biggest_raid)) return "biggest_raid";
+    if (!same_honor(a.top_thief, b.top_thief)) return "top_thief";
     if (!same_honor(a.last_stand, b.last_stand)) return "last_stand";
     const MatchReport::Play &x = a.play, &y = b.play;
     if (x.present != y.present || x.seat != y.seat || x.kind != y.kind || x.count != y.count || x.turn != y.turn || x.tile_x != y.tile_x || x.tile_y != y.tile_y) return "play";
@@ -685,7 +689,7 @@ int main(int argc, char* argv[]) {
         r = report_of(other, seat_wins(3));
         ASSERT_TRUE(r.ok && r.winners == 0x08 && !r.mvp.present);
         r = report_of(empty_stats(), seat_wins(1));
-        ASSERT_TRUE(r.ok && !r.mvp.present && !r.first_blood.present && !r.biggest_raid.present && !r.last_stand.present && !r.play.present);
+        ASSERT_TRUE(r.ok && !r.mvp.present && !r.first_blood.present && !r.top_thief.present && !r.last_stand.present && !r.play.present);
         // two rows with the same score: the local seat's goes first (the results screen's own rule), so the winners are the local seat's
         const sim::MatchResult level = result_of({100, 100, 0, 0}, 0x03);
         ASSERT_EQ(report_of(st, level, sim::GameMode::HighestScore, 1).winners, 0x02);
@@ -711,19 +715,24 @@ int main(int argc, char* argv[]) {
         ASSERT_FALSE(r.first_blood.present);
     } TEST_END();
 
-    TEST_CASE("MR1.5 Biggest raid is the raid that took the most points (more than none, the earlier of two equal ones); in 187 there is Last stand instead: of the seats that did not win and ran out of ants for good, the last") {
+    TEST_CASE("MR1.5 Top Thief is the seat with the most raids whose loot got home (more than none, the lower seat on a tie); in 187 there is Last stand instead: of the seats that did not win and ran out of ants for good, the last") {
         MatchStats st = empty_stats();
-        add_raid(st, raid_of(100, 0, 1, 0));
-        add_raid(st, raid_of(200, 1, 2, 30));
-        add_raid(st, raid_of(300, 2, 3, 50));
-        add_raid(st, raid_of(400, 3, 0, 50));
+        st.raids_home = {1, 3, 3, 2};
+        st.loot_home = {50, 150, 90, 100};
         st.out_turn = {-1, 3000, 3500, -1};
         st.wipe_turn = {-1, 100, 2000, 5000};                                      // (a seat that was wiped out and came back from an egg did not run out: only out_turn counts)
         MatchReport r = report_of(st, seat_wins(0));
-        ASSERT_TRUE(r.biggest_raid.present && r.biggest_raid.seat == 2 && r.biggest_raid.value == 50 && r.biggest_raid.turn == 300);
+        ASSERT_TRUE(r.top_thief.present && r.top_thief.seat == 1 && r.top_thief.value == 3 && r.top_thief.turn == 0);       // (seats 1 and 2 have three raids home: the lower seat)
+        ASSERT_TRUE(r.raids_home == st.raids_home && r.loot_home == st.loot_home);
         ASSERT_FALSE(r.last_stand.present);                                        // (the original's game has no Last stand, whatever ran out)
+        st.raids_home = {1, 3, 4, 2};
+        r = report_of(st, seat_wins(0));
+        ASSERT_TRUE(r.top_thief.present && r.top_thief.seat == 2 && r.top_thief.value == 4);
+        st.raids_home = {1, 0, 0, 5};                                              // (the winner of the match is not the one: the honor is about every seat)
+        r = report_of(st, seat_wins(0));
+        ASSERT_TRUE(r.top_thief.present && r.top_thief.seat == 3 && r.top_thief.value == 5);
         r = report_of(st, seat_wins(0), sim::GameMode::Kills187);
-        ASSERT_FALSE(r.biggest_raid.present);                                      // (187 has no Biggest raid)
+        ASSERT_FALSE(r.top_thief.present);                                         // (187 has no Top Thief)
         ASSERT_TRUE(r.last_stand.present && r.last_stand.seat == 2 && r.last_stand.turn == 3500);
         st.out_turn = {-1, 3000, 3000, -1};                                        // a tie: the lower seat
         r = report_of(st, seat_wins(0), sim::GameMode::Kills187);
@@ -734,11 +743,29 @@ int main(int argc, char* argv[]) {
         st.out_turn = {-1, -1, -1, -1};
         r = report_of(st, seat_wins(0), sim::GameMode::Kills187);
         ASSERT_FALSE(r.last_stand.present);
+        // a raid that was begun is not a raid that got home: five begun and one home loses to two home
+        MatchStats begun = empty_stats();
+        for (uint32_t i = 0; i < 5; ++i) add_raid(begun, raid_of(100 + 10 * i, 3, 0, 50));
+        add_raid(begun, raid_of(300, 1, 0, 50));
+        add_raid(begun, raid_of(310, 1, 0, 50));
+        begun.raids_home = {0, 2, 0, 1};
+        begun.loot_home = {0, 100, 0, 50};
+        r = report_of(begun, seat_wins(0));
+        ASSERT_TRUE(r.top_thief.present && r.top_thief.seat == 1 && r.top_thief.value == 2 && r.loot_home[1] == 100);
+        ASSERT_TRUE(r.raids[3] == 5 && r.raids_home[3] == 1);
+        // none got home (a raid on a hill with nothing, a Thief killed on the way): no Top Thief
         MatchStats nothing = empty_stats();
-        add_raid(nothing, raid_of(100, 0, 1, 0));                                  // (a raid that took nothing is no biggest raid)
+        add_raid(nothing, raid_of(100, 0, 1, 0));
+        add_raid(nothing, raid_of(200, 2, 3, 50));
         r = report_of(nothing, seat_wins(0));
-        ASSERT_FALSE(r.biggest_raid.present);
+        ASSERT_FALSE(r.top_thief.present);
         ASSERT_EQ(r.raids[0], 1u);
+        // the debt comes home too: a raid on a hill below zero is a raid home, whatever its points
+        MatchStats debt = empty_stats();
+        debt.raids_home = {0, 1, 0, 0};
+        debt.loot_home = {0, -30, 0, 0};
+        r = report_of(debt, seat_wins(0));
+        ASSERT_TRUE(r.top_thief.present && r.top_thief.seat == 1 && r.top_thief.value == 1 && r.loot_home[1] == -30);
     } TEST_END();
 
     TEST_CASE("MR1.6 The Play of the game is the busiest 10 seconds (two neighboring buckets of 100 turns) of at least 28 of the activity curve's weights (death 14, bomb 10, theft 6, fire 5, hit 2); the earlier window wins a tie") {
@@ -949,7 +976,7 @@ int main(int argc, char* argv[]) {
         for (uint32_t i = 0; i < 5; ++i) add_raid(nothing, raid_of(800 + 10 * i, 1, 0, 0, 3, 4));
         MatchReport r = report_of(nothing, seat_wins(1));
         ASSERT_FALSE(r.play.present);                                              // (five raids and not a point: "steals 0 points" is no sentence)
-        ASSERT_FALSE(r.biggest_raid.present);                                      // (the honor needs points)
+        ASSERT_FALSE(r.top_thief.present);                                         // (the honor needs a raid that got home)
         // seat 3's 20 hits (40) beat seat 0's two deaths (28): the hits are credited to the one who did the damage
         MatchStats credit = empty_stats();
         add_hits(credit, 2, 3, 20);
@@ -1030,6 +1057,8 @@ int main(int argc, char* argv[]) {
         st.raids.push_back(raid_of(10, 1, 0, 12));
         st.raids.push_back(raid_of(20, 1, 2, 30));
         st.raids.push_back(raid_of(30, 3, 0, 0));
+        st.raids_home = {0, 1, 0, 0};
+        st.loot_home = {0, 12, 0, 0};
         const MatchReport r = report_of(st, seat_wins(0));
         ASSERT_TRUE(r.ok && r.turns == 6000 && r.roster == 0x0F);
         for (size_t s = 0; s < kSeats; ++s) {
@@ -1038,6 +1067,7 @@ int main(int argc, char* argv[]) {
         }
         ASSERT_TRUE(r.raids[0] == 0 && r.raids[1] == 2 && r.raids[2] == 0 && r.raids[3] == 1);
         ASSERT_TRUE(r.loot[1] == 42 && r.loot[3] == 0 && r.loot[0] == 0);
+        ASSERT_TRUE(r.raids_home == st.raids_home && r.loot_home == st.loot_home);                 // (of the two raids of seat 1, one got home)
         MatchStats failed = st;
         failed.ok = false;
         const MatchReport bad = report_of(failed, seat_wins(0));
@@ -1063,9 +1093,14 @@ int main(int argc, char* argv[]) {
     TEST_CASE("MR2.1 A match counted while it is played says what the replay of its own recording says, field by field: damage, kills, raids with their tiles, bombs and fires with theirs, hits credited, the curve of the activity, the food, the seats that ran out; the same report; and the matches had all of it") {
         const Matches& m = matches();
         Content all;
+        size_t top_thieves = 0;
         for (const Played* p : {&m.hellraiser, &m.treasure, &m.popcorn}) {
             ASSERT_FALSE(p->bytes.empty());
             ASSERT_TRUE(p->live.ok && p->live.events_ok && p->live_report.ok);
+            const MatchReport& thief = p->live_report;                              // (the Top Thief of a real match has the most raids home, and no seat got more home than it began)
+            for (size_t s = 0; s < kSeats; ++s) ASSERT_TRUE(thief.raids_home[s] <= thief.raids[s] && (!thief.top_thief.present || thief.raids_home[s] <= static_cast<uint32_t>(thief.top_thief.value)));
+            ASSERT_TRUE(!thief.top_thief.present || thief.top_thief.value == static_cast<int64_t>(thief.raids_home[thief.top_thief.seat]));
+            top_thieves += thief.top_thief.present ? 1u : 0u;
             const Replayed again = replayed(p->file, 0);
             ASSERT_TRUE(again.ok);
             ASSERT_EQ(differs(p->live, again.stats), std::string());
@@ -1112,6 +1147,7 @@ int main(int argc, char* argv[]) {
             for (size_t s = 0; s < kSeats; ++s) bombs_off += p->live.bombs_off[s];
             ASSERT_EQ(bombs_off, p->live.bomb_events.size());
         }
+        ASSERT_TRUE(top_thieves > 0);                                              // (some match had a raid that got home)
         ASSERT_TRUE(all.kills > 0 && all.raids > 0 && all.bombs > 0 && all.fires > 0 && all.hits > 0 && all.credited_hits > 0 && all.damage > 0 && all.food_trips > 0);
         ASSERT_EQ(all.fires_with_tile, all.fires);                                 // (a fire wall was there for each fire: none of these matches lit one at the entrance of a hill)
         ASSERT_TRUE(m.hellraiser.live_report.play.present && m.treasure.live_report.play.present);         // (a real match has a play: the busiest window of hellraiser has bombs and deaths that no team did, the next busiest one has a play to tell)
@@ -1212,7 +1248,7 @@ int main(int argc, char* argv[]) {
             ASSERT_EQ(differs(app.live_stats().stats(), again.stats), std::string());
             ASSERT_EQ(differs(report, again.report), std::string());
             ASSERT_EQ(report.turns, rep.total_turns);
-            ASSERT_FALSE(mode == 1 && report.biggest_raid.present);                    // (187 has none)
+            ASSERT_FALSE(mode == 1 && report.top_thief.present);                       // (187 has none)
             app.shutdown();
         }
     } TEST_END();

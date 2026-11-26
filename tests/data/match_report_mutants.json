@@ -137,20 +137,47 @@
    "test": "timeout 600 ./build/tests/test_app/test_match_report"
   },
   {
-   "id": "biggest_raid_takes_the_later_of_two_equal",
+   "id": "top_thief_takes_the_higher_seat_of_two_equal",
    "file": "src/ants_app/match_report.cpp",
-   "old": "raid.points <= most",
-   "new": "raid.points < most",
+   "old": "if (st.raids_home[s] <= most) continue;",
+   "new": "if (st.raids_home[s] == 0 || st.raids_home[s] < most) continue;",
    "expect": "MR1.5",
    "build": "test_match_report",
    "test": "timeout 600 ./build/tests/test_app/test_match_report"
   },
   {
-   "id": "biggest_raid_takes_a_raid_that_took_nothing",
+   "id": "top_thief_takes_a_seat_with_no_raid_home",
    "file": "src/ants_app/match_report.cpp",
-   "old": "        int32_t most = 0;\n        for (const MatchStats::Raid& raid : st.raids) {",
-   "new": "        int32_t most = -1;\n        for (const MatchStats::Raid& raid : st.raids) {",
+   "old": "if (st.raids_home[s] <= most) continue;",
+   "new": "if (st.raids_home[s] <= most && most > 0) continue;",
    "expect": "MR1.5",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "top_thief_counts_the_raids_that_began",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "if (st.raids_home[s] <= most) continue;                         // (strictly: the lower seat keeps a tie)\n            most = st.raids_home[s];",
+   "new": "if (report.raids[s] <= most) continue;                         // (strictly: the lower seat keeps a tie)\n            most = report.raids[s];",
+   "expect": "MR1.5",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "top_thief_is_the_most_loot_not_the_most_raids",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "if (st.raids_home[s] <= most) continue;                         // (strictly: the lower seat keeps a tie)\n            most = st.raids_home[s];",
+   "new": "if (st.loot_home[s] <= static_cast<int64_t>(most)) continue;\n            most = static_cast<uint32_t>(st.loot_home[s]);",
+   "expect": "MR1.5",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_report_loses_the_loot_home",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "report.loot_home[s] = st.loot_home[s];",
+   "new": "report.loot_home[s] = 0;",
+   "expect": "MR1.",
    "build": "test_match_report",
    "test": "timeout 600 ./build/tests/test_app/test_match_report"
   },

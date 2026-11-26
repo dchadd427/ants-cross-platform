@@ -1,7 +1,7 @@
 #pragma once
 
 // What the end-of-match screen says besides the original's four numbers (docs/VIEW_AND_HUD.md, "The new look of the results screen"): the damage that every side did and took, the food it carried, its bombs, fires and
-// raids, the honors (MVP, First blood, Biggest raid, or Last stand in 187) and the Play of the game. All of it is COUNTED by the replay's stats pass (ants_replay/match_stats.hpp, the code that the match pages of the
+// raids, the honors (MVP, First blood, Top Thief, or Last stand in 187) and the Play of the game. All of it is COUNTED by the replay's stats pass (ants_replay/match_stats.hpp, the code that the match pages of the
 // replays use) while the match is played, on the CONFIRMED engine, for every tick that it executes; nothing here reaches the simulation, the lock-step rules or any hash.
 //
 // `ok` is the whole truth of the report: false (a tick was not seen, the pass failed, the match was not played from its first turn) and the screen shows the original's numbers only, never a wrong one.
@@ -33,6 +33,8 @@ struct MatchReport {
     std::array<uint32_t, kSeats> fires_lit{};
     std::array<uint32_t, kSeats> raids{};                                  // hills raided by the seat's thieves
     std::array<int64_t, kSeats> loot{};                                    // the points those raids took
+    std::array<uint32_t, kSeats> raids_home{};                             // the raids among them whose loot got home (a raid on a hill with nothing, and a Thief killed on the way, never do)
+    std::array<int64_t, kSeats> loot_home{};                               // the points of those
 
     /// An honor: the seat that earned it, the number that is shown under it, and the turn it happened (0 for a total of the match)
     struct Honor {
@@ -43,7 +45,7 @@ struct MatchReport {
     };
     Honor mvp;                                                             // of the winning side: the highest mixed share (mvp_share), `value` that share in thousandths (the card says "62% of the play"); none when no seat of the side did any of the three things
     Honor first_blood;                                                     // the first kill by a seat that is not its own victim's, none that drowned: the killer, `turn` when
-    Honor biggest_raid;                                                    // the raid with the most loot (a raid that took nothing is none, the earlier of two equal ones wins); `value` the points. Never in 187
+    Honor top_thief;                                                       // the seat with the most raids whose loot got home (none when no raid did, the lower seat wins a tie); `value` those raids, their points are loot_home[seat]. Never in 187
     Honor last_stand;                                                      // 187 only: the seat that was out of ants last of those that did not win; `turn` when it ran out. Never in the original's game
 
     /// The Play of the game: the busiest 10 seconds of the match by the activity curve's weights (death 14, bomb 10, theft 6, fire 5, hit 2), credited to the seat with the largest share of them
@@ -65,7 +67,7 @@ struct MatchReport {
 /// did averaged with equal weight (a thing that nobody did is left out), in thousandths. Public so that a test can say it.
 uint32_t mvp_share(const replay::MatchStats& stats, uint8_t seat);
 
-/// The report of a match from what the stats pass counted. `result` says who won (its rows and alliances: the seats of the first row of result.rows(local_seat)); `mode` is the rules (187 has Last stand instead of Biggest raid).
+/// The report of a match from what the stats pass counted. `result` says who won (its rows and alliances: the seats of the first row of result.rows(local_seat)); `mode` is the rules (187 has Last stand instead of Top Thief).
 /// ok is false (and nothing but `turns` is filled) when `stats.ok` is not, or `stats.events_ok` is not: the pass could not count the match, or could not tell the owner of a bomb or the place of a fire for sure.
 /// The definitions of every number and honor are in the .cpp (and in docs/REPLAYS.md, "The match pages"). A pure function of its arguments: no clock, no disk, no floating point.
 MatchReport make_match_report(const replay::MatchStats& stats, const sim::MatchResult& result, sim::GameMode mode, uint8_t local_seat);
