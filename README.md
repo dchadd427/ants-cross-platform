@@ -80,6 +80,7 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [`BOT_PLAY.md`](docs/BOT_PLAY.md): how the standard bot plays: styles, the gate, the stall detector, the can't-go loop, bombs on the way, alliances, walled maps and the game type 187
 - [`BOT_ISLANDS.md`](docs/BOT_ISLANDS.md): the computer players on water maps (ISLANDS and SMALL): the expedition, the ferry, the swarm and the bridges
 - [`BOT_IDLE.md`](docs/BOT_IDLE.md): the idle batch of the computer players: the Thief of the endgame on water maps, the answer to a Thief at the hole, Fire hats, bridges, two ants face to face on a bridge, a blow for the ant beside the enemy, jobs for the ants that nothing holds
+- [`BOT_CONTEST.md`](docs/BOT_CONTEST.md): the fight batch of the computer players, part 2: standing on power-ups (the original's can't-go cancel) and a fight with a plan (built, measured, off), the contest at a flower strip (on at Hard)
 - [`BOT_LIMITS.md`](docs/BOT_LIMITS.md): the known limits of the computer players
 - [`BOT_GATES.md`](docs/BOT_GATES.md): walled maps: the map's own bombs left to the gate goals, the field breach (food beyond a field of bombs, a fire wall and water: POPcOrN and its family), the measurements, and POPcOrN in a match
 - [`BOT_FIGHT.md`](docs/BOT_FIGHT.md): the Hard computer player's quick kill (an enemy beside water, a bomb or a fire wall, struck from the tile that throws it in), fights that a walk reaches, hunting when there is nothing to bank, and the measuring tool `bot_watch`

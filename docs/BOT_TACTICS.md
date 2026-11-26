@@ -156,6 +156,8 @@ The requirement: Hard bots should be really aggressive. Every number below is TR
 
 - **Left out and why** (flags kept, `bot_arena --tune`, `tools/bot_arena.cpp`): the parked guard, the interception of thieves (the Defensive style won 13.9 percent against the mix of aggressor, rusher and plain bots with it and 29.2 without), hatching, the strict contest order, strikes and the wipe-out focus (they never trigger in symmetric play and cost in the benches; the strike is part of Hard aggressive), the ambush, the skirmish of the bot's own and workers in the strike (the contest batch: "Fights of its own", "Behind the leader and the endgame"), the sabotage with a single Fire Ant (the Hard aggressive style steals a second one: its walls round the best opponent's gate, `SabotageTask`: eight tiles, the queue row sealed, until the victim puts one out or they burn out, 3,600 ticks).
 
+Part 2 of the fight batch measured three more kinds of aggression (standing on a power-up when hurt, a fight that asks for an edge and pulls the hurt back, the fight for a flower strip): the first two lose or win nothing and ship off, the strike at a flower strip wins on ISLANDS and ships on at Hard: [BOT_CONTEST.md](BOT_CONTEST.md).
+
 ## Contested food
 
 Which food a bot eats first when other teams want it too, the classes of the piles (who else reaches a pile how soon), the denial order of Medium and Hard, the race of Easy and what was measured, is in [BOT_FOOD.md](BOT_FOOD.md).
