@@ -30,6 +30,10 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - **Copy link on a phone.** A live view and a replay have the button in the top bar on a phone now (a share symbol, 44 px; on a computer it says Copy link as before). It opens the phone's share sheet where there is one, otherwise copies the match's address and says Copied!. The bar shows Matches and Full instead of All matches and Fullscreen on a narrow phone, so that all five buttons fit in one row.
+
+## v0.21.5 - 2026-11-24 - The Podium results, messages on phones and smarter bots
+
+**For players:**
 - **Computer players stand idle less.** On ISLANDS Hard bots take the Thief and Fire hats and dig to a rival's hill to steal; at every level ants that meet on a bridge sort it out. Bots only.
 - **A new results screen.** With the New HUD the end of a match is a page that fits any window or phone: Victory! or Defeat, the winner and the others ranked, the damage, three honors and a Play of the game, with Watch on the desktop. "All stats" opens every player's numbers and "Back to results" returns (the arrow keys work too).
 - **You choose after a room's match.** The results of a match that began in a lobby room have two buttons, "Back to the room" and "Back to Ants & Uncles", and wait until you press one.
@@ -38,6 +42,8 @@ Work that is not released yet is written in the same template under a heading th
 **Fixes:**
 - On a phone, a live view's "Jump to live" no longer covers the clock beside the play button: the clock keeps its room, the button goes under it when the row is short, and Picture sits beside the camera button. The speed buttons and Picture are 44 px high.
 - Private messages on a phone: the conversation is a sheet that follows what you can see, so with the keyboard open the field sits just above it, the head with the name and the X stays on the screen and the messages fill the room over the field. The X, the arrow, Escape, a pull down on the head and the phone's Back button each close the sheet and leave you on the page where you were, not on the bell's list.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/df4b4255...36deb771)
 
 ## v0.21.4 - 2026-11-24 - Special ants on the match page, What's new fits a phone
 
