@@ -33,10 +33,12 @@ Work that is not released yet is written in the same template under a heading th
 - **Games list.** Dashed Open lobby cards fill the empty places (Host here), and a live match shows its scores in a strip that opens a scoreboard.
 - **Copy link on a phone.** A live view and a replay have the button in the top bar on a phone now (a share symbol, 44 px; on a computer it says Copy link as before). It opens the phone's share sheet where there is one, otherwise copies the match's address and says Copied!. The bar shows Matches and Full instead of All matches and Fullscreen on a narrow phone, so that all five buttons fit in one row.
 - **Kills first on the Podium.** The results show Killed before Lost (then Hatched), for the winner and for each of the other players.
+- **Fill a box in the Map Maker.** A switch under the Objects, Food and Ants tools: drag a box and it fills with every cell, every other cell, every Nth row or column or a random pattern, as one Undo step. Water, rock and things in the way are skipped and counted; one fill puts at most 250 ants. An AI that you connect has it too (`fill_area`).
 
 **Fixes:**
 - On a phone, a live view's "Jump to live" no longer covers the clock beside the play button: the clock keeps its room, the button goes under it when the row is short, and Picture sits beside the camera button. The speed buttons and Picture are 44 px high.
 - The menu's "players online" counts the same people as the Players list, not only those in a room or a match.
+- A connected AI's `put_ants` puts the ant type that it names, and `get_region` names the types right (they were mixed up: asking for a combat ant gave a bomber, and a swimmer gave a combat ant).
 
 ## v0.21.5 - 2026-11-24 - The Podium results, messages on phones and smarter bots
 
