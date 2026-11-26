@@ -800,7 +800,7 @@
       this.mapTex = tex;
       if (!this.tileGroundMesh || this.tileGroundMesh.cols !== cols || this.tileGroundMesh.rows !== rows) {
         if (this.tileGroundMesh) this.tileGroundMesh.dispose();
-        this.tileGroundMesh = buildTileGroundMesh(gl, cols, rows, 36.0);
+        this.tileGroundMesh = buildTileGroundMesh(gl, cols, rows, 64.0);
       }
     }
 

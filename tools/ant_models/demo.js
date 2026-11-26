@@ -6,6 +6,7 @@
     DEG, TEAMS, validLighting, wrapAngleDeg, AntRenderer, installToolbarRovingTabindex,
   } = window.__antRender;
   const { buildCarriedLunchboxMat, buildHeistsForMap, updateHeists } = window.__demoHeist;
+  const { BORDER_GRASS_IDS, appendBorderGrass } = window.__demoBorder;
 
   const $ = (id) => document.getElementById(id);
 
@@ -533,7 +534,7 @@
 
       const antSpecs = buildAntSpecsForMap(mapData);
       const uniqueAnts = [...new Set([...antSpecs.map((a) => a.cls), "thief"])];
-      const uniqueItems = [...new Set([...mapData.objects.map((o) => o.id), "lunchbox"])];
+      const uniqueItems = [...new Set([...mapData.objects.map((o) => o.id), "lunchbox", ...BORDER_GRASS_IDS])];
       const queue = [
         ...uniqueAnts.map((cls) => [`ant:${cls}`, `models/${cls}.glb`]),
         ...uniqueItems.map((id) => [`item:${id}`, `models/items/${id}.glb`]),
@@ -565,6 +566,9 @@
         };
         itemEntries.push({ inst, spec, x: spec.x, z: spec.z, radius });
       }
+      const grassModels = {};
+      for (const gid of BORDER_GRASS_IDS) grassModels[gid] = await modelCache.get(`item:${gid}`);
+      appendBorderGrass(itemEntries, mapData, grassModels, mapsCatalog.water_tile_index, buildWorldMat);
 
       const lunchboxModel = await modelCache.get("item:lunchbox");
       const thiefModel = await modelCache.get("ant:thief");

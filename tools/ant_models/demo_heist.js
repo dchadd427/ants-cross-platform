@@ -61,13 +61,13 @@
     // Ant-local left paw trajectory measured directly from `worker.glb`/`thief.glb` Walk `forearm_left` tip
     // so the top handle stays firmly gripped in the ant's left hand at every frame of the stride!
     const handX = heldFront ? 0.0 : ((0.136 + 0.014 * s1) * antScale);
-    const handY = heldFront ? (0.56 * antScale) : ((0.378 + 0.078 * s1 + 0.012 * s1 * s1) * antScale);
-    const handZ = heldFront ? (0.30 * antScale) : ((0.180 + 0.020 * s1) * antScale);
+    const handY = heldFront ? (0.56 * antScale) : ((0.382 + 0.058 * s1 + 0.008 * s1 * s1) * antScale);
+    const handZ = heldFront ? (0.30 * antScale) : ((0.180 + 0.016 * s1) * antScale);
 
-    // Lively pendulum swing (~±40°) around the gripped handle in the ant's sagittal walking plane!
-    const swingRx = heldFront ? -0.18 : (-0.70 * sLag);
+    // Subtle, natural weighted pendulum swing (~±14°) around the gripped handle in sync with the arm!
+    const swingRx = heldFront ? -0.14 : (-0.25 * sLag);
     // Positive Rz tilts the bottom gently outward (+X) so the box clears the hip/legs while handle stays in the paw!
-    const outRollRz = heldFront ? 0.0 : (0.18 + 0.04 * Math.abs(s1));
+    const outRollRz = heldFront ? 0.0 : (0.14 + 0.02 * Math.abs(s1));
     // +114° turns `lunchbox.glb` (baked at -24°) to +90° so handle runs front-to-back parallel to the ant's side!
     const boxYawLocal = heldFront ? (24 * Math.PI / 180) : (114 * Math.PI / 180);
 

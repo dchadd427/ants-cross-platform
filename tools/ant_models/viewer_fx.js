@@ -650,20 +650,82 @@
       if (u_waterPass != 0) discard;
       vec2 edgeD = max(max(-p, p - u_mapSize), vec2(0.0));
       float dOut = length(edgeD);
-      float frame = 1.0 - smoothstep(0.0, 0.24, dOut);
-      float fade = (u_isOrtho != 0) ? 0.0 : smoothstep(1.2, 6.0, dOut);
-      vec3 matCol = mix(vec3(0.05, 0.06, 0.08), vec3(0.16, 0.19, 0.23), frame * 0.55);
-      fragColor = vec4(mix(matCol, skyMatch, fade), 1.0);
+      // Organic lush backyard grass meadow surrounding every map edge (replaces the old black void!)
+      float macro = tgFbm(p * 0.24 + vec2(2.3, 7.1));
+      float clump = tgFbm(p * 1.15 + vec2(macro * 1.4, -macro * 1.1));
+      float tufts = tgFbm(p * 3.8 + vec2(clump * 1.2, 4.7));
+      float blade1 = tgNoise(vec2(p.x * 16.0 + macro * 2.6, p.y * 26.0 + clump * 1.8));
+      float blade2 = tgNoise(vec2(p.x * 28.0 - clump * 2.1, p.y * 18.0 + macro * 2.2));
+      float blades = blade1 * 0.56 + blade2 * 0.44;
+      // Rich chlorophyll palette matched directly to the 3D grass clumps (item_grass_blade)
+      vec3 gRoot = vec3(0.024, 0.098, 0.011);
+      vec3 gMid  = vec3(0.068, 0.258, 0.022);
+      vec3 gSun  = vec3(0.145, 0.390, 0.036);
+      vec3 lawnAlb = mix(gRoot, gMid, smoothstep(0.16, 0.74, clump * 0.55 + tufts * 0.45));
+      lawnAlb = mix(lawnAlb, gSun, smoothstep(0.46, 0.90, macro * 0.52 + blades * 0.48) * 0.72);
+      // Subtle root-shadow earth blend right at the clearing edge so 3D border grass feels naturally rooted
+      float edgeWobble = (tgFbm(p * 2.8) - 0.5) * 0.22;
+      float edgeBlend = smoothstep(0.0, 0.42, dOut + edgeWobble);
+      vec3 edgeMoss = vec3(0.036, 0.122, 0.016);
+      lawnAlb = mix(edgeMoss, lawnAlb, 0.35 + 0.65 * edgeBlend);
+      // Soft ambient occlusion tucked directly under the inner 3D border grass hedge
+      float hedgeAo = mix(0.76, 1.0, smoothstep(0.25, 2.2, dOut) * 0.65 + 0.35 * tufts);
+      lawnAlb *= hedgeAo * (0.90 + 0.20 * blades);
+
+      float eN = 0.08;
+      float hL = tgFbm((p - vec2(eN, 0.0)) * 3.2) * 0.6 + tgNoise((p - vec2(eN, 0.0)) * 18.0) * 0.4;
+      float hR = tgFbm((p + vec2(eN, 0.0)) * 3.2) * 0.6 + tgNoise((p + vec2(eN, 0.0)) * 18.0) * 0.4;
+      float hD = tgFbm((p - vec2(0.0, eN)) * 3.2) * 0.6 + tgNoise((p - vec2(0.0, eN)) * 18.0) * 0.4;
+      float hU = tgFbm((p + vec2(0.0, eN)) * 3.2) * 0.6 + tgNoise((p + vec2(0.0, eN)) * 18.0) * 0.4;
+      vec3 gN = normalize(vec3((hL - hR) * 0.85, 1.0, (hD - hU) * 0.85));
+
+      float sh = sampleTileShadow(v_worldPos);
+      float NoL = max(dot(gN, u_keyDir), 0.0);
+      float NoF = max(dot(gN, u_fillDir), 0.0);
+      float keyNorm = max(u_keyDir.y, 0.28);
+      float sunFactor = (NoL / keyNorm) * mix(1.0 - u_shadowStrength, 1.0, sh);
+      vec3 shadowCool = mix(vec3(0.88, 0.92, 1.02), vec3(1.0), sh);
+      vec3 lit = lawnAlb * (u_keyColor * sunFactor * 0.28 + u_skyColor * 0.24 * u_lightMix.x * shadowCool + u_fillColor * NoF * 0.16);
+      vec3 outCol = tgToSrgb(tgAces(lit * 1.06 * u_lightMix.z));
+      if (u_lightMix.w > 0.001) {
+        vec3 flatGrass = tgToSrgb(tgAces(lawnAlb * 1.25)) * mix(1.0 - u_shadowStrength * 0.55, 1.0, sh);
+        outCol = mix(outCol, flatGrass, u_lightMix.w);
+      }
+      // In Game View / Top-Down (ortho): 100% lush green grass to the edge; in 3D persp: gentle distant horizon mist far out
+      float fade = (u_isOrtho != 0) ? 0.0 : smoothstep(26.0, 58.0, dOut);
+      fragColor = vec4(mix(outCol, skyMatch, fade), 1.0);
       return;
     }
 
-    // Pass 1 (u_waterPass == 1): seamless deep recessed underwater pond bed with subtle animated caustics (ZERO rectangular discontinuities!)
+    // Pass 1 (u_waterPass == 1): depth-aware sunlit pebbly pond floor with crisp organic dancing caustic webs
     if (u_waterPass == 1) {
-      float bedN = tgFbm(p * 2.4);
-      float caust = pow(0.5 + 0.5 * sin(p.x * 5.2 + p.y * 3.8 + u_time * 1.7 + bedN * 4.2) * cos(p.x * 3.6 - p.y * 5.4 - u_time * 1.3), 3.0);
-      vec3 bedCol = mix(vec3(0.008, 0.028, 0.082), vec3(0.020, 0.064, 0.160), bedN) + vec3(0.014, 0.042, 0.072) * caust;
-      float keyLum = clamp(dot(u_keyColor, vec3(0.299, 0.587, 0.114)) * 0.34, 0.14, 1.05);
-      fragColor = vec4(tgToSrgb(tgAces(bedCol * (0.48 + 0.72 * keyLum) * u_lightMix.z)), 1.0);
+      float bNear = 0.25 * (
+        sampleMask(p + vec2(0.45, 0.0)).a + sampleMask(p - vec2(0.45, 0.0)).a +
+        sampleMask(p + vec2(0.0, 0.45)).a + sampleMask(p - vec2(0.0, 0.45)).a
+      );
+      float bFar = 0.25 * (
+        sampleMask(p + vec2(1.15, 0.75)).a + sampleMask(p - vec2(1.15, 0.75)).a +
+        sampleMask(p + vec2(-0.75, 1.15)).a + sampleMask(p - vec2(-0.75, 1.15)).a
+      );
+      float bedDepth = smoothstep(0.15, 0.96, bNear * 0.45 + bFar * 0.55);
+      float bedMacro = tgFbm(p * 1.15);
+      float bedPeb = tgFbm(p * 4.8 + vec2(3.7, 1.9));
+      float stones = smoothstep(0.62, 0.88, tgNoise(p * 9.5 + vec2(bedPeb * 1.4, 2.1)));
+      // Domain-warped ridge caustics (bright dancing underwater light webs, ZERO repeating grid!)
+      vec2 wWarp = vec2(tgFbm(p * 1.30 + vec2(u_time * 0.20, -u_time * 0.14)), tgFbm(p * 1.30 + vec2(5.2 - u_time * 0.16, 2.7 + u_time * 0.19)));
+      vec2 cUv1 = mat2(0.82, 0.57, -0.57, 0.82) * p * 2.05 + wWarp * 1.35 + vec2(u_time * 0.24, -u_time * 0.17);
+      vec2 cUv2 = mat2(0.54, -0.84, 0.84, 0.54) * p * 2.65 - wWarp * 1.15 + vec2(-u_time * 0.19, u_time * 0.23);
+      float r1 = pow(clamp(1.0 - abs(2.0 * tgNoise(cUv1) - 1.0), 0.0, 1.0), 4.6);
+      float r2 = pow(clamp(1.0 - abs(2.0 * tgNoise(cUv2) - 1.0), 0.0, 1.0), 4.6);
+      float caust = clamp((r1 * r2 * 3.4 + (r1 + r2) * 0.34), 0.0, 1.0);
+      // Warm sandy-pebble submerged shore shelf sloping down into rich deep sapphire-teal pond floor!
+      vec3 shallowBed = mix(vec3(0.036, 0.088, 0.118), vec3(0.072, 0.132, 0.145), bedMacro * 0.55 + bedPeb * 0.45);
+      shallowBed = mix(shallowBed, vec3(0.105, 0.155, 0.150), stones * 0.32);
+      vec3 deepBed = mix(vec3(0.004, 0.024, 0.082), vec3(0.010, 0.052, 0.138), bedMacro * 0.6 + bedPeb * 0.4);
+      vec3 bedCol = mix(shallowBed, deepBed, bedDepth);
+      bedCol += mix(vec3(0.045, 0.155, 0.195), vec3(0.018, 0.095, 0.168), bedDepth) * caust * mix(1.05, 0.68, bedDepth);
+      float keyLum = clamp(dot(u_keyColor, vec3(0.299, 0.587, 0.114)) * 0.34, 0.16, 1.08);
+      fragColor = vec4(tgToSrgb(tgAces(bedCol * (0.56 + 0.68 * keyLum) * u_lightMix.z)), 1.0);
       return;
     }
 
@@ -693,27 +755,47 @@
     float outAlpha = 1.0;
 
     if (u_waterPass == 2) {
-      // Seamless coastal depth from nearby water mask (shallow turquoise shore -> deep royal cobalt water)
-      float wAvg = 0.25 * (
-        sampleMask(p + vec2(0.32, 0.0)).a + sampleMask(p - vec2(0.32, 0.0)).a +
-        sampleMask(p + vec2(0.0, 0.32)).a + sampleMask(p - vec2(0.0, 0.32)).a
+      // Wide two-ring coastal depth sampling: clear turquoise-aqua shallow shelf -> deep inviting marine sapphire-teal!
+      float wNear = 0.25 * (
+        sampleMask(p + vec2(0.38, 0.0)).a + sampleMask(p - vec2(0.38, 0.0)).a +
+        sampleMask(p + vec2(0.0, 0.38)).a + sampleMask(p - vec2(0.0, 0.38)).a
       );
-      float wDeep = smoothstep(0.28, 0.96, wAvg);
-      float w1 = sin(p.x * 7.8 + p.y * 4.6 + u_time * 2.1 + tgNoise(p * 2.2) * 2.4);
-      float w2 = cos(p.x * 5.2 - p.y * 7.4 - u_time * 1.7 + tgNoise(p * 3.1) * 2.0);
-      float w3 = sin((p.x - p.y) * 11.5 + u_time * 2.9) * 0.5;
-      N = normalize(vec3((w1 * 0.075 + w3 * 0.035), 1.0, (w2 * 0.075 - w3 * 0.035)));
-      vec3 shallowCol = vec3(0.042, 0.185, 0.310);
-      vec3 deepCol = vec3(0.018, 0.074, 0.235);
-      albedo = (u_pbrFloor != 0) ? mix(shallowCol, deepCol, wDeep) : mix(tgToLinear(texSrgb), deepCol, 0.35);
-      albedo *= 0.92 + 0.16 * (0.5 + 0.5 * w1 * w2);
-      rough = 0.14;
-      specBoost = 0.16;
+      float wFar = 0.25 * (
+        sampleMask(p + vec2(1.15, 0.80)).a + sampleMask(p - vec2(1.15, 0.80)).a +
+        sampleMask(p + vec2(-0.80, 1.15)).a + sampleMask(p - vec2(-0.80, 1.15)).a
+      );
+      float wDeep = smoothstep(0.14, 0.96, wNear * 0.42 + wFar * 0.58);
 
-      // Subtle animated shoreline lap foam hugging curved pond/island banks
-      float shoreLine = smoothstep(0.08, 0.26, waterW) * (1.0 - smoothstep(0.30, 0.56, waterW));
-      float lapWave = 0.55 + 0.45 * sin(p.x * 6.0 + p.y * 5.0 + u_time * 2.6 + tgNoise(p * 5.0) * 3.0);
-      float foam = (u_pbrFloor != 0) ? (shoreLine * lapWave * 0.38) : 0.0;
+      // Organic multi-octave domain-warped liquid ripples (ZERO diagonal sine checkerboard!)
+      vec2 flow1 = p * 0.78 + vec2(u_time * 0.14, u_time * 0.09);
+      float swell = tgFbm(flow1);
+      vec2 rUv1 = mat2(0.80, 0.60, -0.60, 0.80) * p * 1.85 + vec2(-u_time * 0.20, u_time * 0.15) + vec2(swell, -swell) * 0.78;
+      vec2 rUv2 = mat2(0.62, -0.78, 0.78, 0.62) * p * 3.25 + vec2(u_time * 0.25, -u_time * 0.18) + vec2(-swell, swell) * 0.58;
+      float eW = 0.065;
+      float hC = tgFbm(rUv1) * 0.62 + tgNoise(rUv2) * 0.38;
+      float hX = tgFbm(rUv1 + vec2(eW, 0.0)) * 0.62 + tgNoise(rUv2 + vec2(eW, 0.0)) * 0.38;
+      float hZ = tgFbm(rUv1 + vec2(0.0, eW)) * 0.62 + tgNoise(rUv2 + vec2(0.0, eW)) * 0.38;
+      N = normalize(vec3((hC - hX) * 1.25, 1.0, (hC - hZ) * 1.25));
+
+      // Rich, clear backyard pond palette: sunlit turquoise shore -> vibrant pond cerulean -> deep 1998 sapphire!
+      vec3 shallowCol = vec3(0.016, 0.165, 0.225);
+      vec3 midCol     = vec3(0.008, 0.088, 0.228);
+      vec3 deepCol    = vec3(0.004, 0.044, 0.168);
+      vec3 pondBase = mix(mix(shallowCol, midCol, smoothstep(0.0, 0.52, wDeep)), deepCol, smoothstep(0.42, 1.0, wDeep));
+      // Subtle organic liquid current light-wisps (soft aqua breeze streaks inspired by 1998 water, zero repetition!)
+      vec2 streakUv = mat2(0.76, -0.65, 0.65, 0.76) * p * vec2(0.85, 2.75) + vec2(u_time * 0.15, -u_time * 0.10) + vec2(swell * 1.4, hC * 1.0);
+      float streak = smoothstep(0.62, 0.90, tgFbm(streakUv)) * (0.35 + 0.65 * wDeep);
+      pondBase += vec3(0.010, 0.068, 0.115) * streak * 0.72;
+      // Gentle recessed bank contact shadow so the water clearly sits below the surrounding mud/dirt banks
+      float bankAo = mix(0.70, 1.0, smoothstep(0.06, 0.58, wNear));
+      pondBase *= bankAo * (0.86 + 0.28 * hC);
+
+      albedo = (u_pbrFloor != 0) ? pondBase : mix(tgToLinear(texSrgb), midCol, 0.28);
+
+      // Delicate lacy organic waterline edge hugging curved banks
+      float shoreBand = smoothstep(0.06, 0.22, waterW) * (1.0 - smoothstep(0.25, 0.50, waterW));
+      float shoreBreak = smoothstep(0.32, 0.78, tgFbm(p * 4.5 + vec2(u_time * 0.28, -u_time * 0.22)));
+      float foam = (u_pbrFloor != 0) ? (shoreBand * (0.25 + 0.75 * shoreBreak) * 0.30) : 0.0;
 
       // Animated white-cyan snorkel splash collar & concentric expanding wake ripple rings around underwater swimmers
       for (int i = 0; i < 8; i++) {
@@ -728,33 +810,36 @@
           float r2 = fract(u_time * 0.95 + rp.z + 0.5) * maxR;
           float ring1 = exp(-pow((d - r1) / 0.052, 2.0)) * (1.0 - r1 / maxR);
           float ring2 = exp(-pow((d - r2) / 0.052, 2.0)) * (1.0 - r2 / maxR);
-          foam = max(foam, clamp(collar * splashJitter * 0.94 + (ring1 + ring2) * 0.74, 0.0, 1.0));
+          foam = max(foam, clamp(collar * splashJitter * 0.92 + (ring1 + ring2) * 0.72, 0.0, 1.0));
         }
       }
-      float shoreAlpha = smoothstep(0.04, 0.36, waterW);
-      outAlpha = shoreAlpha * mix(mix(0.46, 0.62, wDeep), 0.95, foam);
+      // Clear shallow shoreline revealing sandy bed & caustics -> richer deep water in open center
+      float shoreAlpha = smoothstep(0.04, 0.34, waterW);
+      outAlpha = shoreAlpha * mix(mix(0.34, 0.78, wDeep), 0.92, foam);
 
+      // Calm natural liquid lighting (rich clear water depth, NO milky white Fresnel haze or shiny plastic glare!)
       float NoL = max(dot(N, u_keyDir), 0.0);
       float NoF = max(dot(N, u_fillDir), 0.0);
-      float NoV = max(dot(N, V), 0.05);
-      float fres = 0.04 + 0.96 * pow(1.0 - NoV, 4.0);
+      float NoV = max(dot(N, V), 0.08);
+      float fres = 0.015 + 0.26 * pow(1.0 - NoV, 4.8);
       vec3 H = normalize(u_keyDir + V);
-      float spec = tgDggx(max(dot(N, H), 0.0), 0.14) * 0.085 * sh;
-      vec3 lit = albedo * (u_keyColor * (NoL / max(u_keyDir.y, 0.28)) * mix(1.0 - u_shadowStrength, 1.0, sh) * 0.30
-                         + u_skyColor * 0.26 * u_lightMix.x + u_fillColor * NoF * 0.16);
-      lit += u_skyColor * fres * 0.32 * u_lightMix.x + u_keyColor * spec;
-      vec3 foamCol = mix(vec3(0.48, 0.82, 1.0), vec3(0.96, 0.99, 1.0), foam * 0.8);
-      lit = mix(lit, foamCol * max(0.32, dot(u_keyColor, vec3(0.3, 0.5, 0.2)) * 0.36 + 0.28), foam * 0.88);
+      float spec = tgDggx(max(dot(N, H), 0.0), 0.30) * 0.024 * sh;
+      vec3 lit = albedo * (u_keyColor * (NoL / max(u_keyDir.y, 0.28)) * mix(1.0 - u_shadowStrength * 0.85, 1.0, sh) * 0.36
+                         + u_skyColor * 0.22 * u_lightMix.x + u_fillColor * NoF * 0.16);
+      vec3 skyTint = u_skyColor * vec3(0.45, 0.76, 1.0);
+      lit += skyTint * fres * 0.065 * u_lightMix.x + u_keyColor * spec;
+      vec3 foamCol = mix(vec3(0.58, 0.88, 0.96), vec3(0.96, 0.99, 1.0), foam * 0.78);
+      lit = mix(lit, foamCol * max(0.32, dot(u_keyColor, vec3(0.3, 0.5, 0.2)) * 0.34 + 0.28), foam * 0.84);
       for (int i = 0; i < 8; i++) {
         if (i >= u_glowCount) break;
         vec4 glw = u_glows[i];
         float gd = length(p - glw.xy) / max(glw.z, 0.25);
         float flick = 0.86 + 0.14 * sin(u_time * 10.5 + float(i) * 2.3);
-        lit += (albedo + vec3(0.08)) * u_glowColors[i] * exp(-gd * gd * 2.1) * glw.w * flick;
+        lit += (albedo + vec3(0.06)) * u_glowColors[i] * exp(-gd * gd * 2.1) * glw.w * flick;
       }
       vec3 outCol = tgToSrgb(tgAces(lit * 1.06 * u_lightMix.z));
       if (u_lightMix.w > 0.001) {
-        vec3 flatW = mix(texSrgb, vec3(0.86, 0.95, 1.0), foam * 0.78);
+        vec3 flatW = mix(texSrgb, vec3(0.86, 0.95, 1.0), foam * 0.72);
         outCol = mix(outCol, flatW * mix(1.0 - u_shadowStrength * 0.55, 1.0, sh), u_lightMix.w);
       }
       if (u_gridAlpha > 0.001) {
@@ -797,15 +882,15 @@
       rough = wG * 0.86 + wM * mix(0.56, 0.24, mudWet) + wS * 0.76 + wL * 0.48;
       specBoost = wG * 0.04 + wM * mix(0.08, 0.22, mudWet) + wS * 0.07 + wL * 0.14;
 
-      // Wet shoreline bank rim right along curved water edges (darkened glossy damp earth catching specular light!)
+      // Soft naturally damp shoreline bank rim along curved water edges (matte damp earth, zero plastic shine)
       float nearW = max(waterW, 0.25 * (
         sampleMask(p + vec2(0.18, 0.0)).a + sampleMask(p - vec2(0.18, 0.0)).a +
         sampleMask(p + vec2(0.0, 0.18)).a + sampleMask(p - vec2(0.0, 0.18)).a
       ));
       float wetBank = smoothstep(0.02, 0.48, nearW);
-      albedo *= mix(1.0, 0.60, wetBank);
-      rough = mix(rough, 0.16, wetBank);
-      specBoost = mix(specBoost, 0.28, wetBank);
+      albedo *= mix(1.0, 0.76, wetBank);
+      rough = mix(rough, 0.54, wetBank);
+      specBoost = mix(specBoost, 0.07, wetBank);
 
       // Real 3D bumped normal map from continuous world-space terrain height + beveled border transitions!
       float eps = 0.038;
