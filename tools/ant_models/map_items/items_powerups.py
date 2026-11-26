@@ -164,21 +164,21 @@ def build_pu_comb() -> SceneBuilder:
 
 def _build_hollow_domino_band(name: str) -> List[MeshPart]:
     """Watertight hollow golden-yellow cloth headband loop with TWO smooth-contoured hemmed oval eye holes."""
-    n_u = 96
-    n_v = 22
+    n_u = 128
+    n_v = 30
     r_x, r_z = 0.258, 0.230
-    thick = 0.026
-    eye_centers = (-0.42, +0.42)
-    eye_y0 = -0.008
-    eye_au = 0.210
-    eye_by = 0.048
+    thick = 0.022
+    eye_centers = (-0.44, +0.44)
+    eye_y0 = -0.002
+    eye_au = 0.262
+    eye_by = 0.070
 
     def _band_v_bounds(u: float) -> Tuple[float, float]:
         a = abs(math.atan2(math.sin(u), math.cos(u)))
-        top = 0.098 + 0.040 * math.exp(-((a / 1.15) ** 2))
-        cheek_dip = -0.062 * math.exp(-(((a - 0.44) / 0.30) ** 2))
-        nose_dip = -0.026 * math.exp(-((a / 0.22) ** 2))
-        bot = -0.072 + cheek_dip + nose_dip
+        top = 0.106 + 0.048 * math.exp(-((a / 1.18) ** 2))
+        cheek_dip = -0.074 * math.exp(-(((a - 0.45) / 0.34) ** 2))
+        nose_dip = -0.024 * math.exp(-((a / 0.22) ** 2))
+        bot = -0.076 + cheek_dip + nose_dip
         return bot, top
 
     def _band_surface_pts(u_val: float, y_val: float, fv_val: float) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
@@ -299,8 +299,8 @@ def _build_hollow_domino_band(name: str) -> List[MeshPart]:
         out_parts.append(
             swept_tube(
                 rim_pts,
-                0.0155,
-                radial_segs=10,
+                0.0145,
+                radial_segs=12,
                 closed=True,
                 name=f"{name}_eye_hem_{e_idx}",
                 material="gear_gold",
@@ -389,7 +389,7 @@ def build_pu_thief() -> SceneBuilder:
 
     # 3. Broad, crisp flattened pleated bandana ribbon flaps matching `63:pu_thief`'s iconic twin kite tails!
     tail_upper = _broad_ribbon_tail(
-        [(0.244, 0.022, -0.092), (0.312, 0.095, -0.118), (0.388, 0.185, -0.145), (0.458, 0.278, -0.165)],
+        [(0.244, 0.022, -0.092), (0.312, 0.105, -0.118), (0.388, 0.205, -0.145), (0.458, 0.310, -0.165)],
         half_widths=[0.038, 0.092, 0.082, 0.012],
         half_thicks=[0.016, 0.015, 0.012, 0.005],
         width_axis=(-0.62, 0.62, -0.48),
@@ -404,9 +404,9 @@ def build_pu_thief() -> SceneBuilder:
     )
     all_parts.extend([tail_upper, tail_lower])
 
-    # Tilt slightly so the open head-ring, smooth oval eye holes & broad upper-right ribbon tails match `63:pu_thief`!
+    # Tilt slightly back so the front domino mask & both oval eye holes face up cleanly in Game View (like 63:pu_thief)!
     for p in all_parts:
-        sc.add("pu_thief", p.rotate_xyz(rx=20.0, ry=-10.0, rz=-10.0, degrees=True))
+        sc.add("pu_thief", p.rotate_xyz(rx=-11.0, ry=-10.0, rz=-4.0, degrees=True))
     return _finalize_item(sc, target_span=0.92)
 
 
