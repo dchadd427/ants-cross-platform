@@ -154,6 +154,10 @@ void PowerStandTask::finish(AntLedger& ledger) {
     Task::finish(ledger);
 }
 
+// TODO (fairness, for whoever turns rule 1 on: docs/BOT_CONTEST.md, AGENTS.md rule 5): the chain's timing is the controller's clock, not a person's eye. The window is counted from the tick at which the click LEFT
+// (Fate::Sent, below) and the cancel is released against the tick at which the sink would APPLY it (CommandSink::applied_at), and the table of windows was measured on the engine, whose path manager delivers a
+// path a variable number of ticks after the click (its queue, which no screen shows). A person clicks the power-up and clicks again when the screen shows the ant crossing into the tile; whether that reaches
+// a window of three to six ticks at a human reaction time, and whether a table that rests on the path queue's timing is a thing a person could know, is for the maintainer to decide before this rule ships.
 void PowerStandTask::on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) {
     if (command.type != sim::CommandType::GroupMove || command.ants.size() != 1) return;
     const auto it = jobs_.find(command.ants[0]);
