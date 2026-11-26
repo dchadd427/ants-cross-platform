@@ -774,89 +774,212 @@ def build_chicken() -> SceneBuilder:
     return _finalize_item(sc, target_span=0.98)
 
 
+def _build_perforated_leather_pouch(name: str) -> MeshPart:
+    """Smooth curved dark-slate leather slingshot pouch with TWO REAL open punched-through eyelet holes (`350:sling`)."""
+    # Build a high-res curved leather saddle plate (38x26 grid) and punch clean circular holes around both eyelets
+    # at local `(hx_l=-0.115, hz=0.0)` and `(hx_r=+0.115, hz=0.0)`, stitching top, bottom, outer edges & inner hole walls!
+    nx, nz = 40, 24
+    hx, hz_h, thick = 0.165, 0.108, 0.011
+    hole_r = 0.020
+    holes = (-0.112, +0.112)
+
+    def _pouch_y(x: float, z: float) -> float:
+        # Authentic curved leather cup dipping gently in the middle and rising slightly at left/right strap ends!
+        return 0.044 + 0.030 * ((x / hx) ** 2) - 0.014 * ((z / hz_h) ** 2)
+
+    xs = np.linspace(-hx, +hx, nx + 1)
+    zs = np.linspace(-hz_h, +hz_h, nz + 1)
+    # Mark grid cells whose center falls outside BOTH punched circular eyelet holes
+    solid = np.ones((nz, nx), dtype=bool)
+    for iz in range(nz):
+        cz = 0.5 * (zs[iz] + zs[iz + 1])
+        for ix in range(nx):
+            cx = 0.5 * (xs[ix] + xs[ix + 1])
+            for h_cx in holes:
+                if math.hypot(cx - h_cx, cz) < hole_r:
+                    solid[iz, ix] = False
+
+    # Snap grid vertices close to each hole boundary onto the exact smooth circle so holes are crisp & round!
+    gx, gz = np.meshgrid(xs, zs)
+    gx_c, gz_c = gx.copy(), gz.copy()
+    for h_cx in holes:
+        dx = gx_c - h_cx
+        dz = gz_c
+        dist = np.hypot(dx, dz)
+        ring = (dist > hole_r * 0.65) & (dist < hole_r * 1.42)
+        if np.any(ring):
+            ang = np.arctan2(dz[ring], dx[ring])
+            # Pull vertices right on the perimeter cleanly to hole_r
+            near = (dist > hole_r * 0.80) & (dist < hole_r * 1.18)
+            if np.any(near):
+                ang_n = np.arctan2(dz[near], dx[near])
+                gx_c[near] = h_cx + hole_r * np.cos(ang_n)
+                gz_c[near] = hole_r * np.sin(ang_n)
+
+    verts: List[Tuple[float, float, float]] = []
+    tris: List[Tuple[int, int, int]] = []
+    top_idx = np.full((nz + 1, nx + 1), -1, dtype=np.int32)
+    bot_idx = np.full((nz + 1, nx + 1), -1, dtype=np.int32)
+
+    def _get_v(iz: int, ix: int, is_top: bool) -> int:
+        tbl = top_idx if is_top else bot_idx
+        if tbl[iz, ix] < 0:
+            x, z = float(gx_c[iz, ix]), float(gz_c[iz, ix])
+            y0 = _pouch_y(x, z)
+            tbl[iz, ix] = len(verts)
+            verts.append((x, y0 + (thick * 0.5 if is_top else -thick * 0.5), z))
+        return int(tbl[iz, ix])
+
+    for iz in range(nz):
+        for ix in range(nx):
+            if not solid[iz, ix]:
+                continue
+            # Top & bottom faces
+            t00, t10, t11, t01 = _get_v(iz, ix, True), _get_v(iz, ix + 1, True), _get_v(iz + 1, ix + 1, True), _get_v(iz + 1, ix, True)
+            b00, b10, b11, b01 = _get_v(iz, ix, False), _get_v(iz, ix + 1, False), _get_v(iz + 1, ix + 1, False), _get_v(iz + 1, ix, False)
+            tris.extend(((t00, t01, t11), (t00, t11, t10)))
+            tris.extend(((b00, b11, b01), (b00, b10, b11)))
+            # Side walls wherever a neighbor cell is empty (both outer perimeter AND inner punched eyelet walls!)
+            if iz == 0 or not solid[iz - 1, ix]:
+                tris.extend(((t00, t10, b10), (t00, b10, b00)))
+            if iz == nz - 1 or not solid[iz + 1, ix]:
+                tris.extend(((t11, t01, b01), (t11, b01, b11)))
+            if ix == 0 or not solid[iz, ix - 1]:
+                tris.extend(((t01, t00, b00), (t01, b00, b01)))
+            if ix == nx - 1 or not solid[iz, ix + 1]:
+                tris.extend(((t10, t11, b11), (t10, b11, b10)))
+
+    pos_p = np.asarray(verts, dtype=np.float32)
+    idx_p = np.asarray(tris, dtype=np.uint32).reshape(-1)
+    pouch = MeshPart(name, "item_leather_smooth", pos_p, recompute_smooth_normals(pos_p, idx_p), idx_p)
+    pouch = pouch.translate(-0.075, 0.0, -0.220)
+    # Soft satin slate-charcoal leather sheen with realistic subtle highlight across the center ridge (`350:sling`)!
+    return tint_part(
+        pouch,
+        lambda pos, nrm: np.clip(
+            (0.72 + 0.34 * np.clip(nrm[:, 1], 0.0, 1.0) + 0.24 * np.exp(-(((pos[:, 0] + 0.025) / 0.055) ** 2)))[:, None]
+            * np.array([[0.90, 0.93, 0.98]]),
+            0.32,
+            1.0,
+        ),
+    )
+
+
 def build_sling() -> SceneBuilder:
-    """Wooden Y-slingshot with crimson surgical bands weaving across dark charcoal curved leather pouch (`350:sling`)."""
+    """Wooden Y-slingshot with rich natural wood branch fork & crimson rubber band genuinely threaded through leather pouch (`350:sling`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_sling")
     parts: List[MeshPart] = []
 
-    handle = _sculpt_bark_branch(
-        [(+0.27, 0.024, +0.34), (+0.21, 0.028, +0.24), (+0.14, 0.032, +0.13), (+0.11, 0.034, +0.08)],
-        [0.030, 0.032, 0.035, 0.034],
-        name="sling_handle",
-        material="item_twig_bark",
-        radial_segs=18,
-        samples_per_seg=4,
-        seed=2.4,
-        cap_start=True,
-        cap_end=True,
-    )
-    fork_l = _sculpt_bark_branch(
-        [(+0.11, 0.034, +0.08), (+0.02, 0.036, +0.09), (-0.06, 0.038, +0.06)],
-        [0.030, 0.026, 0.024],
-        name="sling_fork_l",
-        material="item_twig_bark",
-        radial_segs=16,
-        samples_per_seg=4,
-        seed=4.1,
-        cap_start=True,
-        cap_end=True,
-    )
-    fork_r = _sculpt_bark_branch(
-        [(+0.11, 0.034, +0.08), (+0.14, 0.036, -0.02), (+0.15, 0.038, -0.12)],
-        [0.030, 0.026, 0.024],
-        name="sling_fork_r",
-        material="item_twig_bark",
-        radial_segs=16,
-        samples_per_seg=4,
-        seed=5.7,
-        cap_start=True,
-        cap_end=True,
-    )
-    # Little broken twig nub jutting off the upper-right fork just like `350:sling`!
-    nub = _sculpt_bark_branch(
-        [(+0.14, 0.036, -0.02), (+0.162, 0.039, -0.038), (+0.185, 0.042, -0.055)],
-        [0.012, 0.0085, 0.005],
-        name="sling_nub",
-        material="item_twig_bark",
-        radial_segs=10,
-        samples_per_seg=2,
-        seed=7.2,
-        cap_start=True,
-        cap_end=True,
-    )
-    parts.extend([handle, fork_l, fork_r, nub])
+    # Rich warm walnut/chestnut carved natural wood branch fork with organic bark tint & seamless Y-crotch collar!
+    def _wood_tint(pos: np.ndarray, nrm: np.ndarray) -> np.ndarray:
+        grain = 0.5 + 0.5 * np.sin((pos[:, 0] * 18.0 + pos[:, 2] * 26.0) + 1.8 * np.sin(pos[:, 1] * 45.0))
+        top_hi = np.clip(nrm[:, 1] * 0.5 + 0.5, 0.0, 1.0)
+        return np.clip(
+            np.column_stack([
+                0.78 + 0.18 * grain + 0.10 * top_hi,
+                0.56 + 0.14 * grain + 0.08 * top_hi,
+                0.38 + 0.10 * grain + 0.05 * top_hi,
+            ]),
+            0.36,
+            1.0,
+        )
 
-    wrap_l = cylinder(0.032, 0.032, 0.045, radial_segs=16, bevel=0.005, axis="x", name="sling_wrap_l", material="item_candy_red").rotate_xyz(ry=-0.32).translate(-0.055, 0.038, +0.062)
-    wrap_r = cylinder(0.032, 0.032, 0.045, radial_segs=16, bevel=0.005, axis="z", name="sling_wrap_r", material="item_candy_red").translate(+0.148, 0.038, -0.115)
+    handle = tint_part(
+        _sculpt_bark_branch(
+            [(+0.275, 0.026, +0.345), (+0.225, 0.028, +0.260), (+0.165, 0.031, +0.165), (+0.112, 0.034, +0.082)],
+            [0.028, 0.031, 0.034, 0.035],
+            name="sling_handle",
+            material="item_wood_stick",
+            radial_segs=22,
+            samples_per_seg=5,
+            seed=2.4,
+            cap_start=True,
+            cap_end=True,
+        ),
+        _wood_tint,
+    )
+    fork_l = tint_part(
+        _sculpt_bark_branch(
+            [(+0.112, 0.034, +0.082), (+0.060, 0.035, +0.095), (-0.005, 0.037, +0.086), (-0.062, 0.038, +0.062)],
+            [0.031, 0.027, 0.025, 0.023],
+            name="sling_fork_l",
+            material="item_wood_stick",
+            radial_segs=20,
+            samples_per_seg=5,
+            seed=4.1,
+            cap_start=True,
+            cap_end=True,
+        ),
+        _wood_tint,
+    )
+    fork_r = tint_part(
+        _sculpt_bark_branch(
+            [(+0.112, 0.034, +0.082), (+0.130, 0.035, +0.020), (+0.144, 0.037, -0.048), (+0.150, 0.038, -0.120)],
+            [0.031, 0.027, 0.025, 0.023],
+            name="sling_fork_r",
+            material="item_wood_stick",
+            radial_segs=20,
+            samples_per_seg=5,
+            seed=5.7,
+            cap_start=True,
+            cap_end=True,
+        ),
+        _wood_tint,
+    )
+    # Smooth wooden crotch knot fairing so the Y-branch union reads like one solid naturally forked stick!
+    crotch = tint_part(
+        ellipsoid(0.042, 0.035, 0.046, u_segs=18, v_segs=12, name="sling_crotch", material="item_wood_stick").rotate_xyz(ry=-0.45).translate(+0.112, 0.034, +0.082),
+        _wood_tint,
+    )
+    # Little broken twig nub jutting cleanly off the upper-right fork just like `350:sling`!
+    nub = tint_part(
+        _sculpt_bark_branch(
+            [(+0.142, 0.036, -0.025), (+0.165, 0.039, -0.042), (+0.188, 0.042, -0.058)],
+            [0.0115, 0.0080, 0.0045],
+            name="sling_nub",
+            material="item_wood_stick",
+            radial_segs=12,
+            samples_per_seg=3,
+            seed=7.2,
+            cap_start=True,
+            cap_end=True,
+        ),
+        _wood_tint,
+    )
+    parts.extend([handle, fork_l, fork_r, crotch, nub])
+
+    wrap_l = cylinder(0.031, 0.031, 0.046, radial_segs=20, bevel=0.006, axis="x", name="sling_wrap_l", material="item_candy_red").rotate_xyz(ry=-0.34).translate(-0.056, 0.038, +0.062)
+    wrap_r = cylinder(0.031, 0.031, 0.046, radial_segs=20, bevel=0.006, axis="z", name="sling_wrap_r", material="item_candy_red").translate(+0.149, 0.038, -0.114)
     parts.extend([wrap_l, wrap_r])
 
-    # Curved dark charcoal-slate leather ammo pouch (`350:sling`) with two dark punched eyelet holes!
-    pouch = tint_part(
-        rounded_box(0.32, 0.020, 0.22, bevel=0.007, segs=3, name="sling_pouch", material="item_rubber_dark")
-        .deform(lambda p: np.column_stack([p[:, 0], p[:, 1] + 0.052 * ((p[:, 0] / 0.16) ** 2) - 0.016 * ((p[:, 2] / 0.11) ** 2), p[:, 2]]))
-        .translate(-0.07, 0.030, -0.22),
-        lambda pos, nrm: np.clip(
-            (0.85 + 0.35 * np.clip(nrm[:, 1], 0.0, 1.0) + 0.28 * np.exp(-(((pos[:, 0] + 0.01) / 0.05) ** 2)))[:, None]
-            * np.array([[0.92, 0.94, 0.98]]),
-            0.35,
-            1.0,
-        ),
-    )
-    for ex, tag in ((-0.19, "l"), (+0.05, "r")):
-        parts.append(cylinder(0.020, 0.020, 0.034, radial_segs=14, axis="y", name=f"sling_hole_{tag}", material="item_soil_hole").translate(ex, 0.068, -0.22))
+    pouch = _build_perforated_leather_pouch("sling_pouch")
 
-    # Red surgical rubber band looping from left fork -> left pouch hole -> WAVING ACROSS FRONT OF POUCH -> right hole -> right fork (`350:sling`)!
+    # Crimson rubber band GENUINELY THREADED THROUGH BOTH EYELET HOLES of the leather pouch (`350:sling`):
+    # Left fork -> passes UNDER left edge of pouch -> threads UP THROUGH left hole (-0.187, -0.220) ->
+    # waves gracefully across the TOP/FRONT face of the leather -> dives DOWN THROUGH right hole (+0.037, -0.220) ->
+    # exits UNDER right edge -> loops cleanly into right fork!
     band_full = curved_tube(
         [
-            (-0.06, 0.038, +0.06), (-0.19, 0.024, +0.10), (-0.32, 0.020, +0.05),
-            (-0.36, 0.024, -0.07), (-0.29, 0.048, -0.19), (-0.19, 0.084, -0.22),
-            (-0.12, 0.084, -0.242), (-0.06, 0.080, -0.200), (+0.00, 0.084, -0.220), (+0.05, 0.086, -0.22),
-            (+0.16, 0.052, -0.25), (+0.21, 0.034, -0.20), (+0.15, 0.038, -0.12),
+            (-0.062, 0.038, +0.062),
+            (-0.185, 0.024, +0.105),
+            (-0.315, 0.020, +0.045),
+            (-0.355, 0.022, -0.085),
+            (-0.290, 0.024, -0.195),
+            (-0.232, 0.030, -0.220),   # passing underneath left leather flap
+            (-0.187, 0.058, -0.220),   # threading UP straight through the open left eyelet hole!
+            (-0.142, 0.072, -0.232),   # resting cleanly across front/top of leather pouch
+            (-0.075, 0.060, -0.200),   # graceful S-wave across center of pouch (`350:sling`)
+            (-0.012, 0.070, -0.226),
+            (+0.037, 0.058, -0.220),   # diving DOWN straight through the open right eyelet hole!
+            (+0.088, 0.032, -0.224),   # passing underneath right leather flap
+            (+0.165, 0.034, -0.235),
+            (+0.205, 0.036, -0.185),
+            (+0.150, 0.038, -0.116),
         ],
-        [0.0115] * 13,
-        samples_per_seg=5,
-        radial_segs=10,
+        [0.0115] * 15,
+        samples_per_seg=6,
+        radial_segs=14,
         cap_rings=2,
         name="sling_band",
         material="item_candy_red",
@@ -970,21 +1093,18 @@ def build_blucray() -> SceneBuilder:
 
 
 def _build_metal_jack(name: str, *, rot_deg: Tuple[float, float, float]) -> SceneBuilder:
-    """Six-pronged warm pewter-steel game jack (4 sleek ball-tipped arms + 2 sharp pointed prongs) (`336..339`)."""
+    """Smooth mirror-polished metallic 6-pronged game jack (4 sleek ball-tipped arms + 2 tapered prongs) (`336..339`)."""
     register_item_materials()
     sc = SceneBuilder(name=name)
-    pewter = _const_tint((0.86, 0.83, 0.78))
-    parts: List[MeshPart] = [tint_part(sphere(0.036, u_segs=14, v_segs=10, name=f"{name}_hub", material="item_chrome_spring"), pewter)]
-    # X and Z axes: 4 slender classic flared arms capped with neat cast-metal spheres
+    pewter = _const_tint((0.94, 0.91, 0.87))
+    parts: List[MeshPart] = [tint_part(sphere(0.038, u_segs=22, v_segs=14, name=f"{name}_hub", material="item_chrome_polished"), pewter)]
+    # X and Z axes: 4 smoothly lathed tapered cast-metal arms flowing seamlessly into gleaming spherical tips!
+    arm_prof = [(0.000, -0.285), (0.026, -0.280), (0.036, -0.262), (0.034, -0.242), (0.018, -0.228), (0.014, -0.140), (0.021, -0.025), (0.024, 0.000), (0.021, +0.025), (0.014, +0.140), (0.018, +0.228), (0.034, +0.242), (0.036, +0.262), (0.026, +0.280), (0.000, +0.285)]
     for axis, tag in (("x", "x"), ("z", "z")):
-        parts.append(tint_part(cylinder(0.017, 0.017, 0.56, radial_segs=12, axis=axis, name=f"{name}_bar_{tag}", material="item_chrome_spring"), pewter))
-        for sgn in (-1.0, +1.0):
-            pos = (sgn * 0.28, 0.0, 0.0) if axis == "x" else (0.0, 0.0, sgn * 0.28)
-            parts.append(tint_part(sphere(0.034, u_segs=14, v_segs=10, name=f"{name}_ball_{tag}_{int(sgn > 0)}", material="item_chrome_spring").translate(*pos), pewter))
-    # Y axis: 2 classic sharp conical tapered pointed metal prongs! (cylinder takes r_bot then r_top)
-    for sgn, tag in ((+1.0, "up"), (-1.0, "dn")):
-        prong = cylinder(0.022 if sgn > 0 else 0.002, 0.002 if sgn > 0 else 0.022, 0.27, radial_segs=12, bevel=0.001, axis="y", name=f"{name}_prong_{tag}", material="item_chrome_spring").translate(0.0, sgn * 0.135, 0.0)
-        parts.append(tint_part(prong, pewter))
+        parts.append(tint_part(lathe(arm_prof, radial_segs=24, cap_bottom=True, cap_top=True, axis=axis, name=f"{name}_bar_{tag}", material="item_chrome_polished"), pewter))
+    # Y axis: 2 classic smooth conical tapered metal prongs!
+    prong_prof = [(0.000, -0.275), (0.004, -0.268), (0.011, -0.175), (0.022, -0.045), (0.026, 0.000), (0.022, +0.045), (0.011, +0.175), (0.004, +0.268), (0.000, +0.275)]
+    parts.append(tint_part(lathe(prong_prof, radial_segs=24, cap_bottom=True, cap_top=True, axis="y", name=f"{name}_prongs", material="item_chrome_polished"), pewter))
 
     rx, ry, rz = rot_deg
     sc.add("jack", [p.rotate_xyz(rx=rx, ry=ry, rz=rz, degrees=True) for p in parts])

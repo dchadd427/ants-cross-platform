@@ -78,7 +78,7 @@ MAP_ITEM_SPECS: Tuple[MapItemSpec, ...] = (
     MapItemSpec("botcap1", "YOU WIN Bottle Cap", "toys", 316, "botcap1", "botcap", "", default_yaw=0.0, default_pitch=50.0, builder_module="items_props_hardware", builder_fn="build_botcap1"),
     MapItemSpec("bolt1", "Hex Steel Nut (Flat)", "toys", 317, "bolt1", "hexnut", "Flat", default_yaw=0.0, default_pitch=46.0, builder_module="items_props_hardware", builder_fn="build_bolt1"),
     MapItemSpec("bolt2", "Hex Steel Nut (Tilted)", "toys", 318, "bolt2", "hexnut", "Tilted", default_yaw=0.0, default_pitch=40.0, builder_module="items_props_hardware", builder_fn="build_bolt2"),
-    MapItemSpec("screw1", "Flat-Head Wood Screw", "toys", 319, "screw1", "screw", "Wood", default_yaw=0.0, default_pitch=56.0, builder_module="items_props_hardware", builder_fn="build_screw1"),
+    MapItemSpec("screw1", "Phillips Wood Screw", "toys", 319, "screw1", "screw", "Wood", default_yaw=0.0, default_pitch=56.0, builder_module="items_props_hardware", builder_fn="build_screw1"),
     MapItemSpec("screw2", "Phillips Machine Screw", "toys", 320, "screw2", "screw", "Phillips", default_yaw=0.0, default_pitch=38.0, builder_module="items_props_hardware", builder_fn="build_screw2"),
     MapItemSpec("pencal1", "Hot-Pink Pen Cap", "toys", 321, "pencal1", "pencap", "", default_yaw=0.0, default_pitch=52.0, builder_module="items_props_hardware", builder_fn="build_pencal1"),
     MapItemSpec("shtbut1", "Teal Shirt Button", "toys", 322, "shtbut1", "button", "", default_yaw=0.0, default_pitch=54.0, builder_module="items_props_hardware", builder_fn="build_shtbut1"),

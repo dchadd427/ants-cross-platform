@@ -74,6 +74,8 @@ def register_item_materials() -> None:
         MaterialSpec("item_cap_soda", (1.00, 1.00, 1.00, 1.0), 0.44, 0.42, texture_family="cap_soda", normal_scale=0.26),
         MaterialSpec("item_cap_win", (1.00, 1.00, 1.00, 1.0), 0.32, 0.46, texture_family="cap_win", normal_scale=0.26),
         MaterialSpec("item_chrome_spring", (0.84, 0.87, 0.92, 1.0), 0.92, 0.20, texture_family="metal", normal_scale=0.22),
+        MaterialSpec("item_chrome_polished", (0.91, 0.93, 0.97, 1.0), 0.96, 0.10, texture_family=None),
+        MaterialSpec("item_leather_smooth", (0.20, 0.21, 0.24, 1.0), 0.02, 0.42, texture_family=None),
         MaterialSpec("item_slinky_steel", (0.58, 0.61, 0.66, 1.0), 0.88, 0.26, texture_family="metal", normal_scale=0.28),
         MaterialSpec("item_can_purple", (0.52, 0.38, 0.88, 1.0), 0.68, 0.28, texture_family="metal", normal_scale=0.24),
         MaterialSpec("item_can_red", (0.84, 0.14, 0.22, 1.0), 0.66, 0.28, texture_family="metal", normal_scale=0.24),

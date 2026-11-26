@@ -154,38 +154,102 @@ def build_leg2() -> SceneBuilder:
     return _finalize_item(sc, target_span=0.94)
 
 
+def _sculpt_doll_hand(prefix: str) -> List[MeshPart]:
+    """Dainty anatomical 5-digit fashion doll hand (local +X fingers pointing forward, +Y back of hand, -Z thumb)."""
+    parts: List[MeshPart] = []
+    # Contoured flat tapered palm + subtle knuckle ridge
+    palm = ellipsoid(0.030, 0.011, 0.022, u_segs=16, v_segs=10, name=f"{prefix}_palm", material="item_doll_skin").translate(0.026, 0.0, 0.0)
+    parts.append(palm)
+    # 4 distinct sculpted gracefully tapered fingers fanning slightly & curling gently upward at the tips!
+    for fi, (fz, flen, frad, yaw) in enumerate((
+        (-0.014, 0.044, 0.0052, +0.16),   # index
+        (-0.004, 0.050, 0.0054, +0.04),   # middle
+        (+0.006, 0.046, 0.0050, -0.05),   # ring
+        (+0.015, 0.036, 0.0044, -0.16),   # pinky
+    )):
+        dx, dz = math.cos(yaw), math.sin(yaw)
+        finger = curved_tube(
+            [
+                (0.046, 0.000, fz),
+                (0.046 + dx * flen * 0.55, 0.002, fz + dz * flen * 0.55),
+                (0.046 + dx * flen, 0.009, fz + dz * flen),
+            ],
+            [frad, frad * 0.85, frad * 0.58],
+            samples_per_seg=3,
+            radial_segs=8,
+            cap_rings=2,
+            name=f"{prefix}_f{fi}",
+            material="item_doll_skin",
+        )
+        parts.append(finger)
+    # Distinct opposable thumb angling naturally outward on -Z side!
+    thumb = curved_tube(
+        [(0.016, -0.002, -0.016), (0.034, 0.001, -0.030), (0.050, 0.006, -0.036)],
+        [0.0068, 0.0058, 0.0044],
+        samples_per_seg=3,
+        radial_segs=8,
+        cap_rings=2,
+        name=f"{prefix}_thumb",
+        material="item_doll_skin",
+    )
+    parts.append(thumb)
+    return parts
+
+
 def _sculpt_doll_arm(prefix: str, *, bent: bool = False) -> List[MeshPart]:
-    """Smooth sculpted Barbie plastic doll arm with shoulder peg & dainty open hand (`333:arm1`, `334:arm2`)."""
+    """Anatomical vintage Barbie plastic doll arm with shoulder ball-joint, crisp elbow bend & 5-finger hand (`333:arm1`, `334:arm2`)."""
     parts: List[MeshPart] = []
     if not bent:
-        # Straight horizontal arm (`333:arm1`): shoulder peg on LEFT (-X), open hand on RIGHT (+X)
+        # Straight horizontal anatomical doll arm (`333:arm1`): shoulder peg LEFT (-X) -> seamless upper arm -> subtle elbow -> tapered forearm -> wrist -> 5-digit hand RIGHT (+X)!
+        peg = cylinder(0.017, 0.019, 0.068, radial_segs=18, bevel=0.004, axis="x", name=f"{prefix}_peg", material="item_doll_skin").translate(-0.402, 0.036, 0.0)
         arm = curved_tube(
-            [(-0.36, 0.036, 0.0), (-0.22, 0.036, 0.0), (-0.04, 0.034, +0.008), (+0.16, 0.032, 0.0), (+0.31, 0.032, 0.0), (+0.38, 0.034, 0.0)],
-            [0.034, 0.036, 0.030, 0.027, 0.018, 0.020],
+            [
+                (-0.365, 0.036, 0.0),
+                (-0.335, 0.036, 0.0),
+                (-0.215, 0.036, 0.0),
+                (-0.045, 0.034, +0.003),
+                (+0.115, 0.033, 0.0),
+                (+0.255, 0.032, 0.0),
+                (+0.300, 0.032, 0.0),
+            ],
+            [0.024, 0.036, 0.033, 0.0265, 0.0245, 0.0175, 0.0150],
             samples_per_seg=4,
-            radial_segs=14,
-            cap_rings=2,
+            radial_segs=20,
+            cap_rings=3,
             name=f"{prefix}_arm",
             material="item_doll_skin",
         )
-        peg = cylinder(0.016, 0.018, 0.068, radial_segs=14, bevel=0.003, axis="x", name=f"{prefix}_peg", material="item_doll_skin").translate(-0.405, 0.036, 0.0)
-        hand = ellipsoid(0.044, 0.016, 0.024, u_segs=14, v_segs=10, name=f"{prefix}_hand", material="item_doll_skin").translate(+0.415, 0.034, 0.0)
-        thumb = ellipsoid(0.024, 0.010, 0.010, u_segs=10, v_segs=6, name=f"{prefix}_thumb", material="item_doll_skin").rotate_xyz(ry=+0.55).translate(+0.395, 0.036, -0.024)
-        parts.extend([arm, peg, hand, thumb])
+        hand = [p.translate(+0.295, 0.032, 0.0) for p in _sculpt_doll_hand(prefix)]
+        parts.extend([peg, arm, *hand])
     else:
-        # Gracefully bent elbow arm (`334:arm2`): shoulder peg on RIGHT (+X), elbow down-center, forearm curving UP-LEFT!
+        # Authentic hinged-elbow Barbie doll arm (`334:arm2`): seamless continuous arm with STRAIGHT upper arm, crisp anatomical
+        # ~122° elbow bend at bottom-center, and STRAIGHT tapered forearm reaching up-left to 5-digit hand!
+        p_sh = (+0.325, 0.036, +0.010)
+        p_el = (+0.035, 0.034, +0.125)
+        p_wr = (-0.255, 0.034, -0.085)
+        peg = cylinder(0.017, 0.019, 0.066, radial_segs=18, bevel=0.004, axis="x", name=f"{prefix}_peg", material="item_doll_skin").rotate_xyz(ry=+0.34).translate(p_sh[0] + 0.052, p_sh[1], p_sh[2] - 0.018)
         arm = curved_tube(
-            [(+0.34, 0.036, +0.04), (+0.18, 0.034, +0.09), (+0.02, 0.032, +0.11), (-0.16, 0.032, +0.06), (-0.28, 0.034, -0.04), (-0.34, 0.038, -0.14)],
-            [0.034, 0.035, 0.029, 0.026, 0.019, 0.018],
+            [
+                (p_sh[0] + 0.024, 0.036, p_sh[2] - 0.008),
+                p_sh,
+                (0.55 * p_sh[0] + 0.45 * p_el[0], 0.035, 0.55 * p_sh[2] + 0.45 * p_el[2]),
+                (0.14 * p_sh[0] + 0.86 * p_el[0], 0.034, 0.14 * p_sh[2] + 0.86 * p_el[2]),
+                p_el,
+                (0.86 * p_el[0] + 0.14 * p_wr[0], 0.034, 0.86 * p_el[2] + 0.14 * p_wr[2]),
+                (0.45 * p_el[0] + 0.55 * p_wr[0], 0.034, 0.45 * p_el[2] + 0.55 * p_wr[2]),
+                (0.12 * p_el[0] + 0.88 * p_wr[0], 0.034, 0.12 * p_el[2] + 0.88 * p_wr[2]),
+                p_wr,
+            ],
+            [0.023, 0.035, 0.032, 0.027, 0.0275, 0.0265, 0.0235, 0.017, 0.015],
             samples_per_seg=4,
-            radial_segs=14,
-            cap_rings=2,
+            radial_segs=20,
+            cap_rings=3,
             name=f"{prefix}_arm",
             material="item_doll_skin",
         )
-        peg = cylinder(0.016, 0.018, 0.066, radial_segs=14, bevel=0.003, axis="x", name=f"{prefix}_peg", material="item_doll_skin").rotate_xyz(ry=+0.28).translate(+0.382, 0.036, +0.026)
-        hand = ellipsoid(0.038, 0.016, 0.024, u_segs=14, v_segs=10, name=f"{prefix}_hand", material="item_doll_skin").rotate_xyz(ry=-0.95).translate(-0.365, 0.040, -0.175)
-        parts.extend([arm, peg, hand])
+        fa_yaw = math.atan2(-(p_wr[2] - p_el[2]), p_wr[0] - p_el[0])
+        hand = [p.rotate_xyz(ry=fa_yaw).translate(*p_wr) for p in _sculpt_doll_hand(prefix)]
+        parts.extend([peg, arm, *hand])
     return parts
 
 

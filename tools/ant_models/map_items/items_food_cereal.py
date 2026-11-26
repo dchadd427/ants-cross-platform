@@ -209,29 +209,26 @@ def _ceramic_shards(name: str) -> List[MeshPart]:
 
 
 def _cereal_spoon(name: str) -> List[MeshPart]:
-    """Sleek stamped gleaming silver cereal spoon extending from LEFT resting cleanly on bowl lip (`1331..1333`)."""
-    handle = curved_tube(
-        [(-0.49, 0.124, +0.01), (-0.36, 0.112, +0.01), (-0.25, 0.102, +0.01), (-0.17, 0.096, +0.01)],
-        [0.024, 0.018, 0.014, 0.012],
-        samples_per_seg=5,
-        radial_segs=14,
-        cap_rings=2,
-        name=f"{name}_spoon_handle",
-        material="item_aluminum",
-    )
-    ph = handle.positions.astype(np.float64)
-    ph[:, 1] = 0.108 + (ph[:, 1] - 0.108) * 0.36
-    handle.positions = ph.astype(np.float32)
-    handle.normals = recompute_smooth_normals(handle.positions, handle.indices)
+    """Complete gleaming mirror-silver cereal spoon with full teardrop handle (`broken3`) attached cleanly to bowl scoop (`1331..1333`)."""
+    try:
+        from .items_props_hardware import build_silver_spoon_handle
+    except ImportError:
+        from map_items.items_props_hardware import build_silver_spoon_handle  # type: ignore
 
-    # Polished concave oval silver spoon scoop nestled over the front-left bowl interior!
-    scoop = ellipsoid(0.118, 0.036, 0.072, u_segs=26, v_segs=14, name=f"{name}_spoon_bowl", material="item_aluminum")
+    # Full stamped mirror-chrome teardrop spoon handle extending seamlessly to the left (integrating `1334:broken3`!)
+    handle = build_silver_spoon_handle(f"{name}_spoon_handle", length=0.46).scale(0.88, 0.88, 0.82).rotate_xyz(rz=-3.0, degrees=True).translate(-0.168, 0.102, +0.012)
+
+    # Polished concave mirror-silver oval spoon bowl joining seamlessly with the slender neck!
+    scoop = tint_part(
+        ellipsoid(0.118, 0.036, 0.070, u_segs=32, v_segs=16, name=f"{name}_spoon_bowl", material="item_chrome_polished"),
+        _const_tint((0.92, 0.94, 0.98)),
+    )
     ps = scoop.positions.astype(np.float64)
     top = ps[:, 1] > 0.0
-    ps[top, 1] = -0.020 * (1.0 - np.clip((ps[top, 0] / 0.118) ** 2 + (ps[top, 2] / 0.072) ** 2, 0.0, 1.0)) + 0.008
+    ps[top, 1] = -0.022 * (1.0 - np.clip((ps[top, 0] / 0.118) ** 2 + (ps[top, 2] / 0.070) ** 2, 0.0, 1.0)) + 0.008
     scoop.positions = ps.astype(np.float32)
     scoop.normals = recompute_smooth_normals(scoop.positions, scoop.indices)
-    scoop = scoop.rotate_xyz(rz=-4.0, degrees=True).translate(-0.075, 0.094, +0.012)
+    scoop = scoop.rotate_xyz(rz=-4.0, degrees=True).translate(-0.072, 0.095, +0.012)
     return [handle, scoop]
 
 

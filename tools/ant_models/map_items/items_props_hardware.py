@@ -93,11 +93,11 @@ def _build_paperclip(name: str, yaw_deg: float) -> SceneBuilder:
     wire = curved_tube(
         pts,
         [0.0155] * len(pts),
-        samples_per_seg=3,
-        radial_segs=10,
-        cap_rings=2,
+        samples_per_seg=6,
+        radial_segs=16,
+        cap_rings=3,
         name=f"{name}_wire",
-        material="item_chrome_spring",
+        material="item_chrome_polished",
     )
     sc.add("paperclip", wire.rotate_xyz(ry=yaw_deg, degrees=True))
     return _finalize_item(sc, target_span=0.88)
@@ -121,45 +121,61 @@ def _build_pushpin(
     needle_len: float = 0.28,
     bent_needle: bool = False,
 ) -> SceneBuilder:
-    """Classic glossy hourglass plastic thumbtack push-pin with steel needle (`313..315:pin1..3`)."""
+    """Smooth high-res glossy plastic thumbtack push-pin with mirror-polished steel needle (`313..315:pin1..3`)."""
     register_item_materials()
     sc = SceneBuilder(name=name)
     parts: List[MeshPart] = []
 
-    # Sculpted glossy plastic push-pin body: flared collar base, concave pinched waist, rounded top thumb cap!
+    # High-res smoothly beveled hourglass plastic push-pin head (zero jagged low-poly facets!).
     prof = [
         (0.000, 0.000),
-        (0.118, 0.000),
-        (0.126, 0.016),
-        (0.116, 0.038),
-        (0.068, 0.056),
-        (0.054, 0.115),
-        (0.064, 0.195),
-        (0.096, 0.236),
-        (0.104, 0.264),
-        (0.092, 0.284),
-        (0.048, 0.292),
-        (0.000, 0.294),
+        (0.095, 0.000),
+        (0.118, 0.004),
+        (0.126, 0.014),
+        (0.125, 0.028),
+        (0.114, 0.041),
+        (0.088, 0.050),
+        (0.066, 0.064),
+        (0.056, 0.092),
+        (0.054, 0.128),
+        (0.058, 0.168),
+        (0.068, 0.204),
+        (0.086, 0.228),
+        (0.100, 0.246),
+        (0.105, 0.264),
+        (0.099, 0.279),
+        (0.084, 0.289),
+        (0.052, 0.294),
+        (0.000, 0.296),
     ]
     cap = tint_part(
-        lathe(prof, radial_segs=30, cap_bottom=True, cap_top=True, axis="y", name=f"{name}_cap", material="item_candy_white"),
+        lathe(prof, radial_segs=48, cap_bottom=True, cap_top=True, axis="y", name=f"{name}_cap", material="item_candy_white"),
         _const_tint(cap_rgb),
     )
     parts.append(cap)
 
     if bent_needle:
-        # Iconic steep scimitar-bent silver needle curving down-left matching `314:pin2`!
+        # Smooth gleaming mirror-polished scimitar-bent steel needle curving cleanly down-left (`314:pin2`)!
         needle = curved_tube(
-            [(0.0, 0.005, 0.0), (-0.015, -0.095, +0.010), (-0.052, -0.195, +0.018), (-0.068, -0.295, +0.018), (-0.055, -0.375, +0.012)],
-            [0.019, 0.018, 0.015, 0.010, 0.002],
-            samples_per_seg=4,
-            radial_segs=10,
-            cap_rings=2,
+            [(0.0, 0.006, 0.0), (-0.014, -0.092, +0.008), (-0.048, -0.192, +0.015), (-0.066, -0.292, +0.016), (-0.056, -0.376, +0.011)],
+            [0.0185, 0.0175, 0.0145, 0.0095, 0.0018],
+            samples_per_seg=10,
+            radial_segs=22,
+            cap_rings=3,
             name=f"{name}_needle",
-            material="item_chrome_spring",
+            material="item_chrome_polished",
         )
     else:
-        needle = cylinder(0.002, 0.019, needle_len, radial_segs=12, axis="y", name=f"{name}_needle", material="item_chrome_spring").translate(0.0, -needle_len * 0.5, 0.0)
+        # Smooth gleaming tapered stainless steel needle with crisp conical tip (`313:pin1`, `315:pin3`)!
+        needle_prof = [
+            (0.000, -needle_len),
+            (0.0025, -needle_len + 0.012),
+            (0.0155, -needle_len + 0.068),
+            (0.0185, -0.010),
+            (0.0185, +0.006),
+            (0.000, +0.006),
+        ]
+        needle = lathe(needle_prof, radial_segs=24, cap_bottom=True, cap_top=True, axis="y", name=f"{name}_needle", material="item_chrome_polished")
     parts.append(needle)
 
     rx, ry, rz = rot_deg
@@ -237,61 +253,80 @@ def build_botcap1() -> SceneBuilder:
 
 
 def _build_hex_nut(name: str, *, rot_deg: Tuple[float, float, float]) -> SceneBuilder:
-    """True hollow machined 6-sided steel hex nut with chamfered edges & internal thread rings (`317:bolt1`, `318:bolt2`)."""
+    """Smooth CNC-machined 6-sided polished steel hex nut with crisp beveled faces & threaded bore (`317:bolt1`, `318:bolt2`)."""
     register_item_materials()
     sc = SceneBuilder(name=name)
     parts: List[MeshPart] = []
 
-    # Explicit closed hollow hexagonal prism with crisp bevelled outer chamfers & circular bore hole!
-    n_ang = 36  # 6 segments per hex face for crisp corners + smooth circular bore
+    # Build cleanly separated smooth faces (6 crisp flat hex sidewalls, smooth top/bottom washers + beveled chamfers,
+    # and smooth circular inner bore) using mirror-smooth `item_chrome_polished` — ZERO streaky metal lines!
+    n_ang = 48  # 8 segments per hex flat for crisp corners + silky-smooth circular bore
     r_out_flat = 0.250
     r_in = 0.118
     h_half = 0.112
-    cham = 0.020
+    cham = 0.022
 
     def _hex_r(theta: float) -> float:
-        # Exact distance to regular hexagon inscribed with apothem r_out_flat
         a = ((theta + math.pi / 6.0) % (math.pi / 3.0)) - math.pi / 6.0
         return r_out_flat / max(0.5, math.cos(a))
 
-    # Closed loop cross-section around the nut wall: inner bot -> outer bot bevel -> outer wall -> outer top bevel -> inner top -> back to inner bot!
-    loop_prof = (
-        ("in", r_in, -h_half + 0.008),
-        ("in", r_in + 0.010, -h_half),
-        ("hex", 0.94, -h_half),
-        ("hex", 1.00, -h_half + cham),
-        ("hex", 1.00, +h_half - cham),
-        ("hex", 0.94, +h_half),
-        ("in", r_in + 0.010, +h_half),
-        ("in", r_in, +h_half - 0.008),
-        ("in", r_in, -h_half + 0.008),
-    )
-    verts, uvs, tris = [], [], []
-    for ir, (kind, scale_r, yv) in enumerate(loop_prof):
-        vf = ir / float(len(loop_prof) - 1)
-        for j in range(n_ang + 1):
-            uf = j / float(n_ang)
-            ang = uf * 2.0 * math.pi
-            rad = (_hex_r(ang) * scale_r) if kind == "hex" else scale_r
-            verts.append((rad * math.cos(ang), yv, rad * math.sin(ang)))
-            uvs.append((uf * 2.0, vf * 2.0))
-    stride = n_ang + 1
-    for ir in range(len(loop_prof) - 1):
-        for j in range(n_ang):
-            a, b, c, d = ir * stride + j, (ir + 1) * stride + j, (ir + 1) * stride + (j + 1), ir * stride + (j + 1)
-            tris.extend(((a, b, c), (a, c, d)))
-    pos_n = np.asarray(verts, dtype=np.float32)
-    idx_n = np.asarray(tris, dtype=np.uint32).reshape(-1)
-    nut_body = tint_part(
-        MeshPart(f"{name}_body", "item_chrome_spring", pos_n, recompute_smooth_normals(pos_n, idx_n), idx_n, uvs=np.asarray(uvs, dtype=np.float32)),
-        _const_tint((0.80, 0.82, 0.86)),
-    )
-    parts.append(nut_body)
+    def _band_mesh(tag: str, r0_spec: Tuple[str, float, float], r1_spec: Tuple[str, float, float], *, flat_hex: bool = False) -> MeshPart:
+        verts: List[Tuple[float, float, float]] = []
+        nrms: List[Tuple[float, float, float]] = []
+        tris: List[Tuple[int, int, int]] = []
+        k0, s0, y0 = r0_spec
+        k1, s1, y1 = r1_spec
+        if flat_hex:
+            # 6 independent flat hex sidewalls with exact crisp planar normals per face!
+            for f in range(6):
+                a0 = f * (math.pi / 3.0) - math.pi / 6.0
+                a1 = a0 + (math.pi / 3.0)
+                amid = 0.5 * (a0 + a1)
+                fnx, fnz = math.cos(amid), math.sin(amid)
+                base = len(verts)
+                for ang in (a0, a1):
+                    rr0 = _hex_r(ang) * s0
+                    rr1 = _hex_r(ang) * s1
+                    verts.append((rr0 * math.cos(ang), y0, rr0 * math.sin(ang)))
+                    verts.append((rr1 * math.cos(ang), y1, rr1 * math.sin(ang)))
+                    nrms.append((fnx, 0.0, fnz))
+                    nrms.append((fnx, 0.0, fnz))
+                tris.extend(((base, base + 1, base + 3), (base, base + 3, base + 2)))
+            pos_a = np.asarray(verts, dtype=np.float32)
+            idx_a = np.asarray(tris, dtype=np.uint32).reshape(-1)
+            nrm_a = np.asarray(nrms, dtype=np.float32)
+            return MeshPart(f"{name}_{tag}", "item_chrome_polished", pos_a, nrm_a, idx_a)
 
-    # Visible machined internal screw thread ridges inside the central bore!
+        for ir, (kind, scale_r, yv) in enumerate((r0_spec, r1_spec)):
+            for j in range(n_ang + 1):
+                ang = (j / float(n_ang)) * 2.0 * math.pi
+                rad = (_hex_r(ang) * scale_r) if kind == "hex" else scale_r
+                verts.append((rad * math.cos(ang), yv, rad * math.sin(ang)))
+        st = n_ang + 1
+        for j in range(n_ang):
+            a, b, c, d = j, st + j, st + j + 1, j + 1
+            tris.extend(((a, b, c), (a, c, d)))
+        pos_a = np.asarray(verts, dtype=np.float32)
+        idx_a = np.asarray(tris, dtype=np.uint32).reshape(-1)
+        return MeshPart(f"{name}_{tag}", "item_chrome_polished", pos_a, recompute_smooth_normals(pos_a, idx_a), idx_a)
+
+    steel_tint = _const_tint((0.86, 0.88, 0.92))
+    bands = [
+        _band_mesh("bore", ("in", r_in, +h_half - 0.010), ("in", r_in, -h_half + 0.010)),
+        _band_mesh("in_ch_b", ("in", r_in, -h_half + 0.010), ("in", r_in + 0.012, -h_half)),
+        _band_mesh("bot_face", ("in", r_in + 0.012, -h_half), ("hex", 0.93, -h_half)),
+        _band_mesh("bot_ch", ("hex", 0.93, -h_half), ("hex", 1.00, -h_half + cham)),
+        _band_mesh("hex_wall", ("hex", 1.00, -h_half + cham), ("hex", 1.00, +h_half - cham), flat_hex=True),
+        _band_mesh("top_ch", ("hex", 1.00, +h_half - cham), ("hex", 0.93, +h_half)),
+        _band_mesh("top_face", ("hex", 0.93, +h_half), ("in", r_in + 0.012, +h_half)),
+        _band_mesh("in_ch_t", ("in", r_in + 0.012, +h_half), ("in", r_in, +h_half - 0.010)),
+    ]
+    parts.extend(tint_part(b, steel_tint) for b in bands)
+
+    # Crisp machined internal screw thread ridges inside the central bore!
     for k in range(5):
         ty = -0.072 + k * 0.036
-        parts.append(torus_arc(r_in - 0.004, 0.008, u_segs=28, v_segs=6, plane="xz", name=f"{name}_thread_{k}", material="item_steel_dark").translate(0.0, ty, 0.0))
+        parts.append(torus_arc(r_in - 0.004, 0.0075, u_segs=36, v_segs=8, plane="xz", name=f"{name}_thread_{k}", material="item_steel_dark").translate(0.0, ty, 0.0))
 
     rx, ry, rz = rot_deg
     sc.add("nut", [p.rotate_xyz(rx=rx, ry=ry, rz=rz, degrees=True) for p in parts])
@@ -309,16 +344,19 @@ def build_bolt2() -> SceneBuilder:
 
 
 def build_screw1() -> SceneBuilder:
-    """Long slender countersunk flat-head steel wood screw lying diagonally (`319:screw1`)."""
+    """Long slender countersunk Phillips '+' steel wood screw lying diagonally (`319:screw1`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_screw1")
     parts: List[MeshPart] = []
 
-    # Build along Z: sharp tip at -Z (-0.36), flared countersunk flat head at +Z (+0.34)
-    shank = cylinder(0.004, 0.044, 0.64, radial_segs=18, axis="z", name="screw1_shank", material="item_chrome_spring").translate(0.0, 0.0, -0.02)
-    head = cylinder(0.044, 0.095, 0.072, radial_segs=24, bevel=0.004, axis="z", name="screw1_head", material="item_chrome_spring").translate(0.0, 0.0, +0.325)
-    slot = rounded_box(0.145, 0.018, 0.016, bevel=0.003, segs=1, name="screw1_slot", material="item_steel_dark").translate(0.0, 0.0, +0.362)
-    parts.extend([shank, head, slot])
+    # Build along Z: sharp tip at -Z (-0.36), flared countersunk Phillips head at +Z (+0.34)!
+    shank = cylinder(0.004, 0.044, 0.64, radial_segs=24, axis="z", name="screw1_shank", material="item_chrome_polished").translate(0.0, 0.0, -0.02)
+    head = cylinder(0.044, 0.096, 0.072, radial_segs=32, bevel=0.005, axis="z", name="screw1_head", material="item_chrome_polished").translate(0.0, 0.0, +0.325)
+    # Crisp recessed Phillips '+' cross-drive on the flat countersunk head!
+    cross_a = rounded_box(0.118, 0.022, 0.018, bevel=0.003, segs=2, name="screw1_cross_a", material="item_steel_dark").translate(0.0, 0.0, +0.360)
+    cross_b = rounded_box(0.022, 0.118, 0.018, bevel=0.003, segs=2, name="screw1_cross_b", material="item_steel_dark").translate(0.0, 0.0, +0.360)
+    cross_core = cylinder(0.024, 0.024, 0.018, radial_segs=16, axis="z", name="screw1_cross_c", material="item_steel_dark").translate(0.0, 0.0, +0.361)
+    parts.extend([shank, head, cross_a, cross_b, cross_core])
 
     # Crisp diagonal machined screw thread coils along the entire tapering shaft!
     n_t = 15
@@ -326,10 +364,10 @@ def build_screw1() -> SceneBuilder:
         u = k / float(n_t - 1)
         tz = -0.29 + u * 0.54
         tr = 0.014 + 0.036 * (u ** 0.72)
-        ring = torus_arc(tr, 0.0085, u_segs=20, v_segs=6, plane="xy", name=f"screw1_th_{k}", material="item_aluminum").rotate_xyz(ry=0.14).translate(0.0, 0.0, tz)
+        ring = torus_arc(tr, 0.0085, u_segs=24, v_segs=8, plane="xy", name=f"screw1_th_{k}", material="item_chrome_polished").rotate_xyz(ry=0.14).translate(0.0, 0.0, tz)
         parts.append(ring)
 
-    # Diagonal pose matching `319:screw1`: pointed tip UP-LEFT, flared countersunk head DOWN-RIGHT!
+    # Diagonal pose matching `319:screw1`: pointed tip UP-LEFT, flared countersunk Phillips head DOWN-RIGHT!
     sc.add("screw1", [p.rotate_xyz(ry=22.0, degrees=True) for p in parts])
     return _finalize_item(sc, target_span=0.90)
 
@@ -433,51 +471,179 @@ def build_shtbut1() -> SceneBuilder:
 
 
 def _sculpt_barbie_pump(prefix: str) -> List[MeshPart]:
-    """Solid unified glossy hot-pink Barbie stiletto pump (local +X pointed toe, -X stiletto heel, +Y arch)."""
-    # Arch elevation y_arch(x) rising cleanly from flat forefoot (+0.08..+0.28) up to elevated stiletto heel seat (-0.22)!
-    def _arch_y(x: np.ndarray) -> np.ndarray:
-        t = np.clip((0.12 - x) / 0.34, 0.0, 1.0)
-        return 0.024 + 0.145 * (t ** 1.45) + 0.012 * np.clip((x - 0.14) / 0.14, 0.0, 1.0)
+    """Authentic hollow wearable glossy hot-pink stiletto high-heel pump (arched sole, hollow cavity, vamp, heel cup & stiletto!)."""
+    # Anatomical shoe centerline u in [0, 1]: u=0 back of heel (x=-0.22), u=1 pointed stiletto toe tip (x=+0.28).
+    def _sole_xyw(u: float) -> Tuple[float, float, float]:
+        x = -0.220 + 0.500 * u
+        # S-curved stiletto arch: elevated heel seat (0.170) -> sweeping graceful arch -> flat ball -> slight toe rocker!
+        t_arch = max(0.0, min(1.0, (0.64 - u) / 0.50))
+        y_arch = 0.012 + 0.158 * (t_arch * t_arch * (3.0 - 2.0 * t_arch)) + 0.016 * (max(0.0, (u - 0.78) / 0.22) ** 1.6)
+        # Anatomical woman's pump half-width: snug rounded heel -> sleek narrow waist -> fuller ball -> pointed almond toe!
+        if u < 0.06:
+            w = 0.050 * math.sqrt(max(0.0, u / 0.06))
+        elif u < 0.68:
+            t = (u - 0.06) / 0.62
+            w = 0.050 - 0.011 * math.sin(t * math.pi) + 0.018 * (t ** 1.8)
+        else:
+            t = (u - 0.68) / 0.32
+            w = 0.068 * ((1.0 - t) ** 0.74)
+        return x, y_arch, max(0.002, w)
 
-    def _pump_shell(pos: np.ndarray) -> np.ndarray:
-        p = pos.copy()
-        x = p[:, 0]
-        u = np.clip((x + 0.24) / 0.52, 0.0, 1.0)  # 0 heel back, 1 pointed toe tip
-        # Sleek shoe width: rounded heel -> slender waist -> wider ball -> sharp pointed stiletto toe!
-        width = 0.78 + 0.28 * np.sin(u * math.pi) - 0.18 * np.exp(-(((u - 0.38) / 0.16) ** 2))
-        width *= 1.0 - 0.84 * (np.clip((u - 0.65) / 0.35, 0.0, 1.0) ** 1.25)
-        p[:, 2] *= np.clip(width, 0.08, 1.15)
-        # Sculpt top hollow scoop opening in the middle (leaving closed pointed toe vamp + curved heel counter cup!)
-        in_opening = np.exp(-(((u - 0.36) / 0.22) ** 2)) * np.exp(-((p[:, 2] / 0.048) ** 2))
-        top_mask = np.clip(p[:, 1] / 0.045, 0.0, 1.0)
-        p[:, 1] = np.where(p[:, 1] < 0.0, p[:, 1] * 0.24, p[:, 1] * (0.95 - 0.65 * np.clip((u - 0.62) / 0.38, 0.0, 1.0)))
-        # Raise heel counter lip at very back (u < 0.18), scoop deep foot opening cleanly through center!
-        p[:, 1] += 0.036 * top_mask * np.exp(-((u / 0.16) ** 2))
-        p[:, 1] -= 0.048 * top_mask * in_opening
-        p[:, 1] += _arch_y(x)
-        return p
-
-    # Paint shaded deep-magenta inner footbed cleanly inside the scooped shoe opening!
-    shoe = tint_part(
-        superellipsoid(0.26, 0.068, 0.064, e1=0.68, e2=0.76, u_segs=42, v_segs=22, name=f"{prefix}_body", material="item_hot_pink")
-        .deform(_pump_shell),
-        lambda pos, nrm: np.clip(
-            1.0 - 0.58 * np.exp(-(((pos[:, 0] + 0.05) / 0.11) ** 2)) * np.exp(-((pos[:, 2] / 0.036) ** 2)) * np.clip(nrm[:, 1], 0.0, 1.0),
-            0.35,
-            1.0,
-        )[:, None] * np.array([[1.0, 1.0, 1.0]]),
+    # 1. Anatomical S-curved solid shoe outsole + soft rose-tinted interior footbed insole!
+    n_u, n_c = 44, 16
+    s_verts: List[Tuple[float, float, float]] = []
+    s_tris: List[Tuple[int, int, int]] = []
+    for iu in range(n_u + 1):
+        u = iu / float(n_u)
+        x, y0, hw = _sole_xyw(u)
+        thick = 0.014 if u < 0.68 else 0.011 * (1.0 - 0.35 * ((u - 0.68) / 0.32))
+        for ic in range(n_c):
+            ang = 2.0 * math.pi * ic / float(n_c)
+            zz = hw * math.cos(ang)
+            yy = y0 + (0.003 * math.sin(ang) if math.sin(ang) >= 0 else thick * math.sin(ang))
+            s_verts.append((x, yy, zz))
+    for iu in range(n_u):
+        for ic in range(n_c):
+            icn = (ic + 1) % n_c
+            a, b = iu * n_c + ic, (iu + 1) * n_c + ic
+            c, d = (iu + 1) * n_c + icn, iu * n_c + icn
+            s_tris.extend(((a, c, b), (a, d, c)))
+    pos_s = np.asarray(s_verts, dtype=np.float32)
+    idx_s = np.asarray(s_tris, dtype=np.uint32).reshape(-1)
+    sole = tint_part(
+        MeshPart(f"{prefix}_sole", "item_hot_pink", pos_s, recompute_smooth_normals(pos_s, idx_s), idx_s),
+        lambda pos, nrm: np.where(
+            (nrm[:, 1] > 0.35)[:, None],
+            np.array([[0.74, 0.30, 0.48]]),   # shaded cushioned rose insole inside the hollow shoe
+            np.array([[0.92, 0.24, 0.56]]),   # glossy hot-pink outer sole & arch
+        ),
     )
-    # Slender tapered glossy hot-pink stiletto spike descending seamlessly from the heel seat!
-    spike = curved_tube(
-        [(-0.205, 0.172, 0.0), (-0.214, 0.090, 0.0), (-0.220, 0.008, 0.0)],
-        [0.025, 0.014, 0.009],
-        samples_per_seg=3,
-        radial_segs=12,
+
+    # 2. GENUINELY HOLLOW DOUBLE-WALLED UPPER: cupped heel counter + low-cut side quarters + vaulted open-throat toe vamp!
+    # Parameterize the perimeter around the shoe sole: `s in [0, 2*pi)` (0=toe tip, pi/2=right side, pi=heel back, 3pi/2=left side)
+    n_p = 72
+    wall_t = 0.0085
+    # 5 cross-section stations from outer sole -> outer upper rim -> rounded top lip -> inner upper rim -> inner sole!
+    # Plus for the closed front toe box (`|s| < s_vamp`), arch the top right over the centerline so the toe is a hollow dome!
+    u_verts: List[Tuple[float, float, float]] = []
+    u_tris: List[Tuple[int, int, int]] = []
+    # 2A: Hollow open-top side quarters & sculpted heel counter wrapping cleanly around `u in [0.00, 0.72]`!
+    # Build perimeter parameter `tau in [-1, +1]` where `-1` is left front edge (`u=0.66`), `0` is back of heel (`u=0.00`), `+1` is right front edge (`u=0.66`)!
+    n_q = 48
+    # Cross-section around thin curved wall: outer bottom -> outer mid -> top outer lip -> top inner lip -> inner mid -> inner bottom
+    q_prof = (
+        (0.00, 0.000, +1.0),
+        (0.50, 0.002, +1.0),
+        (0.95, 0.001, +1.0),
+        (1.00, -wall_t * 0.45, +1.0),
+        (0.95, -wall_t, +1.0),
+        (0.50, -wall_t, +1.0),
+        (0.00, -wall_t, +1.0),
+    )
+    q_verts: List[Tuple[float, float, float]] = []
+    q_tris: List[Tuple[int, int, int]] = []
+    for iq in range(n_q + 1):
+        tau = -1.0 + 2.0 * (iq / float(n_q))  # -1 left front -> 0 heel back -> +1 right front
+        at = abs(tau)
+        # Map `at` smoothly around heel semicircle then straight forward along left/right sole edge to `u = 0.68`
+        if at < 0.24:
+            ang_h = (tau / 0.24) * (math.pi * 0.5)  # -pi/2..+pi/2 around heel back
+            u_loc = 0.06 * (1.0 - math.cos(ang_h))
+            x0, y0, hw = _sole_xyw(max(0.004, u_loc))
+            z_edge = hw * math.sin(ang_h)
+            nx_in, nz_in = math.cos(ang_h), -math.sin(ang_h)
+        else:
+            u_loc = 0.06 + ((at - 0.24) / 0.76) * 0.62
+            x0, y0, hw = _sole_xyw(u_loc)
+            sgn = 1.0 if tau > 0 else -1.0
+            z_edge = sgn * hw
+            nx_in, nz_in = 0.0, -sgn
+        # Sculpted pump collar silhouette: high cupped heel counter (0.095) swooping smoothly into the vamp without any step!
+        heel_cup = 0.092 * math.exp(-((u_loc / 0.22) ** 2))
+        vamp_tuck = 1.0 - 0.65 * max(0.0, (u_loc - 0.56) / 0.12)
+        h_rim = (0.024 + heel_cup) * max(0.28, vamp_tuck)
+        # Subtle inward lean at top of heel counter & quarters so it hugs an ankle realistically!
+        for hf, in_off, _ in q_prof:
+            lean = 0.010 * (hf ** 1.4) * (0.45 + 0.55 * math.exp(-((u_loc / 0.25) ** 2))) + 0.004 * max(0.0, (u_loc - 0.55) / 0.13)
+            d_in = lean - in_off
+            px = x0 + nx_in * d_in
+            pz = z_edge + nz_in * d_in
+            py = y0 - 0.004 + hf * h_rim
+            q_verts.append((px, py, pz))
+    st_q = len(q_prof)
+    for iq in range(n_q):
+        for ip in range(st_q - 1):
+            a, b = iq * st_q + ip, (iq + 1) * st_q + ip
+            c, d = (iq + 1) * st_q + (ip + 1), iq * st_q + (ip + 1)
+            q_tris.extend(((a, b, c), (a, c, d)))
+    pos_q = np.asarray(q_verts, dtype=np.float32)
+    idx_q = np.asarray(q_tris, dtype=np.uint32).reshape(-1)
+    quarters = MeshPart(f"{prefix}_quarters", "item_hot_pink", pos_q, recompute_smooth_normals(pos_q, idx_q), idx_q)
+
+    # 2B: Hollow vaulted pointed toe-box vamp hood (`u in [0.58, 1.00]`) with crisp U-shaped open throat neckline!
+    n_vu, n_va = 22, 22
+    v_verts: List[Tuple[float, float, float]] = []
+    v_tris: List[Tuple[int, int, int]] = []
+    # Build BOTH outer shell and offset inner shell, stitched at the front throat neckline & sole edges!
+    for shell_idx, thick_off in enumerate((0.0, -wall_t)):
+        base_s = len(v_verts)
+        for iu in range(n_vu + 1):
+            t_u = iu / float(n_vu)  # 0 at throat opening, 1 at pointed toe tip
+            for ia in range(n_va + 1):
+                # `ang` from 0 (right sole edge) over top arch (pi/2) to pi (left sole edge)
+                ang = math.pi * (ia / float(n_va))
+                sa, ca = math.sin(ang), math.cos(ang)
+                # U-shaped low-cut throat neckline sweeps slightly back on the sides (`u=0.58`) and dips forward at top center (`u=0.66`)!
+                u_throat = 0.575 + 0.088 * (sa ** 1.6)
+                u_loc = u_throat + (1.0 - u_throat) * t_u
+                x0, y0, hw = _sole_xyw(min(0.999, u_loc))
+                # Sleek arched toe-box roof height tapering gracefully toward pointed toe tip!
+                h_vamp = (0.068 * ((1.0 - t_u) ** 0.58) + 0.012 * (1.0 - t_u))
+                r_z = max(0.001, hw + thick_off * abs(ca))
+                r_y = max(0.001, h_vamp + thick_off * sa)
+                px = x0 + thick_off * 0.45 * (t_u ** 2)
+                py = y0 - 0.003 + r_y * (sa ** 0.88)
+                pz = r_z * ca
+                v_verts.append((px, py, pz))
+        st_v = n_va + 1
+        for iu in range(n_vu):
+            for ia in range(n_va):
+                a, b = base_s + iu * st_v + ia, base_s + (iu + 1) * st_v + ia
+                c, d = base_s + (iu + 1) * st_v + (ia + 1), base_s + iu * st_v + (ia + 1)
+                if shell_idx == 0:
+                    v_tris.extend(((a, c, b), (a, d, c)))
+                else:
+                    v_tris.extend(((a, b, c), (a, c, d)))
+    # Stitch the crisp rolled throat edge (`iu = 0`) between outer & inner vamp shells so it's 100% solid & smooth!
+    st_v = n_va + 1
+    inner_off = (n_vu + 1) * st_v
+    for ia in range(n_va):
+        o0, o1 = ia, ia + 1
+        i0, i1 = inner_off + ia, inner_off + ia + 1
+        v_tris.extend(((o0, o1, i1), (o0, i1, i0)))
+    pos_v = np.asarray(v_verts, dtype=np.float32)
+    idx_v = np.asarray(v_tris, dtype=np.uint32).reshape(-1)
+    vamp = MeshPart(f"{prefix}_vamp", "item_hot_pink", pos_v, recompute_smooth_normals(pos_v, idx_v), idx_v)
+
+    # 3. Sculpted hourglass stiletto heel flaring organically out of the heel seat + crisp dark heel tap!
+    heel_pts = [
+        (-0.192, 0.168, 0.0),
+        (-0.198, 0.145, 0.0),
+        (-0.205, 0.105, 0.0),
+        (-0.212, 0.056, 0.0),
+        (-0.216, 0.012, 0.0),
+    ]
+    heel = curved_tube(
+        heel_pts,
+        [0.036, 0.025, 0.016, 0.0115, 0.010],
+        samples_per_seg=4,
+        radial_segs=18,
         cap_rings=2,
-        name=f"{prefix}_spike",
+        name=f"{prefix}_heel",
         material="item_hot_pink",
     )
-    return [shoe, spike]
+    heel_tap = cylinder(0.0102, 0.0102, 0.012, radial_segs=16, bevel=0.002, axis="y", name=f"{prefix}_tap", material="item_rubber_dark").translate(-0.216, 0.006, 0.0)
+    return [sole, quarters, vamp, heel, heel_tap]
 
 
 def build_broken1() -> SceneBuilder:
@@ -485,7 +651,7 @@ def build_broken1() -> SceneBuilder:
     register_item_materials()
     sc = SceneBuilder(name="item_broken1")
     parts = _sculpt_barbie_pump("pump1")
-    # Lying sideways on ground: stiletto spike pointing UP-LEFT, curved arch sweeping RIGHT (`287:broken1`)!
+    # Lying sideways on ground: stiletto spike pointing UP-LEFT, open hollow cavity & curved arch sweeping RIGHT (`287:broken1`)!
     sc.add("broken1", [p.rotate_xyz(rx=+82.0, ry=-6.0, rz=-10.0, degrees=True) for p in parts])
     return _finalize_item(sc, target_span=0.90)
 
@@ -495,31 +661,61 @@ def build_broken2() -> SceneBuilder:
     register_item_materials()
     sc = SceneBuilder(name="item_broken2")
     parts = _sculpt_barbie_pump("pump2")
-    # Vertical side-lie: heel counter TOP-LEFT, stiletto spike jutting RIGHT, curved arch & sharp toe pointing DOWN (`288:broken2`)!
+    # Vertical side-lie: heel counter TOP-LEFT, stiletto spike jutting RIGHT, hollow opening & sharp toe pointing DOWN (`288:broken2`)!
     sc.add("broken2", [p.rotate_xyz(rx=+82.0, ry=-92.0, rz=+10.0, degrees=True) for p in parts])
     return _finalize_item(sc, target_span=0.90)
 
 
+def build_silver_spoon_handle(name: str, *, length: float = 0.56) -> MeshPart:
+    """Gleaming mirror-polished stamped silver spoon paddle handle (`1334:broken3` & `1331..1333:fdcer*` shared geometry!)."""
+    # Runs along local X from `-length` (rounded teardrop paddle tip on LEFT) to `0.0` (slender tapered neck join on RIGHT)!
+    n_u, n_c = 36, 18
+    verts: List[Tuple[float, float, float]] = []
+    tris: List[Tuple[int, int, int]] = []
+    for iu in range(n_u + 1):
+        u = iu / float(n_u)  # 0 at paddle tip (-length), 1 at slender neck (0.0)
+        x = -length * (1.0 - u)
+        # Authentic stainless teaspoon handle contour: smoothly ROUNDED semicircular paddle tip tapering cleanly to slim neck!
+        tip_round = math.sqrt(max(0.0, min(1.0, 1.0 - ((max(0.0, 0.14 - u) / 0.14) ** 2))))
+        hw = (0.052 * (1.0 - 0.72 * (u ** 0.72)) + 0.011) * max(0.06, tip_round)
+        th = (0.0105 * (1.0 - 0.30 * u)) * max(0.28, tip_round)
+        # Graceful classic flatware S-arch rising gently at paddle end and curving down toward the spoon neck
+        y_mid = 0.036 * ((1.0 - u) ** 1.4) + 0.012 * math.sin(u * math.pi)
+        for ic in range(n_c):
+            ang = 2.0 * math.pi * ic / float(n_c)
+            ca, sa = math.cos(ang), math.sin(ang)
+            zz = hw * ca
+            # Subtle stamped recessed center bead along upper surface (`sa > 0`) for crisp mirror highlight!
+            dish = -0.0022 * (1.0 - u) * max(0.0, sa) * (1.0 - ca * ca)
+            yy = y_mid + th * sa + dish
+            verts.append((x, yy, zz))
+    for iu in range(n_u):
+        for ic in range(n_c):
+            icn = (ic + 1) % n_c
+            a, b = iu * n_c + ic, (iu + 1) * n_c + ic
+            c, d = (iu + 1) * n_c + icn, iu * n_c + icn
+            tris.extend(((a, c, b), (a, d, c)))
+    # Cap both ends cleanly
+    c0, c1 = len(verts), len(verts) + 1
+    verts.append((-length, 0.022, 0.0))
+    verts.append((0.0, 0.0, 0.0))
+    for ic in range(n_c):
+        icn = (ic + 1) % n_c
+        tris.append((c0, ic, icn))
+        base = n_u * n_c
+        tris.append((c1, base + icn, base + ic))
+    pos_h = np.asarray(verts, dtype=np.float32)
+    idx_h = np.asarray(tris, dtype=np.uint32).reshape(-1)
+    return tint_part(
+        MeshPart(name, "item_chrome_polished", pos_h, recompute_smooth_normals(pos_h, idx_h), idx_h),
+        _const_tint((0.92, 0.94, 0.98)),
+    )
+
+
 def build_broken3() -> SceneBuilder:
-    """Sleek silver metal spoon handle / paddle lying horizontally (`1334:broken3`)."""
+    """Sleek mirror-silver spoon handle matching the spilled cereal bowl spoon (`1334:broken3`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_broken3")
-
-    # Authentic slender teardrop silver spoon handle: rounded paddle LEFT (-X) tapering cleanly to slim neck RIGHT (+X)!
-    def _spoon_shape(pos: np.ndarray) -> np.ndarray:
-        p = pos.copy()
-        u = np.clip((p[:, 0] + 0.38) / 0.76, 0.0, 1.0)
-        width = 0.24 + 0.80 * np.sin(np.clip(u / 0.28, 0.0, 1.0) * math.pi * 0.5) * (1.0 - 0.72 * (u ** 0.75))
-        p[:, 2] *= width
-        p[:, 1] *= 0.52 + 0.32 * (1.0 - u)
-        p[:, 1] += 0.052 * ((u - 0.35) ** 2) - 0.008 * np.exp(-((p[:, 2] / 0.040) ** 2)) * (1.0 - u)
-        return p
-
-    handle = tint_part(
-        superellipsoid(0.38, 0.036, 0.072, e1=0.62, e2=0.70, u_segs=38, v_segs=18, name="spoon_handle", material="item_chrome_spring")
-        .deform(_spoon_shape)
-        .translate(0.0, 0.018, 0.0),
-        _const_tint((0.88, 0.90, 0.96)),
-    )
-    sc.add("broken3", handle.rotate_xyz(ry=3.0, degrees=True))
+    handle = build_silver_spoon_handle("spoon_handle", length=0.72).translate(+0.36, 0.012, 0.0)
+    sc.add("broken3", handle.rotate_xyz(ry=2.0, degrees=True))
     return _finalize_item(sc, target_span=0.92)
