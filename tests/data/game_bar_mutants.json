@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the game page's part of the bar (web/game_bar.js and web/game_bar.css: the links that ask or open a new tab during a match, the keys that are the bar's, the focus after a press, the Menu's own lines, the question that Reload page asks, the Menu through a resize and its refit, the focus after the Menu or the question closes, the room under the bar, the pointer on the bar's blank parts) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: tools/mutate.py tests/data/game_bar_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_game_bar.py runs them on copies.",
+ "note": "Mutants of the game page's part of the bar (web/game_bar.js and web/game_bar.css: the links that ask or open a new tab during a match, the keys that are the bar's, the focus after a press, the Menu's own lines, the question that Reload page asks, the Menu through a resize and its refit, the focus after the Menu or the question closes, the room under the bar, the pointer on the bar's blank parts, the controls row under the picture from 320 to 700 px) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: tools/mutate.py tests/data/game_bar_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_game_bar.py runs them on copies.",
  "mutants": [
   {
    "id": "home_goes_without_asking",
@@ -172,15 +172,8 @@
   {
    "id": "a_wide_window_repeats_the_bars_buttons_in_the_menu",
    "file": "web/game_bar.css",
-   "old": "@media (min-width: 701px) { body.replay .sbm a.gb-copy, body.replay .sbm a.gb-dl, body.replay .sbm a.gb-file { display: none; } }",
+   "old": "@media (min-width: 701px) { body.replay .sbm a.gb-dl, body.replay .sbm a.gb-file { display: none; } }",
    "new": "",
-   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
-  },
-  {
-   "id": "a_file_of_your_own_offers_copy_link",
-   "file": "web/game_bar.css",
-   "old": "body.ownfile .sbm a.gb-dl, body.ownfile .sbm a.gb-copy { display: none; }",
-   "new": "body.ownfile .sbm a.gb-dl { display: none; }",
    "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
   },
   {
@@ -426,6 +419,62 @@
    "file": "web/site_nav.js",
    "old": "window.history && window.history.length === 1 ? own : ''",
    "new": "own",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "a_phone_has_no_copy_link_in_the_bar",
+   "file": "web/game_bar.css",
+   "old": "    .sb #copy-btn .cl-ic { display: block; }\n",
+   "new": "",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "a_phone_shows_the_words_of_copy_link_too",
+   "file": "web/game_bar.css",
+   "old": "    .sb #copy-btn .cl-tx { display: none; }\n",
+   "new": "",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "the_copy_link_glyph_shows_on_a_wide_window",
+   "file": "web/game_bar.css",
+   "old": ".sb #copy-btn .cl-ic { display: none; fill: none;",
+   "new": ".sb #copy-btn .cl-ic { fill: none;",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "the_copy_link_target_is_smaller_than_a_finger",
+   "file": "web/game_bar.css",
+   "old": "    .sb #copy-btn { min-width: 44px; min-height: 44px; margin: -1px 0; padding: 0; }\n",
+   "new": "    .sb #copy-btn { margin: -1px 0; padding: 0; }\n",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "the_menu_offers_copy_link_again",
+   "file": "web/game_bar.js",
+   "old": "            top.push(action('gb-own gb-dl', 'Download', press('dl')));\n",
+   "new": "            top.push(action('gb-own gb-copy', 'Copy link', press('copy-btn')));\n            top.push(action('gb-own gb-dl', 'Download', press('dl')));\n",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "the_live_row_is_one_row_of_four_on_a_narrow_phone",
+   "file": "web/shell.html",
+   "old": "            .rbar.islive:not(.over) { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }\n",
+   "new": "",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "the_live_row_wraps_only_under_400_px",
+   "file": "web/shell.html",
+   "old": "        @media (max-width: 499px) {\n            .rbar.islive:not(.over) { display: flex;",
+   "new": "        @media (max-width: 399px) {\n            .rbar.islive:not(.over) { display: flex;",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "a_button_of_the_bar_is_smaller_than_a_finger",
+   "file": "web/shell.html",
+   "old": ".rbar:not(.over) .speed button, .rbar:not(.over) .picwrap > .btn, .rbar:not(.over) .jtl { min-height: 44px; }",
+   "new": ".rbar:not(.over) .speed button, .rbar:not(.over) .picwrap > .btn, .rbar:not(.over) .jtl { min-height: 36px; }",
    "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
   }
  ]

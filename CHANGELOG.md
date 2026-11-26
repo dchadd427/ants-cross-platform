@@ -28,7 +28,11 @@ Work that is not released yet is written in the same template under a heading th
 
 ## Next
 
+**For players:**
+- **Copy link on a phone.** A live view and a replay have the button in the top bar on a phone now (a share symbol, 44 px; on a computer it says Copy link as before). It opens the phone's share sheet where there is one, otherwise copies the match's address and says Copied!. The bar shows Matches and Full instead of All matches and Fullscreen on a narrow phone, so that all five buttons fit in one row.
+
 **Fixes:**
+- On a phone, a live view's "Jump to live" no longer covers the clock beside the play button: the clock keeps its room, the button goes under it when the row is short, and Picture sits beside the camera button. The speed buttons and Picture are 44 px high.
 - The menu's "players online" counts the same people as the Players list, not only those in a room or a match.
 
 ## v0.21.5 - 2026-11-24 - The Podium results, messages on phones and smarter bots

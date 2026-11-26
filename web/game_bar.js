@@ -91,7 +91,6 @@
             if (!menuOpen()) { focusGame(); return; }
             [].slice.call(b.querySelectorAll('.gb-x')).forEach(function (n) { n.parentNode.removeChild(n); });
             if (busy()) top.push(make('p', 'gb-x gb-note', 'A match is running here. Home asks first; the other links open in a new tab.'));
-            top.push(action('gb-own gb-copy', 'Copy link', press('copy-btn')));
             top.push(action('gb-own gb-dl', 'Download', press('dl')));
             if (d.getElementById('own-more')) top.push(action('gb-own gb-file', 'Open another file', press('own-more')));
             ref = b.firstChild;
