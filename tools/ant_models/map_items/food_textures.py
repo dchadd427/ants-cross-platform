@@ -53,6 +53,12 @@ FOOD_TEXTURE_SIZES: Dict[str, int] = {
     "skittle_t": 128,
     "skittle_s": 128,
     "skittle_c": 128,
+    "petal_daisy_white": 256,
+    "petal_cosmos_pink": 256,
+    "petal_cosmos_rose": 256,
+    "petal_lily_lilac": 256,
+    "petal_lily_violet": 256,
+    "petal_lily_googly": 256,
 }
 
 
@@ -519,8 +525,65 @@ def _build_cola_label_pack(size: int):
     return _pack_from_rgb("cola_label", size, rgb, height, rough, metal)
 
 
+def _build_petal_stripe_pack(
+    family: str,
+    size: int,
+    *,
+    base_rgb: Tuple[float, float, float],
+    stripe_rgb: Tuple[float, float, float],
+    throat_rgb: Tuple[float, float, float],
+    highlight_rgb: Tuple[float, float, float],
+    n_stripes: float,
+    stripe_strength: float,
+    wave_amp: float = 0.0,
+    wave_freq: float = 3.0,
+    stripe_sharp: float = 2.0,
+    seed: int = 811,
+):
+    """High-resolution 256px procedural 1998 floral petal texture with authentic longitudinal veins/tiger stripes (`410..416`)."""
+    try:
+        from .. import textures as tx
+    except ImportError:
+        import textures as tx  # type: ignore
+
+    lin = np.linspace(0.0, 1.0, size, dtype=np.float32)
+    u, v = np.meshgrid(lin, lin)  # u in [0,1] across petal width, v in [0,1] from throat (0) to tip (1)
+    s = 2.0 * u - 1.0  # -1..+1 across width
+    fine = tx._tile_noise(size, 28, 14, seed=seed)
+    micro = tx._tile_noise(size, 52, 26, seed=seed + 1)
+
+    # Organic longitudinal petal veins/stripes running cleanly from throat (`v=0`) all the way to the tip (`v=1`)!
+    waver = wave_amp * (np.sin(v * math.pi * wave_freq + s * 2.2) + 0.45 * np.cos(v * math.pi * (wave_freq * 1.7) - s * 3.1))
+    # Gently fan stripes out from the narrow throat while staying bold along the full blade!
+    s_fan = s * (1.0 + 0.14 * (1.0 - v)) + waver + 0.045 * (fine - 0.5)
+    raw_wave = 0.5 + 0.5 * np.cos(s_fan * math.pi * n_stripes)
+    # Crisp fine midrib + bold parallel striation lines!
+    stripes = (raw_wave ** stripe_sharp) * (0.76 + 0.24 * np.sin(v * math.pi))
+    mid_vein = np.exp(-((s / 0.055) ** 2.0)) * (1.0 - 0.25 * v)
+    stripe_mask = np.clip(stripes * stripe_strength + 0.28 * mid_vein * stripe_strength, 0.0, 0.96)
+
+    # Highlight sheen ridges sitting cleanly between the dark longitudinal stripe grooves!
+    ridge_hi = ((1.0 - raw_wave) ** 1.8) * (0.35 + 0.65 * np.sin(v * math.pi))
+    # Rich darker floral throat near `v=0` fading naturally outward
+    throat = np.exp(-((v / 0.24) ** 1.8))
+
+    base_c = np.array(base_rgb, dtype=np.float32)[None, None, :]
+    stripe_c = np.array(stripe_rgb, dtype=np.float32)[None, None, :]
+    throat_c = np.array(throat_rgb, dtype=np.float32)[None, None, :]
+    hi_c = np.array(highlight_rgb, dtype=np.float32)[None, None, :]
+
+    rgb = base_c * (0.94 + 0.08 * fine[:, :, None])
+    rgb = rgb * (1.0 - 0.36 * ridge_hi[:, :, None]) + hi_c * (0.36 * ridge_hi[:, :, None])
+    rgb = rgb * (1.0 - stripe_mask[:, :, None]) + stripe_c * stripe_mask[:, :, None]
+    rgb = rgb * (1.0 - 0.62 * throat[:, :, None]) + throat_c * (0.62 * throat[:, :, None])
+
+    height = np.clip(0.56 + 0.28 * (1.0 - raw_wave) - 0.18 * mid_vein + 0.08 * micro, 0.0, 1.0)
+    rough = np.clip(0.46 + 0.14 * stripe_mask + 0.08 * fine - 0.10 * ridge_hi, 0.28, 0.78)
+    return _pack_from_rgb(family, size, np.clip(rgb, 0.04, 1.0), height, rough)
+
+
 def build_food_texture_pack(family: str, size: int):
-    """Dispatch procedural 1998 food label & candy texture packs."""
+    """Dispatch procedural 1998 food label, candy & botanical floral petal texture packs."""
     if family == "cola_label":
         return _build_cola_label_pack(size)
     if family == "pizza_tube":
@@ -543,4 +606,52 @@ def build_food_texture_pack(family: str, size: int):
     if family in skit_map:
         ch, col = skit_map[family]
         return _build_skittle_pack(family, ch, col, size)
+    # Authentic 1998 floral petal striation & tiger-lily pattern packs (`strip_flowers.png`)!
+    if family == "petal_daisy_white":
+        return _build_petal_stripe_pack(
+            family, size,
+            base_rgb=(0.97, 0.97, 0.95), stripe_rgb=(0.82, 0.83, 0.86),
+            throat_rgb=(0.94, 0.90, 0.72), highlight_rgb=(1.00, 1.00, 0.99),
+            n_stripes=4.0, stripe_strength=0.45, wave_amp=0.02, stripe_sharp=2.6, seed=821,
+        )
+    if family == "petal_cosmos_pink":
+        # Hot-pink cosmos (`412:flower2a`): bold fine longitudinal magenta-rose lines down every petal!
+        return _build_petal_stripe_pack(
+            family, size,
+            base_rgb=(0.99, 0.44, 0.70), stripe_rgb=(0.56, 0.08, 0.34),
+            throat_rgb=(0.68, 0.12, 0.38), highlight_rgb=(1.00, 0.74, 0.86),
+            n_stripes=7.0, stripe_strength=0.78, wave_amp=0.03, wave_freq=2.0, stripe_sharp=2.2, seed=823,
+        )
+    if family == "petal_cosmos_rose":
+        # Deep rose starflower (`413:flower2b`): vivid dark burgundy-magenta longitudinal striations!
+        return _build_petal_stripe_pack(
+            family, size,
+            base_rgb=(0.90, 0.24, 0.50), stripe_rgb=(0.38, 0.04, 0.20),
+            throat_rgb=(0.48, 0.06, 0.26), highlight_rgb=(1.00, 0.50, 0.70),
+            n_stripes=7.5, stripe_strength=0.84, wave_amp=0.035, wave_freq=2.2, stripe_sharp=2.1, seed=825,
+        )
+    if family == "petal_lily_lilac":
+        # Spotted lilac lily (`414:flower3a`): vibrant wavy radiating purple-violet zebra veins!
+        return _build_petal_stripe_pack(
+            family, size,
+            base_rgb=(0.88, 0.60, 0.98), stripe_rgb=(0.40, 0.10, 0.68),
+            throat_rgb=(0.32, 0.10, 0.64), highlight_rgb=(0.98, 0.84, 1.00),
+            n_stripes=6.0, stripe_strength=0.84, wave_amp=0.14, wave_freq=3.6, stripe_sharp=1.5, seed=827,
+        )
+    if family == "petal_lily_violet":
+        # Deep violet lily (`415:flower3b`): rich indigo-violet petals with bold dark-plum & lilac stripes!
+        return _build_petal_stripe_pack(
+            family, size,
+            base_rgb=(0.54, 0.34, 0.92), stripe_rgb=(0.16, 0.06, 0.44),
+            throat_rgb=(0.14, 0.05, 0.42), highlight_rgb=(0.82, 0.64, 1.00),
+            n_stripes=6.0, stripe_strength=0.86, wave_amp=0.14, wave_freq=3.6, stripe_sharp=1.5, seed=829,
+        )
+    if family == "petal_lily_googly":
+        # Googly-Eyed Flower (`416:flower3c`): iconic HIGH-CONTRAST white-lavender & vibrant magenta-purple tiger stripes!
+        return _build_petal_stripe_pack(
+            family, size,
+            base_rgb=(0.98, 0.88, 1.00), stripe_rgb=(0.52, 0.12, 0.74),
+            throat_rgb=(0.44, 0.10, 0.66), highlight_rgb=(1.00, 0.98, 1.00),
+            n_stripes=6.0, stripe_strength=0.90, wave_amp=0.18, wave_freq=4.0, stripe_sharp=1.35, seed=831,
+        )
     return None

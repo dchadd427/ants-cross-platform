@@ -483,102 +483,128 @@ def _collect_powerup_meshes(builder_fn: Callable[[], SceneBuilder], prefix: str,
 
 
 def _golden_teardrop(name: str) -> MeshPart:
-    """Luminous glossy golden honey/nectar teardrop (`422..426:FD_*` frame 0 silhouette)."""
-    # Smooth teardrop lathe profile (plump round bottom, graceful tapering pointed apex at top!)
-    n = 20
+    """Compact luminous golden honey/nectar teardrop (`422..426:FD_*`) with origin at its bottom pole for clean stretch & fall."""
+    n = 24
     prof: List[Tuple[float, float]] = []
     for i in range(n + 1):
-        t = i / float(n)  # 0 at bottom pole -> 1 at pointed apex
+        t = i / float(n)  # 0 at plump rounded bottom pole -> 1 at slender pointed drip tail
         ang = t * math.pi
-        y = 0.03 + 0.52 * t
-        # Authentic plump teardrop curve: sin(ang) widened near bottom (t ~ 0.30) and pinched smoothly to apex
-        rad = 0.215 * math.sin(ang) * ((1.0 - 0.52 * t) ** 0.72)
+        y = 0.21 * t
+        # Classic hanging nectar drop silhouette: plump glossy bottom belly tapering gracefully to a sharp top drip tip!
+        rad = 0.095 * math.sin(ang) * ((1.0 - 0.62 * t) ** 0.78)
         prof.append((max(0.0, rad), y))
     drop = lathe(prof, radial_segs=32, cap_bottom=False, cap_top=False, axis="y", name=name, material="item_nectar_gold")
-    return gradient_y_tint(drop, (0.98, 0.74, 0.04), (1.00, 0.96, 0.36))
+    return gradient_y_tint(drop, (1.00, 0.84, 0.16), (0.98, 0.62, 0.04))
 
 
 def _build_power_nectar(name: str, pu_builder: Callable[[], SceneBuilder]) -> SceneBuilder:
-    """Animated 9-frame Power-Up Nectar Drop: glowing golden teardrop -> green-sparkle splash -> 3D Power-Up gear!"""
+    """Animated 8-frame Power-Up Nectar Drop matching `strip_nectar.png` 1:1: overhead drip -> stretch -> fall -> splat -> Power-Up appears!"""
     register_item_materials()
     sc = SceneBuilder(name=name)
 
-    # 1. Golden honey/nectar teardrop (primary iconic frame-0 silhouette!)
+    # 1. Overhead golden nectar teardrop (rest-positioned high at top so camera frames the FULL vertical drop trajectory!)
+    sc.set_node_transform("nectar_drop", translation=(0.0, 0.74, 0.0))
     sc.add("nectar_drop", [_golden_teardrop(f"{name}_drop")])
 
-    # 2. Impact golden splash disc + emerald-green magic sparkle burst ring (frames 6-7 of 1998 sprite!)
-    splash_puddle = ellipsoid(0.24, 0.044, 0.24, u_segs=22, v_segs=10, name=f"{name}_splash", material="item_nectar_gold").translate(0.0, 0.022, 0.0)
-    splash_parts: List[MeshPart] = [gradient_y_tint(splash_puddle, (0.98, 0.70, 0.04), (1.00, 0.94, 0.24))]
-    for k in range(8):
-        ang = k * (2.0 * math.pi / 8.0)
-        sx, sz = 0.16 * math.cos(ang), 0.16 * math.sin(ang)
-        sp = sphere(0.030, u_segs=10, v_segs=8, name=f"{name}_sp_{k}", material="item_frog_green").translate(sx, 0.072, sz)
-        splash_parts.append(tint_part(sp, _const_tint((0.20, 1.00, 0.28))))
-    sc.add("nectar_splash", splash_parts)
+    # 2. Smooth glossy golden nectar landing puddle/mound on the ground (`strip_nectar.png` frames 6-7 — zero weird floating balls!)
+    splash_puddle = ellipsoid(0.22, 0.068, 0.20, u_segs=28, v_segs=14, name=f"{name}_splash", material="item_nectar_gold").translate(0.0, 0.032, 0.0)
+    ps = splash_puddle.positions.astype(np.float64)
+    ps[:, 1] = np.maximum(ps[:, 1], 0.001)
+    splash_puddle.positions = ps.astype(np.float32)
+    splash_puddle.normals = recompute_smooth_normals(splash_puddle.positions, splash_puddle.indices)
+    splash_rim = torus_arc(0.185, 0.022, u_segs=28, v_segs=10, plane="xz", name=f"{name}_splash_rim", material="item_nectar_gold").translate(0.0, 0.018, 0.0)
+    sc.set_node_transform("nectar_splash", translation=(0.0, 0.0, 0.0))
+    sc.add(
+        "nectar_splash",
+        [
+            gradient_y_tint(splash_puddle, (0.94, 0.56, 0.02), (1.00, 0.94, 0.34)),
+            gradient_y_tint(splash_rim, (0.96, 0.62, 0.02), (1.00, 0.90, 0.28)),
+        ],
+    )
 
-    # 3. Genuine 3D class Power-Up gear emerging cleanly from the golden nectar splash (frame 8 of 1998 sprite!)
-    gear_parts = _collect_powerup_meshes(pu_builder, prefix=f"{name}_gear", target_span=0.52)
+    # 3. Genuine 3D class Power-Up gear appearing cleanly right inside the landed golden nectar splash (`strip_nectar.png` frame 7!)
+    gear_parts = _collect_powerup_meshes(pu_builder, prefix=f"{name}_gear", target_span=0.48)
+    sc.set_node_transform("gear_reveal", translation=(0.0, 0.012, 0.0))
     sc.add("gear_reveal", gear_parts)
 
-    # Authentic 9-frame-inspired 3.2s looping 'Idle' morph animation!
-    # At t=0 (and loop end t=3.2): teardrop is full & glowing (`scale=1`), splash & gear are tucked tiny (`0.02`).
-    # t=0.0->0.8: drop stretches tall; t=0.8->1.3: drop squishes down; t=1.2->1.7: splash+sparkles burst out;
-    # t=1.6->2.7: Power-Up 3D gear pops to full scale & gleams; t=2.7->3.2: reforms into glowing teardrop!
-    times = np.array([0.0, 0.45, 0.85, 1.15, 1.45, 1.75, 2.55, 2.85, 3.20], dtype=np.float32)
+    # Authentic 2.6s looping 1998 drip-fall-splat-reveal animation matching `strip_nectar.png` frames 0..7!
+    # 0.00: small bead forming high up (f0)
+    # 0.24: swelling & beginning to hang (f1)
+    # 0.48: long dramatic stretched honey tear hanging before detaching (f2)
+    # 0.68: detached plump teardrop falling mid-air (f3)
+    # 0.86: accelerating downward, rounding plump (f4)
+    # 1.00: round golden globule just above impact (f5)
+    # 1.10: SPLAT into golden landing puddle mound (f6)
+    # 1.26: actual 3D Power-Up gear pops out of the landed puddle (f7)
+    # 2.18: hold Power-Up clearly on ground so player sees the pickup!
+    # 2.42: fade out cleanly -> 2.60: new tiny drop beads at top!
+    times = np.array([0.00, 0.24, 0.48, 0.68, 0.86, 1.00, 1.10, 1.26, 1.42, 2.18, 2.42, 2.60], dtype=np.float32)
 
     drop_trans = np.array(
         [
-            [0.0, 0.24, 0.0],  # 0.00: hovering high like frame 0
-            [0.0, 0.16, 0.0],  # 0.45: falling & stretching (frames 1-2)
-            [0.0, 0.04, 0.0],  # 0.85: nearing ground (frames 4-5)
-            [0.0, 0.00, 0.0],  # 1.15: ground impact (frame 6)
-            [0.0, 0.00, 0.0],
-            [0.0, 0.00, 0.0],
-            [0.0, 0.00, 0.0],
-            [0.0, 0.14, 0.0],
-            [0.0, 0.24, 0.0],
+            [0.0, 0.78, 0.0],  # 0.00: tiny drop beading high up (f0)
+            [0.0, 0.71, 0.0],  # 0.24: swelling & stretching down (f1)
+            [0.0, 0.54, 0.0],  # 0.48: long stretched hanging teardrop (f2)
+            [0.0, 0.40, 0.0],  # 0.68: snapped free, falling mid-air (f3)
+            [0.0, 0.22, 0.0],  # 0.86: accelerating downward (f4)
+            [0.0, 0.05, 0.0],  # 1.00: plump orb just above ground (f5)
+            [0.0, 0.00, 0.0],  # 1.10: ground impact squish (f6)
+            [0.0, 0.00, 0.0],  # 1.26: vanished into splash
+            [0.0, 0.00, 0.0],  # 1.42: hidden while Power-Up shines
+            [0.0, 0.00, 0.0],  # 2.18: hidden
+            [0.0, 0.80, 0.0],  # 2.42: resetting to top while tiny
+            [0.0, 0.78, 0.0],  # 2.60: seamless loop back to f0
         ],
         dtype=np.float32,
     )
     drop_scale = np.array(
         [
-            [0.88, 0.88, 0.88],  # 0.00: plump glowing teardrop (matches frame 0!)
-            [0.64, 1.24, 0.64],  # 0.45: stretches tall (frames 1-2)
-            [1.06, 0.84, 1.06],  # 0.85: gathers round (frames 4-5)
-            [1.24, 0.32, 1.24],  # 1.15: impact squish (frame 6)
-            [0.001, 0.001, 0.001],  # 1.45: vanished into splash
-            [0.001, 0.001, 0.001],  # 1.75: hidden while gear gleams
-            [0.001, 0.001, 0.001],  # 2.55: hidden
-            [0.64, 0.64, 0.64],  # 2.85: reforming
-            [0.88, 0.88, 0.88],  # 3.20: loop
+            [0.54, 0.56, 0.54],    # 0.00: small bead (f0)
+            [0.52, 0.98, 0.52],    # 0.24: elongating (f1)
+            [0.44, 1.88, 0.44],    # 0.48: iconic long stretched drip! (f2)
+            [0.84, 1.04, 0.84],    # 0.68: classic falling teardrop (f3)
+            [0.98, 0.86, 0.98],    # 0.86: plump falling drop (f4)
+            [1.08, 0.76, 1.08],    # 1.00: plump pre-impact sphere (f5)
+            [1.35, 0.22, 1.35],    # 1.10: flat impact squish (f6)
+            [0.001, 0.001, 0.001], # 1.26: absorbed into puddle
+            [0.001, 0.001, 0.001], # 1.42: hidden
+            [0.001, 0.001, 0.001], # 2.18: hidden
+            [0.001, 0.001, 0.001], # 2.42: hidden while teleporting back to top
+            [0.54, 0.56, 0.54],    # 2.60: loop
         ],
         dtype=np.float32,
     )
     splash_scale = np.array(
         [
-            [0.001, 0.001, 0.001],  # completely hidden while drop falls!
-            [0.001, 0.001, 0.001],
-            [0.001, 0.001, 0.001],
-            [1.05, 0.85, 1.05],  # impact splash!
-            [1.25, 1.15, 1.25],  # emerald sparkles burst (frame 7)!
-            [0.25, 0.15, 0.25],
-            [0.001, 0.001, 0.001],
-            [0.001, 0.001, 0.001],
-            [0.001, 0.001, 0.001],
+            [0.001, 0.001, 0.001], # 0.00: hidden
+            [0.001, 0.001, 0.001], # 0.24: hidden
+            [0.001, 0.001, 0.001], # 0.48: hidden
+            [0.001, 0.001, 0.001], # 0.68: hidden
+            [0.001, 0.001, 0.001], # 0.86: hidden
+            [0.001, 0.001, 0.001], # 1.00: hidden right before touch
+            [1.06, 1.00, 1.06],    # 1.10: golden landing mound appears (f6)!
+            [1.16, 0.58, 1.16],    # 1.26: flattens into glowing puddle under Power-Up (f7)!
+            [1.10, 0.48, 1.10],    # 1.42: soft golden puddle bed
+            [0.98, 0.42, 0.98],    # 2.18: hold puddle under Power-Up
+            [0.001, 0.001, 0.001], # 2.42: clean dissolve
+            [0.001, 0.001, 0.001], # 2.60: loop
         ],
         dtype=np.float32,
     )
     gear_scale = np.array(
         [
-            [0.001, 0.001, 0.001],  # hidden while drop falls
+            [0.001, 0.001, 0.001], # 0.00..1.00: hidden while teardrop falls
             [0.001, 0.001, 0.001],
             [0.001, 0.001, 0.001],
             [0.001, 0.001, 0.001],
-            [0.48, 0.48, 0.48],  # emerging!
-            [1.04, 1.04, 1.04],  # full 3D Power-Up gear pop (frame 8)!
-            [1.00, 1.00, 1.00],  # hold showcase
-            [0.20, 0.20, 0.20],  # tuck back
-            [0.001, 0.001, 0.001],  # loop
+            [0.001, 0.001, 0.001],
+            [0.001, 0.001, 0.001],
+            [0.001, 0.001, 0.001], # 1.10: still pure golden puddle (f6)
+            [0.94, 0.86, 0.94],    # 1.26: Power-Up emerges cleanly out of splash (f7)!
+            [1.04, 1.04, 1.04],    # 1.42: playful bounce settle
+            [1.00, 1.00, 1.00],    # 2.18: hold clear hero Power-Up
+            [0.001, 0.001, 0.001], # 2.42: disappear cleanly before next drop
+            [0.001, 0.001, 0.001], # 2.60: loop
         ],
         dtype=np.float32,
     )
@@ -592,7 +618,7 @@ def _build_power_nectar(name: str, pu_builder: Callable[[], SceneBuilder]) -> Sc
             AnimationChannel("gear_reveal", "scale", times, gear_scale),
         ],
     )
-    return _finalize_item(sc, target_span=0.68)
+    return _finalize_item(sc, target_span=0.92)
 
 
 def build_fd_comb() -> SceneBuilder:

@@ -343,32 +343,35 @@ def build_grassmed4() -> SceneBuilder:
 
 
 def _heart_leaflet(name: str, *, scale: float = 1.0) -> MeshPart:
-    """One crisp separated heart-shaped clover leaflet with deep apical notch & pale V-chevron marking."""
+    """One plump rounded heart-shaped clover leaflet with smooth twin cheeks, apical notch & sunlit V-chevron (`404..408`)."""
     def _heart(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
-        # Map ellipsoid into a clean narrow-stemmed, wide-lobed heart silhouette with crisp gap at base!
-        u = np.clip((p[:, 2] + 0.14) / 0.28, 0.0, 1.0)
-        # Taper sharply to petiole point near u=0, puff into plump rounded twin heart lobes around u=0.72!
-        flare = (0.14 + 1.18 * (u ** 0.68)) * (1.02 - 0.14 * (u ** 3.2))
-        p[:, 0] *= flare * 1.06 * scale
-        p[:, 2] = (0.014 + u * 0.275) * scale
-        # Crisp heart-tip cleavage notch at u -> 1
-        notch = 0.062 * scale * np.exp(-((p[:, 0] / (0.044 * scale)) ** 2)) * (u ** 2.0)
+        s = np.clip(p[:, 2] / 0.14, -1.0, 1.0)
+        u = 0.5 * (s + 1.0)  # 0 at narrow stem petiole -> 1 at outer heart tip
+        raw_env = np.sqrt(np.maximum(0.06, 1.0 - s * s))
+        # Plump rounded clover heart silhouette: slender stem junction -> full round twin cheeks -> crisp heart notch!
+        base_taper = np.clip(u / 0.50, 0.0, 1.0) ** 0.68
+        lobe_round = np.sqrt(np.maximum(0.0, 1.0 - np.clip((u - 0.66) / 0.34, 0.0, 1.0) ** 2.0))
+        desired_w = np.where(u >= 0.998, 0.0, np.maximum(0.04, (0.12 + 0.98 * base_taper) * lobe_round))
+        p[:, 0] *= np.clip(desired_w / raw_env, 0.0, 2.8) * 1.00 * scale
+        p[:, 2] = (0.014 + u * 0.272) * scale
+        # Crisp botanical heart cleavage notch separating the twin rounded outer cheeks (`strip_clovers.png`)!
+        notch = 0.072 * scale * np.exp(-((p[:, 0] / (0.040 * scale)) ** 2)) * (u ** 2.1)
         p[:, 2] -= notch
         # Natural botanical V-fold along midrib + gentle downward curl at tips
-        p[:, 1] += 0.022 * scale * np.abs(p[:, 0]) / max(1e-4, 0.11 * scale) - 0.020 * scale * (u ** 2.1)
+        p[:, 1] += 0.020 * scale * np.abs(p[:, 0]) / max(1e-4, 0.12 * scale) - 0.018 * scale * (u ** 2.0)
         return p
 
-    leaf = ellipsoid(0.118, 0.008, 0.14, u_segs=26, v_segs=10, name=name, material="item_leaf_rich").deform(_heart)
+    leaf = ellipsoid(0.124, 0.008, 0.14, u_segs=30, v_segs=14, name=name, material="item_leaf_rich").deform(_heart)
 
     def _clover_chevron(pos: np.ndarray, _nrm: np.ndarray) -> np.ndarray:
         r = np.hypot(pos[:, 0] * 1.05, pos[:, 2] - 0.03 * scale)
-        # Signature pale-lime white-clover inner chevron band + deeper emerald veins!
-        band = np.exp(-(((r - 0.155 * scale) / (0.028 * scale)) ** 2))[:, None]
-        edge_dark = np.clip(1.0 - 0.28 * (r / (0.31 * scale)), 0.66, 1.0)[:, None]
-        base = np.array([[0.74, 0.96, 0.54]], dtype=np.float64) * edge_dark
-        chev = np.array([[0.98, 1.00, 0.82]], dtype=np.float64)
-        return base * (1.0 - 0.55 * band) + chev * (0.55 * band)
+        # Signature bright sunlit lime-green inner chevron band + deep shaded emerald base & rims (`strip_clovers.png`)!
+        band = np.exp(-(((r - 0.148 * scale) / (0.036 * scale)) ** 2))[:, None]
+        edge_dark = np.clip(1.0 - 0.34 * (r / (0.30 * scale)), 0.56, 1.0)[:, None]
+        base = np.array([[0.64, 0.92, 0.44]], dtype=np.float64) * edge_dark
+        chev = np.array([[0.94, 1.00, 0.66]], dtype=np.float64)
+        return base * (1.0 - 0.62 * band) + chev * (0.62 * band)
 
     return tint_part(leaf, _clover_chevron)
 
@@ -377,18 +380,17 @@ def _build_single_clover_parts(
     prefix: str,
     *,
     stem_pts: List[Tuple[float, float, float]],
-    n_leaves: int = 4,
-    yaw_offset: float = 0.35,
+    leaf_angles_deg: Tuple[float, ...] = (0.0, 90.0, 180.0, 270.0),
     tilt_rx: float = 0.0,
     tilt_rz: float = 0.0,
-    leaf_scale: float = 0.98,
+    leaf_scale: float = 1.00,
 ) -> List[MeshPart]:
-    """Build one clover stem + radiating heart leaflets anchored at the stem's last point."""
+    """Build one clover stem + radiating rounded heart leaflets at exact 1998 angles."""
     parts: List[MeshPart] = []
     stem = curved_tube(
         stem_pts,
-        [0.015, 0.013, 0.012, 0.015][: len(stem_pts)],
-        samples_per_seg=4,
+        [0.015, 0.013, 0.012, 0.014][: len(stem_pts)],
+        samples_per_seg=5,
         radial_segs=10,
         cap_rings=2,
         name=f"{prefix}_stem",
@@ -396,11 +398,11 @@ def _build_single_clover_parts(
     )
     parts.append(stem)
     hx, hy, hz = stem_pts[-1]
-    for k in range(n_leaves):
-        ang = k * (2.0 * math.pi / n_leaves) + yaw_offset
-        pitch = 0.14 + 0.05 * (k % 2)
+    for k, deg in enumerate(leaf_angles_deg):
+        ang = math.radians(deg)
+        pitch = 0.13 + 0.04 * (k % 2)
         lf = (
-            _heart_leaflet(f"{prefix}_leaf_{k}", scale=leaf_scale - 0.05 * (k % 2))
+            _heart_leaflet(f"{prefix}_leaf_{k}", scale=leaf_scale - 0.03 * (k % 2))
             .rotate_xyz(rx=pitch, ry=ang)
             .rotate_xyz(rx=tilt_rx, rz=tilt_rz)
             .translate(hx, hy + 0.005 * (k % 2), hz)
@@ -410,32 +412,31 @@ def _build_single_clover_parts(
 
 
 def build_clover1() -> SceneBuilder:
-    """Realistic lucky 4-leaf clover with separated notched heart leaflets & sweeping curved stem (`404:clover1`)."""
+    """Authentic 3-leaf clover with crooked stem curving down-right (`404:clover1`, `strip_clovers.png` #1)."""
     register_item_materials()
     sc = SceneBuilder(name="item_clover1")
     sc.add(
         "clover",
         _build_single_clover_parts(
             "clover1",
-            stem_pts=[(+0.24, 0.00, +0.26), (+0.15, 0.06, +0.16), (+0.05, 0.15, +0.06), (0.00, 0.23, 0.00)],
-            n_leaves=4,
-            yaw_offset=0.35,
+            stem_pts=[(+0.22, 0.00, +0.29), (+0.15, 0.06, +0.20), (+0.08, 0.14, +0.10), (0.00, 0.22, 0.00)],
+            leaf_angles_deg=(-148.0, +132.0, -26.0),
+            leaf_scale=1.04,
         ),
     )
     return _finalize_item(sc, target_span=0.90)
 
 
 def build_clover2() -> SceneBuilder:
-    """Symmetrical upright 4-leaf clover with straight vertical stem (`405:clover2`)."""
+    """Symmetrical upright 4-leaf clover in classic `+` cross with straight vertical stem (`405:clover2`, `strip_clovers.png` #2)."""
     register_item_materials()
     sc = SceneBuilder(name="item_clover2")
     sc.add(
         "clover",
         _build_single_clover_parts(
             "clover2",
-            stem_pts=[(0.00, 0.00, +0.28), (0.00, 0.08, +0.18), (0.00, 0.16, +0.08), (0.00, 0.24, 0.00)],
-            n_leaves=4,
-            yaw_offset=0.785,
+            stem_pts=[(0.00, 0.00, +0.34), (0.00, 0.08, +0.22), (0.00, 0.16, +0.11), (0.00, 0.24, 0.00)],
+            leaf_angles_deg=(0.0, 90.0, 180.0, 270.0),
             leaf_scale=1.02,
         ),
     )
@@ -443,53 +444,51 @@ def build_clover2() -> SceneBuilder:
 
 
 def build_clover3() -> SceneBuilder:
-    """Wide tilted 4-leaf clover with long crooked stem sweeping bottom-left (`406:clover3`)."""
+    """Authentic 3-leaf clover with long crooked stem sweeping down-left and hooking left (`406:clover3`, `strip_clovers.png` #3)."""
     register_item_materials()
     sc = SceneBuilder(name="item_clover3")
     sc.add(
         "clover",
         _build_single_clover_parts(
             "clover3",
-            stem_pts=[(-0.30, 0.00, +0.26), (-0.18, 0.05, +0.22), (-0.08, 0.14, +0.10), (0.00, 0.23, 0.00)],
-            n_leaves=4,
-            yaw_offset=0.20,
-            tilt_rz=-0.12,
-            leaf_scale=0.98,
+            stem_pts=[(-0.34, 0.00, +0.29), (-0.19, 0.02, +0.27), (-0.09, 0.12, +0.13), (0.00, 0.22, 0.00)],
+            leaf_angles_deg=(+164.0, +64.0, -82.0),
+            tilt_rz=-0.10,
+            leaf_scale=1.04,
         ),
     )
     return _finalize_item(sc, target_span=0.92)
 
 
 def build_clover4() -> SceneBuilder:
-    """Plump lush 4-leaf clover tilted softly with diagonal stem (`407:clover4`)."""
+    """Lush broad 3-leaf clover with straight diagonal stem sweeping bottom-left (`407:clover4`, `strip_clovers.png` #4)."""
     register_item_materials()
     sc = SceneBuilder(name="item_clover4")
     sc.add(
         "clover",
         _build_single_clover_parts(
             "clover4",
-            stem_pts=[(-0.24, 0.00, +0.24), (-0.14, 0.07, +0.15), (-0.05, 0.15, +0.06), (0.00, 0.24, 0.00)],
-            n_leaves=4,
-            yaw_offset=0.52,
-            tilt_rx=0.08,
-            leaf_scale=1.04,
+            stem_pts=[(-0.27, 0.00, +0.26), (-0.17, 0.07, +0.17), (-0.08, 0.15, +0.08), (0.00, 0.23, 0.00)],
+            leaf_angles_deg=(-132.0, +124.0, +12.0),
+            tilt_rx=0.06,
+            leaf_scale=1.10,
         ),
     )
     return _finalize_item(sc, target_span=0.90)
 
 
 def build_clovers() -> SceneBuilder:
-    """Wild patch bouquet of 4 intertwined clovers on sturdy arching stems (`408:clovers`)."""
+    """Wild patch bouquet of 4 intertwined 3-leaf clovers on arching stems (`408:clovers`, `strip_clovers.png` #5)."""
     register_item_materials()
     sc = SceneBuilder(name="item_clovers")
     bouquet = (
-        ("c0", [(-0.02, 0.00, 0.02), (-0.11, 0.14, 0.03), (-0.23, 0.27, 0.05), (-0.31, 0.34, 0.05)], 3, 0.4, 0.22, +0.34, 0.80),
-        ("c1", [(0.00, 0.00, 0.00), (-0.05, 0.18, -0.01), (-0.10, 0.34, -0.02), (-0.14, 0.44, -0.02)], 4, 0.6, 0.18, +0.16, 0.86),
-        ("c2", [(0.02, 0.00, 0.00), (+0.05, 0.22, -0.02), (+0.07, 0.40, -0.03), (+0.08, 0.52, -0.03)], 4, 0.2, 0.16, -0.08, 0.88),
-        ("c3", [(0.03, 0.00, 0.02), (+0.13, 0.15, 0.03), (+0.24, 0.28, 0.05), (+0.32, 0.36, 0.06)], 4, 0.9, 0.22, -0.32, 0.82),
+        ("c0", [(-0.02, 0.00, 0.02), (-0.13, 0.12, 0.04), (-0.25, 0.22, 0.06), (-0.33, 0.29, 0.06)], (-145.0, +118.0, -24.0), 0.24, +0.34, 0.78),
+        ("c1", [(0.00, 0.00, 0.00), (-0.06, 0.18, -0.01), (-0.12, 0.34, -0.02), (-0.16, 0.43, -0.02)], (-132.0, +124.0, +12.0), 0.20, +0.18, 0.94),
+        ("c2", [(0.02, 0.00, 0.00), (+0.03, 0.22, -0.02), (+0.04, 0.42, -0.03), (+0.04, 0.56, -0.03)], (+176.0, +62.0, -64.0), 0.16, -0.04, 0.96),
+        ("c3", [(0.03, 0.00, 0.02), (+0.13, 0.15, 0.03), (+0.23, 0.28, 0.05), (+0.30, 0.37, 0.06)], (+152.0, +48.0, -76.0), 0.22, -0.30, 0.92),
     )
-    for tag, pts, nl, yo, rx, rz, ls in bouquet:
-        sc.add("clovers", _build_single_clover_parts(tag, stem_pts=pts, n_leaves=nl, yaw_offset=yo, tilt_rx=rx, tilt_rz=rz, leaf_scale=ls))
+    for tag, pts, angs, rx, rz, ls in bouquet:
+        sc.add("clovers", _build_single_clover_parts(tag, stem_pts=pts, leaf_angles_deg=angs, tilt_rx=rx, tilt_rz=rz, leaf_scale=ls))
     return _finalize_item(sc, target_span=0.96)
 
 
@@ -524,12 +523,18 @@ def _sculpt_daisy_petal(
         p[:, 1] -= 0.0042 * np.exp(-((p[:, 0] / max(0.009, half_width * 0.48)) ** 2)) * np.sin(u * math.pi)
         return p
 
+    petal = ellipsoid(half_width, thickness, 0.5 * length, u_segs=26, v_segs=14, name=name, material="item_petal_white").deform(_strap_shape)
+    # Assign clean longitudinal petal UVs (`u` across width, `v` from base=0 to tip=1) so daisy veins align down every ray!
+    p_loc = petal.positions.astype(np.float64)
+    u_tex = np.clip(0.5 + p_loc[:, 0] / max(1e-5, 2.0 * half_width * 1.15), 0.0, 1.0)
+    v_tex = np.clip(p_loc[:, 2] / max(1e-5, length), 0.0, 1.0)
+    petal.uvs = np.column_stack([u_tex, v_tex]).astype(np.float32)
     return tint_part(
-        ellipsoid(half_width, thickness, 0.5 * length, u_segs=26, v_segs=14, name=name, material="item_petal_white").deform(_strap_shape),
+        petal,
         lambda pos, nrm: np.clip(
-            (0.76 + 0.24 * np.clip(pos[:, 2] / max(1e-5, length), 0.0, 1.0) + 0.06 * nrm[:, 1])[:, None]
-            * np.array([[1.00, 0.99, 0.96]]),
-            0.68,
+            (0.84 + 0.16 * np.clip(pos[:, 2] / max(1e-5, length), 0.0, 1.0) + 0.06 * nrm[:, 1])[:, None]
+            * np.array([[1.00, 0.99, 0.97]]),
+            0.74,
             1.0,
         ),
     )
@@ -779,29 +784,54 @@ def build_flower1a() -> SceneBuilder:
 
 
 def _build_groucho_daisy(name: str, *, animated: bool) -> SceneBuilder:
-    """Shared authentic 1998 Groucho Disguise Daisy (`420:dflower1` animated & `421:flower1` still): 8 long slender strap petals, wayfarer shades, nose & bristly mustache."""
+    """Authentic 1998 Groucho Disguise Daisy (`420:dflower1` flexing-stem head-bobbing anim & `421:flower1` still)."""
     register_item_materials()
     sc = SceneBuilder(name=name)
-    sc.set_node_transform("dflower_stem", translation=(0.0, 0.0, 0.0))
 
-    # Slender wiry S-curved dark-green botanical stem + twin broad-ovate stem leaves clearly below the petals (`daisies_sheet.png`)!
-    stem = curved_tube(
-        [(0.0, 0.00, -0.02), (-0.018, 0.18, -0.015), (+0.018, 0.40, -0.005), (0.0, 0.62, +0.01)],
-        [0.016, 0.014, 0.013, 0.014],
-        samples_per_seg=5,
-        radial_segs=10,
+    # 3-segment hierarchical articulated stem (`bot` -> `mid` -> `top` -> `head` -> `stache`) so the stem flexes organically in S-curves!
+    sc.set_node_transform("dflower_stem_bot", translation=(0.0, 0.0, 0.0))
+    stem_bot = curved_tube(
+        [(0.0, 0.00, -0.020), (-0.014, 0.10, -0.017), (-0.012, 0.22, -0.014)],
+        [0.016, 0.015, 0.014],
+        samples_per_seg=4,
+        radial_segs=12,
         cap_rings=2,
-        name="dflower_stem_mesh",
+        name="dflower_stem_bot_mesh",
         material="item_stem_green",
     )
-    sc.add("dflower_stem", stem)
-    sc.add("dflower_stem", _build_daisy_stem_leaf("dflower_leaf_l", length=0.195, width=0.132, side=-1.0, curve=0.014, pitch=0.22, yaw_mag=1.38, face_tilt=0.80).translate(0.0, 0.135, -0.012))
-    sc.add("dflower_stem", _build_daisy_stem_leaf("dflower_leaf_r", length=0.225, width=0.148, side=+1.0, curve=-0.016, pitch=-0.08, yaw_mag=1.34, face_tilt=0.76).translate(0.0, 0.190, -0.010))
+    sc.add("dflower_stem_bot", stem_bot)
+    sc.add("dflower_stem_bot", _build_daisy_stem_leaf("dflower_leaf_l", length=0.195, width=0.132, side=-1.0, curve=0.014, pitch=0.22, yaw_mag=1.38, face_tilt=0.80).translate(-0.010, 0.135, -0.015))
 
-    # Pivoted flower bloom + Groucho disguise node (`dflower_head` parented cleanly to `dflower_stem`!)
-    head_pivot = (0.0, 0.66, +0.02)
-    sc.set_node_parent("dflower_head", "dflower_stem")
-    sc.set_node_transform("dflower_head", translation=head_pivot, rotation=quat_from_euler_xyz(rx=68.0, degrees=True))
+    sc.set_node_parent("dflower_stem_mid", "dflower_stem_bot")
+    sc.set_node_transform("dflower_stem_mid", translation=(-0.012, 0.21, -0.014))
+    stem_mid = curved_tube(
+        [(0.0, -0.012, 0.0), (+0.022, 0.10, +0.004), (+0.016, 0.22, +0.010)],
+        [0.0145, 0.0135, 0.0135],
+        samples_per_seg=4,
+        radial_segs=12,
+        cap_rings=2,
+        name="dflower_stem_mid_mesh",
+        material="item_stem_green",
+    )
+    sc.add("dflower_stem_mid", stem_mid)
+    sc.add("dflower_stem_mid", _build_daisy_stem_leaf("dflower_leaf_r", length=0.225, width=0.148, side=+1.0, curve=-0.016, pitch=-0.08, yaw_mag=1.34, face_tilt=0.76).translate(+0.008, 0.012, +0.002))
+
+    sc.set_node_parent("dflower_stem_top", "dflower_stem_mid")
+    sc.set_node_transform("dflower_stem_top", translation=(+0.016, 0.21, +0.010))
+    stem_top = curved_tube(
+        [(0.0, -0.012, 0.0), (-0.006, 0.11, +0.008), (-0.004, 0.22, +0.020)],
+        [0.0135, 0.013, 0.014],
+        samples_per_seg=4,
+        radial_segs=12,
+        cap_rings=2,
+        name="dflower_stem_top_mesh",
+        material="item_stem_green",
+    )
+    sc.add("dflower_stem_top", stem_top)
+
+    # Pivoted flower bloom + Groucho disguise node (`dflower_head` parented cleanly to `dflower_stem_top`!)
+    sc.set_node_parent("dflower_head", "dflower_stem_top")
+    sc.set_node_transform("dflower_head", translation=(-0.004, 0.23, +0.022), rotation=quat_from_euler_xyz(rx=68.0, degrees=True))
 
     head_parts: List[MeshPart] = []
     calyx = superellipsoid(0.068, 0.036, 0.068, e1=0.80, e2=0.95, u_segs=20, v_segs=10, name="dflower_calyx", material="item_stem_green").translate(0.0, -0.020, 0.0)
@@ -823,24 +853,39 @@ def _build_groucho_daisy(name: str, *, animated: bool) -> SceneBuilder:
     disc = superellipsoid(0.076, 0.034, 0.076, e1=0.80, e2=0.96, u_segs=22, v_segs=12, name="dflower_center", material="item_pollen_gold").translate(0.0, 0.008, 0.0)
     head_parts.append(disc)
 
-    # Sleek glossy black wayfarer-style Groucho sunglasses (curved dark frames + glossy lenses + crisp diagonal catchlights)!
-    for side, tag in ((+1.0, "l"), (-1.0, "r")):
-        frame = superellipsoid(0.062, 0.016, 0.048, e1=0.45, e2=0.55, u_segs=20, v_segs=10, name=f"groucho_frame_{tag}", material="gear_dark").rotate_xyz(ry=-side * 0.14).translate(side * 0.066, 0.048, -0.032)
-        lens = superellipsoid(0.053, 0.015, 0.040, e1=0.50, e2=0.55, u_segs=18, v_segs=8, name=f"groucho_lens_{tag}", material="eye_pupil").rotate_xyz(ry=-side * 0.14).translate(side * 0.066, 0.056, -0.032)
-        glint = ellipsoid(0.020, 0.005, 0.009, u_segs=10, v_segs=6, name=f"groucho_glint_{tag}", material="eye_catchlight").rotate_xyz(ry=0.48).translate(side * 0.052, 0.070, -0.042)
-        temple = rounded_box(0.012, 0.014, 0.10, bevel=0.004, segs=2, name=f"groucho_arm_{tag}", material="gear_dark").rotate_xyz(rx=0.40, ry=side * 0.18).translate(side * 0.122, 0.026, -0.058)
+    # Sleek glossy black Wayfarer Groucho sunglasses with temple arms routed CLEANLY BETWEEN the upper-side petals (`1:30`/`3:00` & `10:30`/`9:00`)!
+    for side, tag in ((+1.0, "r"), (-1.0, "l")):
+        frame = superellipsoid(0.062, 0.016, 0.048, e1=0.45, e2=0.55, u_segs=20, v_segs=10, name=f"groucho_frame_{tag}", material="gear_dark").rotate_xyz(ry=-side * 0.14).translate(side * 0.066, 0.048, -0.034)
+        lens = superellipsoid(0.053, 0.015, 0.040, e1=0.50, e2=0.55, u_segs=18, v_segs=8, name=f"groucho_lens_{tag}", material="eye_pupil").rotate_xyz(ry=-side * 0.14).translate(side * 0.066, 0.056, -0.034)
+        glint = ellipsoid(0.020, 0.005, 0.009, u_segs=10, v_segs=6, name=f"groucho_glint_{tag}", material="eye_catchlight").rotate_xyz(ry=0.48).translate(side * 0.052, 0.070, -0.044)
+        # Sleek temple arm runs from outer frame hinge BACKWARD (`-Y`) cleanly through the open gap at `+-112.5 deg` between the petals & hooks behind calyx!
+        temple = curved_tube(
+            [
+                (side * 0.118, +0.046, -0.050),
+                (side * 0.140, +0.020, -0.058),
+                (side * 0.142, -0.016, -0.059),
+                (side * 0.120, -0.048, -0.050),
+                (side * 0.088, -0.060, -0.038),
+            ],
+            [0.0085, 0.0080, 0.0075, 0.0070, 0.0055],
+            samples_per_seg=4,
+            radial_segs=10,
+            cap_rings=2,
+            name=f"groucho_arm_{tag}",
+            material="gear_dark",
+        )
         head_parts.extend([frame, lens, glint, temple])
-    bridge = rounded_box(0.050, 0.018, 0.020, bevel=0.005, segs=2, name="groucho_bridge", material="gear_dark").translate(0.0, 0.056, -0.040)
+    bridge = rounded_box(0.050, 0.018, 0.020, bevel=0.005, segs=2, name="groucho_bridge", material="gear_dark").translate(0.0, 0.056, -0.042)
     head_parts.append(bridge)
 
-    # Sculpted bulbous peach-pink Groucho nose with flared nostrils (`daisies_sheet.png`)!
+    # Sculpted bulbous peach-pink Groucho nose with flared nostrils (`strip_groucho.png`)!
     nose = (
         superellipsoid(0.040, 0.054, 0.062, e1=0.74, e2=0.80, u_segs=22, v_segs=14, name="groucho_nose", material="item_groucho_nose")
         .rotate_xyz(rx=0.22)
         .translate(0.0, 0.072, +0.016)
     )
     head_parts.append(nose)
-    for side, tag in ((+1.0, "l"), (-1.0, "r")):
+    for side, tag in ((+1.0, "r"), (-1.0, "l")):
         nostril = ellipsoid(0.020, 0.016, 0.018, u_segs=12, v_segs=8, name=f"groucho_nostril_{tag}", material="item_groucho_nose").translate(side * 0.028, 0.054, +0.040)
         head_parts.append(nostril)
     sc.add("dflower_head", head_parts)
@@ -863,26 +908,68 @@ def _build_groucho_daisy(name: str, *, animated: bool) -> SceneBuilder:
     sc.add("dflower_stache", stache_parts)
 
     if animated:
-        # Authentic 700 ms 7-frame 1998 `420:dflower1` suspicious left-to-right look-around animation!
-        times = [0.00, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70]
-        head_poses = [
-            (70.0, -26.0, +16.0),  # frame 0 (590): looking far LEFT
-            (68.0, -16.0, +10.0),  # frame 1 (594): glancing left
-            (66.0, -7.0, +4.0),    # frame 2 (597): turning toward center
-            (66.0, 0.0, 0.0),      # frame 3 (600): dead CENTER suspicious stare
-            (70.0, +26.0, -16.0),  # frame 4 (601): looking far RIGHT
-            (66.0, +4.0, -3.0),    # frame 5 (600): swinging back center
-            (68.0, -13.0, +8.0),   # frame 6 (597): swinging back left
-            (70.0, -26.0, +16.0),  # seamless loop closure
+        # Authentic 1998 `420:dflower1` playful head-bobbing + flexing S-wave stem animation (`strip_groucho.png` 7 frames!)
+        times = [0.00, 0.12, 0.24, 0.36, 0.48, 0.60, 0.72, 0.84]
+        # Articulated 3-segment stem flexes left -> S-bend dip -> upright -> right nod -> S-bend rebound -> left!
+        bot_rot = [
+            (+2.0, 0.0, +13.0),   # f0: stem arches left
+            (+5.0, 0.0, +9.0),    # f1: bobbing down-left
+            (+9.0, 0.0, +2.0),    # f2: dipping forward through center
+            (+3.0, 0.0, -4.0),    # f3: popping up center-right
+            (+8.0, 0.0, -14.0),   # f4: bold right arch & bob (matches frame 5!)
+            (+6.0, 0.0, -6.0),    # f5: bouncing back toward center
+            (+3.0, 0.0, +5.0),    # f6: swinging back left
+            (+2.0, 0.0, +13.0),   # seamless loop
         ]
-        stem_sways = [+5.0, +3.0, +1.5, 0.0, -5.0, -1.0, +2.5, +5.0]
-        stache_twitches = [+5.0, -3.0, +3.0, 0.0, -5.0, +3.0, -2.0, +5.0]
+        mid_rot = [
+            (+4.0, 0.0, -15.0),   # S-curve counter-bend!
+            (+9.0, 0.0, -8.0),
+            (+13.0, 0.0, +5.0),
+            (+2.0, 0.0, +10.0),
+            (+12.0, 0.0, +15.0),
+            (+8.0, 0.0, +4.0),
+            (+3.0, 0.0, -9.0),
+            (+4.0, 0.0, -15.0),
+        ]
+        top_rot = [
+            (-6.0, 0.0, +12.0),   # whip follow-through on upper stem neck!
+            (+7.0, 0.0, +5.0),
+            (+12.0, 0.0, -5.0),
+            (-5.0, 0.0, -4.0),
+            (+14.0, 0.0, -11.0),
+            (+4.0, 0.0, -2.0),
+            (-4.0, 0.0, +8.0),
+            (-6.0, 0.0, +12.0),
+        ]
+        # Playful bouncy head-bobbing + forward nodding (`rx` dips boldly on bob beats!) + cheekily glancing left/right!
+        head_poses = [
+            (60.0, -18.0, +14.0),  # f0: head up-left, leaning left
+            (74.0, -12.0, +9.0),   # f1: nodding/bobbing down-left
+            (78.0, -4.0, +2.0),    # f2: low center bob!
+            (58.0, +2.0, -2.0),    # f3: bouncing upright center
+            (82.0, +20.0, -16.0),  # f4: big expressive right-nod head bob (`strip_groucho.png` frame 5!)
+            (60.0, +6.0, -4.0),    # f5: rebounding up center
+            (70.0, -10.0, +8.0),   # f6: dipping slightly back left
+            (60.0, -18.0, +14.0),  # loop closure
+        ]
+        stache_twitches = [
+            (-5.0, +5.0, +4.0),
+            (+6.0, -3.0, -2.0),
+            (+8.0, +2.0, +3.0),
+            (-6.0, 0.0, 0.0),
+            (+9.0, -6.0, -5.0),
+            (-5.0, +3.0, +2.0),
+            (+3.0, -2.0, -2.0),
+            (-5.0, +5.0, +4.0),
+        ]
         sc.add_animation(
             "Idle",
             [
+                AnimationChannel("dflower_stem_bot", "rotation", times, [quat_from_euler_xyz(rx=rx, ry=ry, rz=rz, degrees=True) for rx, ry, rz in bot_rot]),
+                AnimationChannel("dflower_stem_mid", "rotation", times, [quat_from_euler_xyz(rx=rx, ry=ry, rz=rz, degrees=True) for rx, ry, rz in mid_rot]),
+                AnimationChannel("dflower_stem_top", "rotation", times, [quat_from_euler_xyz(rx=rx, ry=ry, rz=rz, degrees=True) for rx, ry, rz in top_rot]),
                 AnimationChannel("dflower_head", "rotation", times, [quat_from_euler_xyz(rx=rx, ry=ry, rz=rz, degrees=True) for rx, ry, rz in head_poses]),
-                AnimationChannel("dflower_stem", "rotation", times, [quat_from_euler_xyz(rz=a, degrees=True) for a in stem_sways]),
-                AnimationChannel("dflower_stache", "rotation", times, [quat_from_euler_xyz(ry=a, rz=a * 0.6, degrees=True) for a in stache_twitches]),
+                AnimationChannel("dflower_stache", "rotation", times, [quat_from_euler_xyz(rx=rx, ry=ry, rz=rz, degrees=True) for rx, ry, rz in stache_twitches]),
             ],
             replace=True,
         )

@@ -969,12 +969,10 @@ def _sculpt_star_petal(name: str, *, length: float, width: float, material: str,
         env = (math.sin(u * math.pi) ** 0.52) * (1.08 - 0.20 * u)
         return hw * max(0.02, env)
 
-    def _petal_tint(_pos: np.ndarray, nrm: np.ndarray, u: np.ndarray, s: np.ndarray, _top: np.ndarray) -> np.ndarray:
-        throat = np.exp(-((u / 0.24) ** 2.0))[:, None]
-        stripe = (0.06 * np.cos(s * math.pi * 3.0) * (1.0 - 0.5 * u))[:, None]
-        base = np.array([[0.98, 0.88, 0.94]], dtype=np.float64) * (0.86 + 0.14 * u[:, None] + 0.06 * nrm[:, 1:2]) + stripe
-        deep = np.array([[0.64, 0.28, 0.46]], dtype=np.float64)
-        return np.clip(base * (1.0 - 0.55 * throat) + deep * (0.55 * throat), 0.32, 1.0)
+    def _petal_tint(_pos: np.ndarray, nrm: np.ndarray, u: np.ndarray, _s: np.ndarray, _top: np.ndarray) -> np.ndarray:
+        # Let crisp 256px longitudinal magenta/rose petal-stripe texture lead; apply gentle botanical lighting lift!
+        lit = np.clip(0.88 + 0.12 * u + 0.08 * nrm[:, 1], 0.78, 1.0)[:, None]
+        return np.repeat(lit, 3, axis=1)
 
     return _build_swept_leaf_sheet(
         name,
@@ -1067,14 +1065,10 @@ def _sculpt_lily_petal(name: str, *, length: float, width: float, material: str)
             return 0.0008
         return hw * max(0.015, (u ** 0.52) * ((1.0 - u) ** 0.96) * 2.48)
 
-    def _lily_tint(pos: np.ndarray, nrm: np.ndarray, u: np.ndarray, s: np.ndarray, _top: np.ndarray) -> np.ndarray:
-        streaks = (np.maximum(0.0, np.cos((s * 5.2 + 0.6 * np.sin(u * 12.0)) * math.pi)) ** 4) * (1.0 - 0.25 * u)
-        spots = ((np.sin(pos[:, 0] * 54.0) * np.cos(pos[:, 2] * 52.0)) > 0.42).astype(np.float64) * (u > 0.14) * (u < 0.86)
-        throat = np.exp(-((u / 0.24) ** 2.0))
-        base = np.array([[0.96, 0.90, 1.00]], dtype=np.float64) * (0.90 + 0.10 * nrm[:, 1:2])
-        dark = np.array([[0.52, 0.30, 0.80]], dtype=np.float64)
-        w = np.clip(0.32 * streaks + 0.38 * spots + 0.42 * throat, 0.0, 0.74)[:, None]
-        return np.clip(base * (1.0 - w) + dark * w, 0.26, 1.0)
+    def _lily_tint(_pos: np.ndarray, nrm: np.ndarray, u: np.ndarray, _s: np.ndarray, _top: np.ndarray) -> np.ndarray:
+        # Let crisp 256px wavy zebra/tiger-lily petal stripe texture shine with gentle tip brightness!
+        lit = np.clip(0.86 + 0.14 * u + 0.08 * nrm[:, 1], 0.76, 1.0)[:, None]
+        return np.repeat(lit, 3, axis=1)
 
     return _build_swept_leaf_sheet(
         name,
@@ -1168,39 +1162,81 @@ def build_flower3b() -> SceneBuilder:
     return _finalize_item(sc, target_span=0.94)
 
 
+def _sculpt_cartoon_tongue(name: str, *, length: float = 0.225, width: float = 0.142) -> MeshPart:
+    """Clean, smooth glossy red-orange cartoon tongue hanging playfully down with central groove (`416:flower3c`)."""
+    hw = width * 0.5
+
+    def _w(u: float) -> float:
+        if u <= 0.0 or u >= 1.0:
+            return 0.001
+        # Wide fleshy base expanding smoothly into a plump rounded U-paddle tip (classic cartoon tongue!)
+        base = 0.68 + 0.36 * math.sin(min(1.0, u / 0.52) * math.pi * 0.5)
+        tip = math.sqrt(max(0.0, 1.0 - max(0.0, (u - 0.66) / 0.34) ** 2.0))
+        return hw * max(0.02, base * tip)
+
+    def _tongue_col(_pos: np.ndarray, nrm: np.ndarray, u: np.ndarray, s: np.ndarray, top: np.ndarray) -> np.ndarray:
+        # Crisp deeper crimson-coral median crease + glossy sunlit coral-orange outer cheeks + bright wet tip highlight!
+        groove = np.exp(-((s / 0.11) ** 2.0)) * np.clip(1.0 - (u / 0.86) ** 2.2, 0.0, 1.0)
+        tip_glow = np.exp(-(((u - 0.82) / 0.18) ** 2.0)) * (1.0 - 0.4 * np.abs(s))
+        root_sh = 0.66 + 0.34 * np.clip(u / 0.24, 0.0, 1.0)
+        lit = np.clip(0.84 + 0.16 * nrm[:, 1], 0.66, 1.0) * root_sh * np.where(top >= -0.05, 1.0, 0.72)
+        base = np.array([[1.00, 0.34, 0.10]], dtype=np.float64) * lit[:, None]
+        dark = np.array([[0.50, 0.06, 0.02]], dtype=np.float64) * lit[:, None]
+        hi = np.array([[1.00, 0.58, 0.26]], dtype=np.float64)
+        c = base * (1.0 - 0.72 * groove[:, None]) + dark * (0.72 * groove[:, None])
+        return np.clip(c * (1.0 - 0.28 * tip_glow[:, None]) + hi * (0.28 * tip_glow[:, None]), 0.10, 1.0)
+
+    part = _build_swept_leaf_sheet(
+        name,
+        length=length,
+        w_left_fn=_w,
+        w_right_fn=_w,
+        spine_y_fn=lambda u: 0.018 * math.sin(u * math.pi * 0.72) - 0.018 * (u ** 2.2),
+        thickness=0.018,
+        v_cup=0.008,
+        ripple_amp=0.0,
+        n_u=32,
+        n_half=12,
+        material="item_tongue_pink",
+        color_fn=_tongue_col,
+    )
+    # Sculpt a crisp smooth median tongue cleft cleanly along the upper face!
+    p = part.positions.astype(np.float64)
+    u_along = np.clip(p[:, 2] / max(1e-5, length), 0.0, 1.0)
+    crease = 0.0145 * np.exp(-((p[:, 0] / 0.014) ** 2.0)) * np.sin(u_along * math.pi * 0.88) * (u_along < 0.88)
+    p[:, 1] -= np.where(part.normals[:, 1] > 0.0, crease, 0.0)
+    part.positions = p.astype(np.float32)
+    part.normals = recompute_smooth_normals(part.positions, part.indices)
+    return part
+
+
 def build_flower3c() -> SceneBuilder:
-    """Iconic 1998 goofy googly-eyed lavender flower sticking out its pink tongue (`416:flower3c`)."""
+    """Iconic 1998 goofy googly-eyed tiger-striped lavender flower sticking out its smooth coral-red tongue (`416:flower3c`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_flower3c")
-    hx, hy, hz = _build_purple_lily_base(sc, petal_mat="item_petal_lilac", tilt_deg=48.0, with_stamens=False)
+    hx, hy, hz = _build_purple_lily_base(sc, petal_mat="item_petal_googly", tilt_deg=48.0, with_stamens=False)
     # Crisp bright-green broad pointed leaf angling UP-RIGHT + tiny left stipule (`416:flower3c`)!
     sc.add("flower", _build_daisy_stem_leaf("lily3c_leaf_r", length=0.235, width=0.148, side=+1.0, curve=-0.014, pitch=-0.42, yaw_mag=1.34, face_tilt=0.82).translate(0.0, 0.115, -0.015))
     sc.add("flower", _build_daisy_stem_leaf("lily3c_leaf_l", length=0.105, width=0.072, side=-1.0, curve=0.008, pitch=0.14, yaw_mag=1.36, face_tilt=0.76).translate(0.0, 0.125, -0.018))
 
     face_parts: List[MeshPart] = []
-    # Two oversized bulging cartoony white googly eyes perched right on the bloom center (`416:flower3c`)!
-    for side, tag, py_off in ((+1.0, "l", 0.008), (-1.0, "r", 0.000)):
-        eye_w = ellipsoid(0.044, 0.046, 0.054, u_segs=20, v_segs=14, name=f"googly_eye_{tag}", material="eye_white").translate(side * 0.042, 0.056 + py_off, -0.022)
-        pupil = sphere(0.022, u_segs=14, v_segs=10, name=f"googly_pupil_{tag}", material="eye_pupil").translate(side * 0.036, 0.092 + py_off, -0.012)
-        glint = sphere(0.008, u_segs=10, v_segs=8, name=f"googly_glint_{tag}", material="eye_catchlight").translate(side * 0.044, 0.110 + py_off, -0.020)
-        face_parts.extend([eye_w, pupil, glint])
-
-    # Dark open laughing mouth pocket + big cheeky bright red-pink drooping tongue sticking out (`416:flower3c`)!
-    mouth = ellipsoid(0.062, 0.022, 0.046, u_segs=16, v_segs=10, name="googly_mouth", material="item_dark_stitch").translate(0.0, 0.026, +0.046)
-
-    def _sculpt_tongue(pos: np.ndarray) -> np.ndarray:
-        p = pos.copy()
-        u = np.clip((p[:, 2] + 0.065) / 0.130, 0.0, 1.0)
-        p[:, 1] -= 0.035 * (u ** 1.8)  # droop playfully downward
-        p[:, 1] -= 0.009 * np.exp(-((p[:, 0] / 0.016) ** 2)) * np.sin(u * math.pi)  # central tongue groove!
-        return p
-
-    tongue = (
-        superellipsoid(0.058, 0.024, 0.072, e1=0.72, e2=0.86, u_segs=24, v_segs=14, name="googly_tongue", material="item_tongue_pink")
-        .deform(_sculpt_tongue)
-        .rotate_xyz(rx=0.22)
-        .translate(0.0, 0.046, +0.088)
+    # Authentic asymmetrical cartoon googly eyes matching `416:flower3c`: smaller left eye (-X), larger bulging right eye (+X) + flush lilac lid!
+    eye_specs = (
+        ("l", -0.044, 0.056, -0.030, 0.036, 0.040, 0.044, 0.017, -0.040, 0.088, -0.022),
+        ("r", +0.038, 0.062, -0.018, 0.052, 0.054, 0.062, 0.025, +0.036, 0.106, -0.010),
     )
+    for tag, ex, ey, ez, rx, ry, rz, pr, px, py, pz in eye_specs:
+        eye_w = ellipsoid(rx, ry, rz, u_segs=22, v_segs=14, name=f"googly_eye_{tag}", material="eye_white").translate(ex, ey, ez)
+        pupil = sphere(pr, u_segs=16, v_segs=10, name=f"googly_pupil_{tag}", material="eye_pupil").translate(px, py, pz)
+        glint = sphere(pr * 0.36, u_segs=10, v_segs=8, name=f"googly_glint_{tag}", material="eye_catchlight").translate(px - pr * 0.35, py + pr * 0.78, pz - pr * 0.35)
+        face_parts.extend([eye_w, pupil, glint])
+    # Flush sculpted lilac upper eyelid hood tucked seamlessly onto top of the bigger right eye (zero floating hoop!)
+    brow = ellipsoid(0.054, 0.042, 0.042, u_segs=18, v_segs=10, name="googly_brow", material="item_petal_violet").translate(+0.038, 0.062, -0.046)
+    face_parts.append(brow)
+
+    # Recessed dark smile crease tucked right beneath the eyes + big smooth glossy coral-red paddle tongue hanging down!
+    mouth = ellipsoid(0.064, 0.018, 0.032, u_segs=16, v_segs=10, name="googly_mouth", material="item_dark_stitch").translate(0.0, 0.026, +0.032)
+    tongue = _sculpt_cartoon_tongue("googly_tongue", length=0.220, width=0.140).rotate_xyz(rx=-0.06, ry=-0.08).translate(-0.008, 0.042, +0.022)
     face_parts.extend([mouth, tongue])
 
     for p in face_parts:
