@@ -42,6 +42,7 @@
 #include "ants_ai/bot.hpp"
 #include "ants_ai/brawl_task.hpp"
 #include "ants_ai/field_task.hpp"
+#include "ants_ai/fight_plan.hpp"
 #include "ants_ai/free_thief_task.hpp"
 #include "ants_ai/gate_task.hpp"
 #include "ants_ai/heal_task.hpp"
@@ -54,9 +55,11 @@
 #include "ants_ai/miner_flight_task.hpp"
 #include "ants_ai/opportunity_task.hpp"
 #include "ants_ai/plug_task.hpp"
+#include "ants_ai/power_stand.hpp"
 #include "ants_ai/refusal_memory.hpp"
 #include "ants_ai/thief_guard.hpp"
 #include "ants_ai/standard_tasks.hpp"
+#include "ants_ai/strip_task.hpp"
 #include "ants_ai/tactics.hpp"
 #include "ants_ai/tasks.hpp"
 
@@ -108,7 +111,10 @@ private:
           free_thief_(kFreeThief),
           head_on_(kHeadOn, tactics_),
           contact_(kContact, tactics_),
-          idle_jobs_(kIdleJobs, tactics_) {
+          idle_jobs_(kIdleJobs, tactics_),
+          power_stand_(kPowerStand, tactics_),
+          fight_plan_(kFightPlan, tactics_),
+          strip_(kStrip, tactics_) {
         thief_guard_.attach(&walls_);
         island_.attach(&harvest_);
         expedition_.attach(&island_);
@@ -165,6 +171,9 @@ public:
     const BridgeHeadOnTask& head_on() const noexcept { return head_on_; }
     const ContactTask& contact() const noexcept { return contact_; }
     const IdleJobsTask& idle_jobs() const noexcept { return idle_jobs_; }
+    const PowerStandTask& power_stand() const noexcept { return power_stand_; }
+    const FightPlanTask& fight_plan() const noexcept { return fight_plan_; }
+    const StripTask& strip() const noexcept { return strip_; }
     FreeThiefTask& free_thief_for_labs() noexcept { return free_thief_; }
     /// Whether the bot plays the gate goals on this map (Medium and Hard, a walled map that the island play does not own; known after the first look)
     bool gate_map() const noexcept { return tactics_.gate_map; }
@@ -221,6 +230,9 @@ public:
     static constexpr TaskId kHeadOn = 30;
     static constexpr TaskId kContact = 31;
     static constexpr TaskId kIdleJobs = 32;
+    static constexpr TaskId kPowerStand = 33;
+    static constexpr TaskId kFightPlan = 34;
+    static constexpr TaskId kStrip = 35;
     static constexpr TaskId kHeal = kHealTaskId;                  // (23: tasks.hpp names it for the tasks that leave a carrier to it)
 
 private:
@@ -247,6 +259,7 @@ private:
         p.walker_bridge = plan.island_walker_bridge;
         p.bridge_ants = plan.island_bridge_ants;
         p.guard = plan.island_guard;
+        p.hold_release = plan.bridge_loaded ? plan.bridge_hold_release : 0u;
         // the margins grow with the latency of the level (Easy looks every 100 ticks and reacts after 60): its bridges are given up earlier and its ants kept away from them longer
         switch (plan.level) {
             case Level::Easy:
@@ -382,6 +395,9 @@ private:
     BridgeHeadOnTask head_on_;
     ContactTask contact_;
     IdleJobsTask idle_jobs_;
+    PowerStandTask power_stand_;
+    FightPlanTask fight_plan_;
+    StripTask strip_;
     RefusalMemory refusals_;
     void note_repeat(const sim::Command& command, uint64_t tick);
     void update_progress(const BotView& view);

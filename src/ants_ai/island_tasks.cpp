@@ -1016,6 +1016,10 @@ void IslandTask::guard(TaskContext& c) {
             } else if (!carrying && still && (gd.pile == kNoPile || !shut(gd.pile)) && hot_dist(a.tile) > radius) {
                 c.ledger.release(a.id, id());                                                      // the pile it worked at is gone (or open again), and no bridge that goes is near: the economy has it again
                 guarded_.erase(g);
+            } else if (params_.hold_release != 0 && carrying && still && hot_dist(a.tile) > radius + 1 && now >= gd.since + params_.hold_release) {
+                c.ledger.release(a.id, id());                                                      // held long enough with a load and no way home: the bridge planner (and the engine's walk home, once a bridge stands) have it
+                guarded_.erase(g);
+                ++loads_released_;
             } else if (hot_dist(a.tile) <= radius + 1 && a.takes_orders() && now >= gd.ordered + latency_ + 40u) {
                 const sim::TileCoord park = park_of(a.tile);                                       // too near the end of a bridge that goes: it blocks the way off it
                 if (park.x >= 0) {

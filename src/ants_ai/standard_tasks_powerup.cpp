@@ -136,6 +136,7 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
     for (const PowerUpView& p : v.powerups()) {
         if (p.kind != kind || p.standing_ant != 0 || tile_blacklisted(p.tile, now)) continue;
         if (std::find(tactics_.plug_tiles.begin(), tactics_.plug_tiles.end(), p.tile) != tactics_.plug_tiles.end()) continue;        // (the plug task has an ant on its way to it)
+        if (std::find(tactics_.stand_tiles.begin(), tactics_.stand_tiles.end(), p.tile) != tactics_.stand_tiles.end()) continue;      // (so has the stand task: an ant stands on it or walks to stand)
         if (kind == sim::AntType::Thief && is_link_flower(p.tile) && !(tactics_.plan.island_endraid && tactics_.endraid)) continue;       // (a Thief of the strip: nothing uses it there, except the Thief of the endgame, which a chain takes to the hills)
         const int side = power_up_side(c.map, p.tile, present);
         const bool ally_side = v.ally() < sim::MAX_PLAYERS && side == v.ally();
