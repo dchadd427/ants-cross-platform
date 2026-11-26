@@ -31,6 +31,7 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - **A better Play of the game.** It is now one player's best 10 seconds: 10 points a kill, more for knocking a player out, saving your hill from a Thief, stopping a Thief with loot and wiping out a whole group. The card says it ("Gory: triple kill in 8 seconds", "saved the hill").
 - **Fill a box in the Map Maker.** A switch under the Objects, Food and Ants tools: drag a box and it fills with every cell, every other cell, every Nth row or column or a random pattern, as one Undo step. Water, rock and things in the way are skipped and counted; one fill puts at most 250 ants. An AI that you connect has it too (`fill_area`).
+- **The Games list fills itself with Open lobby cards.** As many as the window has room for with nothing to scroll (more on a tall window, none when real games fill the list), and the dashed plus on a card hosts a game, the same as Host here.
 
 **Fixes:**
 - A connected AI's `put_ants` puts the ant type that it names, and `get_region` names the types right (they were mixed up: asking for a combat ant gave a bomber, and a swimmer gave a combat ant).

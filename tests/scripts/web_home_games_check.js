@@ -810,44 +810,76 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// 12. The empty cards ("lobby slots"): the list is padded with dashed cards up to two rows of its grid (one row while matches run), real rooms take the first places
+// 12. The empty cards ("lobby slots"): the list is padded with dashed cards, as many as leave the body of the list nothing to scroll (the rooms, the locked cards and the matches take their room first); the plus is Host here
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
+    const { SIZES, GAP, DEFAULT_SPEC } = R;
     const OPEN = (n) => Array.from({ length: n }, (_, i) => row('r' + String(i).padStart(5, '0'), 'Host' + i, { age: 100 - i }));
     const kinds = (env) => first(popOf(env), 'glist').children.map((li) => classes(li).indexOf('gslot') !== -1 ? 'slot' : classes(li).indexOf('gpriv') !== -1 ? 'locked' : 'room');
     const count = (list, kind) => list.filter((k) => k === kind).length;
-    // a docked list in a window of `width` px (the fake has no layout, so the style's own rule says the columns: up to 700 px one, under 1250 two, else three), with `rooms` open rooms and `live` matches in progress
-    async function docked(width, rooms, live, extra) {
-        const site = fakeSite();
+    const liveBody = (n) => ({ live: Array.from({ length: n }, (_, i) => ({ id: 'TINY-20261119-12000' + i + 'Z', map: 'TINY.LVL', mode: 'highest-score', started: 1, turns: 400, seconds: 20, players: ['Green (Ann)', 'Red (Bob)'] })), count: n });
+    const bodyOf = (env) => first(popOf(env), 'gpbody');
+    const scrolls = (env) => bodyOf(env).scrollHeight > bodyOf(env).clientHeight;
+    const fireResize = (env) => (env.win.listeners.resize || []).forEach((fn) => fn());
+    // a docked list in a window of `size` (SIZES: its width and height, the body's height and a card's, as the real browser measured them there), with `rooms` open rooms and `live` matches in progress; lay and options change the page's
+    async function docked(size, rooms, live, extra, lay, options) {
+        const s = SIZES[size], site = fakeSite();
         site.body = listOf(OPEN(rooms).concat(extra || []));
-        if (live) { site.live.reject = false; site.live.body = { live: Array.from({ length: live }, (_, i) => ({ id: 'TINY-20261119-12000' + i + 'Z', map: 'TINY.LVL', mode: 'highest-score', started: 1, turns: 400, seconds: 20, players: ['Green (Ann)', 'Red (Bob)'] })), count: live }; }
-        const env = await page({ site, options: { popover: false, innerWidth: width } });
+        if (live) { site.live.reject = false; site.live.body = liveBody(live); }
+        const env = await page({ site, layout: Object.assign({ body: s.body, card: s.card }, lay || {}), options: Object.assign({ popover: false, innerWidth: s.w, innerHeight: s.h }, options || {}) });
         await wait(env, 6000);
         env.site = site;
         return env;
     }
-    same('a list that is on, with no room at all: the empty cards fill two rows of the grid: 4 at 1000 px (two columns), 6 at 1366 px (three), 3 on a phone (one column)',
-        [count(kinds(await docked(1000, 0, 0)), 'slot'), count(kinds(await docked(1366, 0, 0)), 'slot'), count(kinds(await docked(390, 0, 0)), 'slot')], [4, 6, 3]);
-    same('real rooms take the first places and the empty cards fill what is left: two rooms at 1000 px leave 2, at 1366 px 4, on a phone 1', [count(kinds(await docked(1000, 2, 0)), 'slot'), count(kinds(await docked(1366, 2, 0)), 'slot'), count(kinds(await docked(390, 2, 0)), 'slot')], [2, 4, 1]);
-    same('the rooms never leave fewer than none: as many rooms as places, or more (they are never capped or hidden: the list goes on as it did), leave no empty card', [kinds(await docked(1000, 4, 0)).join(), count(kinds(await docked(1000, 9, 0)), 'slot'), count(kinds(await docked(1000, 9, 0)), 'room'), count(kinds(await docked(390, 3, 0)), 'slot')],
-        ['room,room,room,room', 0, 9, 0]);
-    same('while matches are in progress the empty cards fill one row only: 2 at 1000 px, 3 at 1366 px, 2 on a phone (with no room)', [count(kinds(await docked(1000, 0, 2)), 'slot'), count(kinds(await docked(1366, 0, 2)), 'slot'), count(kinds(await docked(390, 0, 2)), 'slot')], [2, 3, 2]);
-    same('... a room takes one of them, and rooms that fill the row leave none', [count(kinds(await docked(1000, 1, 2)), 'slot'), count(kinds(await docked(1366, 2, 1)), 'slot'), count(kinds(await docked(390, 2, 1)), 'slot'), count(kinds(await docked(1000, 2, 1)), 'slot')], [1, 1, 0, 0]);
-    {   // the order: the rooms first (as they were), then the empty cards, then the locked cards (which take no place and are no card to press), then the matches in their own box
-        const env = await docked(1000, 1, 1, [locked('Maple'), locked('Quill', { map: 'SMALL.LVL' })]);
-        same('the rooms, the empty cards, the locked cards; the match box follows the list', [kinds(env).join(), first(popOf(env), 'gpbody').children.indexOf(first(popOf(env), 'glist')) < first(popOf(env), 'gpbody').children.indexOf(first(popOf(env), 'glivebox'))], ['room,slot,locked,locked', true]);
+    // what the body holds, worked out from the sizes alone: whole rows of the grid's columns that fit in what the matches' box leaves of it, the rooms among them (none when the rooms already fill it, or overflow it)
+    const rowsIn = (body, card, live) => Math.floor((body - (live ? DEFAULT_SPEC.head + live * DEFAULT_SPEC.liveCard + (live - 1) * GAP : 0) + GAP) / (card + GAP));
+    const want = (size, rooms, live) => { const s = SIZES[size]; return Math.max(0, rowsIn(s.body, s.card, live) * R.columnsOf(s.w, s.h) - rooms); };
+    const NAMES = ['phone', 'd1000', 'd1366'];
+    const TABLE = [[0, 0, [5, 6, 9]], [2, 0, [3, 4, 7]], [0, 1, [3, 2, 3]], [2, 1, [1, 0, 1]], [0, 2, [2, 0, 0]]];       // (rooms, matches in progress, then the cards at 390 x 844, 1000 x 800 and 1366 x 768)
+    for (const [rooms, live, cards] of TABLE) {
+        const got = [];
+        for (const size of NAMES) {
+            const env = await docked(size, rooms, live);
+            got.push(count(kinds(env), 'slot'));
+            check('' + size + ' with ' + rooms + ' rooms and ' + live + ' matches: the empty cards are the rows that fit times the grid\'s columns, less the rooms (' + want(size, rooms, live) + '), and they cause no scroll', got[got.length - 1] === want(size, rooms, live) && !scrolls(env), got.join());
+        }
+        same('a list that is on with ' + rooms + ' rooms and ' + live + ' matches in progress: the empty cards fill what is free, at 390 x 844 (one column), 1000 x 800 (two) and 1366 x 768 (three)', got, cards);
+    }
+    {   // rooms that fill the body, or overflow it: no empty card, and the scroll is the rooms' own
+        const full = await docked('d1000', 9, 0), exact = await docked('d1000', 6, 0), small = await docked('phone', 5, 0);
+        same('rooms that overflow the body leave no empty card, and the list scrolls for them (they are never capped or hidden)', [count(kinds(full), 'slot'), count(kinds(full), 'room'), scrolls(full)], [0, 9, true]);
+        same('rooms that fill the body exactly leave none, and nothing scrolls', [kinds(exact).join(), kinds(small).join(), scrolls(exact), scrolls(small)], ['room,room,room,room,room,room', 'room,room,room,room,room', false, false]);
+        const live = await docked('d1000', 0, 3);
+        same('matches that fill the body leave no empty card either: the list is the matches, and they scroll for themselves', [count(kinds(live), 'slot'), find(popOf(live), 'glive').length, scrolls(live)], [0, 3, true]);
+    }
+    {   // the body is exactly as high as its rows, or one pixel less
+        const rows = (body) => docked('d1000', 0, 0, null, { body }).then((env) => count(kinds(env), 'slot'));
+        same('a body as high as 3 rows holds 3 rows of two (6); one pixel less holds 2 rows (4); a body that is lower than a card holds none', [await rows(3 * 94 + 2 * GAP), await rows(3 * 94 + 2 * GAP - 1), await rows(94 - 1)], [6, 4, 0]);
+    }
+    {   // the cards that stay are the same nodes, and what is counted again with nothing changed paints nothing
+        const env = await docked('d1000', 0, 0);
+        const before = first(popOf(env), 'glist').children.slice();
+        await wait(env, 12000);
+        fireResize(env);
+        check('a look at the list that finds the same answer (and a window that was changed to its own size) leaves every card where it was: the same nodes, in the same order', first(popOf(env), 'glist').children.length === before.length && first(popOf(env), 'glist').children.every((li, i) => li === before[i]));
+    }
+    {   // the order: the rooms first (as they were), then the empty cards, then the locked cards (which are no card to press), then the matches in their own box
+        const env = await docked('d1366', 1, 1, [locked('Maple'), locked('Quill', { map: 'SMALL.LVL' })], { body: 600 });
+        same('the rooms, the empty cards (four rows of three, less the three cards that are real), the locked cards; the match box follows the list', [kinds(env).join(), first(popOf(env), 'gpbody').children.indexOf(first(popOf(env), 'glist')) < first(popOf(env), 'gpbody').children.indexOf(first(popOf(env), 'glivebox'))], ['room' + ',slot'.repeat(9) + ',locked,locked', true]);
         same('the heading and the count beside Games say the rooms and the matches only, never the empty cards', [textOf(first(popOf(env), 'gpcount')), pillOf(env).textContent], ['1 open, 2 invite only, 1 in progress', '2']);
+        const roomy = await docked('d1000', 1, 0, [locked('Maple'), locked('Quill', { map: 'SMALL.LVL' })]);
+        same('the locked cards are real content: they take their room before the empty cards, which stand between the rooms and them (a room and two locked cards: three of the six places)', [kinds(roomy).join(), scrolls(roomy)], ['room,slot,slot,slot,locked,locked', false]);
     }
     {   // a card: no name, no count, no filled dot (nobody waits), one button; hidden from a screen reader but for the button, which says what it does
-        const env = await docked(1000, 0, 0);
+        const env = await docked('d1000', 0, 0);
         const li = slotsOf(env)[0];
         same('an empty card says "Open lobby" and "Empty", has four open seats and no filled one, and the one button Host here, whose name says what it does', [textOf(first(li, 'gname')), textOf(first(li, 'gsay')), find(li, 'gdot').map((d) => d.className.replace(/ c\d$/, '')), find(li, 'btn').map(textOf), joinOf(li).getAttribute('aria-label'), first(li, 'gdots').getAttribute('aria-hidden'), first(li, 'gmap').getAttribute('aria-hidden')],
             [TEXT.slotName, TEXT.slotSay, ['gdot open', 'gdot open', 'gdot open', 'gdot open'], [TEXT.slotHost], TEXT.slotAria, 'true', 'true']);
         check('... it has no code, no count of seats and no name of a host (it is not a room)', joinOf(li).getAttribute('data-code') === null && find(li, 'gcount').length === 0 && find(li, 'gname').length === 1);
         check('the cards that are empty are not counted anywhere: "none waiting", and the count beside Games is 0', textOf(first(popOf(env), 'gpcount')) === 'none waiting' && pillOf(env).textContent === '0');
     }
-    {   // a press asks first (Quick host's question), changes nothing until it is answered, and Escape gives the focus back to the card
-        const env = await docked(1000, 0, 0);
+    {   // a press asks first (Quick host's question), changes nothing until it is answered, and Escape gives the focus back to the card that was pressed
+        const env = await docked('d1000', 0, 0);
         tap(joinOf(slotsOf(env)[1]));
         const asked = hostCard(env);
         same('a press on Host here asks "Host a game": Public room, Invite only, Cancel; no room is made yet', [!!asked, asked ? find(asked, 'btn').map(textOf) : [], env.sockets.length], [true, [TEXT.hostPublic, TEXT.hostPrivate, TEXT.cancel], 0]);
@@ -856,8 +888,28 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
         tap(joinOf(slotsOf(env)[0]));
         check('... Public room makes the room (the Room shows), as Quick host does', chooseHost(env, TEXT.hostPublic) && env.sockets.length === 1 && env.screen() === 'room');
     }
+    {   // the plus is the same press as Host here, for a pointer: the same question, the same answers, the same way back; and it is no second control
+        const env = await docked('d1000', 0, 0);
+        const li = slotsOf(env)[2], plus = first(li, 'gmap');
+        check('the plus is no control of its own: hidden from a screen reader, no button, link, role or focus stop in it, and the card has the one button, Host here', plus.getAttribute('aria-hidden') === 'true' && plus.getAttribute('tabindex') === null && plus.getAttribute('role') === null
+            && plus.findAll((e) => ['button', 'a', 'input'].indexOf(e.tagName) !== -1).length === 0 && li.findAll((e) => e.tagName === 'button' || e.getAttribute('tabindex') !== null).length === 1);
+        plus.click();
+        const asked = hostCard(env);
+        same('a press on the plus asks the same question as Host here: Public room, Invite only, Cancel; no room is made yet', [!!asked, asked ? find(asked, 'btn').map(textOf) : [], env.sockets.length], [true, [TEXT.hostPublic, TEXT.hostPrivate, TEXT.cancel], 0]);
+        pressEscape(env);
+        check('... Escape closes it, nothing is made, and the focus is on the Host here button of the card whose plus was pressed', hostCard(env) === null && env.sockets.length === 0 && env.focused === joinOf(slotsOf(env)[2]));
+        first(slotsOf(env)[0], 'gmap').click();
+        check('... Public room makes the room (the Room shows), as Quick host does', chooseHost(env, TEXT.hostPublic) && env.sockets.length === 1 && env.screen() === 'room');
+        const another = await docked('d1000', 0, 0);
+        myRoom(another, ['Maya'], PRIVATE);
+        another.toggleRoom();
+        await flush();
+        const before = another.sockets.length;
+        first(slotsOf(another)[0], 'gmap').click();
+        check('while the page holds a room a press on the plus shows the Room and asks nothing, as Host here does', another.screen() === 'room' && hostCard(another) === null && another.sockets.length === before);
+    }
     {   // while the page holds a room an empty card does what Quick host does then: it shows the Room, and asks and opens nothing new
-        const env = await docked(1000, 0, 0);
+        const env = await docked('d1000', 0, 0);
         myRoom(env, ['Maya'], PRIVATE);
         env.toggleRoom();
         await flush();
@@ -867,30 +919,42 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     }
     {   // the page's own public room (the row tagged Yours) is a room of the list and takes a place like any other
         const site = fakeSite();
-        const env = await page({ site, options: { popover: false, innerWidth: 1000 } });
+        const env = await page({ site, layout: { body: SIZES.d1000.body }, options: { popover: false, innerWidth: 1000 } });
         const sock = myRoom(env, ['Maya'], PUBLIC);
         site.body = listOf([row(helloRoom(sock.sent[0]), 'Maya', { people: 1, free: 3 })]);
         env.toggleRoom();
         await flush();
         await wait(env, 30000);
-        same('the page\'s own public room (Yours) takes a place of the empty cards: it and three empty cards', [kinds(env).join(), find(popOf(env), 'gyours').length], ['room,slot,slot,slot', 1]);
+        same('the page\'s own public room (Yours) takes a place of the empty cards: it and five empty cards', [kinds(env).join(), find(popOf(env), 'gyours').length], ['room,slot,slot,slot,slot,slot', 1]);
     }
-    {   // a room appears: it takes a place; a match starts: the room goes from the list and the empty cards fall to one row
-        const env = await docked(1000, 0, 0);
+    {   // a room appears: it takes a place; a match starts: the room goes from the list and the empty cards leave the matches their room; the match is over: they fill the body again
+        const env = await docked('d1000', 0, 0);
         const site = env.site;
-        check('(four empty cards to begin with)', count(kinds(env), 'slot') === 4);
+        check('(six empty cards to begin with)', count(kinds(env), 'slot') === 6);
         site.body = listOf(OPEN(1));
         await wait(env, 6000);
-        same('a room is listed: it is first and one card fewer is empty', [kinds(env).join()], ['room,slot,slot,slot']);
+        same('a room is listed: it is first and one card fewer is empty', [kinds(env).join()], ['room,slot,slot,slot,slot,slot']);
         site.body = listOf([]);
-        site.live.reject = false; site.live.body = { live: [{ id: 'TINY-20261119-120000Z', map: 'TINY.LVL', mode: 'highest-score', started: 1, turns: 40, seconds: 2, players: ['Green (Ann)', 'Red (Bob)'] }], count: 1 };
+        site.live.reject = false; site.live.body = liveBody(1);
         await wait(env, 70000);       // (the door of the matches had failed before: its looks were slowed down, and come back at their pace after the first good answer)
-        same('the room has started its match: it is in the box of matches, and the empty cards fill one row now', [kinds(env).join(), find(popOf(env), 'glive').length], ['slot,slot', 1]);
+        same('the room has started its match: it is in the box of matches, and the empty cards fill what the box leaves', [kinds(env).join(), find(popOf(env), 'glive').length, scrolls(env)], ['slot,slot', 1, false]);
         site.live.body = { live: [], count: 0 };
         await wait(env, 12000);
-        check('the match is over: two rows of empty cards again', count(kinds(env), 'slot') === 4);
+        check('the match is over: the body is full of empty cards again', count(kinds(env), 'slot') === 6 && !scrolls(env));
     }
-    {   // the list is off or has not answered: no empty card (nothing is known of the list); the popover (one card wide) has three
+    {   // the focus: it stays on an empty card that stays, and goes to the last one when its own is gone
+        const env = await docked('d1000', 0, 0);
+        const cards = slotsOf(env), last = joinOf(cards[5]);
+        last.focus();
+        env.site.body = listOf(OPEN(1));
+        await wait(env, 6000);
+        check('a room comes while the focus is on the last empty card: that card is gone, and the focus is on the last one that is left', count(kinds(env), 'slot') === 5 && env.focused === joinOf(slotsOf(env)[4]));
+        joinOf(slotsOf(env)[1]).focus();
+        env.site.body = listOf(OPEN(2));
+        await wait(env, 6000);
+        check('... and on a card that stays it stays (the same node)', count(kinds(env), 'slot') === 4 && env.focused === joinOf(slotsOf(env)[1]) && joinOf(slotsOf(env)[1]) === joinOf(cards[1]));
+    }
+    {   // the list is off or has not answered: no empty card (nothing is known of the list); the popover (one card wide, no body to fill) has three, two with matches
         const site = fakeSite();
         site.status = 503;
         const env = await page({ site, options: { popover: false } });
@@ -902,31 +966,84 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
         const pop = await page({ options: { popover: true } });
         tap(pop.home('games'));
         await flush();
-        check('the popover (a list that is given no dock) is one card wide: three empty cards', slotsOf(pop).length === 3);
+        check('the popover (a list that is given no dock) is one card wide and has no body to fill: three empty cards', slotsOf(pop).length === 3);
+        const live = fakeSite();
+        live.live.reject = false; live.live.body = liveBody(1);
+        const matches = await page({ site: live, options: { popover: true } });
+        tap(matches.home('games'));
+        await wait(matches, 6000);
+        check('... and two while matches are in progress', slotsOf(matches).length === 2);
+        const room = fakeSite();
+        room.body = listOf(OPEN(1));
+        const withRoom = await page({ site: room, options: { popover: true } });
+        tap(withRoom.home('games'));
+        await wait(withRoom, 6000);
+        check('a room of the popover takes one of its places: it and two empty cards', kinds(withRoom).join() === 'room,slot,slot');
     }
-    {   // the grid takes more or fewer columns with no change of the window (the players' column comes in after the list was first painted): the list counts its empty cards again
-        const mine = [];
-        class Watch { constructor(fn) { this.fn = fn; } observe(el) { if (String(el.className).indexOf('glist') !== -1) mine.push(this); } unobserve() {} disconnect() {} }
-        const site = fakeSite();
-        site.body = listOf(OPEN(1));
-        const env = await page({ site, options: { popover: false, innerWidth: 1000, win: { ResizeObserver: Watch } } });
-        await wait(env, 6000);
-        check('(two columns: one room and three empty cards; the list is watched for its size)', kinds(env).join() === 'room,slot,slot,slot' && mine.length === 1);
-        env.win.innerWidth = 1366;       // (the fake has no layout: the width stands in for the grid's own columns)
-        mine[0].fn([]);
-        check('a change in the grid\'s size that is not the window\'s counts the empty cards again: three columns hold one room and five empty cards', kinds(env).join() === 'room,slot,slot,slot,slot,slot');
+    {   // the window changes (a phone turned, a window made wider or higher): the list counts the empty cards again for the columns and the height that there are
+        const env = await docked('d1000', 1, 0);
+        check('(1000 x 800: one room and five empty cards)', kinds(env).join() === 'room,slot,slot,slot,slot,slot');
+        env.win.innerWidth = 1366; Object.assign(env.spec, { body: SIZES.d1366.body });
+        fireResize(env);
+        check('1366 x 768: three columns in three rows hold one room and eight empty cards', count(kinds(env), 'slot') === 8 && !scrolls(env));
+        env.win.innerWidth = 390; Object.assign(env.spec, { body: SIZES.phone.body, card: SIZES.phone.card });
+        fireResize(env);
+        check('390 x 844: a phone is one column of five rows: one room and four empty cards', count(kinds(env), 'slot') === 4 && !scrolls(env));
+        env.win.innerWidth = 1000; Object.assign(env.spec, { body: 200, card: 94 });
+        fireResize(env);
+        check('a window that is low (a body of 200 px holds two rows): one room and three empty cards', count(kinds(env), 'slot') === 3 && !scrolls(env));
+    }
+    {   // every size of body and every count of columns: the most that holds (the doubling and halving of the search is right at every number)
+        const env = await docked('d1000', 0, 0);
+        const wrong = [];
+        for (const w of [390, 1000, 1366, 1920]) for (const body of [1, 60, 93, 94, 95, 105, 106, 200, 305, 306, 307, 411, 412, 500, 777, 1234, 2500]) {
+            env.win.innerWidth = w; Object.assign(env.spec, { body, card: 94 });
+            fireResize(env);
+            const rows = Math.floor((body + GAP) / (94 + GAP)), got = count(kinds(env), 'slot');
+            if (got !== Math.max(0, rows * R.columnsOf(w, 800)) || scrolls(env)) wrong.push(w + 'x' + body + ': ' + got);
+        }
+        check('the empty cards are the rows that fit times the columns at every body height and window width that was tried (' + 4 * 17 + ' of them)', wrong.length === 0, wrong.join('; '));
+        env.win.innerWidth = 1366; Object.assign(env.spec, { body: 1e6 });
+        fireResize(env);
+        check('a body that nothing fills gets 150 empty cards, and no more (the most that is ever tried)', count(kinds(env), 'slot') === 150);
+        Object.assign(env.spec, { body: 1500 });
+        fireResize(env);
+        check('a tall window (a body of 1500 px, three columns) gets 14 rows of three', count(kinds(env), 'slot') === 42);
+    }
+    {   // the body or the matches' box takes more or less room with no change of the window (the chat is folded, the players' column dragged, a scoreboard opened): the list watches both and counts again
+        const marks = [], watched = [];
+        class Watch { constructor(fn) { this.fn = fn; marks.push(this); } observe(el) { watched.push(classes(el).find((c) => c === 'gpbody' || c === 'glivebox') || classes(el).join(' ')); } unobserve() {} disconnect() {} }
+        const env = await docked('d1000', 0, 1, null, null, { win: { ResizeObserver: Watch } });
+        same('(the list is watched through one observer: its body, and the box of the matches)', [marks.length, watched.sort()], [1, ['glivebox', 'gpbody']]);
+        check('(1000 x 800 with a match: two empty cards)', count(kinds(env), 'slot') === 2);
+        env.spec.body = 600; marks[0].fn([]);
+        check('the chat is folded and the body has 600 px: the empty cards fill it (a match, 166 px, and four rows of two)', count(kinds(env), 'slot') === 8 && !scrolls(env));
+        env.spec.body = 352; marks[0].fn([]);
+        check('... and unfolded, back to two', count(kinds(env), 'slot') === 2 && !scrolls(env));
+        env.spec.liveCard = 230; marks[0].fn([]);
+        check('a scoreboard opens (the match is 110 px higher): the empty cards go, and nothing scrolls', count(kinds(env), 'slot') === 0 && !scrolls(env));
+        env.spec.liveCard = DEFAULT_SPEC.liveCard; marks[0].fn([]);
+        check('... and shut they come back', count(kinds(env), 'slot') === 2);
         const before = first(popOf(env), 'glist').children.slice();
-        mine[0].fn([]);
-        check('... a change that leaves the columns as they are paints nothing again', first(popOf(env), 'glist').children.every((li, i) => li === before[i]) && first(popOf(env), 'glist').children.length === before.length);
+        marks[0].fn([]); marks[0].fn([]);
+        check('a change that leaves the count as it is paints nothing again', first(popOf(env), 'glist').children.every((li, i) => li === before[i]) && first(popOf(env), 'glist').children.length === before.length);
     }
-    {   // the columns of the grid where there is no layout to ask: the page's own arithmetic on the dock's width (where there is a layout, the grid's own count is read: web_home_games_browser.js asserts the real numbers)
-        same('a phone is one column (up to 700 px), a window of 1000 px two, 1250 px two, 1366 px three, 1920 px five; a short window (up to 500 px high) has no players column: 844 x 390 holds two, 568 x 320 one',
-            [[390, 844], [700, 800], [701, 800], [900, 700], [1000, 800], [1250, 800], [1280, 800], [1366, 768], [1366, 640], [1920, 1080], [844, 390], [568, 320]].map(([w, h]) => Games.columnsFor(w, h)), [1, 1, 1, 1, 2, 2, 3, 3, 3, 5, 2, 1]);
-        same('a window of no size is one column (never none)', [Games.columnsFor(0, 0), Games.columnsFor(-5, 100)], [1, 1]);
+    {   // a list that is covered (the phone's Chat view: no height) keeps what it had and is counted when it is shown again; one that was never shown has none until it is
+        const marks = [];
+        class Watch { constructor(fn) { this.fn = fn; marks.push(this); } observe() {} unobserve() {} disconnect() {} }
+        const env = await docked('d1000', 0, 0, null, null, { win: { ResizeObserver: Watch } });
+        env.spec.body = 0; marks[0].fn([]); fireResize(env);
+        check('a list with no height keeps its six empty cards (it is not drawn: nothing can be asked of it)', count(kinds(env), 'slot') === 6);
+        env.spec.body = 200; marks[0].fn([]);
+        check('... and is counted when it has a height again', count(kinds(env), 'slot') === 4);
+        const hidden = await docked('d1000', 0, 0, null, { body: 0 }, { win: { ResizeObserver: Watch } });
+        check('a list that has never had a height has no empty card yet', count(kinds(hidden), 'slot') === 0);
+        hidden.spec.body = 352; marks[1].fn([]);
+        check('... and has them when it is first shown', count(kinds(hidden), 'slot') === 6);
     }
     {   // START reaches the page: the list stops watching its size, and the listener of the window that it added to paint the list again is taken away
         const removed = [], watchers = [];
-        class Watch { constructor(fn) { this.fn = fn; this.gone = false; } observe(el) { if (String(el.className).indexOf('glist') !== -1) watchers.push(this); } unobserve() {} disconnect() { this.gone = true; } }
+        class Watch { constructor(fn) { this.fn = fn; this.gone = false; watchers.push(this); } observe() {} unobserve() {} disconnect() { this.gone = true; } }
         const env = await page({ search: '?room=k7m2xq', options: { stayHome: false, popover: false, win: { ResizeObserver: Watch, removeEventListener(t, fn) { removed.push([t, fn]); } } } });
         const sock = guestRoom(env, 'Pebble', PUBLIC);
         env.toggleRoom();
@@ -935,16 +1052,6 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
         check('(the list watches its size: an observer, and listeners of the window)', watchers.length === 1 && !watchers[0].gone && resizers.length >= 2 && removed.length === 0);
         sock.receive(roomMessage(seatsOf(['Pebble', 'Maya']), { you: 1, leader: 0, flags: STARTING }));
         check('START is on its way: the observer is let go of, and a listener of the window that the list added is taken away again', watchers[0].gone && removed.some(([t, fn]) => t === 'resize' && resizers.indexOf(fn) !== -1));
-    }
-    {   // the window changes (a phone turned, a window made wider): the empty cards are painted again for the columns that there are
-        const env = await docked(1000, 1, 0);
-        check('(two columns: one room and three empty cards)', kinds(env).join() === 'room,slot,slot,slot');
-        env.win.innerWidth = 1366;
-        (env.win.listeners.resize || []).forEach((fn) => fn());
-        check('a wider window has three columns: one room and five empty cards', kinds(env).join() === 'room,slot,slot,slot,slot,slot');
-        env.win.innerWidth = 390;
-        (env.win.listeners.resize || []).forEach((fn) => fn());
-        check('a phone has one column: one room and two empty cards', kinds(env).join() === 'room,slot,slot');
     }
 }
 

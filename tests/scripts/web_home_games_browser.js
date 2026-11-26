@@ -32,6 +32,7 @@ function check(label, ok, detail) {
     checks++;
     if (!ok) { failures++; console.log('FAIL ' + label + (detail === undefined ? '' : ' (' + detail + ')')); }
 }
+function same(label, got, want) { const a = JSON.stringify(got), b = JSON.stringify(want); check(label, a === b, 'got ' + a + ', wanted ' + b); }
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function until(label, fn, ms) {
     const t0 = Date.now();
@@ -81,6 +82,7 @@ function standIn(server, o) {
             proxy(req, res, server.replay, '/lobbies'); return;
         }
         if (url.pathname === '/stats' || url.pathname === '/busy') { proxy(req, res, server.ws, url.pathname); return; }
+        if (url.pathname === '/live' && o.live) { res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(o.live())); return; }       // (o.live: the matches that run now, as the server's door says them)
         if (url.pathname.startsWith('/maps/previews/')) {            // the library's pictures, as nginx serves them: a name of printable ASCII (no / or \\), .webp, a file that is there; anything else is a 404
             let name = '';
             try { name = decodeURIComponent(url.pathname.slice('/maps/previews/'.length)); } catch (e) { name = ''; }
@@ -187,7 +189,7 @@ async function flows() {
                 for (const size of [['desktop', 1280, 800], ['phone', 390, 844], ['side', 844, 390]]) {
                     const empty = await newPage(browser, none, 'Maple', size, '/', true), long = await newPage(browser, many, 'Maple', size, '/', true);
                     await empty.waitForSelector('.gpop .gslot'); await long.waitForSelector('.gpop .gitem'); await long.waitForSelector('.gc', { state: 'attached' });
-                    check('' + size[0] + ': no open games shows the empty cards (each with its one button, Host here: the bar has Quick host and Quick join) and Have a code? in the docked list', await empty.evaluate(() => { const p = document.querySelector('.gpop'), c = [...p.querySelectorAll('.gslot')]; const list = p.querySelector('.glist'), tracks = getComputedStyle(list).gridTemplateColumns.split(/\s+/).filter(Boolean).length; return c.length === (tracks === 1 ? 3 : 2 * tracks) && c.every((e) => e.querySelectorAll('button').length === 1 && e.querySelector('button').textContent === 'Host here') && p.textContent.indexOf('No open games right now.') === -1 && !!p.querySelector('.gcodelink') && /none waiting/.test(p.textContent); }));
+                    check('' + size[0] + ': no open games shows the empty cards (each with its one button, Host here: the bar has Quick host and Quick join) and Have a code? in the docked list', await empty.evaluate(() => { const p = document.querySelector('.gpop'), c = [...p.querySelectorAll('.gslot')]; const list = p.querySelector('.glist'), tracks = getComputedStyle(list).gridTemplateColumns.split(/\s+/).filter(Boolean).length; return c.length > 0 && tracks > 0 && c.every((e) => e.querySelectorAll('button').length === 1 && e.querySelector('button').textContent === 'Host here') && p.textContent.indexOf('No open games right now.') === -1 && !!p.querySelector('.gcodelink') && /none waiting/.test(p.textContent); }));
                     const m = await long.evaluate(async () => {
                         const p = document.querySelector('.gpop'), body = p.querySelector('.gpbody'), q = p.getBoundingClientRect(), y = document.getElementById('hmain').getBoundingClientRect(); const scrolls = body.scrollHeight > body.clientHeight + 4;
                         body.scrollTop = body.scrollHeight; await new Promise((r) => setTimeout(r, 50)); const c = p.querySelector('.gcodelink'), cr = c.getBoundingClientRect(), top = document.elementFromPoint(cr.left + cr.width / 2, cr.top + cr.height / 2), last = [...p.querySelectorAll('.gjoin')].pop(), lr = last.getBoundingClientRect(), lt = document.elementFromPoint(lr.left + lr.width / 2, lr.top + lr.height / 2);
@@ -196,22 +198,72 @@ async function flows() {
                     check('' + size[0] + ': twelve games scroll inside the list (it stays in the body), the last Join can be reached, Have a code? stays in the heading, nothing sideways', m.scrolls && m.bottom && m.codeReachable && m.lastReachable && m.count === 12 && m.wide, JSON.stringify(m));
                     await empty.context().close(); await long.context().close();
                 }
-                // the REAL columns of the grid and the empty cards that follow them: two rows (4 at 1000 px, 6 at 1366 px with the players' column open, 3 on a phone), counted from the grid's own tracks; and again when the grid changes with no
-                // change of the window (the players' column is dragged wider by its splitter, web/home/split.js: its width is the property --pl-w of Home's div, set here by hand)
-                const grid = (p) => p.evaluate(() => { const list = document.querySelector('.gpop .glist'), tracks = getComputedStyle(list).gridTemplateColumns.split(/\s+/).filter(Boolean).length; return { slots: document.querySelectorAll('.gpop .gslot').length, tracks, fallback: window.AntsHomeGames.columnsFor(window.innerWidth, window.innerHeight), players: document.getElementById('home').classList.contains('pl-on') }; });
-                const pull = async (p, px) => { await p.evaluate((x) => { const h = document.getElementById('home'); if (x) { h.setAttribute('data-split-w', String(x)); h.style.setProperty('--pl-w', x + 'px'); } else { h.removeAttribute('data-split-w'); h.style.removeProperty('--pl-w'); } }, px); await sleep(500); return grid(p); };
-                for (const [label, w, h, want] of [['1000 x 800', 1000, 800, 4], ['1366 x 768', 1366, 768, 6], ['1366 x 640', 1366, 640, 6], ['phone 390 x 844', 390, 844, 3]]) {
+                // the empty cards fill the body of the list: the most that leave it nothing to scroll (the rooms, the locked cards and the matches take their room first), counted from the grid's REAL columns and the body's real height.
+                // Three witnesses: the body does not scroll, one more card (a clone of the last: it starts a new row, as the rows are whole) makes it scroll, and the count is asserted exactly at the sizes of the pictures
+                const fill = (p) => p.evaluate(() => {
+                    const body = document.querySelector('.gpop .gpbody'), list = document.querySelector('.gpop .glist'), slots = Array.from(list.querySelectorAll('.gslot')), scrolls = () => body.scrollHeight > body.clientHeight, before = scrolls();
+                    const tracks = getComputedStyle(list).gridTemplateColumns.split(/\s+/).filter(Boolean).length, rooms = list.querySelectorAll('.gitem:not(.gslot)').length;
+                    let more = null;
+                    if (slots.length) { const extra = slots[slots.length - 1].cloneNode(true); slots[slots.length - 1].after(extra); more = scrolls(); extra.remove(); }
+                    return { slots: slots.length, tracks, rooms, scrolls: before, oneMoreScrolls: more, body: body.clientHeight, players: document.getElementById('home').classList.contains('pl-on') };
+                });
+                const pull = async (p, px) => { await p.evaluate((x) => { const h = document.getElementById('home'); if (x) { h.setAttribute('data-split-w', String(x)); h.style.setProperty('--pl-w', x + 'px'); } else { h.removeAttribute('data-split-w'); h.style.removeProperty('--pl-w'); } }, px); await sleep(500); return fill(p); };
+                const two = await standIn(server, { lobbies: () => ({ format: 1, count: 2, lobbies: FIVE().lobbies.slice(0, 2) }) });
+                const MATCHES = () => ({ live: [0, 1].map((i) => ({ id: 'TREASURE-20261124-09' + (10 + i) + '00Z', map: 'TREASURE.LVL', mode: 'highest-score', seconds: 300 + i, turns: 6000, players: ['Green (Sage)', 'Red (Rowan)'], scores: [100 + i, 50], sides: [0, 1] })) });
+                const withMatches = await standIn(server, { lobbies: () => ({ format: 1, lobbies: [], count: 0 }), live: MATCHES }), roomsAndMatches = await standIn(server, { lobbies: () => ({ format: 1, count: 2, lobbies: FIVE().lobbies.slice(0, 2) }), live: MATCHES });
+                const SITES = { none, two, withMatches, roomsAndMatches };
+                // [size, then the cards for: no room; two rooms; two matches; two rooms and two matches]
+                const WANT = [['1000 x 800', 1000, 800, [6, 4, 2, 0]], ['1366 x 768', 1366, 768, [9, 7, 3, 1]], ['phone 390 x 844', 390, 844, [5, 3, 1, 0]]];
+                for (const [label, w, h, wants] of WANT) {
+                    const got = [];
+                    for (const name of Object.keys(SITES)) {
+                        const p = await newPage(browser, SITES[name], 'Maple', [label, w, h], '/', true);
+                        await p.waitForSelector('.gpop .gitem'); await sleep(600);
+                        const m = await fill(p);
+                        got.push(m.slots);
+                        check(label + ', ' + name + ' (the players\' column ' + (m.players ? 'open' : 'NOT open') + '): the empty cards cause no scroll, and one more would (whole rows of the grid\'s ' + m.tracks + ' real columns); with none, the rooms and matches scroll for themselves or fit', (w <= 700 || m.players) && m.tracks === (w <= 700 ? 1 : w < 1250 ? 2 : 3) && (m.slots === 0 || (!m.scrolls && m.oneMoreScrolls === true)), JSON.stringify(m));
+                        await p.context().close();
+                    }
+                    same(label + ': the empty cards with no room, with two rooms, with two matches, and with both', got, wants);
+                }
+                for (const [label, w, h, wants] of [['1366 x 768', 1366, 768, 9], ['phone 390 x 844', 390, 844, 5]]) {
                     const p = await newPage(browser, none, 'Maple', [label, w, h], '/', true);
                     await p.waitForSelector('.gpop .gslot'); await sleep(500);
-                    const m = await grid(p);
-                    check(label + ' (the players\' column ' + (m.players ? 'open' : 'NOT open') + '): ' + want + ' empty cards, two rows of the grid\'s real columns (the page\'s own count where there is no layout, columnsFor, says the same)', (w <= 700 || m.players) && m.slots === want && m.tracks === (want === 3 ? 1 : want / 2) && m.fallback === m.tracks, JSON.stringify(m));
+                    const m = await fill(p);
                     if (w >= 1366) {
                         const narrow = await pull(p, 600), back = await pull(p, 0);
-                        check(label + ': the players\' column dragged to 600 px leaves the grid two columns and the empty cards follow it with no change of the window (4), and back to ' + want, narrow.tracks === 2 && narrow.slots === 4 && back.slots === want, JSON.stringify([m, narrow, back]));
+                        check(label + ': the players\' column dragged to 600 px leaves the grid two columns and the empty cards follow it with no change of the window (two columns, whole rows, no scroll), and back to ' + wants, narrow.tracks === 2 && !narrow.scrolls && narrow.oneMoreScrolls === true && narrow.slots % 2 === 0 && back.slots === wants, JSON.stringify([m, narrow, back]));
                     }
+                    await p.evaluate(() => { window.__card = document.querySelector('.gpop .gslot .gjoin'); window.__card.focus(); });
+                    await p.setViewportSize({ width: w, height: h + 1 }); await sleep(400);
+                    check(label + ': a window that changes by a pixel leaves the cards and the focus where they were (the same button is still the one that has it)', await p.evaluate(() => document.activeElement === window.__card && document.querySelectorAll('.gpop .gslot').length > 0));
+                    await p.setViewportSize({ width: w, height: h - 120 }); await sleep(400);
+                    const low = await fill(p);
+                    check(label + ': a window 121 px lower has fewer empty cards, still whole rows and no scroll', low.slots < wants && !low.scrolls && low.oneMoreScrolls === true && low.slots % low.tracks === 0, JSON.stringify(low));
+                    await p.setViewportSize({ width: w, height: h }); await sleep(400);
+                    check(label + ': ... and back at its first height it has the first count again', (await fill(p)).slots === wants);
+                    await p.click('.gcodelink'); await sleep(400);
+                    const asked = await fill(p);
+                    check(label + ': Have a code? opens a field above the list: the empty cards give it the room (no scroll, one more would, and not more than before)', !asked.scrolls && asked.oneMoreScrolls === true && asked.slots <= wants, JSON.stringify(asked));
                     await p.context().close();
                 }
-                none.close(); many.close();
+                {   // the plus of an empty card is a press on Host here, with a pointer; for a keyboard and a screen reader the card has the one control
+                    const p = await newPage(browser, none, 'Maple', ['plus', 1000, 800], '/', true);
+                    await p.waitForSelector('.gpop .gslot'); await sleep(400);
+                    const look = await p.evaluate(() => { const c = document.querySelector('.gpop .gslot'), plus = c.querySelector('.gmap'), r = plus.getBoundingClientRect(); return { cursor: getComputedStyle(plus).cursor, stops: c.querySelectorAll('button, a, input, select, textarea, [tabindex]').length, hidden: plus.getAttribute('aria-hidden'), size: [Math.round(r.width), Math.round(r.height)] }; });
+                    same('the plus of an empty card is a pointer\'s press (hand cursor, at least 44 px) and no stop of its own: the card has one control, and the plus is hidden from a screen reader', [look.cursor, look.stops, look.hidden, look.size[0] >= 44 && look.size[1] >= 44], ['pointer', 1, 'true', true]);
+                    await p.click('.gpop .gslot:nth-child(2) .gmap');
+                    await p.waitForSelector('.gconfirm .gyes');
+                    check('a click on the plus asks the question that Host here asks (Public room, Invite only, Cancel), and makes no room yet', await p.evaluate(() => Array.from(document.querySelectorAll('.gconfirm .btn')).map((b) => b.textContent.trim()).join('|') === 'Public room|Invite only|Cancel') && (await screenOf(p)) === 'home');
+                    await p.keyboard.press('Escape'); await sleep(200);
+                    check('... Escape closes it, and the focus is on the Host here button of that card', await p.evaluate(() => !document.querySelector('.gconfirm') && document.activeElement === document.querySelector('.gpop .gslot:nth-child(2) .gjoin')));
+                    await p.click('.gpop .gslot:nth-child(3) .gmap'); await p.waitForSelector('.gconfirm .gyes');
+                    await p.evaluate(() => Array.from(document.querySelectorAll('.gconfirm .gyes')).filter((b) => /^Invite only$/.test(b.textContent.trim()))[0].click());
+                    await p.waitForFunction(() => document.body.getAttribute('data-screen') === 'room', null, { timeout: 10000 });
+                    check('... and Invite only, answered after a click on the plus, makes the room and shows it', (await screenOf(p)) === 'room');
+                    await p.context().close();
+                }
+                none.close(); many.close(); two.close(); withMatches.close(); roomsAndMatches.close();
             }
             staging.close(); prod.close();
         }

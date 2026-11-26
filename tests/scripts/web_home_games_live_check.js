@@ -22,7 +22,7 @@ async function livePage(o) {
     const site = R.fakeSite();
     site.live.reject = false; site.live.body = answer(o.rows === undefined ? SAMPLE : o.rows);
     if (o.lobbies) site.body = listOf(o.lobbies);
-    return page({ site, stored: o.stored, search: o.search, options: Object.assign({ popover: false }, o.options || {}) });
+    return page({ site, stored: o.stored, search: o.search, layout: o.layout, options: Object.assign({ popover: false }, o.options || {}) });
 }
 const openRows = (env) => R.rowsOf(env).filter((li) => R.classes(li).indexOf('glive') === -1);
 const looksAtLive = (env) => env.site.live.calls.length;
@@ -110,11 +110,11 @@ const M = 'TREASURE.LVL';
     const env = await livePage({ rows: [], lobbies: [row('k7m2xq', 'Pebble')] });
     check('nothing in progress: no box at all (an empty box would grow the panel), and the heading is the plain one, "1 waiting · updates live"', boxOf(env).hidden === true && headOf(env) === '1 waiting \u00b7 updates live', headOf(env));
     const both = await livePage({ rows: [] });
-    check('nothing open and nothing in progress: the empty cards of the open games (two rows), one line "none waiting", and no box of matches', headOf(both) === 'none waiting' && slotsOf(both).length === 6 && boxOf(both).hidden === true);
-    const only = await livePage({ lobbies: [] });
-    check('nothing open, two in progress: no "No open games right now." card at all; one row of empty cards, then the box of matches; the head says "0 open, 2 in progress"', slotsOf(only).length === 3 && liveRows(only).length === 2 && headOf(only) === '0 open, 2 in progress' && textOf(popOf(only)).indexOf('No open games right now.') === -1, headOf(only));
-    const openOnes = await livePage({ lobbies: [row('k7m2xq', 'Pebble')] });
-    check('with an open game the open rows come first, then the empty cards that fill one row, and the box of matches follows', rowsOf(openOnes).length === 3 && slotsOf(openOnes).length === 2 && first(popOf(openOnes), 'gpbody').children.indexOf(first(popOf(openOnes), 'glist')) < first(popOf(openOnes), 'gpbody').children.indexOf(boxOf(openOnes)));
+    check('nothing open and nothing in progress: the empty cards of the open games (three rows of three fill the body), one line "none waiting", and no box of matches', headOf(both) === 'none waiting' && slotsOf(both).length === 9 && boxOf(both).hidden === true);
+    const only = await livePage({ lobbies: [], layout: { body: 500 } });
+    check('nothing open, two in progress: no "No open games right now." card at all; the empty cards fill what the box of matches leaves of the body (two rows of three), then the box of matches; the head says "0 open, 2 in progress"', slotsOf(only).length === 6 && liveRows(only).length === 2 && headOf(only) === '0 open, 2 in progress' && textOf(popOf(only)).indexOf('No open games right now.') === -1, headOf(only));
+    const openOnes = await livePage({ lobbies: [row('k7m2xq', 'Pebble')], layout: { body: 500 } });
+    check('with an open game the open rows come first, then the empty cards that fill what is left (it is one of the six places), and the box of matches follows', rowsOf(openOnes).length === 3 && slotsOf(openOnes).length === 5 && first(popOf(openOnes), 'gpbody').children.indexOf(first(popOf(openOnes), 'glist')) < first(popOf(openOnes), 'gpbody').children.indexOf(boxOf(openOnes)));
 }
 
 {   // the tag of a match of mode 187: after the red Live mark, text only, none for any other mode

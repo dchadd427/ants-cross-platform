@@ -181,7 +181,7 @@ const GEOM = () => {
             }
             site.close();
         }
-        {   // one list: open rooms first, then the matches; with no open room and a match in progress there is no empty card and the first match shows without a scroll of the list
+        {   // one list: open rooms first, then the empty cards that fill what is left of the body, then the matches (which show without a scroll of the list when they fit, and then the empty cards leave them their room)
             const SHOW = [SIZES[0], SIZES[4], SIZES[6]];
             for (const [label, opts] of [['0 open, 1 live', { noOpen: true, n: 1 }], ['0 open, 3 live', { noOpen: true, n: 3 }], ['3 open, 3 live', { n: 3 }], ['0 open, 0 live', { noOpen: true, mode: 'none' }]]) {
                 const { site, origin } = await startSite(opts.mode || 'busy', opts);
@@ -193,17 +193,18 @@ const GEOM = () => {
                         const q = (e) => e && e.getClientRects().length ? e.getBoundingClientRect() : null;
                         const body = q(document.querySelector('.gdock .gpbody')), row = q(document.querySelector('.gdock .glive')), list = q(document.querySelector('.gdock .glist:not(.glivelist)'));
                         const slots = [...document.querySelectorAll('.gdock .gslot')].filter((e) => q(e)), open = [...document.querySelectorAll('.gdock .glist:not(.glivelist) .gitem:not(.gslot)')].filter((e) => q(e));
-                        return { body: body && [body.top, body.bottom], slots: slots.length, slotBtns: slots.every((e) => e.querySelectorAll('button').length === 1), open: open.length, row: row && [row.top, row.bottom], list: list && [list.top, list.bottom], code: !!q(document.querySelector('.gdock .gcodelink')), sideways: document.documentElement.scrollWidth > innerWidth };
+                        const scroller = document.querySelector('.gdock .gpbody');
+                        return { body: body && [body.top, body.bottom], scrolls: !!scroller && scroller.scrollHeight > scroller.clientHeight, slots: slots.length, slotBtns: slots.every((e) => e.querySelectorAll('button').length === 1), open: open.length, row: row && [row.top, row.bottom], list: list && [list.top, list.bottom], code: !!q(document.querySelector('.gdock .gcodelink')), sideways: document.documentElement.scrollWidth > innerWidth };
                     });
                     const tag = name + '/' + label;
                     check(tag + ': no sideways scroll, Have a code? is shown', !g.sideways && g.code, JSON.stringify(g));
                     if (opts.noOpen && !opts.mode) {
-                        check(tag + ': one row of empty cards while a match is in progress (2 on a phone, 2 to 3 on a wide window) and no "No open games right now." card, then the matches', g.slots >= 2 && g.slots <= 3 && g.slotBtns && g.list && g.row && g.list[0] < g.row[0], JSON.stringify(g));
+                        check(tag + ': the empty cards fill what the matches in progress leave of the body (none when the matches fill it) and cause no scroll, each with its one button, and no "No open games right now." card, then the matches', g.slotBtns && g.list && g.row && g.list[0] < g.row[0] && (g.slots === 0 || !g.scrolls), JSON.stringify(g));
                         if (name !== 'side' && h >= 700) check(tag + ': the head of the first match in progress shows under the empty cards without a scroll (100 px of it: its name and Watch)', g.row && Math.min(g.row[1], g.body[1]) - g.row[0] >= Math.min(100, g.row[1] - g.row[0]), JSON.stringify(g));
                     } else if (opts.mode === 'none') {
-                        check(tag + ': nothing at all: two rows of empty cards (4 to 6; 3 on a phone), each with its one button, and no match', g.slots >= 3 && g.slots <= 6 && g.slotBtns && !g.row, JSON.stringify(g));
+                        check(tag + ': nothing at all: the empty cards fill the body (none in a window too low for a row) and cause no scroll, each with its one button, and no match', g.slotBtns && !g.row && (g.slots === 0 || !g.scrolls) && (h < 400 || g.slots >= 3), JSON.stringify(g));
                     } else {
-                        check(tag + ': open rooms first, then the empty cards of one row (none when the rooms fill it), the matches under them', g.list && g.row && g.list[0] < g.row[0] && g.open === 3 && g.slots <= 3, JSON.stringify(g));
+                        check(tag + ': open rooms first, then the empty cards that fill what is left (none when the rooms and matches fill the body) without a scroll of their own, the matches under them', g.list && g.row && g.list[0] < g.row[0] && g.open === 3 && (g.slots === 0 || !g.scrolls), JSON.stringify(g));
                     }
                     await shot(page, 'compact_' + label.replace(/[^0-9a-z]+/g, '_') + '_' + name);
                     await context.close();
