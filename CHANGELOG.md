@@ -26,7 +26,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.21.5 - 2026-11-24 - The Podium results, messages on phones and smarter bots
 
 **For players:**
 - **Computer players stand idle less.** On ISLANDS Hard bots take the Thief and Fire hats and dig to a rival's hill to steal; at every level ants that meet on a bridge sort it out. Bots only.
@@ -38,6 +38,8 @@ Work that is not released yet is written in the same template under a heading th
 
 **Fixes:**
 - Private messages on a phone: the conversation is a sheet that follows what you can see, so with the keyboard open the field sits just above it, the head with the name and the X stays on the screen and the messages fill the room over the field. The X, the arrow, Escape, a pull down on the head and the phone's Back button each close the sheet and leave you on the page where you were, not on the bell's list.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/df4b4255...36deb771)
 
 ## v0.21.4 - 2026-11-24 - Special ants on the match page, What's new fits a phone
 
