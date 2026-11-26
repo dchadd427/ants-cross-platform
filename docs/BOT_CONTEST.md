@@ -59,7 +59,7 @@ Keys: `sfight` (the switch), `sradius`, `sreach`, `sforce`, `sedge`, `sleave` (8
 
 ## All the numbers, the arena's counters and how to repeat them
 
-Every row is the same arrangement: `bot_arena` with four Hard bots, `--rotate` (every one of the six ways to seat two bots of one kind and two of the other), seeds 1 to 36 (12 on the four small maps), the whole match; two seats play the rule (`--seat N=standard+styled=1,KEYS:hard`) and two the plan that ships (`standard+styled=1:hard`), so that the same matches are the comparison. Columns: the number of matches, the mean score of a seat with the rule and without it, the gain (the mean over the matches of the seats with minus the seats without, and twice its standard error in brackets), the matches that a seat of the group won outright, the kills and the losses a seat and match, and the power-ups that a seat's ants took within one tile of a drop tile (the flowers).
+The rows marked "fresh seeds 109-144" were played again on the tree that carries all four rules, with rule 3 in the plan that the other seats play (so every kill count is higher than in the rows above), and say the same: rule 3 gains on ISLANDS and is neutral elsewhere, rules 1 and 2 do not win. Every row is the same arrangement: `bot_arena` with four Hard bots, `--rotate` (every one of the six ways to seat two bots of one kind and two of the other), seeds 1 to 36 (12 on the four small maps), the whole match; two seats play the rule (`--seat N=standard+styled=1,KEYS:hard`) and two the plan that ships (`standard+styled=1:hard`), so that the same matches are the comparison. Columns: the number of matches, the mean score of a seat with the rule and without it, the gain (the mean over the matches of the seats with minus the seats without, and twice its standard error in brackets), the matches that a seat of the group won outright, the kills and the losses a seat and match, and the power-ups that a seat's ants took within one tile of a drop tile (the flowers).
 
 | rule, keys | maps | matches | score with : without | gain (2 SE) | matches won | kills | losses | at flowers |
 |---|---|---|---|---|---|---|---|---|
@@ -78,6 +78,11 @@ Every row is the same arrangement: `bot_arena` with four Hard bots, `--rotate` (
 | 3 as it ships, seeds 37-108 (held out) | ISLANDS | 432 | 1411 : 1384 | +27 (31) | 238 : 187 | 1.82 : 0.58 | 1.06 : 1.44 | 3.33 : 2.93 |
 | 3 as it ships (24 seeds) | GAUNTLET, MEDIUM, SMALL, TINY | 576 | 887 : 888 | -1 (21) | 284 : 286 | 2.25 : 2.25 | 2.26 : 2.26 | 1.46 : 1.46 |
 | 3, edge 300 (`sedge=300`) | ISLANDS | 216 | 1410 : 1386 | +24 (46) | 118 : 95 | 1.34 : 0.69 | 1.00 : 1.21 | 3.09 : 2.93 |
+| 3 as it ships, fresh seeds 109-144 | ISLANDS | 216 | 1409 : 1386 | +23 (41) | 110 : 101 | 1.72 : 0.67 | 1.12 : 1.40 | 3.34 : 2.99 |
+| 3 as it ships, fresh seeds 109-144 | SMALL | 216 | 989 : 988 | +1 (21) | 111 : 105 | 1.58 : 1.53 | 1.57 : 1.61 | 2.64 : 2.66 |
+| 1 (`pstand=1,pdeny=1`), fresh seeds 109-144, against the plan with rule 3 | ISLANDS | 216 | 1386 : 1409 | -23 (43) | 98 : 112 | 1.60 : 1.61 | 1.63 : 1.70 | 3.33 : 3.25 |
+| 2 (`fplan=1`), fresh seeds 109-144, against the plan with rule 3 | ISLANDS | 216 | 1382 : 1410 | -28 (41) | 95 : 113 | 2.14 : 1.51 | 1.81 : 1.94 | 3.18 : 3.40 |
+| 2, fresh seeds 109-144 | TREASURE | 216 | 1555 : 1853 | -298 (90) | 50 : 164 | 3.81 : 2.08 | 3.01 : 2.90 | 0.00 : 0.00 |
 
 Against the bench bots of `tools/bench_aggressor.hpp` on TREASURE (SMALL for the flower strip), two standard seats against two bench seats, with the rule on and with it off (432 matches each), the score of a standard seat with : without, the matches that the standard seats won (of 216), kills and losses of a standard seat:
 
