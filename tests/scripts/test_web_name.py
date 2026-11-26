@@ -111,7 +111,7 @@ class TheMarkup(unittest.TestCase):
 class TheDocuments(unittest.TestCase):
     def test_the_browser_page_and_the_network_notes_say_what_the_pages_do(self):
         page = read(os.path.join(REPO, "docs", "PLAY_IN_BROWSER.md"))
-        self.assertIn("Nobody types a name on the web.", page)
+        self.assertIn("`ants.guestname`", page)                                              # (the name that a guest typed: kept in this browser)
         self.assertIn("`ants.guest`", page)                                                  # (the one key of a name that the page keeps)
         self.assertIn("is not used", page)                                                   # (a name that an earlier version remembered, `ants.name`)
         self.assertIn("asks first, every time", page)
