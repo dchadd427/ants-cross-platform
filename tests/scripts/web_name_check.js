@@ -1558,6 +1558,14 @@ const statsView = (env) => ({ hidden: env.$('stats').hidden, dot: env.$('stats-d
     check('... and the page made no markup from the numbers', env.innerHTMLWrites.length === 0);
 }
 {
+    const env = runLobby('', {}, { fetch: answers({ '/stats': GOOD_STATS }) });
+    await settle();
+    env.pageBridge.hereNow(3);
+    same('the Players list says 3 are here: "online" counts the same people as the list, not the game server\'s 7', statsView(env).live, '3 matches being played · 3 players online');
+    env.pageBridge.hereNow(null);
+    same('... and with no count from the list, the game server\'s own number comes back', statsView(env).live, '3 matches being played · 7 players online');
+}
+{
     const env = runLobby('', {}, { fetch: answers({ '/stats': 'page', '/busy': { matches: 0, players: 2 } }) });
     await settle();
     same('/stats is the game page (the site has no such route) and /busy answers: the live part, a grey dot, no totals', [env.fetches.map((f) => f.url), statsView(env)],
