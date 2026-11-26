@@ -56,11 +56,13 @@ class MapItemsTests(unittest.TestCase):
         self.assertTrue(callable(items_powerups.build_pu_swim))
         self.assertTrue(callable(items_structures.build_wallup04))
         self.assertTrue(callable(items_world.build_greenhill))
-        # Plants & Grass (35), Hills & Gear (14), Toys & Props (51), and Food & Power-Up Nectar (94) are 100% covered.
+        # Complete 100% coverage of all 216 authentic 1998 Ants map items!
         self.assertEqual(sum(1 for s in MAP_ITEM_SPECS if s.category == "plants"), 35)
         self.assertEqual(sum(1 for s in MAP_ITEM_SPECS if s.category == "structures"), 14)
         self.assertEqual(sum(1 for s in MAP_ITEM_SPECS if s.category == "toys"), 51)
         self.assertEqual(sum(1 for s in MAP_ITEM_SPECS if s.category == "food"), 94)
+        self.assertEqual(sum(1 for s in MAP_ITEM_SPECS if s.category == "rocks"), 22)
+        self.assertEqual(len(MAP_ITEM_SPECS), 216)
 
     def test_catalog_matches_authentic_1998_chd_sprites_and_excludes_tiles_hud_cursors(self):
         from tools.ant_models.map_items import CATEGORIES, MAP_ITEM_SPECS

@@ -34,12 +34,12 @@ CATEGORIES: Tuple[Tuple[str, str], ...] = (
     ("structures", "Hills & Gear"),
 )
 
-# Waves 1–4 realistic 3D showcase:
+# Waves 1–5 complete 1998 Ants 3D Map Items showcase (216 / 216 = 100%):
 # - Plants & Grass: 35 / 35 complete (100%)
 # - Hills & Gameplay Gear: 14 / 14 complete (100%; mud bridges excluded as ground tiles)
 # - Toys, Props, Hardware, Doll & Characters: 51 / 51 complete (100%)
 # - Food & Power-Up Nectar: 94 / 94 complete (100%)
-# - Rocks: 1 Wave 1 item (total 195 / 216; only 21 Rocks remain!).
+# - Rocks, Boulders & Pebbles: 22 / 22 complete (100%).
 MAP_ITEM_SPECS: Tuple[MapItemSpec, ...] = (
     # --- Toys & Props (Wave 1) ---
     MapItemSpec("bearhed", "Teddy Bear Head", "toys", 345, "bearhed", "bear", "Head", default_yaw=-8.0, default_pitch=46.0, builder_module="items_toys", builder_fn="build_bearhed"),
@@ -230,8 +230,29 @@ MAP_ITEM_SPECS: Tuple[MapItemSpec, ...] = (
     MapItemSpec("dflower1", "Groucho Disguise Daisy", "plants", 420, "dflower1", "dflower", "Animated", default_yaw=0.0, default_pitch=30.0, builder_module="items_plants", builder_fn="build_dflower1"),
     MapItemSpec("flower1", "Groucho Daisy (Still)", "plants", 421, "flower1", "dflower", "Still", default_yaw=0.0, default_pitch=30.0, builder_module="items_foliage", builder_fn="build_flower1"),
     MapItemSpec("mush2a", "Spotted Mushroom", "plants", 329, "mush2a", "mushroom", "", default_yaw=0.0, default_pitch=34.0, builder_module="items_plants", builder_fn="build_mush2a"),
-    # --- Rocks (Wave 1) ---
+    # --- Rocks, Boulders & Pebbles (ALL 22 / 22 COMPLETE!) ---
+    MapItemSpec("bigrock1", "Flat Granite Slab", "rocks", 289, "bigrock1", "rock", "Big Slab", default_yaw=0.0, default_pitch=46.0, builder_module="items_rocks", builder_fn="build_bigrock1"),
     MapItemSpec("bigrock2", "Mossy Granite Boulder", "rocks", 290, "bigrock2", "rock", "Big Mossy", default_yaw=0.0, default_pitch=44.0, builder_module="items_world", builder_fn="build_bigrock2"),
+    MapItemSpec("bigrock3", "Fractured Limestone Crag", "rocks", 291, "bigrock3", "rock", "Big Crag", default_yaw=0.0, default_pitch=46.0, builder_module="items_rocks", builder_fn="build_bigrock3"),
+    MapItemSpec("bigrock4", "Rose Porphyry Boulder", "rocks", 292, "bigrock4", "rock", "Big Rose", default_yaw=0.0, default_pitch=44.0, builder_module="items_rocks", builder_fn="build_bigrock4"),
+    MapItemSpec("medrock1", "Olive River Cobble", "rocks", 293, "medrock1", "medrock", "Cobble 1", default_yaw=0.0, default_pitch=50.0, builder_module="items_rocks", builder_fn="build_medrock1"),
+    MapItemSpec("medrock2", "Smooth Quartz Stone", "rocks", 294, "medrock2", "medrock", "Quartz 2", default_yaw=0.0, default_pitch=48.0, builder_module="items_rocks", builder_fn="build_medrock2"),
+    MapItemSpec("medrock3", "Rose-Veined Cobble", "rocks", 295, "medrock3", "medrock", "Veined 3", default_yaw=0.0, default_pitch=50.0, builder_module="items_rocks", builder_fn="build_medrock3"),
+    MapItemSpec("medrock4", "Dark Mossy Cobble", "rocks", 296, "medrock4", "medrock", "Mossy 4", default_yaw=0.0, default_pitch=48.0, builder_module="items_rocks", builder_fn="build_medrock4"),
+    MapItemSpec("medrock5", "Grey Slate Flagstone", "rocks", 297, "medrock5", "medrock", "Slate 5", default_yaw=0.0, default_pitch=54.0, builder_module="items_rocks", builder_fn="build_medrock5"),
+    MapItemSpec("medrock6", "Lichen Fieldstone", "rocks", 298, "medrock6", "medrock", "Lichen 6", default_yaw=0.0, default_pitch=46.0, builder_module="items_rocks", builder_fn="build_medrock6"),
+    MapItemSpec("medrock7", "Teardrop Quartz Stone", "rocks", 299, "medrock7", "medrock", "Wedge 7", default_yaw=0.0, default_pitch=50.0, builder_module="items_rocks", builder_fn="build_medrock7"),
+    MapItemSpec("medrock8", "Pink-Blushed Wedge Rock", "rocks", 300, "medrock8", "medrock", "Blush 8", default_yaw=0.0, default_pitch=50.0, builder_module="items_rocks", builder_fn="build_medrock8"),
+    MapItemSpec("medrock9", "Kidney River Stone", "rocks", 301, "medrock9", "medrock", "Kidney 9", default_yaw=0.0, default_pitch=50.0, builder_module="items_rocks", builder_fn="build_medrock9"),
+    MapItemSpec("smlrock1", "Grey Gravel Pebble", "rocks", 302, "smlrock1", "smlrock", "Pebble 1", default_yaw=0.0, default_pitch=52.0, builder_module="items_rocks", builder_fn="build_smlrock1"),
+    MapItemSpec("smlrock2", "Triangular Tan Pebble", "rocks", 303, "smlrock2", "smlrock", "Pebble 2", default_yaw=0.0, default_pitch=52.0, builder_module="items_rocks", builder_fn="build_smlrock2"),
+    MapItemSpec("smlrock3", "Blushed Flat Pebble", "rocks", 304, "smlrock3", "smlrock", "Pebble 3", default_yaw=0.0, default_pitch=52.0, builder_module="items_rocks", builder_fn="build_smlrock3"),
+    MapItemSpec("smlrock4", "Diamond Granite Chip", "rocks", 305, "smlrock4", "smlrock", "Chip 4", default_yaw=0.0, default_pitch=52.0, builder_module="items_rocks", builder_fn="build_smlrock4"),
+    MapItemSpec("smlrock5", "Warm Mossy Pebble", "rocks", 306, "smlrock5", "smlrock", "Pebble 5", default_yaw=0.0, default_pitch=52.0, builder_module="items_rocks", builder_fn="build_smlrock5"),
+    MapItemSpec("smlrock6", "Angular Limestone Chip", "rocks", 307, "smlrock6", "smlrock", "Chip 6", default_yaw=0.0, default_pitch=52.0, builder_module="items_rocks", builder_fn="build_smlrock6"),
+    MapItemSpec("smlrock7", "Tiny Gravel Bead", "rocks", 308, "smlrock7", "smlrock", "Bead 7", default_yaw=0.0, default_pitch=52.0, builder_module="items_rocks", builder_fn="build_smlrock7"),
+    MapItemSpec("smlrock8", "Pearlescent Quartz Bead", "rocks", 309, "smlrock8", "smlrock", "Quartz 8", default_yaw=0.0, default_pitch=50.0, builder_module="items_rocks", builder_fn="build_smlrock8"),
+    MapItemSpec("smlrock9", "Dark Slate River Pebble", "rocks", 310, "smlrock9", "smlrock", "Slate 9", default_yaw=0.0, default_pitch=50.0, builder_module="items_rocks", builder_fn="build_smlrock9"),
     # --- Hills & Gameplay Gear (ALL 14 / 14 COMPLETE!) ---
     MapItemSpec("GREENHILL", "Green Team Anthill", "structures", 248, "GREENHILL", "anthill", "Green", default_yaw=0.0, default_pitch=46.0, builder_module="items_world", builder_fn="build_greenhill"),
     MapItemSpec("REDHILL", "Red Team Anthill", "structures", 247, "REDHILL", "anthill", "Red", default_yaw=0.0, default_pitch=46.0, builder_module="items_structures", builder_fn="build_redhill"),
