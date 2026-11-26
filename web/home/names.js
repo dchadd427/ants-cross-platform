@@ -21,13 +21,12 @@
         nickLabel: 'Nickname', nickHint: '3 to 16 characters', nickHelp: 'Letters and digits of one alphabet, spaces and . _ - \u2019',
         tagLabel: 'Tag', tagHint: 'optional, 2 to 5', tagHelp: 'Letters or digits. Shown as [TAG] before your name.',
         guestLabel: 'Name', guestHelp: '',
-        firstNote: 'In the chat, the players list, rooms and match results.', guestNote: 'In rooms and in the game.',
+        firstNote: 'In the chat, the players list, rooms and match results.', guestNote: 'In rooms and in the game.', guestFirst: 'This is your name until you set one.',
         sinceNow: function (date) { return 'Your nickname since ' + date + '. You can change it now; after that you wait 30 days.'; }, sinceLater: function (date, free) { return 'Your nickname since ' + date + '. You can change it again on ' + free + '.'; },
         rules: ['Your nickname is yours alone: nobody else can use it.', 'You can change it once every 30 days. The old one stays yours for 30 days.', 'A tag can change once a day. Anyone can use any tag.', 'Names and tags are public and are kept with match results.'],
         guestRules: ['You cannot use the name of a player who is logged in.', 'Your name stays in this browser. Another browser starts over.', 'Names are public and are kept with match results.'],
         guestBox: 'Guests cannot chat in the lobby or get messages.', loginWith: 'Log in with Discord',
         menuFirst: 'You show as ', menuFirstEnd: ', your Discord name.', menuChoose: 'Choose a nickname', menuChange: 'Nickname and tag', menuNick: 'Nickname ', menuTag: ' \u00b7 Tag ', menuNoTag: ' \u00b7 No tag',
-        othersSee: function (name) { return 'Others see ' + name + ' now.'; },
         welcomeTitle: 'Welcome to Ants & Uncles', welcomeLine: 'Chatting needs a Discord sign-in. You can play and watch without one.', welcomeDiscord: 'Sign in with Discord to chat',
         welcomeSet: 'Set a display name', welcomeSetSmall: 'if you don\u2019t want to chat', welcomeNotNow: 'Not now',
         chipLabel: function (shown) { return 'You show as ' + shown + '. Set a name.'; }, chipLabelSet: function (name) { return 'Your name: ' + name + ' (Guest). Change it.'; },
@@ -225,7 +224,7 @@
             if (s.mode === 'guest') {
                 var typed = person.typed();
                 name = shown || (typed ? typed + ' (Guest)' : shownName());
-                note = shown || typed ? TEXT.guestNote : TEXT.othersSee(shownName());
+                note = shown || typed ? TEXT.guestNote : TEXT.guestFirst;
             } else {
                 var current = me && me.nick ? (me.tag ? '[' + me.tag + '] ' : '') + me.nick : '';       // (how the person shows now, when they have a nickname)
                 name = shown || current || (me ? me.name : '');

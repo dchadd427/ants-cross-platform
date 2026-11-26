@@ -266,7 +266,7 @@ const OK = { ok: true };
     r.chip().click();
     check('guest sheet: the chip opens it, the welcome card goes, there is one field (no tag) with a counter', !!r.sheet() && r.card() === null && !!r.nick() && r.tag() === null && one(r.sheet(), 'nm-cnt').textContent === '0 / 16');
     check('guest sheet: Save is off and nothing was asked yet', r.save().disabled === true && r.sent.length === 0);
-    check('guest sheet: it says what the others see now and has the rules for guests and the login button', /Guest 550000/.test(r.preview()) && byClass(r.sheet(), 'nm-rules')[0].children.length === 3 && !!button(r.sheet(), 'Log in with Discord'));
+    check('guest sheet: it says what the others see now (the number is the name until one is set) and has the rules for guests and the login button', /Guest 550000/.test(r.preview()) && /until you set one/.test(one(r.sheet(), 'nm-ps').textContent) && byClass(r.sheet(), 'nm-rules')[0].children.length === 3 && !!button(r.sheet(), 'Log in with Discord'));
     r.type(r.nick(), 'Wr');
     r.advance(100);
     r.type(r.nick(), 'Wren');
