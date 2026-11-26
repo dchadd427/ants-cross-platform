@@ -215,7 +215,7 @@
     sunAzim: clamp(Number(params.get("azim") ?? initLs.azim), -180, 180),
     playing: params.get("play") !== "0",
     dragMode: params.get("drag") === "orbit" ? "orbit" : "pan",
-    showGrid: params.get("grid") !== "0",
+    showGrid: params.get("grid") === "1",
     castShadows: params.get("shadows") !== "0",
     hiResTiles: params.get("hires") !== "0",
     patrols: params.get("patrols") !== "0",
