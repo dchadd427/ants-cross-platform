@@ -29,7 +29,7 @@ const HUB_TOOLS = argv.includes('--tools') ? argv[argv.indexOf('--tools') + 1].s
 })();
 const load = (name) => require(path.join(FRONT, name));
 const File = load('mapmaker_file.js'), Edit = load('mapmaker_edit.js'), Blocks = load('mapmaker_blocks.js'), Palette = load('mapmaker_palette.js'), Dialog = load('mapmaker_dialog.js');
-const Tools = load('mapmaker_ai_tools.js'), Part = load('mapmaker_ai.js');
+const Tools = load('mapmaker_ai_tools.js'), Part = load('mapmaker_ai.js'), Fill = load('mapmaker_fill.js'), Ext = require('./web_mapmaker_extended.js');
 
 let failures = 0, checks = 0;
 function check(ok, what) { checks++; if (!ok) { failures++; console.log('    FAILED: ' + what); } }
@@ -40,7 +40,7 @@ function map(rel) { const f = File.parse(new Uint8Array(fs.readFileSync(path.joi
 function rig(rel, over) {
     over = over || {};
     const sim = { saved: false, copies: [], kept: [], notes: [], acts: [], changed: 0, stroking: 0, fail: '', fetched: [], laters: [], keeps: [], maps: 0 };       // (laters and keeps: what a page that really waits holds, for `over.async`)
-    const file0 = map(rel || 'Original-Ants/Maps/TINY.LVL');
+    const file0 = over.extended ? File.parse(Ext.toExtended(FRONT, new Uint8Array(fs.readFileSync(path.join(ROOT, rel))))) : map(rel || 'Original-Ants/Maps/TINY.LVL');          // (over.extended: the map as an Extended map)
     const ed = Edit.create(file0, { rebase: (b) => File.parse(b), erase: Blocks.eraseAt, guard: Blocks.blockedText });
     const core = {
         checkMap: () => ({ status: 0, json: { works: true, headline: 'Works in the original game', kind: 'classic', findings: [{ severity: 'note', message: 'A note that says <b>bold</b>', row: 1, column: 2 }] } }),
@@ -58,7 +58,7 @@ function rig(rel, over) {
         library: () => [{ name: 'Treasure', file: 'TREASURE.LVL', kind: 'classic', width: 60, height: 60, minutes: 12, players: 4 }, { name: 'Odd <b>one</b>', file: 'ODD.LVL', kind: 'classic' }],
         fetchMap: (file, done) => { sim.fetched.push(file); done(file === 'TREASURE.LVL' ? '' : 'failed', file === 'TREASURE.LVL' ? new Uint8Array(fs.readFileSync(path.join(ROOT, 'Original-Ants/Maps/TREASURE.LVL'))) : null); },
         fetchText: (url, done) => done(url.endsWith('/ants-map-guide/SKILL.md') ? '' : 'failed', 'the guide text'),
-        edges: () => null, note: (t) => sim.notes.push(t), onAct: (t) => sim.acts.push(t)
+        edges: () => null, note: (t) => sim.notes.push(t), onAct: (t) => sim.acts.push(t), loadFill: over.loadFill || ((done) => done(Fill))
     };
     part = Tools.create(env);
     const run = (name, args, alive) => { let out = null; part.run(name, args || {}, (frame) => { out = frame; }, alive); return out; };
@@ -66,6 +66,7 @@ function rig(rel, over) {
 }
 const HILLS = (f) => Blocks.facts(f, true).hills;
 // the map as it is after its dictionary (a name that a stroke needed stays in the dictionary after an Undo, as it does for the person: it is harmless, and not part of what is compared)
+function open_(rel) { return map(rel); }
 function bytesOf(f) { return Buffer.from(f.bytes.subarray(f.dictAt + 2 + 11 * f.names)).toString('hex'); }
 function freeCell(f) { for (let i = 0; i < f.cells; i++) { const r = Math.floor(i / f.columns), c = i % f.columns; if (r > 3 && c > 3 && r < f.rows - 4 && c < f.columns - 4 && f.tile2(r, c) === 0x7FFE && !Blocks.inTheWay(f, i) && f.tile1(r, c) === 485) return [r, c]; } return null; }
 
@@ -194,6 +195,60 @@ console.log('RUNNING: C changing');
     const big = Palette.items('bigger')[0], placed = r.run('put_object', { tile: big.id, row: 20, column: 20 });
     check(placed.ok && r.ed.file.tile2(20, 20) === big.id, 'put_object: a bigger object');
     check(r.run('put_object', { tile: 999, row: 3, column: 3 }).error === 'bad_args' && r.run('put_object', { tile: 302, row: 99, column: 3 }).error === 'refused', 'put_object: a tile that is no object, and a cell outside the map');
+    // fill_area: a box of one thing on the cells of a pattern, one step, the cells that cannot take it counted
+    {
+        const MEDIUM = 'Original-Ants/Maps/MEDIUM.LVL', box = { row: 40, column: 25, rows: 8, columns: 12 };
+        const f = rig(MEDIUM), before = bytesOf(f.ed.file), ok = f.run('fill_area', { rect: box, object: 129, pattern: 'checker' });
+        check(ok.ok && ok.result.placed > 0 && ok.result.placed === ok.result.changed && ok.result.left_out === 0 && ok.result.seed === 1, 'fill_area: bombs on every other cell: ' + JSON.stringify(ok));
+        const sk = ok.result.skipped;
+        check(sk && sk.water > 0 && sk.rock >= 0 && sk.dry === 0 && sk.in_the_way >= 0 && sk.water + sk.rock + sk.in_the_way === 48 - ok.result.placed, 'fill_area: the cells that cannot take a bomb are counted by their reason: ' + JSON.stringify(sk));
+        check(steps(f) === 1 && f.sim.acts.length === 1 && f.ed.file.markers.length === open_(MEDIUM).markers.length, 'fill_area: one step of the history, and one line for the strip');
+        check(f.part.undoAll() === 1 && bytesOf(f.ed.file) === before, 'fill_area: Undo AI changes takes the whole fill back, byte for byte');
+        // the same seed is the same pattern, another seed another
+        const seeded = (seed) => { const g = rig(MEDIUM), res = g.run('fill_area', { rect: box, object: 129, pattern: 'random', density: 40, seed }); return { res, bytes: bytesOf(g.ed.file) }; };
+        const s5 = seeded(5), s5b = seeded(5), s6 = seeded(6);
+        check(s5.res.ok && s5.res.result.seed === 5 && s5.bytes === s5b.bytes && s5.bytes !== s6.bytes && s6.res.result.seed === 6, 'fill_area: a seed repeats its pattern exactly, and the answer says the seed');
+        // a bridge piece wants water; a box of dry ground gets none
+        const wet = f.run('fill_area', { rect: { row: 20, column: 8, rows: 12, columns: 12 }, object: 37 });
+        check(wet.ok && wet.result.placed > 0 && wet.result.skipped.dry > 0 && wet.result.skipped.water === 0, 'fill_area: bridge pieces go on water and the dry cells are skipped: ' + JSON.stringify(wet));
+        // ants: 250 at the most, the rest is told
+        const horde = rig(MEDIUM), n0 = horde.ed.file.markers.length, many = horde.run('fill_area', { rect: { row: 0, column: 0, rows: 60, columns: 60 }, ants: { team: 'green' } });
+        check(many.ok && many.result.placed === 250 && many.result.left_out > 0 && horde.ed.file.markers.length === n0 + 250 && steps(horde) === 1, 'fill_area: one call puts at most 250 ants and says how many it left out: ' + JSON.stringify(many.result));
+        // plants, flowers and food
+        const gr = rig(MEDIUM), pl = gr.run('fill_area', { rect: { row: 3, column: 3, rows: 6, columns: 6 }, plant: { tile: 421, dropper: 30 }, pattern: 'rows', n: 2 }), fd = gr.run('fill_area', { rect: { row: 30, column: 30, rows: 4, columns: 4 }, food: { stages: 4, bites: 30, points: 25 }, pattern: 'checker' });
+        check(pl.ok && pl.result.placed === 18 && gr.ed.file.plants.length === open_(MEDIUM).plants.length + 18 && fd.ok && fd.result.placed === 8 && gr.ed.file.food.length === open_(MEDIUM).food.length + 8 && steps(gr) === 2, 'fill_area: flowers that drop power-ups and food piles: ' + JSON.stringify([pl.result, fd.result]));
+        // the refusals, each with nothing changed
+        const snap = bytesOf(f.ed.file), stepsNow = steps(f), still = () => bytesOf(f.ed.file) === snap && steps(f) === stepsNow;
+        const refusal = (args, code, what) => { const out = f.run('fill_area', args); check(out.ok === false && out.error === code && out.message && still(), 'fill_area: ' + what + ' (' + (out.error || 'ok') + ')'); };
+        refusal({ rect: { row: 55, column: 55, rows: 10, columns: 10 }, object: 129 }, 'refused', 'a box that is not inside the map is refused');
+        refusal({ rect: { row: 0, column: 59, rows: 2, columns: 2 }, object: 129 }, 'refused', 'a box that crosses the edge is refused');
+        refusal({ rect: box, object: 1323 }, 'bad_args', 'a bigger object is not an object of a fill');
+        refusal({ rect: box, object: 404 }, 'bad_args', 'a plant is not an object of a fill');
+        refusal({ rect: box, plant: { tile: 302 } }, 'bad_args', 'a tile that is not a plant is refused');
+        refusal({ rect: box, food: { food: 5 } }, 'bad_args', 'a tile that is not a food item is refused');
+        refusal({ rect: box, ants: { team: 'red', type: 'fire' } }, 'refused', 'an ant type is for an Extended map');
+        const lake = rig(MEDIUM), sunk = Array.from({ length: 60 * 60 }, (_, i) => [Math.floor(i / 60), i % 60]).filter(([r, c]) => Fill.plan(lake.ed.file, Fill.objectThing(129), { r0: r, c0: c, r1: r, c1: c }, { pattern: 'all' }).skips.water === 1)[0];
+        const alone = lake.run('fill_area', { rect: { row: sunk[0], column: sunk[1], rows: 1, columns: 1 }, object: 129 });
+        check(alone.error === 'refused' && /Nothing to put/.test(alone.message) && /1 water/.test(alone.message) && steps(lake) === 0, 'fill_area: a box with nothing to put is refused with the page\u2019s sentence: ' + JSON.stringify(alone));
+        const dead = rig(MEDIUM, { loadFill: (done) => done(null) }), nope = dead.run('fill_area', { rect: box, object: 129 });
+        check(nope.error === 'refused' && /did not load/.test(nope.message) && steps(dead) === 0, 'fill_area: a part of the page that did not load is said, and nothing changes');
+        const old = f.run('fill_area', { rect: box, object: 129, base: f.part.version() + 5 });
+        check(old.error === 'changed_by_person' && still(), 'fill_area: an old base is refused with the new version');
+        const fine = f.run('fill_area', { rect: box, object: 62, base: f.part.version() });
+        check(fine.ok, 'fill_area: the new version is the right base: ' + JSON.stringify(fine));
+        // an Extended map: ants of a type, by the file's own numbers (bomber 1, fire 2, thief 3, combat 4, swimmer 5); a swimmer stands on water and an ant of another type does not
+        const x = rig(MEDIUM, { extended: true }), types = [['combat', 4], ['thief', 3], ['bomber', 1], ['swimmer', 5], ['fire', 2]];
+        const put = [];
+        types.forEach(([type, number], i) => {
+            const out = x.run('put_ants', { team: 'green', row: 10 + 5 * i, column: 40, count: 1, type }), m = x.ed.file.markers[x.ed.file.markers.length - 1];
+            check(out.ok && m.antType === number, 'put_ants: ' + type + ' ants are type ' + number + ' in the file');
+            put.push([type, m.row, m.column]);
+        });
+        const region = x.run('get_region', { row: 0, column: 0, rows: 60, columns: 60 }).result.ants;
+        equal(put.map(([type, r, c]) => (region.filter((a) => a.row === r && a.column === c && a.type)[0] || {}).type), put.map((p) => p[0]), 'get_region: each ant is read back with the name of the type that it was put with');
+        const pond = { row: 20, column: 8, rows: 12, columns: 12 }, diver = x.run('fill_area', { rect: pond, ants: { team: 'blue', type: 'swimmer' }, pattern: 'checker' }), walker = rig(MEDIUM, { extended: true }).run('fill_area', { rect: pond, ants: { team: 'red', type: 'combat' }, pattern: 'checker' });
+        check(diver.ok && diver.result.skipped.water === 0 && walker.ok && walker.result.skipped.water > 0 && walker.result.placed < diver.result.placed, 'fill_area: swimmer ants are put on water, other ants skip it: ' + JSON.stringify([diver.result, walker.result]));
+    }
     const refused = r.run('set_properties', { description: 'x'.repeat(100) });
     check(refused.error === 'refused' && /does not fit/.test(refused.message), 'set_properties: the core\u2019s reason is the answer');
     check(r.run('resize_map', { rows: 500, columns: 500 }).error === 'refused', 'resize_map: more than a Classic map may have is refused');

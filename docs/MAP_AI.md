@@ -77,6 +77,7 @@ One table (`hub/aitools.py`) serves the plain HTTP door, the MCP door, the OpenA
 | `list_library_maps`, `view_library_map` | read | the public library's maps as examples: a summary, a text picture or a PNG |
 | `paint` | edit | one tile as ground or as a one-cell object: `cells` (at most 2,000), `rect`, `line` with a brush, or `fill`; at most 5,000 cells a call; optional `auto_edges` |
 | `put_object`, `put_hill`, `put_ants`, `put_food`, `put_plant`, `erase` | edit | the Map Maker's own tools |
+| `fill_area` | edit | "Fill a box" ([`MAP_EDITOR.md`](MAP_EDITOR.md#fill-a-box)): a `rect` of one thing (`object`, `plant`, `food` or `ants`) on the cells of a `pattern` (`all`, `checker`, `rows`, `cols`, `random` with a `density` and a `seed`); at most 5,000 cells and 250 ants a call, one step of the history; the answer counts what was put, what was skipped (water, solid ground, something in the way; a bridge piece wants water and a swimmer ant may stand on it) and what the ant cap left out |
 | `set_properties` | edit | description, minutes, eggs, default ant (not the rules word: the page sets that itself) |
 | `fix_edges`, `resize_map`, `new_map` | edit | the page's own functions with the page's own refusals; `new_map` only after the safety copy |
 | `undo`, `redo` | edit | the AI's own steps only |

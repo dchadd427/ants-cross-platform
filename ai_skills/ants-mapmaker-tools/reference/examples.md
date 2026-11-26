@@ -74,6 +74,16 @@ Changing:
 {"tool": "put_object", "args": {"tile": 1323, "row": 15, "column": 15}}
 ```
 
+A field of bombs on every other cell of a box, and a meadow of flowers on a tenth of another one (the same `seed` is the same meadow):
+
+```json
+{"tool": "fill_area", "args": {"rect": {"row": 20, "column": 20, "rows": 8, "columns": 12}, "object": 129, "pattern": "checker"}}
+```
+
+```json
+{"tool": "fill_area", "args": {"rect": {"row": 30, "column": 5, "rows": 10, "columns": 10}, "plant": {"tile": 421}, "pattern": "random", "density": 10, "seed": 7}}
+```
+
 ```json
 {"tool": "erase", "args": {"rect": {"row": 0, "column": 0, "rows": 4, "columns": 4}}}
 ```

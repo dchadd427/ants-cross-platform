@@ -471,6 +471,19 @@
         s.onload = c.onload = function () { end(true); }; s.onerror = c.onerror = function () { end(false); };
         doc.head.appendChild(c); doc.head.appendChild(s);
     }
+    // The switch "Fill a box" (mapmaker_fill.js and its style), loaded the first time it is on, and again for the AI's `fill_area`: done(the part), or done(null) when a file did not load. Several asks
+    // that come before the files are there wait for the same two loads.
+    var fillWaiting = null;
+    function loadFill(done) {
+        if (win.MapFill) return done(win.MapFill);
+        if (fillWaiting) return fillWaiting.push(done);
+        fillWaiting = [done];
+        var left = 2, bad = false, s = el('script'), c = el('link');
+        function end(ok) { bad = bad || !ok; if (--left) return; var waiting = fillWaiting; fillWaiting = null; waiting.forEach(function (f) { f(bad || !win.MapFill ? null : win.MapFill); }); }
+        s.src = 'front/mapmaker_fill.js'; c.rel = 'stylesheet'; c.href = 'front/mapmaker_fill.css';
+        s.onload = c.onload = function () { end(true); }; s.onerror = c.onerror = function () { end(false); };
+        doc.head.appendChild(c); doc.head.appendChild(s);
+    }
     // The Pick up tool (mapmaker_pickup.js and its style), loaded the first time the tool is chosen: done(the part), or done(null) when it did not load. Each of the two files is asked for again
     // until it is there (a script that came while its style did not is not enough), and a tag of a file that failed is taken away before the next one is added.
     var pickPart = { script: null, style: null };
@@ -513,7 +526,8 @@
                 },
                 mini: function (file, w, h) { return MapView.miniBase(file, w, h, canvasOf); }, makeCanvas: canvasOf,
                 library: function () { return store.libraryList(); }, fetchMap: function (file, done) { store.fetchMap(file, done); },
-                edges: function () { return win.MapEdges && win.MapGround ? { MapEdges: win.MapEdges, MapGround: win.MapGround } : null; }
+                edges: function () { return win.MapEdges && win.MapGround ? { MapEdges: win.MapEdges, MapGround: win.MapGround } : null; },
+                loadFill: loadFill
             }
         };
     }
@@ -566,9 +580,9 @@
             host: {
                 tools: doc.querySelectorAll('[data-tool]'), box: $('palette-box'), title: $('palette-title'), swatches: $('palette'), name: $('palette-name'), hint: $('tool-hint'),
                 tile: $('tile-btn'), map: $('map'), side: doc.querySelector('aside.side'), brushes: doc.querySelectorAll('[data-brush]'), fill: $('fill-btn'), autoEdges: [$('auto-edges-btn'), $('auto-edges-mob')], undo: $('undo-btn'), redo: $('redo-btn'),
-                stepper: $('stepper'), stepperLabel: $('stepper-label'), stepLess: $('step-less'), stepValue: $('step-val'), stepMore: $('step-more')
+                stepper: $('stepper'), stepperLabel: $('stepper-label'), stepLess: $('step-less'), stepValue: $('step-val'), stepMore: $('step-more'), fillRow: $('fill-row'), fillBtn: $('fill-box-btn')
             },
-            loadAnts: loadAnts, loadPick: loadPick, about: antsAbout, props: function () { ACTIONS.props(); }, convert: function () { ACTIONS.convert(); }, file: function () { return map.file; }, rebase: rebase, onEdit: edited, busy: function () { return dialogs.isOpen() || !$('crop').hidden || !$('mine').hidden; }, dialogs: dialogs, say: function (t, m) { dialogs.message(t, m); }
+            loadAnts: loadAnts, loadPick: loadPick, loadFill: loadFill, about: antsAbout, props: function () { ACTIONS.props(); }, convert: function () { ACTIONS.convert(); }, file: function () { return map.file; }, rebase: rebase, onEdit: edited, busy: function () { return dialogs.isOpen() || !$('crop').hidden || !$('mine').hidden; }, dialogs: dialogs, say: function (t, m) { dialogs.message(t, m); }
         });
         // The page asks before it is closed only when the work is not safe in the browser (the browser keeps nothing, or the last change has not been written yet)
         win.addEventListener('beforeunload', function (e) { if (map && !tools.isSaved() && (store.status() !== 'ready' || keepPending)) { e.preventDefault(); e.returnValue = ''; } });

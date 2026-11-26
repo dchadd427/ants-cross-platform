@@ -234,6 +234,90 @@
    "old": " Running or saving it keeps the key on this computer (the terminal\\u2019s history, the AI app\\u2019s settings): if the computer is shared, revoke the key when you are done.",
    "new": "",
    "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "fill_a_box_outside_the_map_is_filled",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "if (!inside(f, box.r0, box.c0) || !inside(f, box.r1, box.c1)) return done(refuse(",
+   "new": "if (false) return done(refuse(",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "fill_an_unknown_object_is_a_bomb",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "Fill.objectThing(args.object) || refuse('bad_args'",
+   "new": "Fill.objectThing(args.object) || Fill.objectThing(129) || refuse('bad_args'",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "fill_a_plant_that_is_no_plant",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "Fill.plantThing(args.plant.tile, args.plant.dropper) || refuse('bad_args'",
+   "new": "Fill.plantThing(args.plant.tile, args.plant.dropper) || Fill.plantThing(404, 0) || refuse('bad_args'",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "fill_a_food_that_is_no_food_item",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "if (food.food && !item) return refuse(",
+   "new": "if (false) return refuse(",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "fill_an_ant_type_on_a_classic_map",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "if (ANT_TYPE_NUMBER[a.type] && f.kind !== 'extended') return refuse(",
+   "new": "if (false) return refuse(",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "fill_nothing_to_put_is_a_step",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "if (!p.cells.length) return refuse('refused', Fill.nothingText(p));",
+   "new": "if (!p.cells.length) return okay({ version: ver, changed: 0 });",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "fill_a_part_that_did_not_load_is_not_said",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "if (!Fill) return done(refuse('refused', 'The part of the page that fills a box did not load. Try again in a moment.'));",
+   "new": "if (!Fill) return done(okay({ version: ver, changed: 0 }));",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "fill_the_seed_is_not_answered",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "seed: p.pat.seed, rect: rect }",
+   "new": "seed: 1, rect: rect }",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "fill_the_skipped_cells_are_not_counted",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "skipped: { water: p.skips.water, dry: p.skips.dry, rock: p.skips.rock, in_the_way: p.skips.taken }",
+   "new": "skipped: { water: 0, dry: 0, rock: 0, in_the_way: 0 }",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "fill_the_cells_left_out_are_not_counted",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "left_out: p.extra.length,",
+   "new": "left_out: 0,",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "ants_have_the_types_of_the_old_list",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "var ANT_TYPE_NUMBER = { combat: 4, thief: 3, bomber: 1, swimmer: 5, fire: 2 };",
+   "new": "var ANT_TYPE_NUMBER = { combat: 1, thief: 2, bomber: 3, swimmer: 4, fire: 5 };",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "ants_are_read_back_with_the_old_list",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "o.type = ANT_TYPE_NAME[m.antType];",
+   "new": "o.type = Props.TYPES[m.antType].key;",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
   }
  ]
 }

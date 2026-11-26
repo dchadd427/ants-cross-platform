@@ -1,0 +1,512 @@
+{
+  "note": "Mutants of the map maker's Fill a box for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the patterns, the cells that are skipped (water and its two exceptions, solid ground, what is there), the cap of a fill, the change that is one step, the box in the page (web/front/mapmaker_fill.js) and the switch in the tools (web/front/mapmaker_tools.js), each breaking one rule of the product, against tests/scripts/web_mapmaker_fill_check.js. Run from the checkout, no build needed: tools/mutate.py tests/data/mapmaker_fill_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_mapmaker_fill.py runs the same list on a copy of the files.",
+  "baseline": {
+    "test": "node tests/scripts/web_mapmaker_fill_check.js"
+  },
+  "mutants": [
+    {
+      "id": "checker_counts_from_the_map",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "case 'checker': return (rr + cc) % 2 === 0;",
+      "new": "case 'checker': return (r + c) % 2 === 0;",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "checker_is_the_other_color",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "case 'checker': return (rr + cc) % 2 === 0;",
+      "new": "case 'checker': return (rr + cc) % 2 === 1;",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "rows_count_from_the_map",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "case 'rows': return rr % p.n === 0;",
+      "new": "case 'rows': return r % p.n === 0;",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "rows_start_on_the_second_row",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "case 'rows': return rr % p.n === 0;",
+      "new": "case 'rows': return (rr + 1) % p.n === 0;",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "columns_are_rows",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "case 'cols': return cc % p.n === 0;",
+      "new": "case 'cols': return rr % p.n === 0;",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "columns_count_from_the_map",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "case 'cols': return cc % p.n === 0;",
+      "new": "case 'cols': return c % p.n === 0;",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "random_ignores_the_seed",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "case 'random': return hash(p.seed, r, c) < p.density / 100;",
+      "new": "case 'random': return hash(1, r, c) < p.density / 100;",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "random_is_decided_by_the_box",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "case 'random': return hash(p.seed, r, c) < p.density / 100;",
+      "new": "case 'random': return hash(p.seed, rr, cc) < p.density / 100;",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "random_density_is_turned_round",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "case 'random': return hash(p.seed, r, c) < p.density / 100;",
+      "new": "case 'random': return hash(p.seed, r, c) >= p.density / 100;",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "random_density_is_a_tenth",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "case 'random': return hash(p.seed, r, c) < p.density / 100;",
+      "new": "case 'random': return hash(p.seed, r, c) < p.density / 1000;",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "every_cell_is_every_other_cell",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "            default: return true;\n",
+      "new": "            default: return (rr + cc) % 2 === 0;\n",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "n_is_not_held_to_its_range",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "n: clamp(p.n === undefined ? 3 : p.n, N_MIN, N_MAX)",
+      "new": "n: p.n === undefined ? 3 : p.n",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "density_is_not_held_to_its_range",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "density: clamp(p.density === undefined ? 30 : p.density, DENSITY_MIN, DENSITY_MAX)",
+      "new": "density: p.density === undefined ? 30 : p.density",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "seed_is_not_held_to_its_range",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "seed: clamp(p.seed === undefined ? 1 : p.seed, 1, SEED_MAX) }",
+      "new": "seed: p.seed === undefined ? 1 : p.seed }",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "a_pattern_that_is_not_one_is_taken",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "pattern: known ? p.pattern : 'all'",
+      "new": "pattern: p.pattern",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "water_takes_everything",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "if (water && !(thing.kind === 'ant' && file.version === 9 && thing.type === SWIMMER)) return 'water';",
+      "new": "if (false) return 'water';",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "every_ant_swims",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "thing.kind === 'ant' && file.version === 9 && thing.type === SWIMMER",
+      "new": "thing.kind === 'ant' && file.version === 9",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "a_classic_map_has_swimmers",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "thing.kind === 'ant' && file.version === 9 && thing.type === SWIMMER",
+      "new": "thing.kind === 'ant' && thing.type === SWIMMER",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "a_bridge_piece_goes_on_dry_ground",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "return water ? '' : 'dry';",
+      "new": "return '';",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "a_bridge_piece_is_skipped_on_water",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "return water ? '' : 'dry';",
+      "new": "return water ? 'water' : 'dry';",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "a_bridge_is_a_plain_object",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "if (thing.kind === 'obj' && thing.id === BRIDGE) return water",
+      "new": "if (false) return water",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "solid_ground_is_free",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "if (Edit.flags(file, 1, idx) & 1) return 'rock';",
+      "new": "if (Edit.flags(file, 1, idx) & 2) return 'rock';",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "an_object_is_free",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "        if (t2 !== EMPTY2) return 'taken';\n",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "a_hill_is_free",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "if (taken[idx] || Blocks.teamOfHill(t2) >= 0) return 'taken';",
+      "new": "if (taken[idx]) return 'taken';",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "ants_and_plants_are_free",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "if (taken[idx] || Blocks.teamOfHill(t2) >= 0) return 'taken';",
+      "new": "if (Blocks.teamOfHill(t2) >= 0) return 'taken';",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "a_pile_is_free",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "        for (i = 0; i < lay.piles.length; i++) { var pile = lay.piles[i]; if (pile.row < file.rows && pile.column < file.columns) taken[pile.row * file.columns + pile.column] = true; }\n",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "the_cells_that_are_skipped_are_not_counted",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "if (why) { skipped.push({ r: r, c: c, why: why }); skips[why]++; } else cells.push({ r: r, c: c });",
+      "new": "if (why) { skipped.push({ r: r, c: c, why: why }); } else cells.push({ r: r, c: c });",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "an_ant_fill_is_300",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "var CAP_ANTS = Blocks.MAX_ANTS, CAP_THINGS = 5000;",
+      "new": "var CAP_ANTS = 300, CAP_THINGS = 5000;",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "a_fill_is_6000",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "var CAP_ANTS = Blocks.MAX_ANTS, CAP_THINGS = 5000;",
+      "new": "var CAP_ANTS = Blocks.MAX_ANTS, CAP_THINGS = 6000;",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "the_room_of_the_list_is_ignored",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "if ((thing.kind === 'ant' || thing.kind === 'plant') && lay.ok1) cap = Math.min(cap, Blocks.MAX_RECORDS - lay.records.length);",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "the_room_of_the_piles_is_ignored",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "if (thing.kind === 'pile' && lay.ok2) cap = Math.min(cap, 65535 - lay.piles.length);",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "the_last_cells_are_put_not_the_first",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "cells: extra.length ? cells.slice(0, cap) : cells,",
+      "new": "cells: extra.length ? cells.slice(cells.length - cap) : cells,",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "the_cells_over_the_cap_are_forgotten",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "var extra = cells.length > cap ? cells.slice(cap) : [];",
+      "new": "var extra = [];",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "a_change_over_the_room_is_made",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "        if (lay.records.length + cells.length > Blocks.MAX_RECORDS) return { error: tooMany(lay.records.length, cells.length) };\n        return Blocks.appendStarts",
+      "new": "        return Blocks.appendStarts",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "a_rock_is_not_solid",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "            if (Solid.sets(thing.id)) change.solid.push([idx, true]);\n",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "an_object_has_no_anchor",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "change.cells.push([idx, thing.id, 1, Edit.ownAnchor(file, idx, thing.id)]);",
+      "new": "change.cells.push([idx, thing.id, 1, 0]);",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "an_object_has_no_name",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "        addName(change, thing.id, thing.name);\n        cells.forEach(function (cell) {\n            var idx",
+      "new": "        cells.forEach(function (cell) {\n            var idx",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "a_flower_does_not_drop",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "dropper > 0 ? { row: cell.r, column: cell.c, flag: 1,",
+      "new": "false ? { row: cell.r, column: cell.c, flag: 1,",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "a_flower_has_no_power_up_names",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "        if (dropper > 0) Blocks.POWERUP_NAMES.forEach(function (pu) { addName(change, pu[0], pu[1]); });\n",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "the_plants_are_not_in_the_list",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "        if (sp1) change.splices.push(sp1);\n        if (sp4) change.splices.push(sp4);\n        addName(change, id",
+      "new": "        if (sp4) change.splices.push(sp4);\n        addName(change, id",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "a_food_item_is_a_plain_pile",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "        if (custom) set = Blocks.customPile(set, custom);\n        for (i = 0;",
+      "new": "        for (i = 0;",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "the_stages_are_not_named",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "        set.stages.forEach(function (s) { if (s[1] !== EMPTY2) addName(change, s[1], Blocks.FOOD_NAMES[s[1]]); });\n        return change;\n    }\n    // Objects",
+      "new": "        return change;\n    }\n    // Objects",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "ants_have_no_type",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "var lay = Blocks.layout(file), type = file.version === 9 ? thing.type : 0;",
+      "new": "var lay = Blocks.layout(file), type = 0;",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "ants_are_all_the_first_team",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "tile: Blocks.markerTile(file, thing.team, type), row: cell.r",
+      "new": "tile: Blocks.markerTile(file, 0, type), row: cell.r",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "a_classic_ant_keeps_its_type",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "if (thing.kind === 'ant' && file.version !== 9 && thing.type) thing = antThing(thing.team, 0);",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "the_box_goes_on_from_the_last_cell",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "extend: function (from, to) { if (start) setBox(start, to); },",
+      "new": "extend: function (from, to) { if (start) setBox(from, to); },",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "a_drag_that_is_taken_away_puts",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "            cancel: function () { drop(); },",
+      "new": "            cancel: function () { finish(); },",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "a_lost_pointer_puts",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "            abandon: function () { drop(); },",
+      "new": "            abandon: function () { finish(); },",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "a_tap_is_lost",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "if (env.stroking && env.stroking() && win.setTimeout) win.setTimeout(finish, 0); else finish();",
+      "new": "finish();",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "a_fill_is_a_step_for_each_cell",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "var change = changeOf(f, p.thing, p.cells);\n            if (change.error)",
+      "new": "var change = changeOf(f, p.thing, p.cells.slice(0, 1));\n            if (change.error)",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "the_box_is_not_dropped_when_it_is_put",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "            st.box = null; start = null; painting = false;\n            if (!p) { drawOver(); renderBox(); return; }",
+      "new": "            start = null; painting = false;\n            if (!p) { drawOver(); renderBox(); return; }",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "an_undo_is_not_said",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "if (st.kind === 'put' && step.top !== st.last.id && step.redo) {",
+      "new": "if (false) {",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "a_redo_is_not_said",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "else if (st.kind === 'undone' && step.top === st.last.id) {",
+      "new": "else if (false) {",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "a_new_pattern_is_the_same",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "st.seed = st.seed % SEED_MAX + 1;",
+      "new": "st.seed = st.seed;",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "the_slider_is_made_again",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "range.addEventListener('input', function () { st.density = clamp(range.value, DENSITY_MIN, DENSITY_MAX); out.textContent = st.density + '%'; head.querySelector('.fb-pn').textContent = patName('random'); setPlan(); renderBox(); drawOver(); env.refresh(); });",
+      "new": "range.addEventListener('input', function () { st.density = clamp(range.value, DENSITY_MIN, DENSITY_MAX); chosen(); });",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "escape_does_not_take_the_box_away",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "key: function (e) { if (e.key === 'Escape' && painting)",
+      "new": "key: function (e) { if (false && painting)",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "the_team_button_does_nothing",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "b.addEventListener('click', function () { env.setTeam(t); chosen(); });",
+      "new": "b.addEventListener('click', function () { chosen(); });",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "the_ant_type_button_does_nothing",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "b.addEventListener('click', function () { env.setAntType(it[0]); chosen(); });",
+      "new": "b.addEventListener('click', function () { chosen(); });",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "a_classic_map_has_ant_types",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "if (file() && file().version === 9 && types.length) {",
+      "new": "if (file() && types.length) {",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "the_cap_is_not_said",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "if (p.extra.length) return { cls: 'warn', text: num(p.cells.length + p.extra.length)",
+      "new": "if (false) return { cls: 'warn', text: num(p.cells.length + p.extra.length)",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "the_leftover_is_not_said",
+      "file": "web/front/mapmaker_fill.js",
+      "old": "+ (p.extra.length ? ' ' + num(p.extra.length) + ' more did not fit in one fill: drag the same box again for them.' : '');",
+      "new": "+ '';",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "the_switch_is_not_remembered",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "try { if (env.win && env.win.localStorage) env.win.localStorage.setItem('ants_mapmaker_fill_box', state.fillBox ? '1' : '0'); } catch (e) {}",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "the_switch_is_on_for_a_new_visitor",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "env.win.localStorage.getItem('ants_mapmaker_fill_box') === '1'); } catch (e) { return false; } })() };",
+      "new": "env.win.localStorage.getItem('ants_mapmaker_fill_box') !== '0'); } catch (e) { return true; } })() };",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "bigger_objects_take_the_box",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "function fillable() { return state.tool === 'objects' || state.tool === 'food' || state.tool === 'ants'; }",
+      "new": "function fillable() { return state.tool === 'objects' || state.tool === 'food' || state.tool === 'ants' || state.tool === 'bigger'; }",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "food_has_no_box",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "function fillable() { return state.tool === 'objects' || state.tool === 'food' || state.tool === 'ants'; }",
+      "new": "function fillable() { return state.tool === 'objects' || state.tool === 'ants'; }",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "the_part_does_not_get_the_canvas",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "function mine() { return fillOn() ? fill.painter : (",
+      "new": "function mine() { return false ? fill.painter : (",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "a_part_that_did_not_load_leaves_the_switch_on",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "askedFill = false; state.fillBox = false; if (env.say)",
+      "new": "askedFill = false; if (env.say)",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "a_part_that_did_not_load_is_not_said",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "if (env.say) env.say('This part did not load', 'The part of the page that fills a box did not load.",
+      "new": "if (false) env.say('This part did not load', 'The part of the page that fills a box did not load.",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "the_plant_follows_the_pointer_in_a_box",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "(editor && !fillOn() && isPlant() ? state.objects : 0)",
+      "new": "(editor && isPlant() ? state.objects : 0)",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "the_part_is_asked_for_again_and_again",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "if (askedFill || !env.loadFill) return;\n            askedFill = true;",
+      "new": "if (!env.loadFill) return;\n            askedFill = true;",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "the_hint_is_the_old_one",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "fillMode() ? FILL_HINT : HINTS[state.tool]",
+      "new": "HINTS[state.tool]",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    },
+    {
+      "id": "the_box_stays_for_other_tools",
+      "file": "web/front/mapmaker_tools.js",
+      "old": "if (fill) fill.show(fillOn());",
+      "new": "if (fill) fill.show(!!fill);",
+      "test": "node tests/scripts/web_mapmaker_fill_check.js"
+    }
+  ]
+}
