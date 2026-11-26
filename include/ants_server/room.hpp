@@ -258,6 +258,7 @@ struct RoomStatus {
     std::vector<Bot> bots;
     std::string teams;                      // the teams that the match started with, "ffa" or "A+B" (protocol 13; "" before the match), and the referee's own alliances by seat now (4: none): for the tests, not shown by
     std::array<uint8_t, 4> allies{4, 4, 4, 4};     // the control interface
+    std::array<int32_t, 4> scores{};        // the referee's score boxes by seat as the game draws them (the display scores, 0 to 999999; 0 for a seat that does not play): for the tests, which compare the live list's numbers with them; not shown by the control interface
     std::string room_teams;                 // the room's own teams, "A+B" ("" when it has none: the leader's START chooses): for the tests, not shown by the control interface
     bool bots_only{false};                  // a match of computer players alone, the server's own (RoomSpec::bots_only): not a game that the site's statistics count
     bool bot_controller{false};             // the server built a bot controller for this room's match (only a room with a bot seat has one: a room without bots runs no bot code, docs/BOTS.md rule 8)
@@ -531,6 +532,7 @@ private:
     void replay_begin(const net::StartMsg& start);           // the recorder of the match is made and taps the referee's runner (begin_match: before the first turn)
     void replay_end();                                       // the match is over (finish, fail while it ran): the recording is made into a file and kept, or the status says why not
     std::string replay_keep(replay::Recorder& recorder);     // the part of replay_end that makes the file and sets replay_file_ or replay_note_: the file's name, "" when the match is not kept
+    void publish_live_scores();                              // the score boxes of the referee's engine, as the game draws them, to the live board (after the first turn and then every second: a few reads of numbers)
     void live_end(const std::string& kept_file);             // takes the recording off the live board (the file's name, "" when it was not kept); the board holds a pointer to the recorder
     bool finish_replay(const RestartLoaded& rec, size_t next_check, std::string& why);      // every turn was given: the last checks, and what begin_restored() needs
     void build_session(uint32_t restart_vote_after_ms, uint32_t start_delay_ms = net::kMatchStartDelayMs);      // the session of the match, as begin_match and restore both make it (the engine is made already); `start_delay_ms`: how long the first turn is held (the 5 s dialog, or the countdown of protocol 21)

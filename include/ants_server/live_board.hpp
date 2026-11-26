@@ -18,12 +18,16 @@
 //  * the list: the matches whose recording has not failed, from the moment they begin (a match that has run no turn yet is on it with turns 0, and is shown as starting), newest start first, at most 50 (when there
 //    are more, the matches that have run kReplayMinTurns, the length that the store keeps, come before the younger ones, so that a stream of matches that end at once cannot push the others off the list), with the
 //    players in the strings of the replay list ("Green (Ann)", "Green", "Red (Bot (Medium))") and the match's game mode;
+//  * the score boxes (LiveScores): the number that each seat's score box shows in the game, and which seats are one side, sampled by the room from its referee's engine once a second (Room::publish_live_scores) and given to
+//    the list with no delay: only what every player of the match sees on the screen at that moment, nothing of the map, the ants, the orders or the other numbers of the match. A match that is not on the board
+//    (Fog of War, an unrecorded match) has none;
 //  * the snapshot of one of them: the recorder's incomplete file with its `live` chunk, cut at the turns that the delay allows (Recorder::snapshot), cached for as long as the board's clock stays in one second, so a
 //    crowd of viewers costs one snapshot a second and the same bytes go to all of them meanwhile; with it the turns the match had run and the turns that the snapshot shows, so that a page can say how late it is;
 //  * the fate of a match that ended lately: the name that the store kept it under ("" when it was not kept) and the turns it ran, for 15 minutes, 256 matches at most, so that a page that watched it finds the
 //    replay when it ends; a match that ended before kReplayMinTurns (never kept: a room that was closed in its countdown or soon after) is remembered too, 2 minutes, 64 of them, so that a page that was sent to it says
 //    that it ended too soon to be kept.
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -36,11 +40,24 @@ class Recorder;
 
 namespace ants::server {
 
+/// What the score boxes of a match show at one moment (the game's own: HUD::render_score_box), by seat. Only the seats of the match's roster have a number. `known` is false until the room has taken its first sample (the
+/// match has run no turn): the list then says nothing, and the page says that there is no score yet.
+struct LiveScores {
+    static constexpr size_t kSeats = 4;                    // sim::MAX_PLAYERS (live_board.cpp checks it)
+    static constexpr int32_t kBoxMax = 999999;             // the box draws no more than this, and no less than 0 (a score can go below 0: the box shows 0)
+    bool known{false};
+    std::array<int32_t, kSeats> box{};                     // the number in the seat's box: its score and its ally's together, from 0 to kBoxMax
+    std::array<uint8_t, kSeats> side{};                    // the side of the seat: the lowest seat of the seat and its ally, so allies share a number; the seat itself with no ally
+    uint8_t covered{0};                                    // bit s: the box of seat s is covered in the game (the seat left the match): it shows no number
+};
+
 /// One match of the list
 struct LiveMatch {
     std::string id;
     std::string map;                                 // the map's file name as the match named it ("TREASURE.LVL")
     uint8_t mode{0};                                 // the room's game mode as the replay's head holds it (sim::GameMode: 0 highest score, 1 for 187)
+    uint8_t roster{0};                               // bit s: seat s plays (`players` has one string for each, in seat order)
+    LiveScores scores;                               // the score boxes as the room last sampled them (`known` false: not yet)
     int64_t started{0};                              // seconds since 1970 UTC when the recording began
     uint32_t turns{0};                               // the turns run so far
     std::vector<std::string> players;                // the seats that play, "Green (Ann)", "Green" (no name) or "Red (Bot (Medium))", in seat order
@@ -88,6 +105,9 @@ public:
     /// starts the match: two or more make the match one that is shown late, and the board never counts again. The recorder must stay alive until end() is called with the id. Returns the id; empty when the match cannot
     /// be named (every one of the 9999 ids of its second is taken) or is played with Fog of War (what the other sides do is hidden from a player, and a live view would not hide it), and then it is not on the board.
     std::string begin(const replay::Recorder& recorder, unsigned people);
+    /// The room's sample of the score boxes of the match `id` (Room::publish_live_scores): the list shows it from now on, in place of the one before. An id that is not on the board (Fog of War, a match that is over, a made-up
+    /// one) is ignored: nothing is made for it. The numbers are clamped to the box's range, and a seat that plays no part in the match keeps no number.
+    void set_scores(const std::string& id, const LiveScores& scores);
     /// Takes the match off the board: the recording became a file (`kept_file` is the name the store gave it) or was dropped (`kept_file` empty). The match is remembered as ended (see above); an id that is not on the
     /// board is ignored.
     void end(const std::string& id, const std::string& kept_file);
@@ -111,6 +131,8 @@ private:
         std::string id;
         std::string map;
         uint8_t mode{0};
+        uint8_t roster{0};
+        LiveScores scores;
         int64_t started{0};
         std::vector<std::string> players;
         const replay::Recorder* recorder{nullptr};

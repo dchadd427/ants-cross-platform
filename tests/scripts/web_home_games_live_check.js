@@ -7,7 +7,7 @@
 // usage: node web_home_games_live_check.js web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
 const R = require('./web_home_games_rig.js')(process.argv[2]);
-const { check, same, flush, row, listOf, page, wait, find, first, home, tap, popOf, textOf, myRoom, Games, RULES0, done, broke, roomMessage, seatsOf, STARTING, KEY } = R;
+const { check, same, flush, row, listOf, page, wait, find, first, home, tap, popOf, rowsOf, slotsOf, classes, textOf, myRoom, Games, RULES0, done, broke, roomMessage, seatsOf, STARTING, KEY } = R;
 
 const LIVE = (id, o) => Object.assign({ id, map: 'TREASURE.LVL', started: 1790000000, turns: 1200, seconds: 60, players: ['Green (Ann)', 'Red (Bot (Medium))'] }, o || {});
 const SAMPLE = [LIVE('TREASURE-20261109-120000Z', { seconds: 125, players: ['Green (Ann)', 'Red (Bot (Medium))'] }), LIVE('ISLANDS-20261109-115900Z', { map: 'ISLANDS.LVL', seconds: 7, players: ['Blue (Cy)', 'Black'] })];
@@ -83,10 +83,10 @@ const M = 'TREASURE.LVL';
     const w = watchOf(rows[0]);
     same('Watch is a link to the player on that match, in this very tab (the page holds no room: nothing is lost, and Back and Home come back to the one front page)', [w.tagName, w.getAttribute('href'), w.getAttribute('target'), w.getAttribute('rel')], ['a', '/play?live=TREASURE-20261109-120000Z', null, null]);
     check('... and its name for a screen reader says the match', /^Watch the match on Treasure, Ann, Bot \(Medium\), 2:05 so far$/.test(w.getAttribute('aria-label')));
-    check('a row in progress has no Join (nobody can take a seat of a running match)', rows.every((li) => !li.findAll((e) => e.tagName === 'button').length && !first(li, 'gjoin')));
+    check('a row in progress has no Join (nobody can take a seat of a running match): its one button is the strip of the scores', rows.every((li) => !first(li, 'gjoin') && li.findAll((e) => e.tagName === 'button').every((b) => classes(b).indexOf('gsum') !== -1)));
     check('the heading of the list says how many are open and how many are in progress', headOf(env) === '1 open, 2 in progress', headOf(env));
     check('the count beside Games is the open games and the matches in progress together (1 open and 2 in progress: 3), and says both to a screen reader', R.pillOf(env).textContent === '3' && R.pillOf(env).hidden === false && env.home('games').getAttribute('aria-label') === 'Games, 1 open, 2 in progress');
-    check('the open rooms are the rows of the first list and the matches are under it, in a box with its own heading', find(popOf(env), 'gitem').length === 3 && first(boxOf(env), 'gsub').textContent === 'In progress' && boxOf(env).hidden === false);
+    check('the open rooms are the rows of the first list and the matches are under it, in a box with its own heading', find(popOf(env), 'gitem').filter((li) => classes(li).indexOf('gslot') === -1).length === 3 && first(boxOf(env), 'gsub').children.length === 1 && first(boxOf(env), 'gsub').textContent.indexOf('In progress') === 0 && boxOf(env).hidden === false);
     check('a row of an open room still has its Join', first(popOf(env), 'gjoin') !== null && first(popOf(env), 'gjoin').textContent === 'Join');
     check('the picture of a match is the map\'s square (an original\'s own)', first(rows[0], 'gmap').findAll((e) => e.tagName === 'img').length === 1 && /preview_treasure\.png$/.test(first(rows[0], 'gmap').findAll((e) => e.tagName === 'img')[0].src));
     await wait(env, 5500);
@@ -103,18 +103,18 @@ const M = 'TREASURE.LVL';
     const env = await livePage({ rows: markup });
     const li = liveRows(env)[0];
     same('names are text: the markup of a name is shown as it was typed and nothing is made of it', first(li, 'gwho').textContent, '<img src=x onerror=alert(1)>, ' + 'W'.repeat(60) + ', a "b" & \'c\' <\/script>');
-    check('... nothing was written as markup, the row holds no element that a name could make, and the one address is the id\'s', env.innerHTMLWrites.length === 0 && li.all().every((e) => ['li', 'span', 'a', 'i', 'img'].indexOf(e.tagName) !== -1) && watchOf(li).getAttribute('href') === '/play?live=Pop_Corn-20261109-120000Z');
+    check('... nothing was written as markup, the row holds no element that a name could make, and the one address is the id\'s', env.innerHTMLWrites.length === 0 && li.all().every((e) => ['li', 'span', 'a', 'i', 'img', 'div', 'button', 'b'].indexOf(e.tagName) !== -1) && watchOf(li).getAttribute('href') === '/play?live=Pop_Corn-20261109-120000Z');
     check('a map of the players: its name without the ending, and a picture only where the page has the picker\'s rule', first(li, 'gname').textContent === 'Pop Corn' && first(li, 'gmap').findAll((e) => e.tagName === 'img').every((img) => /^\/maps\/previews\/Pop%20Corn\.webp$/.test(img.src.replace(/^.*(?=\/maps)/, ''))));
 }
 {   // nothing in progress; nothing open
     const env = await livePage({ rows: [], lobbies: [row('k7m2xq', 'Pebble')] });
     check('nothing in progress: no box at all (an empty box would grow the panel), and the heading is the plain one, "1 waiting · updates live"', boxOf(env).hidden === true && headOf(env) === '1 waiting \u00b7 updates live', headOf(env));
     const both = await livePage({ rows: [] });
-    check('nothing open and nothing in progress: the empty card of the open games, one line "none waiting", and no box of matches', headOf(both) === 'none waiting' && first(popOf(both), 'gempty').hidden === false && boxOf(both).hidden === true);
+    check('nothing open and nothing in progress: the empty cards of the open games (two rows), one line "none waiting", and no box of matches', headOf(both) === 'none waiting' && slotsOf(both).length === 6 && boxOf(both).hidden === true);
     const only = await livePage({ lobbies: [] });
-    check('nothing open, two in progress: no "No open games right now." card at all, the rows are the first thing under the heading; the head says "0 open, 2 in progress"', first(popOf(only), 'gempty').hidden === true && liveRows(only).length === 2 && headOf(only) === '0 open, 2 in progress', headOf(only));
+    check('nothing open, two in progress: no "No open games right now." card at all; one row of empty cards, then the box of matches; the head says "0 open, 2 in progress"', slotsOf(only).length === 3 && liveRows(only).length === 2 && headOf(only) === '0 open, 2 in progress' && textOf(popOf(only)).indexOf('No open games right now.') === -1, headOf(only));
     const openOnes = await livePage({ lobbies: [row('k7m2xq', 'Pebble')] });
-    check('with an open game there is no empty card, the open rows come first and the matches follow in the same list', first(popOf(openOnes), 'gempty').hidden === true && first(popOf(openOnes), 'gpbody').children.indexOf(first(popOf(openOnes), 'glist')) < first(popOf(openOnes), 'gpbody').children.indexOf(boxOf(openOnes)));
+    check('with an open game the open rows come first, then the empty cards that fill one row, and the box of matches follows', rowsOf(openOnes).length === 3 && slotsOf(openOnes).length === 2 && first(popOf(openOnes), 'gpbody').children.indexOf(first(popOf(openOnes), 'glist')) < first(popOf(openOnes), 'gpbody').children.indexOf(boxOf(openOnes)));
 }
 
 {   // the tag of a match of mode 187: after the red Live mark, text only, none for any other mode
@@ -455,5 +455,110 @@ for (const [what, tweak] of [['404', (s) => { s.live.reject = false; s.live.stat
     check('a browser that refuses its storage: the rows are there (nothing threw)', liveRows(env).length === 2);
 }
 
+// ---- 5. the scores of the matches (the door's `scores` and `sides`: the score boxes, live): the strip, the scoreboard that it opens, and the pure parts ----
+{
+    const TEXT = Games.TEXT, P = (list) => list;                                          // (the page's own words; a list of players, as the door writes them)
+    const withScores = (o, scores, sides) => Object.assign({}, o, { scores, sides });
+    const four = (n) => withScores(LIVE('TREASURE-20261124-091500Z', { seconds: 725, turns: 14500, players: P(['Green (Sage)', 'Red (Rowan)', 'Blue (Kit (bot, Medium))', 'Black (moss)']) }), n || [2040, 1310, 900, 455], [0, 1, 2, 3]);
+    const team = (n) => withScores(LIVE('ISLANDS-20261124-090200Z', { map: 'ISLANDS.LVL', seconds: 905, turns: 18100, players: P(['Green (Pebble)', 'Red (Wren)', 'Blue (juniper)', 'Black (Pip (bot, Hard))']) }), n || [2310, 2310, 2680, 2680], [0, 0, 2, 2]);
+    const kills = (n) => withScores(LIVE('SMALL-20261124-091900Z', { map: 'SMALL.LVL', mode: '187', seconds: 341, turns: 6820, players: P(['Green (tess)', 'Red (Fern)', 'Blue (Bo (bot, Easy))']) }), n || [14, 9, null], [0, 1, 2]);
+    const duel = () => withScores(LIVE('TINY-20261124-092300Z', { map: 'TINY.LVL', seconds: 125, turns: 2500, players: P(['Green (maple.leaf)', 'Red (Pip (bot, Hard))']) }), [300, 300], [0, 1]);
+    const fresh = () => LIVE('MEDIUM-20261124-092500Z', { map: 'MEDIUM.LVL', seconds: 0, turns: 0, players: P(['Green (Wren)', 'Red (moss)']) });
+    const old = () => LIVE('GAUNTLET-20261124-092600Z', { map: 'GAUNTLET.LVL', seconds: 60, turns: 1200, players: P(['Green (Ann)', 'Red (Bob)']) });       // (a server that gives no scores)
+    const cardOf = (env, id) => liveRows(env).filter((li) => watchOf(li).getAttribute('data-live') === id)[0];
+    const toggleOf = (li) => first(li, 'gsum');
+    const nums = (li) => first(li, 'gnums').children.filter((c) => c.className.indexOf('gpair') !== -1).map((p) => first(p, 'gn').textContent);
+    const gold = (li) => find(first(li, 'gnums'), 'glead').map((n) => n.textContent);
+    const rowsOfBoard = (li) => find(first(li, 'gboard'), 'gside');
+    const openIt = (li) => toggleOf(li).click();
+    const inside = (root, tag) => root.findAll((e) => e.tagName === tag);                  // (the elements of a tag; find() is by class)
+
+    // the pure parts
+    const door = (extra) => Object.assign({ id: 'A-20261109-120000Z', turns: 100, players: ['Green (Ann)', 'Red (Bob)', 'Blue'] }, extra || {});
+    same('a match with scores: a number and a side for each player, in the door\'s order', [Games.liveOf(door({ scores: [10, 20, 30], sides: [0, 1, 2] }), RULES0).scores, Games.liveOf(door({ scores: [10, 20, 30], sides: [0, 1, 2] }), RULES0).sides], [[10, 20, 30], [0, 1, 2]]);
+    same('a match with none, or with a shape that does not fit (not lists, one missing, the wrong length, no players), has no scores at all', [{}, { scores: [1, 2, 3] }, { sides: [0, 1, 2] }, { scores: 'x', sides: [0, 1, 2] }, { scores: [1, 2], sides: [0, 1, 2] }, { scores: [1, 2, 3], sides: [0, 1] }, { scores: {}, sides: {} }, { players: [], scores: [], sides: [] }].map((x) => Games.liveOf(door(x), RULES0).scores), [null, null, null, null, null, null, null, null]);
+    same('a number that is no box (below 0, a fraction, over 999999, a text, null: a covered box, none) is no number; 999999 and 0 are', Games.liveOf(door({ scores: [-1, 1.5, 1000000], sides: [0, 1, 2] }), RULES0).scores.concat(Games.liveOf(door({ scores: ['9', null, undefined], sides: [0, 1, 2] }), RULES0).scores, Games.liveOf(door({ scores: [999999, 0, 7], sides: [0, 1, 2] }), RULES0).scores), [null, null, null, null, null, null, 999999, 0, 7]);
+    same('a side that is no seat (4, -1, a fraction, a text) is a side of its own, never one that another player is in', Games.liveOf(door({ scores: [1, 2, 3], sides: [4, -1, 'a'] }), RULES0).sides.map((x) => x >= 4 && x < 100), [true, true, true]);
+    same('a player that the page drops keeps the others\' numbers where they were (the numbers go with the strings of the door, not with what is kept)', [Games.liveOf(door({ players: ['Green (A)', 7, 'Red (B)'], scores: [1, 2, 3], sides: [0, 1, 2] }), RULES0).scores, Games.liveOf(door({ players: ['Green (A)', 7, 'Red (B)'], scores: [1, 2, 3], sides: [0, 1, 2] }), RULES0).sides], [[1, 3], [0, 2]]);
+    const board = (o) => Games.boardOf(Games.liveOf(o, RULES0));
+    same('the leader is the side alone at the top with a number above 0', [board(four()).sides.map((s) => s.lead), board(four([5, 40, 3, 2])).sides.map((s) => s.lead), board(duel()).sides.map((s) => s.lead), board(four([0, 0, 0, 0])).sides.map((s) => s.lead), board(four([7, 7, 3, 1])).sides.map((s) => s.lead)],
+        [[true, false, false, false], [false, true, false, false], [false, false], [false, false, false, false], [false, false, false, false]]);
+    same('a side that is the only one with a box leads when above 0; a covered box never leads and is no number', [board(kills()).sides.map((s) => [s.n, s.lead]), board(kills([0, null, null])).sides.map((s) => s.lead)], [[[14, true], [9, false], [null, false]], [false, false, false]]);
+    same('allies are one side, a player alone is one: Pebble + Wren and juniper + Pip, four players, and the column\'s word is the score (Kills in 187)', [board(team()).sides.map((s) => s.who.length), board(four()).sides.map((s) => s.who.length), board(team()).label, board(kills()).label, board(team()).team, board(four()).team], [[2, 2], [1, 1, 1, 1], 'Score', 'Kills', true, false]);
+    same('a match with no score yet has a side for each player and no number', [board(fresh()).scored, board(fresh()).sides.map((s) => [s.n, s.lead])], [false, [[null, false], [null, false]]]);
+    same('the digits are grouped: 0, 999, 1,000, 12,345, 999,999', [0, 999, 1000, 12345, 999999].map(Games.groupDigits), ['0', '999', '1,000', '12,345', '999,999']);
+    same('a computer player is named without its level: Kit (bot, Medium), Kit (bot), Bot (Medium); a person with "bot" in a name is not cut', ['Kit (bot, Medium)', 'Kit (bot)', 'Bot (Medium)', 'Abbot', 'Bo (bot, Easy)', 'robot (x)'].map(Games.plainName), ['Kit', 'Kit', 'Bot', 'Abbot', 'Bo', 'robot (x)']);
+
+    // the cards: collapsed they have the strip
+    const env = await livePage({ rows: [four(), team(), kills(), duel(), fresh(), old()] });
+    const ids = { four: 'TREASURE-20261124-091500Z', team: 'ISLANDS-20261124-090200Z', kills: 'SMALL-20261124-091900Z', duel: 'TINY-20261124-092300Z', fresh: 'MEDIUM-20261124-092500Z', old: 'GAUNTLET-20261124-092600Z' };
+    const L = (k) => cardOf(env, ids[k]);
+    same('a 4-way: the strip has each player\'s number, the leader\'s in gold, and the word of the column', [nums(L('four')), gold(L('four')), first(L('four'), 'glabel').textContent], [['2,040', '1,310', '900', '455'], ['2,040'], TEXT.score]);
+    same('... a square of each seat\'s color before its number, a ring for the computer player; one thin bar in the shares, a segment for each', [find(first(L('four'), 'gnums'), 'gsq').map((q) => q.className), inside(first(L('four'), 'gshare'), 'i').map((q) => q.className)], [['gsq c0', 'gsq c1', 'gsq c2 bot', 'gsq c3'], ['c0', 'c1', 'c2', 'c3']]);
+    check('... the share of a side is its number against the whole (the segments are in the proportion of the numbers, none under 2 % of it)', inside(first(L('four'), 'gshare'), 'i').map((q) => Number(/^([\d.]+) 0 0$/.exec(q.style.flex)[1])).join() === '2040,1310,900,455');
+    same('a 2v2: two pairs of squares and two numbers with "vs" between them, the leader\'s in gold, and a bar of two colors for each team', [first(L('team'), 'gnums').children.map((c) => c.className), nums(L('team')), gold(L('team')), inside(first(L('team'), 'gshare'), 'i').map((q) => q.className), find(first(L('team'), 'gnums'), 'gsq').map((q) => q.className)],
+        [['gpair', 'gvs', 'gpair'], ['2,310', '2,680'], ['2,680'], ['c0 two d1', 'c2 two d3'], ['gsq c0', 'gsq c1', 'gsq c2', 'gsq c3 bot']]);
+    same('a 187 match: the column says Kills, the leader is in gold, a covered box is a dash and dimmed and leads nowhere', [first(L('kills'), 'glabel').textContent, nums(L('kills')), gold(L('kills')), find(first(L('kills'), 'gnums'), 'gout').length, inside(first(L('kills'), 'gshare'), 'i').length], [TEXT.kills, ['14', '9', '–'], ['14'], 1, 2]);
+    same('a tie marks nobody', [nums(L('duel')), gold(L('duel')), rowsOfBoard(L('duel')).map((r) => r.className)], [['300', '300'], [], ['gside', 'gside']]);
+    same('a match that is starting says "no score yet" in place of numbers, and has no bar', [first(L('fresh'), 'gnums').children.map((c) => c.textContent), inside(first(L('fresh'), 'gshare'), 'i').length, first(L('fresh'), 'gscore').hidden], [[TEXT.noScore], 0, false]);
+    check('a match that has run and that the door gives no scores for has no strip (the card is what it was: an older server)', first(L('old'), 'gscore').hidden === true);
+    check('"scores are live" stands beside the heading of the matches when the door gives scores, and is not drawn when it gives none', first(boxOf(env), 'gnote').hidden === false && first(boxOf(env), 'gnote').textContent.trim() === 'scores are live');
+    same('the strip is a button that names the numbers for a screen reader (the squares and bars are pictures), says it is closed, and stands in the card of the match', [toggleOf(L('four')).tagName, toggleOf(L('four')).getAttribute('aria-expanded'), toggleOf(L('four')).getAttribute('aria-label'), toggleOf(L('duel')).getAttribute('aria-label')],
+        ['button', 'false', 'Scores of the match on Treasure: Sage 2,040 leading, Rowan 1,310, Kit (bot) 900, moss 455', 'Scores of the match on Tiny: maple.leaf 300, Pip (bot) 300']);
+    same('... for a 187 match, a team, a covered box and no score yet', [toggleOf(L('kills')).getAttribute('aria-label'), toggleOf(L('team')).getAttribute('aria-label'), toggleOf(L('fresh')).getAttribute('aria-label')],
+        ['Scores of the 187 match on Small: tess 14 leading, Fern 9, Bo (bot) left', 'Scores of the match on Islands: Pebble + Wren 2,310, juniper + Pip (bot) 2,680 leading', 'Scores of the match on Medium: no score yet']);
+    check('Watch still names the match as it did, and has no score in its name', watchOf(L('four')).getAttribute('aria-label') === 'Watch the match on Treasure, Sage, Rowan, Kit (bot, Medium), moss, 12:05 so far');
+    check('the card starts closed: no board, the names of the players in their line, the strip', classes(L('four')).indexOf('gopen') === -1 && first(L('four'), 'gboard').hidden === true && first(L('four'), 'gwho').textContent === 'Sage, Rowan, Kit (bot, Medium), moss');
+
+    // the scoreboard that the strip opens
+    const card = L('four'), button = toggleOf(card);
+    openIt(card);
+    check('a press opens the card: the scoreboard shows, the button says it is open, the line of names is out (the board has them)', classes(card).indexOf('gopen') !== -1 && button.getAttribute('aria-expanded') === 'true' && first(card, 'gboard').hidden === false);
+    same('the scoreboard has a line for each player: its square, its name (a computer player marked "(bot)", with no level), the number, the leader\'s with a triangle and said to a screen reader', [rowsOfBoard(card).map((r) => first(r, 'gpl').textContent), rowsOfBoard(card).map((r) => first(r, 'gn').children.length ? 'leads' : ''), rowsOfBoard(card).map((r) => first(r, 'gn').textContent), rowsOfBoard(card).map((r) => r.className)],
+        [['Sage', 'Rowan', 'Kit (bot)', 'moss'], ['leads', '', '', ''], ['2,040 leading', '1,310', '900', '455'], ['gside glead', 'gside', 'gside', 'gside']]);
+    same('... a bar against the best side: 100 %, 64 %, 44 %, 22 %; the colors of the seats; the head says Player and the column\'s word', [rowsOfBoard(card).map((r) => inside(first(r, 'gtrack'), 'i')[0].style.width), rowsOfBoard(card).map((r) => inside(first(r, 'gtrack'), 'i')[0].className), first(card, 'ghead').children.map((c) => c.textContent)],
+        [['100%', '64%', '44%', '22%'], ['c0', 'c1', 'c2', 'c3'], [TEXT.player, TEXT.score]]);
+    openIt(L('team'));
+    same('a team\'s line has both names, both squares and a bar of two colors, the number once; the head says Team', [rowsOfBoard(L('team')).map((r) => first(r, 'gpl').textContent), rowsOfBoard(L('team')).map((r) => find(r, 'gsq').length), rowsOfBoard(L('team')).map((r) => inside(first(r, 'gtrack'), 'i')[0].className), rowsOfBoard(L('team')).map((r) => first(r, 'gn').textContent), first(L('team'), 'ghead').children.map((c) => c.textContent)],
+        [['Pebble + Wren', 'juniper + Pip (bot)'], [2, 2], ['c0 two d1', 'c2 two d3'], ['2,310', '2,680 leading'], [TEXT.team, TEXT.score]]);
+    openIt(L('kills')); openIt(L('duel')); openIt(L('fresh'));
+    same('a 187 board counts Kills; a covered box is a dash with no bar; a tie marks nobody; a match with no score yet has dashes and no bar', [first(L('kills'), 'ghead').children[1].textContent, rowsOfBoard(L('kills')).map((r) => first(r, 'gn').textContent), rowsOfBoard(L('kills')).map((r) => inside(r, 'i').filter((i) => i.className.indexOf('gsq') === -1).length), rowsOfBoard(L('duel')).map((r) => r.className), rowsOfBoard(L('fresh')).map((r) => first(r, 'gn').textContent), rowsOfBoard(L('fresh')).map((r) => inside(first(r, 'gtrack'), 'i').length)],
+        [TEXT.kills, ['14 leading', '9', '–'], [1, 1, 0], ['gside', 'gside'], ['–', '–'], [0, 0]]);
+    check('a side with a zero has no bar in the board (a number of 0 is no length)', (() => { const z = board(four([100, 0, 0, 0])); return z.sides.length === 4 && z.top === 100; })());
+    openIt(card);
+    check('a second press closes the card again: the strip, and the names in their line', classes(card).indexOf('gopen') === -1 && button.getAttribute('aria-expanded') === 'false' && first(card, 'gboard').hidden === true);
+
+    // the numbers move in place, a card that is open stays open, a focus stays, and nothing else is asked
+    openIt(card);
+    const hereLi = card, hereBtn = button;
+    hereBtn.focus();
+    env.site.live.body = answer([four([2100, 2200, 905, 455]), team([2400, 2400, 2680, 2680]), kills([15, 9, null]), duel(), fresh(), old()]);
+    await wait(env, 6500);
+    check('a look later the card is the same and still open, the numbers are the door\'s new ones and the lead has moved, and the focus is where it was', L('four') === hereLi && toggleOf(L('four')) === hereBtn && classes(L('four')).indexOf('gopen') !== -1 && env.focused === hereBtn
+        && rowsOfBoard(L('four')).map((r) => first(r, 'gn').textContent).join() === '2,100,2,200 leading,905,455' && rowsOfBoard(L('four')).map((r) => r.className).join() === 'gside,gside glead,gside,gside', rowsOfBoard(L('four')).map((r) => first(r, 'gn').textContent).join());
+    check('... the strip behind it has the new numbers and the leader, and its name for a screen reader too', nums(L('four')).join() === '2,100,2,200,905,455' && gold(L('four')).join() === '2,200' && /Rowan 2,200 leading/.test(toggleOf(L('four')).getAttribute('aria-label')));
+    same('... a card that was not opened is closed still, and the team that took the lead has it', [classes(L('kills')).indexOf('gopen') !== -1, classes(L('duel')).indexOf('gopen') !== -1, gold(L('team'))], [true, true, ['2,680']]);
+    env.site.live.body = answer([withScores(Object.assign({}, fresh(), { turns: 40, seconds: 2 }), [0, 0], [0, 1]), four(), team(), kills(), duel(), old()]);
+    await wait(env, 6500);
+    same('a match that has run its first turn shows its numbers where "no score yet" was (zeros are numbers; a tie marks nobody)', [nums(L('fresh')), gold(L('fresh')), first(L('fresh'), 'gscore').hidden], [['0', '0'], [], false]);
+    env.site.live.body = answer([four(), team(), kills(), duel(), old()]);
+    await wait(env, 6500);
+    env.site.live.body = answer([four(), team(), kills(), duel(), fresh(), old()]);
+    await wait(env, 6500);
+    check('a match that has left the list loses its choice: when it is back it is closed', classes(L('fresh')).indexOf('gopen') === -1 && first(L('fresh'), 'gboard').hidden === true && classes(L('four')).indexOf('gopen') !== -1);
+    check('the looks at /live are the same as ever: 5 to 6 s apart, no other address, no new timer or connection for the scores', env.site.live.calls.every((c) => c.url === '/live') && env.site.live.times.every((t, i) => i === 0 || (t - env.site.live.times[i - 1] >= 5000 && t - env.site.live.times[i - 1] <= 6250)) && env.site.calls.every((c) => c.url === '/lobbies'), JSON.stringify(env.site.live.times));
+}
+{   // text only: a name with markup is shown as typed in the board and the strip's name; nothing is written as markup
+    const markup = Object.assign(LIVE('Pop_Corn-20261109-120000Z', { map: 'Pop Corn.lvl', players: ['Green (<img src=x onerror=alert(1)>)', 'Red (Kit (bot, Medium))'] }), { scores: [5, 7], sides: [0, 1] });
+    const env = await livePage({ rows: [markup] });
+    const li = liveRows(env)[0], openIt = (card) => first(card, 'gsum').click(), rowsOfBoard = (card) => find(first(card, 'gboard'), 'gside');
+    openIt(li);
+    same('a name with markup is text in the board, and a computer player is marked "(bot)"', rowsOfBoard(li).map((r) => first(r, 'gpl').textContent), ['<img src=x onerror=alert(1)>', 'Kit (bot)']);
+    check('... and the page wrote no markup', env.innerHTMLWrites.length === 0 && li.all().every((e) => ['li', 'span', 'a', 'i', 'img', 'div', 'button', 'b'].indexOf(e.tagName) !== -1));
+}
+{   // an older server: no scores for any match: no note, no strip, the cards as they were
+    const env = await livePage({ rows: [LIVE('TREASURE-20261124-091500Z'), LIVE('ISLANDS-20261124-090200Z', { map: 'ISLANDS.LVL' })] });
+    check('a door that gives no scores: the heading has no "scores are live", no card has a strip, and the rows are as they were', first(boxOf(env), 'gnote').hidden === true && liveRows(env).every((li) => first(li, 'gscore').hidden === true && classes(li).indexOf('gopen') === -1));
+}
 done('matches in progress');
 })().catch(broke);

@@ -186,8 +186,8 @@ async function flows() {
                 const many = await standIn(server, { lobbies: () => ({ format: 1, count: 12, lobbies: Array.from({ length: 12 }, (_, i) => ({ code: 'm' + (i + 2) + 'x2q' + i, host: 'Host' + i, map: 'TREASURE.LVL', mode: 'highest-score', people: 1, bots: 0, free: 3, size: 4, age: 10 + i })) }) });
                 for (const size of [['desktop', 1280, 800], ['phone', 390, 844], ['side', 844, 390]]) {
                     const empty = await newPage(browser, none, 'Maple', size, '/', true), long = await newPage(browser, many, 'Maple', size, '/', true);
-                    await empty.waitForSelector('.gpop .gempty:not([hidden])'); await long.waitForSelector('.gpop .gitem'); await long.waitForSelector('.gc', { state: 'attached' });
-                    check('' + size[0] + ': no open games shows the empty state (words only, no Quick host or Quick join: the bar has them) and Have a code? in the docked list', await empty.evaluate(() => { const p = document.querySelector('.gpop'), b = [...p.querySelectorAll('.gempty button')]; return p.textContent.indexOf('No open games right now.') !== -1 && !!p.querySelector('.gcodelink') && /none waiting/.test(p.textContent) && b.length === 0; }));
+                    await empty.waitForSelector('.gpop .gslot'); await long.waitForSelector('.gpop .gitem'); await long.waitForSelector('.gc', { state: 'attached' });
+                    check('' + size[0] + ': no open games shows the empty cards (each with its one button, Host here: the bar has Quick host and Quick join) and Have a code? in the docked list', await empty.evaluate(() => { const p = document.querySelector('.gpop'), c = [...p.querySelectorAll('.gslot')]; return c.length >= 3 && c.every((e) => e.querySelectorAll('button').length === 1 && e.querySelector('button').textContent === 'Host here') && p.textContent.indexOf('No open games right now.') === -1 && !!p.querySelector('.gcodelink') && /none waiting/.test(p.textContent); }));
                     const m = await long.evaluate(async () => {
                         const p = document.querySelector('.gpop'), body = p.querySelector('.gpbody'), q = p.getBoundingClientRect(), y = document.getElementById('hmain').getBoundingClientRect(); const scrolls = body.scrollHeight > body.clientHeight + 4;
                         body.scrollTop = body.scrollHeight; await new Promise((r) => setTimeout(r, 50)); const c = p.querySelector('.gcodelink'), cr = c.getBoundingClientRect(), top = document.elementFromPoint(cr.left + cr.width / 2, cr.top + cr.height / 2), last = [...p.querySelectorAll('.gjoin')].pop(), lr = last.getBoundingClientRect(), lt = document.elementFromPoint(lr.left + lr.width / 2, lr.top + lr.height / 2);
@@ -442,9 +442,9 @@ async function flows() {
                 await p.keyboard.press('Escape');
                 await p.context().close();
                 p = await newPage(browser, emptySite, 'Maple', size); await lit(p);
-                await p.evaluate(() => document.querySelector('.htab.t-games').click()); await p.waitForSelector('.gempty:not([hidden])');
+                await p.evaluate(() => document.querySelector('.htab.t-games').click()); await p.waitForSelector('.gslot');
                 await shot(p, 'games_empty', size);
-                check(label + ': the empty list says it, with no button of its own', (await p.evaluate(() => !!document.querySelector('.gempty') && document.querySelectorAll('.gempty button').length === 0)));
+                check(label + ': the empty list is empty cards, each with its one button Host here (44 px high and inside its card)', (await p.evaluate(() => { const c = [...document.querySelectorAll('.gslot')]; return c.length >= 2 && c.every((e) => { const b = e.querySelector('button'), r = e.getBoundingClientRect(), q = b.getBoundingClientRect(); return e.querySelectorAll('button').length === 1 && q.height >= 44 && q.left >= r.left && q.right <= r.right + 1; }); })));
                 await p.context().close();
                 p = await newPage(browser, offSite, 'Maple', size); await lit(p);
                 await p.evaluate(() => document.querySelector('.htab.t-games').click()); await p.waitForSelector('.goff:not([hidden])');

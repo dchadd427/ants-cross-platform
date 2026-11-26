@@ -495,6 +495,16 @@ ctl::HttpResponse handle_public_live(const RoomManager& rooms, const ctl::HttpRe
             JsonValue players = JsonValue::make_array();
             for (const std::string& p : m.players) players.push_back(JsonValue::make_string(p));
             e.set("players", std::move(players));
+            if (m.scores.known) {                                                        // (the score boxes, live: a number and a side for each of `players`, in the same order; null for a seat whose box is covered. Not before the room's first sample)
+                JsonValue boxes = JsonValue::make_array(), sides = JsonValue::make_array();
+                for (uint8_t seat = 0; seat < LiveScores::kSeats; ++seat) {
+                    if ((m.roster & (1u << seat)) == 0) continue;
+                    boxes.push_back((m.scores.covered & (1u << seat)) != 0 ? JsonValue::make_null() : JsonValue::make_int(m.scores.box[seat]));
+                    sides.push_back(JsonValue::make_int(m.scores.side[seat]));
+                }
+                e.set("scores", std::move(boxes));
+                e.set("sides", std::move(sides));
+            }
             list.push_back(std::move(e));
         }
         JsonValue o = JsonValue::make_object();
