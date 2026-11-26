@@ -56,7 +56,7 @@ sim::MatchResult sample(bool allied = true) {
     return mr;
 }
 
-/// A match that was counted: 12:40 long, the damage of each team, the honors and a bomb at 7:41 that took out six ants
+/// A match that was counted: 12:40 long, the damage of each team, the honors and a moment at 7:41 in which seat 1 killed three ants in 8 seconds and saved its hill
 MatchReport counted(bool with_play = true) {
     MatchReport r;
     r.ok = true;
@@ -77,7 +77,7 @@ MatchReport counted(bool with_play = true) {
     r.first_blood = MatchReport::Honor{true, 2, 0, 840};
     r.top_thief = MatchReport::Honor{true, 0, 3, 0};
     r.last_stand = MatchReport::Honor{true, 3, 0, 2600};
-    if (with_play) r.play = MatchReport::Play{true, 1, MatchReport::PlayKind::Bomb, 6, 9220, 10, 20};
+    if (with_play) r.play = MatchReport::Play{true, 1, 3, 55, 8, MatchReport::kSavedHill, 0, 9220, 10, 20};
     return r;
 }
 
@@ -116,6 +116,14 @@ bool fitted_thief_line(const ArtSpy& spy, const std::string& raids, const std::s
             const std::string tail = points + unit;
             if (f.text.size() >= tail.size() && f.text.compare(f.text.size() - tail.size(), tail.size(), tail) == 0) return true;
         }
+    }
+    return false;
+}
+
+/// Is there a line of the face that has all of these pieces in it (the wording of the Play of the game's card is the card's to choose: the test names the numbers and names that it must say)
+bool has_line_with(const ArtSpy& spy, std::initializer_list<std::string> pieces) {
+    for (const ArtSpy::Face& f : spy.face_lines) {
+        if (std::all_of(pieces.begin(), pieces.end(), [&](const std::string& piece) { return f.text.find(piece) != std::string::npos; })) return true;
     }
     return false;
 }
@@ -313,7 +321,7 @@ void test_counted(const assets::AssetArchive& arc, const hud_art::Art& art) {
     check(count(*spy, art, "sc_k_mvp") == 1 && count(*spy, art, "sc_k_blood") == 1 && count(*spy, art, "sc_k_thief") == 1 && count(*spy, art, "sc_k_stand") == 0 && count(*spy, art, "sc_k_play") == 1, "the labels of the three honors and of the Play of the game");
     check(has_line(*spy, "62% of the play") && has_line(*spy, "at 0:42") && fitted_thief_line(*spy, "3 raids", "100"), "the honors' numbers: the MVP's share of the play, First blood's time, the Top Thief's raids home and their points (the wording that fits the card)");
     check(has_line(*spy, card.seat_name(0)) && has_line(*spy, card.seat_name(2)), "...and who earned them");
-    check(has_line(*spy, card.seat_name(1) + "'s bomb takes out") && has_line(*spy, "6 ants") && has_line(*spy, "at 7:41"), "the Play of the game says what happened and when (\"... bomb takes out\", \"6 ants\", \"at 7:41\")");
+    check(has_line_with(*spy, {card.seat_name(1), "3 kills in 8 s"}) && has_line_with(*spy, {"saved the hill"}) && has_line(*spy, "at 7:41"), "the Play of the game says who, how many kills in how many seconds, the big moment and when");
     check(count(*spy, art, "sc_watch_up") == 1, "Watch is there");
     // no still of the moment: the picture is the ants of the seat that made it, on a dark ground
     check(card.podium().play_picture.w > 0, "...with the picture's place");
@@ -332,7 +340,7 @@ void test_counted(const assets::AssetArchive& arc, const hud_art::Art& art) {
     blind.set_on_watch([&](uint32_t, int32_t, int32_t) { ++blind_watched; });
     const auto spyw = draw(arc, blind, kWide720);
     click(blind, blind.scale().rect(blind.podium().watch));
-    check(count(*spyw, art, "sc_watch_up") == 0 && blind.watch_rect().w == 0 && blind_watched == 0 && count(*spyw, art, "sc_k_play") == 1 && has_line(*spyw, "6 ants"), "no recording to open: the play is there, Watch is not, and a click where it would be does nothing");
+    check(count(*spyw, art, "sc_watch_up") == 0 && blind.watch_rect().w == 0 && blind_watched == 0 && count(*spyw, art, "sc_k_play") == 1 && has_line_with(*spyw, {"3 kills"}), "no recording to open: the play is there, Watch is not, and a click where it would be does nothing");
     ScorecardModal sighted;
     open(sighted, &art, kWide720, sample(), sim::GameMode::HighestScore, true, &rep);
     sighted.set_watch_available(false);
@@ -420,6 +428,53 @@ void test_counted(const assets::AssetArchive& arc, const hud_art::Art& art) {
     late.show_page(ScorecardModal::Page::Stats);
     late.set_report(failed);
     check(late.page() == ScorecardModal::Page::Results && count(*draw(arc, late, kWide720), art, "sc_sm_m_up") == 0, "...and one that was not takes the second page away");
+}
+
+/// The card of the Play of the game for one moment on one screen: the lines of its words (the ones that name kills or a big moment) and every line that has "..." in it
+struct PlayCard {
+    std::vector<std::string> lines;
+    bool cut_number{false};
+};
+PlayCard play_card_of(const assets::AssetArchive& arc, const hud_art::Art& art, const Screen& screen, const MatchReport::Play& play) {
+    MatchReport rep = counted();
+    rep.play = play;
+    ScorecardModal card;
+    open(card, &art, screen, sample(), sim::GameMode::HighestScore, true, &rep);
+    const auto spy = draw(arc, card, screen);
+    PlayCard out;
+    for (const ArtSpy::Face& f : spy->face_lines) {
+        if (f.text.find(" kill") == std::string::npos && f.text.find("knock") == std::string::npos && f.text.find("hill") == std::string::npos && f.text.find("group") == std::string::npos && f.text.find("Thief") == std::string::npos &&
+            f.text.find("a knockout") == std::string::npos) {
+            continue;
+        }
+        if (f.text.find("Killed") != std::string::npos) continue;                                        // (a ranked row's small numbers)
+        out.lines.push_back(f.text);
+        const size_t dots = f.text.find("...");
+        if (dots != std::string::npos && f.text.find_first_of("0123456789", dots) != std::string::npos) out.cut_number = true;
+    }
+    return out;
+}
+
+void test_play_card(const assets::AssetArchive& arc, const hud_art::Art& art) {
+    group("play", "the card of the Play of the game says the kills and the seconds, and names the big moments that fit; a number is never cut");
+    using Play = MatchReport::Play;
+    for (const Screen& screen : {kWide720, kSmall43, kUltra, kPhoneUp}) {
+        const std::string at = std::string(" (") + screen.name + ")";
+        const PlayCard one = play_card_of(arc, art, screen, Play{true, 2, 1, 10, 0, 0, 0, 3000, 5, 5});
+        check(one.lines.size() == 1 && one.lines[0].find(": 1 kill") != std::string::npos && one.lines[0].find("second") == std::string::npos && one.lines[0].find(" s") == std::string::npos, "one kill: \"1 kill\" and no seconds" + at);
+        const Play everything{true, 1, 6, 200, 9, MatchReport::kKnockedOut | MatchReport::kSavedHill | MatchReport::kWipedGroup | MatchReport::kStoppedLoot, 3, 3000, 5, 5};
+        const PlayCard all = play_card_of(arc, art, screen, everything);
+        bool kills_line = false, moments_line = false;
+        for (const std::string& line : all.lines) {
+            kills_line = kills_line || line.find("6 kills in 9 s") != std::string::npos;                  // ("9 seconds" begins the same way)
+            moments_line = moments_line || line.find("knock") != std::string::npos || line.find("saved the hill") != std::string::npos;
+        }
+        check(kills_line && moments_line && !all.cut_number, "six kills in nine seconds with every bonus: both numbers, and the big moments that fit" + at);
+        const PlayCard each = play_card_of(arc, art, screen, Play{true, 1, 2, 45, 4, MatchReport::kWipedGroup, 0, 3000, 5, 5});
+        bool group = false;
+        for (const std::string& line : each.lines) group = group || line.find("group") != std::string::npos;
+        check(group && !each.cut_number, "a wiped out group is named" + at);
+    }
 }
 
 void test_waiting(const assets::AssetArchive& arc, const hud_art::Art& art) {
@@ -1134,6 +1189,7 @@ void test_scorecard_look(const assets::AssetArchive& arc, const hud_art::Art& ar
     test_switch(arc, art);
     test_podium(arc, art);
     test_counted(arc, art);
+    test_play_card(arc, art);
     test_waiting(arc, art);
     test_187(arc, art);
     test_reflow(arc, art);
