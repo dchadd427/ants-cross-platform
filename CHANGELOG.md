@@ -33,6 +33,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Fixes:**
 - On a phone, a live view's "Jump to live" no longer covers the clock beside the play button: the clock keeps its room, the button goes under it when the row is short, and Picture sits beside the camera button. The speed buttons and Picture are 44 px high.
+- The menu's "players online" counts the same people as the Players list, not only those in a room or a match.
 
 ## v0.21.5 - 2026-11-24 - The Podium results, messages on phones and smarter bots
 
