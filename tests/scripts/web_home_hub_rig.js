@@ -83,7 +83,7 @@ async function openPage(browser, stack, account, size, onError, label) {
     page.on('pageerror', (e) => onError(String(e && e.message || e)));
     await page.goto(stack.origin + '/', { waitUntil: 'load' });
     await until(label + 'the dock is live', () => page.evaluate(() => { const d = document.getElementById('gchat'); return !!d && d.getAttribute('data-state') === 'live'; }), 15000);
-    await until(label + 'the bell and the Messages button are there', () => page.evaluate(() => !!document.querySelector('.hbar .al-bell') && !!document.querySelector('#gchat .pm-btn')), 15000);
+    await until(label + 'the bell is there and the Messages part is loaded', () => page.evaluate(() => !!document.querySelector('.hbar .al-bell') && !!window.AntsHomeMessages), 15000);
     await sleep(400);
     return { context, page, phone: !!size[4], size, name: account };
 }

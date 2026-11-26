@@ -373,7 +373,7 @@
             askedAlerts = true;
             lazy('home/alerts', function () {
                 if (!win.AntsHomeAlerts) return;
-                alerts = win.AntsHomeAlerts.mount({ doc: doc, win: win, core: win.AntsAlertCore, ctl: { show: show, screen: function () { return screen; }, join: joinInvite, chat: openChat, messages: function (h, name) { if (messages) messages.open(h, name); }, seeing: function (h) { return !!messages && messages.isOpen(h); } }, bar: right, menuBtn: menuHome, dock: function () { return dock; }, signedIn: function () { return !!(dock && dock.you && dock.you()); } });
+                alerts = win.AntsHomeAlerts.mount({ doc: doc, win: win, core: win.AntsAlertCore, ctl: { show: show, screen: function () { return screen; }, join: joinInvite, chat: openChat, messages: function (h, name, back) { if (messages) messages.open(h, name, back); }, seeing: function (h) { return !!messages && messages.isOpen(h); }, convs: function () { return messages ? messages.convs() : []; }, messagesReady: function () { return !!messages && messages.ready(); } }, bar: right, menuBtn: menuHome, dock: function () { return dock; }, signedIn: function () { return !!(dock && dock.you && dock.you()); } });
                 waitingOver.splice(0).forEach(function (d) { alerts.alert('over', d); });         // (the match that this tab came back from: told before the part was here)
             });
         }
@@ -383,12 +383,12 @@
         }
 
         var askedMod = false, askedSheet = false, mod = null, messages = null, askedMessages = false;
-        function wantMessages() {                           // the Messages button and its panel (messages.js, messages.css), after the dock, for a person who is logged in: a guest never downloads it
+        function wantMessages() {                           // the conversation's panel (messages.js, messages.css; the list of conversations is the Messages tab of the bell), after the dock, for a person who is logged in: a guest never downloads it
             if (askedMessages || !dock || !dock.tap || !dock.you) return;
             function load() {
                 if (askedMessages || !dock.you()) return;
                 askedMessages = true;
-                lazy('home/messages', function () { if (win.AntsHomeMessages) messages = win.AntsHomeMessages.mount({ doc: doc, win: win, dock: dock, say: function (words, tone) { return !!alerts && alerts.say(words, tone) === true; } }); });
+                lazy('home/messages', function () { if (win.AntsHomeMessages) { messages = win.AntsHomeMessages.mount({ doc: doc, win: win, dock: dock, say: function (words, tone) { return !!alerts && alerts.say(words, tone) === true; }, changed: function () { if (alerts) alerts.messagesChanged(); }, toList: function () { if (alerts) alerts.open(null, 'messages'); } }); if (alerts) alerts.messagesChanged(); } });
             }
             dock.tap(function (kind) { if (kind === 'live' || kind === 'you') load(); });
             load();

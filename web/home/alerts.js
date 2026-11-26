@@ -25,7 +25,8 @@
     var PHONE = '(max-width: 700px), (max-height: 500px)';
     var KINDS = ['invite', 'mention', 'join', 'over', 'room', 'msg'];       // the kinds of row that the hub sends (docs/HUB_PEOPLE.md)
     var TEXT = {
-        title: 'Alerts', settings: 'Alert settings', group: 'On this page', lead: 'Nothing to allow. These work while Ants is open, also in a background tab.', close: 'Close', back: 'Back', gear: 'Alert settings', open: 'Open', doJoin: 'Join',
+        title: 'Alerts', tabAlerts: 'Alerts', tabMessages: 'Messages', msgNone: 'No private messages yet', msgNoneLine: 'Open a person\u2019s menu and press Message, or type /msg NAME.', msgKeep: 'Messages are kept for 7 days. Anyone can write to you; block a person to stop their messages.',
+        you: 'You: ', followed: 'You follow this person', settings: 'Alert settings', group: 'On this page', lead: 'Nothing to allow. These work while Ants is open, also in a background tab.', close: 'Close', back: 'Back', gear: 'Alert settings', open: 'Open', doJoin: 'Join',
         joined: ' joined your room', invited: ' invited you', mentioned: ' mentioned you', opened: ' opened a room', messaged: ' sent you a private message', inChat: 'In the chat', closed: 'The room has closed.', as: 'as ', in: ' in', of: ' of ', now: 'just now', yesterday: 'Yesterday',
         none: 'No alerts yet', noneLine: 'Invitations, people who join your room and your mentions in the chat show up here.', noneGuest: 'People who join your room show up here.',
         keptAccount: 'Kept on your account for 7 days.', keptBrowser: 'Kept in this browser for 7 days.', loginNote: 'Log in to get invitations from other players.', list: 'My list', clear: 'Clear my alerts',
@@ -97,13 +98,14 @@
             parts = [map, row.n + TEXT.of + row.of + TEXT.in, ago].filter(Boolean);
             return { title: row.from + said, sub: parts.join(' \u00b7 '), action: TEXT.doJoin, dim: false };
         }
-        if (row.k === 'msg') return { title: row.from + TEXT.messaged, sub: ago, action: TEXT.open, dim: false };
         if (row.k === 'over') return { title: TEXT.over, sub: [mapNameOf(row.map, rules), row.place ? TEXT.places[row.place - 1] : '', ago].filter(Boolean).join(' \u00b7 '), action: TEXT.view, dim: false };
         if (row.k === 'mention') return { title: row.from + TEXT.mentioned, sub: (row.text ? '\u201c' + row.text + '\u201d' : TEXT.inChat) + ' \u00b7 ' + ago, action: TEXT.open, dim: false };
         return { title: row.name + TEXT.joined, sub: TEXT.as + row.seat + ' \u00b7 ' + ago, action: TEXT.open, dim: false };
     }
     function countOf(rows) { var n = 0; rows.forEach(function (r) { if (r.u) n++; }); return n; }
     function countText(n) { return n > 9 ? '9+' : String(n); }
+    function initial(name, Chat) { var first = Chat.clip(name, 1); return first.length > 1 && first.charAt(first.length - 1) === '\u2026' ? first.slice(0, -1) : first; }          // (the first code point of a name, without the dots that a cut adds)
+    function countBig(n) { return n > 99 ? '99+' : String(n); }          // (the count of a tab and of a conversation: the bell's is 9+)
     // The list that a visitor keeps in this browser: the rows of the last 7 days, the newest 30, newest first
     function trim(rows, now) { return rows.filter(function (r) { return now - r.at < DAYS * 86400; }).sort(function (a, b) { return b.id - a.id; }).slice(0, KEEP); }
 
@@ -115,7 +117,7 @@
         if (!core || !core.settings) return null;
         var set = core.settings(win), flash = core.flasher({ win: win, doc: doc }), snd = core.sounds({ win: win, settings: set, table: env.table });
         var now = env.now || function () { return Math.floor(Date.now() / 1000); };
-        var shade = null, panel = null, opener = null, view = 'list', unreadAtOpen = {}, toast = null, toastText = null, toastBtns = null, told = null, toastTimer = null, bell = null, mark = null;
+        var shade = null, panel = null, opener = null, view = 'list', tab = 'alerts', unreadAtOpen = {}, toast = null, toastText = null, toastBtns = null, told = null, toastTimer = null, bell = null, mark = null;
         var hub = [], local = null, drawn = '', invitations = {};
 
         function Chat() { return win.AntsHomeChat; }
@@ -146,11 +148,14 @@
         }
         function mine() { if (local === null) local = loadLocal(); return local || []; }
         function saveLocal() { try { win.localStorage.setItem(LIST_KEY, JSON.stringify(mine().map(function (r) { return { id: r.id, at: r.at, k: r.k, u: r.u ? 1 : 0, name: r.name, seat: r.seat, map: r.map, place: r.place || undefined, match: r.match || undefined }; }))); } catch (e) { /* the visit keeps it */ } }
-        function rows() { return signedIn() ? hub : mine(); }
-        function count() { return countOf(rows()); }
+        function rows() { return (signedIn() ? hub : mine()).filter(function (r) { return r.k !== 'msg'; }); }       // (a private message is a conversation, with its own tab and count: its row of the hub's list is the toast's and nothing else)
+        function convs() { try { return signedIn() && ctl.convs ? ctl.convs() : []; } catch (e) { return []; } }
+        function hasMessages() { try { return signedIn() && !!ctl.convs && !!ctl.messagesReady && !!ctl.messagesReady(); } catch (e) { return false; } }       // (the Messages part is there, and the hub has said who the visitor is)
+        function messageCount() { var n = 0; if (hasMessages()) convs().forEach(function (c) { n += c.u; }); return n; }
+        function count() { return countOf(rows()) + messageCount(); }
         function newest() { var m = 0; rows().forEach(function (r) { if (r.id > m) m = r.id; }); return m; }
         function readAll() {
-            if (!count()) return;
+            if (!countOf(rows())) return;
             if (signedIn()) { var d = dock(); if (d && d.send) d.send({ t: 'seen', upto: newest() }); hub.forEach(function (r) { r.u = false; }); }
             else { mine().forEach(function (r) { r.u = false; }); saveLocal(); }
         }
@@ -190,13 +195,12 @@
             var back = opener;
             close();
             if (row.k === 'invite' || row.k === 'room') { if (ctl.join) ctl.join(row, back); }
-            else if (row.k === 'msg') { if (ctl.messages) ctl.messages(row.h, row.from); }
             else if (row.k === 'mention') { if (ctl.chat) ctl.chat(); }
             else if (row.k === 'over') { try { win.open(row.match ? '/match?id=' + encodeURIComponent(row.match) : '/matches', '_blank', 'noopener,noreferrer'); } catch (e) { /* the page that shows the match is another tab: a browser that refuses it shows none */ } }
             else if (ctl.show) ctl.show('room', 'push');
         }
         function item(row) {
-            var w = wordsOf(row, rules(), now(), Chat().agoOf), li = el('div', 'al-item' + (unreadAtOpen[row.id] ? ' unread' : '') + (w.dim ? ' dim' : '')), ic = el('span', 'al-ic'), tx = el('span', 'al-tx'), i = icon(row.k === 'invite' ? 'invite' : row.k === 'mention' ? 'chat' : row.k === 'over' ? 'flag' : row.k === 'room' ? 'home' : row.k === 'msg' ? 'lock' : 'user');
+            var w = wordsOf(row, rules(), now(), Chat().agoOf), li = el('div', 'al-item' + (unreadAtOpen[row.id] ? ' unread' : '') + (w.dim ? ' dim' : '')), ic = el('span', 'al-ic'), tx = el('span', 'al-tx'), i = icon(row.k === 'invite' ? 'invite' : row.k === 'mention' ? 'chat' : row.k === 'over' ? 'flag' : row.k === 'room' ? 'home' : 'user');
             li.setAttribute('data-id', String(row.id)); li.setAttribute('data-k', row.k);
             if (i) ic.appendChild(i);
             tx.appendChild(el('span', 'al-t', w.title)); tx.appendChild(el('span', 'al-s', w.sub));
@@ -217,6 +221,44 @@
             if (!signedIn()) card.appendChild(el('p', 'al-note', TEXT.loginNote));
             card.appendChild(el('p', 'al-keep', signedIn() ? TEXT.keptAccount : TEXT.keptBrowser));
         }
+        function convItem(c) {                              // a conversation: the person's circle, the name (and the gold star of a person that is followed), the start of the newest message, the time and the count of what is not read
+            var C = Chat(), b = el('button', 'al-item al-conv' + (c.u ? ' unread' : '')), ic = el('span', 'al-ic', initial(c.name, C)), tx = el('span', 'al-tx'), t = el('span', 'al-t'), sub = (c.me ? TEXT.you : '') + c.text, meta = el('span', 'al-meta'), star;
+            b.type = 'button'; b.setAttribute('data-h', c.h); b.setAttribute('aria-label', c.name + (c.u ? ', ' + c.u + TEXT.unread : '') + ', ' + sub);
+            t.appendChild(el('bdi', '', c.name));
+            if (c.f) { star = el('span', 'al-star'); star.setAttribute('role', 'img'); star.setAttribute('aria-label', TEXT.followed); t.appendChild(star); }
+            tx.appendChild(t); tx.appendChild(el('bdi', 'al-s', sub));
+            meta.appendChild(el('span', 'al-when', C.agoOf(c.at, now())));
+            if (c.u) meta.appendChild(el('span', 'al-u', countBig(c.u)));
+            b.appendChild(ic); b.appendChild(tx); b.appendChild(meta);
+            b.addEventListener('click', function () { var back = opener; close(); if (ctl.messages) ctl.messages(c.h, c.name, back); });          // (the list closes, the conversation opens; its X leaves the page where it was)
+            return b;
+        }
+        function messagesBody(card) {
+            var cs = convs(), box = el('div', 'al-list');
+            box.setAttribute('role', 'list');
+            if (!cs.length) {
+                var e = el('div', 'al-empty'), li = icon('lock');
+                if (li) { li.setAttribute('class', 'al-ico big'); e.appendChild(li); }
+                e.appendChild(el('p', 'al-et', TEXT.msgNone)); e.appendChild(el('p', 'al-es', TEXT.msgNoneLine));
+                box.appendChild(e);
+            } else cs.forEach(function (c) { box.appendChild(convItem(c)); });
+            card.appendChild(box);
+            card.appendChild(el('p', 'al-keep', TEXT.msgKeep));
+        }
+        function tabsBar() {
+            var bar = el('div', 'al-tabs'), unread = 0, id;
+            bar.setAttribute('role', 'tablist');
+            rows().forEach(function (r) { if (unreadAtOpen[r.id]) unread++; });
+            [['alerts', TEXT.tabAlerts, unread], ['messages', TEXT.tabMessages, messageCount()]].forEach(function (t) {
+                var b = el('button', 'al-tab');
+                b.type = 'button'; b.setAttribute('role', 'tab'); b.setAttribute('data-tab', t[0]); b.setAttribute('aria-selected', tab === t[0] ? 'true' : 'false'); b.setAttribute('data-on', tab === t[0] ? 'true' : 'false');
+                b.appendChild(el('span', 'al-tl', t[1]));
+                if (t[2]) { var n = el('span', 'al-tn', countBig(t[2])); n.setAttribute('aria-label', t[2] + TEXT.unread); b.appendChild(n); }
+                b.addEventListener('click', function () { if (tab !== t[0]) { tab = t[0]; paint(); var again = shade && shade.querySelector ? shade.querySelector('.al-tab[data-tab="' + t[0] + '"]') : null; if (again && again.focus) again.focus(); } });
+                bar.appendChild(b);
+            });
+            return bar;
+        }
         function settingsBody(card) {
             card.appendChild(el('div', 'al-h', TEXT.group)); card.appendChild(el('p', 'al-lead', TEXT.lead));
             wired().forEach(function (name) { card.appendChild(line(name)); });
@@ -232,27 +274,30 @@
         function controls() { var out = [], all = shade && shade.querySelectorAll ? shade.querySelectorAll('button') : []; for (var i = 0; i < all.length; i++) out.push(all[i]); return out; }
         function paint() {                                 // the panel's content again (the list changed, or the view)
             if (!panel) return;
-            var card = panel, top = el('div', 'al-top'), h = el('h2', 'al-title', view === 'list' ? title() : TEXT.settings), first;
+            var tabbed = view === 'list' && hasMessages(), card = panel, top = el('div', 'al-top'), h, first;
+            if (!tabbed) tab = 'alerts';
+            h = el('h2', 'al-title', view === 'list' ? (tab === 'messages' ? TEXT.tabMessages : title()) : TEXT.settings);
             while (card.firstChild) card.removeChild(card.firstChild);
-            card.setAttribute('aria-label', h.textContent); card.setAttribute('data-view', view);
+            card.setAttribute('aria-label', h.textContent); card.setAttribute('data-view', view); card.setAttribute('data-tab', tab);
             card.appendChild(el('div', 'al-grab'));
             if (view === 'settings') top.appendChild(iconButton('al-back', TEXT.back, 'back', function () { view = 'list'; paint(); focusFirst(); }));
             top.appendChild(h);
-            if (view === 'list') top.appendChild(iconButton('al-gear', TEXT.gear, 'gear', function () { view = 'settings'; paint(); focusFirst(); }));
+            if (view === 'list' && tab === 'alerts') top.appendChild(iconButton('al-gear', TEXT.gear, 'gear', function () { view = 'settings'; paint(); focusFirst(); }));
             top.appendChild(iconButton('al-x', TEXT.close, 'x', function () { close(); }));
             card.appendChild(top);
-            if (view === 'list') listBody(card); else settingsBody(card);
+            if (tabbed) card.appendChild(tabsBar());
+            if (view !== 'list') settingsBody(card); else if (tab === 'messages') messagesBody(card); else listBody(card);
             first = null;
         }
-        function focusFirst() { var b = shade && shade.querySelector ? (shade.querySelector('.al-act') || shade.querySelector('.al-line') || shade.querySelector('.al-x')) : null; if (b && b.focus) b.focus(); }
+        function focusFirst() { var b = shade && shade.querySelector ? (shade.querySelector('.al-conv') || shade.querySelector('.al-act') || shade.querySelector('.al-line') || shade.querySelector('.al-x')) : null; if (b && b.focus) b.focus(); }
         function place() {                                 // a wide window: under the bell, its right edge at the bar's, and no taller than what is left of the window; a phone's sheet is the style's
             if (!panel || phone()) { if (panel) { panel.style.top = ''; panel.style.right = ''; panel.style.maxHeight = ''; } return; }
             var bar = env.bar && env.bar.parentNode && env.bar.parentNode.getBoundingClientRect ? env.bar.parentNode : null, r = bar ? bar.getBoundingClientRect() : { bottom: 70 }, top = Math.round(r.bottom + 6), high = win.innerHeight || 600;
             panel.style.top = top + 'px'; panel.style.maxHeight = Math.max(160, high - top - 12) + 'px';
         }
-        function open(back) {
-            if (shade) return;
-            opener = back || bell || null; view = 'list'; unreadAtOpen = {};
+        function open(back, which) {                       // which: 'messages' opens on the Messages tab (a conversation's arrow comes back to it)
+            if (shade) { if (which === 'messages' && hasMessages() && (tab !== 'messages' || view !== 'list')) { tab = 'messages'; view = 'list'; paint(); focusFirst(); } return; }
+            opener = back || bell || null; view = 'list'; tab = which === 'messages' && hasMessages() ? 'messages' : 'alerts'; unreadAtOpen = {};
             rows().forEach(function (r) { if (r.u) unreadAtOpen[r.id] = true; });
             shade = el('div', 'gshade al-shade' + (phone() ? ' phone' : ''));
             panel = el('section', 'al-panel'); panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true');
@@ -452,9 +497,14 @@
         makeBell();
         hook();
 
+        function messagesChanged() {                       // the Messages part says that the conversations or the count of what is not read changed: the bell's number, and the list if it is on the screen
+            if (shade && view === 'list') { if (tab === 'messages' || hasMessages()) paint(); }
+            refresh();
+        }
+
         // say(words, tone): a toast of the page's own for another part (the invitation that was sent, the one that was refused); tone 'warn' is the gold one
         function say(words, tone) { up(String(words), { icon: tone === 'warn' ? 'warn' : 'check', tone: tone === 'warn' ? 'warn' : '' }); return true; }
-        return { open: open, close: close, alert: alert, say: say, rows: rows, count: count, refresh: refresh, title: title, flash: flash, wired: wired, tap: tap };
+        return { open: open, close: close, alert: alert, say: say, rows: rows, count: count, refresh: refresh, title: title, flash: flash, wired: wired, tap: tap, messagesChanged: messagesChanged };
     }
 
     return { TEXT: TEXT, TOAST_MS: TOAST_MS, INVITE_MS: INVITE_MS, KEEP: KEEP, DAYS: DAYS, LIST_KEY: LIST_KEY, rowOf: rowOf, wordsOf: wordsOf, countOf: countOf, countText: countText, trim: trim, possessive: possessive, mount: mount };
