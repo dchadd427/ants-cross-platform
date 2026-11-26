@@ -59,6 +59,7 @@ public:
         uint32_t max_bridges{3};             // bridges that carry at the same time (one ant each: the hill banks about one deposit per 100 ticks, so about three ants fill its gate); no new bridge for another pile
         bool walker_bridge{false};           // a Swimmer digs only while a bridge is planned and goes back to the ferry when it is done, whoever stands at the hill (the walkers may stand on another island: the crew that was flown to the Swimmers)
         bool guard{true};                    // false: the ants on a bridge and the ants of a closed pile are left alone (the tests that show what the guard prevents)
+        uint32_t hold_release{0};            // plan.bridge_loaded: an ant that holds a load and has been held on land this long with no bridge that gets it home is given back (0: never): the bridge planner digs for it
     };
 
     IslandTask(TaskId id, Tactics& tactics) : IslandTask(id, tactics, Params{}) {}
@@ -95,6 +96,8 @@ public:
     uint32_t failures() const noexcept { return failures_; }
     /// Ants called home because their pile was closed, ants sent off a bridge that was going, ants stopped on land because the way home would not last
     uint32_t recalls() const noexcept { return recalls_; }
+    /// plan.bridge_loaded: the ants that hold a load and were given back by the guard after `hold_release` ticks with no bridge home (docs/BOT_UNSTUCK.md)
+    uint32_t loads_released() const noexcept { return loads_released_; }
     uint32_t escapes() const noexcept { return escapes_; }
     uint32_t holds() const noexcept { return holds_; }
     /// Carriers told to walk home again after a bridge tile went (their paths may have led over it)
@@ -196,6 +199,7 @@ private:
     uint32_t chains_finished_{0};
     uint32_t failures_{0};
     uint32_t recalls_{0};
+    uint32_t loads_released_{0};
     uint32_t escapes_{0};
     uint32_t holds_{0};
     uint32_t repaths_{0};

@@ -295,6 +295,7 @@ void Orders::chain(uint32_t ant, const std::vector<ChainStep>& steps, Priority p
         in.step = static_cast<uint32_t>(i);
         in.gap_lo = steps[i].gap_lo;
         in.gap_hi = steps[i].gap_hi;
+        in.cancel = steps[i].cancel;
     }
 }
 

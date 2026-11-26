@@ -33,6 +33,7 @@ public:
         uint32_t max_hold_ants{2};           // at most this many ants are held back at a time
         uint32_t plug_ticks{100};            // an own ant that has stood idle this long on the land tile at the foot of a bridge, with an ant that cannot go within `jam_tiles`, is a plug
         int32_t jam_tiles{8};                // ... and the ant that cannot go (in the can't-go clip for a while, or standing on a bridge tile beside the plug) is within this many tiles of it (a bridge of a few tiles: its other end)
+        uint32_t max_orders{3};              // plan.bridge_foot: the clicks that send a plug off the foot of a bridge (the first included)
     };
     BridgeHeadOnTask(TaskId id, Tactics& tactics) : BridgeHeadOnTask(id, tactics, Params{}) {}
     BridgeHeadOnTask(TaskId id, Tactics& tactics, const Params& params) : Task(id), tactics_(tactics), params_(params) {}
@@ -60,6 +61,8 @@ private:
         sim::TileCoord shore{-1, -1};
         uint64_t until{0};
         uint64_t ordered{0};
+        bool loaded{false};                  // the ant holds food or loot (plan.bridge_foot): the hold goes on while it does, the ant keeps what it carries
+        uint32_t orders{0};                  // the clicks that sent it off the foot (a click that was not carried out is given again, at most `max_orders` in all)
     };
     struct Jam {
         sim::TileCoord tile{-1, -1};

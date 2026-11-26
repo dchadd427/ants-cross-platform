@@ -144,6 +144,9 @@ struct Intent {
     uint32_t step{0};
     uint32_t gap_lo{0};
     uint32_t gap_hi{0};
+    /// The CANCEL of a stand (docs/BOT_CONTEST.md, Orders::stand): the last click of a chain that is meant to be refused ("Can't go there.", or a silent stop): it ends the walk onto a power-up inside the window in which the
+    /// ant has crossed into the tile and not yet landed, so that the ant stays on the power-up. The reach guard (which takes out a click that no walk leads to) leaves it alone.
+    bool cancel{false};
 };
 
 /// One click of a timed chain: the tile, whether it is a planned pick-up (the tile holds a power-up), and for every step but the first the ticks between the moment the step before is applied and the
@@ -153,6 +156,7 @@ struct ChainStep {
     bool pickup{false};
     uint32_t gap_lo{0};
     uint32_t gap_hi{0};
+    bool cancel{false};                  // the click is the cancel of a stand (Intent::cancel)
 };
 
 /// The only way out of a bot: what a person could click, as data. The named methods cannot express Quit or Drop (push_unchecked exists for the tests of the
