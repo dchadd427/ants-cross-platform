@@ -213,13 +213,18 @@ void test_podium(const assets::AssetArchive& arc, const hud_art::Art& art) {
     check(has_ink(*spy, win + " win the match."), "the sentence names the winners (an alliance win), with no time while nothing was counted");
     check(has_line(*spy, card.rows()[0].numbers[0]) && has_line(*spy, win), "the winner's name and score are drawn");
     check(has_line(*spy, "Lost") && has_line(*spy, "Killed") && has_line(*spy, "Hatched") && !has_line(*spy, "Damage"), "...with a tile for each of the others' numbers, and no damage: nothing was counted");
+    const ArtSpy::Face* killed_tile = spy->face("Killed");
+    const ArtSpy::Face* lost_tile = spy->face("Lost");
+    const ArtSpy::Face* hatched_tile = spy->face("Hatched");
+    check(killed_tile != nullptr && lost_tile != nullptr && hatched_tile != nullptr && killed_tile->x < lost_tile->x && lost_tile->x < hatched_tile->x,
+          "...kills first, then the ants lost, then the hatched");
     const ArtSpy::Face* score = spy->face(card.rows()[0].numbers[0]);
     check(score != nullptr && score->color.r == 246 && score->color.g == 208, "the winner's score is gold");
     for (size_t i = 1; i < card.rows().size(); ++i) {
         const ScorecardModal::Row& row = card.rows()[i];
         check(has_line(*spy, row.numbers[0]), "row " + std::to_string(i) + ": the score " + row.numbers[0]);
         check(has_line(*spy, row.name), "row " + std::to_string(i) + ": the name \"" + row.name + "\"");
-        check(spy->face("Lost " + row.numbers[1] + "   Killed " + row.numbers[2] + "   Hatched " + row.numbers[3]) != nullptr, "row " + std::to_string(i) + ": its three small numbers in a line");
+        check(spy->face("Killed " + row.numbers[2] + "   Lost " + row.numbers[1] + "   Hatched " + row.numbers[3]) != nullptr, "row " + std::to_string(i) + ": its three small numbers in a line");
     }
     check(count(*spy, art, "sc_well_tl") == 2 && count(*spy, art, "sc_others") == 1, "two wells, the winner's and the others', and the label of the others");
     int32_t ants = 0;
@@ -289,7 +294,7 @@ void test_counted(const assets::AssetArchive& arc, const hud_art::Art& art) {
     const std::string win = card.rows()[0].name;
     check(has_ink(*spy, win + " win the match.   12:40 played"), "the sentence says how long the match was");
     check(has_line(*spy, "Damage") && has_line(*spy, "1,840"), "the winner's well has the damage tile (the winner's side: 1,240 and 600, added up, with its thousands grouped)");
-    check(spy->face("Lost " + card.rows()[1].numbers[1] + "   Killed " + card.rows()[1].numbers[2] + "   Hatched " + card.rows()[1].numbers[3] + "   Damage 420") != nullptr, "a ranked row's small numbers end with its damage");
+    check(spy->face("Killed " + card.rows()[1].numbers[2] + "   Lost " + card.rows()[1].numbers[1] + "   Hatched " + card.rows()[1].numbers[3] + "   Damage 420") != nullptr, "a ranked row's small numbers end with its damage");
     check(count(*spy, art, "sc_sm_m_up") == 1 && count(*spy, art, "sc_sw_allstats_up") == 1 && count(*spy, art, "sc_sw_back_up") == 0, "one link, \"All stats\", and no tabs");
     check(count(*spy, art, "sc_k_mvp") == 1 && count(*spy, art, "sc_k_blood") == 1 && count(*spy, art, "sc_k_raid") == 1 && count(*spy, art, "sc_k_stand") == 0 && count(*spy, art, "sc_k_play") == 1, "the labels of the three honors and of the Play of the game");
     check(has_line(*spy, "62% of the play") && has_line(*spy, "at 0:42") && has_line(*spy, "50 points at 9:10"), "the honors' numbers: the MVP's share of the play, First blood's time, the raid's loot and time");

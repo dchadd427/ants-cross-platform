@@ -31,6 +31,7 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - **Games list.** Dashed Open lobby cards fill the empty places (Host here), and a live match shows its scores in a strip that opens a scoreboard.
 - **Copy link on a phone.** A live view and a replay have the button in the top bar on a phone now (a share symbol, 44 px; on a computer it says Copy link as before). It opens the phone's share sheet where there is one, otherwise copies the match's address and says Copied!. The bar shows Matches and Full instead of All matches and Fullscreen on a narrow phone, so that all five buttons fit in one row.
+- **Kills first on the Podium.** The results show Killed before Lost (then Hatched), for the winner and for each of the other players.
 
 **Fixes:**
 - On a phone, a live view's "Jump to live" no longer covers the clock beside the play button: the clock keeps its room, the button goes under it when the row is short, and Picture sits beside the camera button. The speed buttons and Picture are 44 px high.
