@@ -26,7 +26,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.21.6 - 2026-11-26 - Live scores, open lobbies, Top Thief and bots that fight for the flower
 
 **For players:**
 - **Top Thief** replaces Biggest raid on the results screen: the player with the most raids whose loot got home. 187 keeps Last stand.
@@ -39,6 +39,8 @@ Work that is not released yet is written in the same template under a heading th
 **Fixes:**
 - On a phone, a live view's "Jump to live" no longer covers the clock beside the play button: the clock keeps its room, the button goes under it when the row is short, and Picture sits beside the camera button. The speed buttons and Picture are 44 px high.
 - The menu's "players online" counts the same people as the Players list, not only those in a room or a match.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/717a2ef9...af4a8282)
 
 ## v0.21.5 - 2026-11-24 - The Podium results, messages on phones and smarter bots
 
