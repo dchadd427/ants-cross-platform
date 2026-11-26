@@ -1344,7 +1344,7 @@
                 return response.json();
             }, function (e) { clearTimeout(timer); throw e; });
         }
-        // The "N online" of the line counts the people on the site, as the Players list does (web/home/players.js tells hereNow); the game server's own count (in a room or a match) is used only
+        // The "N online" of the line counts the people on the site, as the Players list does (the list tells hereNow); the game server's own count (in a room or a match) is used only
         // while the list has no count (no hub, not connected yet).
         var hereNow = null, lastStats = null;
         function showStats(stats) {
