@@ -538,6 +538,7 @@
   layout(location = 0) in vec3 a_position;
   uniform mat4 u_model, u_lightViewProj;
   uniform vec4 u_jelloWobble;
+  out float v_worldY;
   void main() {
     vec3 lp = a_position;
     if (u_jelloWobble.w > 0.01) {
@@ -547,21 +548,29 @@
       lp.x += u_jelloWobble.x * sway;
       lp.z += u_jelloWobble.y * sway;
     }
-    gl_Position = u_lightViewProj * (u_model * vec4(lp, 1.0));
+    vec4 wp = u_model * vec4(lp, 1.0);
+    v_worldY = wp.y;
+    gl_Position = u_lightViewProj * wp;
   }`;
 
   const SHADOW_FS = `#version 300 es
   precision highp float;
-  void main() {}`;
+  in float v_worldY;
+  uniform int u_clipBelowWater;
+  void main() {
+    if (u_clipBelowWater != 0 && v_worldY < -0.01) discard;
+  }`;
 
-  // --- Original 1998 Ants Tile-Grid Ground Shader (ground.png Atlas + Crisp Grid + Real Hardware PCF Shadows) ---
+  // --- Original 1998 Ants Tile-Grid Ground Shader (2-pass: Opaque Land + Pond Bed, then Translucent Water Surface + Swimmer Ripples) ---
   const TILE_GROUND_VS = `#version 300 es
   layout(location = 0) in vec3 a_position;
   uniform mat4 u_viewProj;
+  uniform float u_yOffset;
   out vec3 v_worldPos;
   void main() {
-    v_worldPos = a_position;
-    gl_Position = u_viewProj * vec4(a_position, 1.0);
+    vec3 wp = vec3(a_position.x, a_position.y + u_yOffset, a_position.z);
+    v_worldPos = wp;
+    gl_Position = u_viewProj * vec4(wp, 1.0);
   }`;
 
   const TILE_GROUND_FS = `#version 300 es
@@ -571,12 +580,15 @@
   uniform mat4 u_lightViewProj;
   uniform vec2 u_mapSize, u_atlasGrid, u_viewport;
   uniform float u_waterTile, u_gridAlpha, u_shadowStrength, u_time;
-  uniform int u_crispPixels, u_useShadowMap, u_isOrtho;
+  uniform int u_crispPixels, u_useShadowMap, u_isOrtho, u_waterPass;
   uniform vec3 u_cameraPos, u_viewDir, u_keyDir, u_fillDir, u_keyColor, u_fillColor, u_skyColor, u_groundColor;
-  uniform vec3 u_bgTop, u_bgMid, u_bgBot;
+  uniform vec3 u_bgTop, u_bgMid, u_bgBot, u_gridColor;
   uniform vec4 u_lightMix;
-  uniform vec4 u_glows[6];
+  uniform vec4 u_glows[8];
+  uniform vec3 u_glowColors[8];
   uniform int u_glowCount;
+  uniform vec4 u_ripples[8]; // xy = swimmer snorkel xz, z = time phase, w = radius
+  uniform int u_rippleCount;
   out vec4 fragColor;
 
   vec3 tgToLinear(vec3 c) { return mix(c / 12.92, pow(max((c + 0.055) / 1.055, 0.0), vec3(2.4)), step(0.04045, c)); }
@@ -613,12 +625,12 @@
     vec3 skyMatch = mix(u_bgMid, mix(u_bgBot, u_bgTop, smoothstep(0.0, 1.0, suv.y)), smoothstep(0.05, 0.95, rad));
 
     if (!inMap) {
-      // Clean dark framed game-table mat outside the map boundary; only blends to sky on low perspective hero angles
+      if (u_waterPass != 0) discard;
       vec2 edgeD = max(max(-p, p - u_mapSize), vec2(0.0));
       float dOut = length(edgeD);
       float frame = 1.0 - smoothstep(0.0, 0.24, dOut);
       float fade = (u_isOrtho != 0) ? 0.0 : smoothstep(1.2, 6.0, dOut);
-      vec3 matCol = mix(vec3(0.075, 0.088, 0.108), vec3(0.20, 0.23, 0.27), frame * 0.55);
+      vec3 matCol = mix(vec3(0.06, 0.072, 0.092), vec3(0.18, 0.21, 0.25), frame * 0.55);
       fragColor = vec4(mix(matCol, skyMatch, fade), 1.0);
       return;
     }
@@ -626,6 +638,26 @@
     vec2 cell = floor(p);
     vec2 localUv = fract(p);
     float rawIdx = floor(texture(u_mapTex, (cell + 0.5) / u_mapSize).r * 255.0 + 0.5);
+    // Treat pure water (w01a = 45) AND water-mud shoreline tiles (MW02a..09a = 0..7, wm02a..09a = 46..53) carefully:
+    // Pure water tile w01a (45) renders translucent water surface in pass 2 over recessed pond bed so submerged swimmers show through!
+    bool isWater = abs(rawIdx - u_waterTile) < 0.5;
+
+    // Pass 1 (u_waterPass == 1): continuous deep submerged pond bed recessed below Y=0.
+    // Never discard on !isWater: Pass 0 opaque land at Y=0 already masks non-water cells in the depth buffer,
+    // so oblique rays looking under a pond shoreline hit shadowed underwater bank instead of sky!
+    if (u_waterPass == 1) {
+      float bedN = tgNoise(p * 3.5) * 0.6 + tgNoise(p * 11.0) * 0.4;
+      vec3 bedCol = mix(vec3(0.008, 0.026, 0.082), vec3(0.022, 0.068, 0.175), bedN);
+      bedCol *= isWater ? 1.0 : 0.45;
+      float keyLum = clamp(dot(u_keyColor, vec3(0.299, 0.587, 0.114)) * 0.34, 0.14, 1.05);
+      fragColor = vec4(tgToSrgb(tgAces(bedCol * (0.48 + 0.72 * keyLum) * u_lightMix.z)), 1.0);
+      return;
+    }
+    // Pass 0 (opaque land at Y=0): skip pure water tiles so submerged swimmers aren't occluded by Y=0 depth buffer
+    if (u_waterPass == 0 && isWater) discard;
+    // Pass 2 (translucent shimmering water surface at Y=0 over submerged swimmers): draw ONLY pure water tiles!
+    if (u_waterPass == 2 && !isWater) discard;
+
     float aCol = mod(rawIdx, u_atlasGrid.x);
     float aRow = floor(rawIdx / u_atlasGrid.x);
     vec2 pxUv = (u_crispPixels != 0)
@@ -635,9 +667,6 @@
     vec3 texSrgb = texture(u_atlasTex, atlasUv).rgb;
     vec3 albedo = tgToLinear(texSrgb);
 
-    // Subtle animated sunlit ripple glint on original 1998 blue water tiles (w01a),
-    // plus crisp Hi-Res surface micro-grain & normal relief on soil/mud/stone when smooth Hi-Res mode is active
-    bool isWater = abs(rawIdx - u_waterTile) < 0.5;
     vec3 N = vec3(0.0, 1.0, 0.0);
     if (isWater) {
       float rip1 = sin(p.x * 9.5 + p.y * 5.2 + u_time * 2.4);
@@ -655,37 +684,59 @@
     float NoL = max(dot(N, u_keyDir), 0.0);
     float NoF = max(dot(N, u_fillDir), 0.0);
 
-    // Normalize angled sunlight intensity so unshadowed original tiles match authentic 1998 earthy color & depth,
-    // while shadowed tiles drop crisply into cool angled sky-lit relief.
-    float keyNorm = max(u_keyDir.y, 0.30);
-    vec3 sunTint = u_keyColor / max(max(u_keyColor.r, max(u_keyColor.g, u_keyColor.b)), 0.01);
-    float keyBright = clamp(dot(u_keyColor, vec3(0.299, 0.587, 0.114)) * 0.38, 0.32, 1.25);
+    // True lighting-responsive exposure (Daylight bright, Golden warm, Nighttime dark indigo, Moonlight silver-blue, Neon magenta/cyan!)
+    float keyNorm = max(u_keyDir.y, 0.28);
     float sunFactor = (NoL / keyNorm) * mix(1.0 - u_shadowStrength, 1.0, sh);
-    vec3 shadowCool = mix(vec3(0.72, 0.82, 1.06), vec3(1.0), sh);
-    vec3 lit = albedo * (sunTint * keyBright * sunFactor * 0.64 + u_skyColor * 0.20 * u_lightMix.x * shadowCool + u_fillColor * NoF * 0.10);
+    vec3 shadowCool = mix(vec3(0.70, 0.80, 1.08), vec3(1.0), sh);
+    vec3 lit = albedo * (u_keyColor * sunFactor * 0.26 + u_skyColor * 0.22 * u_lightMix.x * shadowCool + u_fillColor * NoF * 0.16);
 
+    float outAlpha = 1.0;
     if (isWater) {
-      // Gentle rippling blue pond shimmer (orthographic-safe view vector, never blows out to white!)
       float wave = 0.5 + 0.5 * sin(p.x * 7.5 + p.y * 4.5 + u_time * 2.2) * cos(p.x * 4.8 - p.y * 6.9 + u_time * 1.6);
       vec3 V = u_isOrtho != 0 ? normalize(u_viewDir) : normalize(u_cameraPos - v_worldPos);
       vec3 H = normalize(u_keyDir + V);
       float spec = pow(max(dot(N, H), 0.0), 84.0) * 0.14 * sh;
-      lit *= 0.92 + 0.14 * wave;
-      lit += sunTint * (spec + wave * 0.025 * sh);
+      lit *= 0.96 + 0.16 * wave;
+      lit += u_keyColor * (spec * 0.38 + wave * 0.012 * sh);
+
+      // Animated white-cyan snorkel splash & expanding wake ripple rings around underwater swimmers!
+      float foam = 0.0;
+      for (int i = 0; i < 8; i++) {
+        if (i >= u_rippleCount) break;
+        vec4 rp = u_ripples[i];
+        float d = length(p - rp.xy);
+        float maxR = max(rp.w, 0.55);
+        if (d < maxR) {
+          // Tight bubbling snorkel collar splash right around the tube (authentic 1998 assw301 splash ring!)
+          float collar = smoothstep(0.22, 0.09, d) * smoothstep(0.02, 0.065, d);
+          float splashJitter = 0.74 + 0.26 * sin(atan(p.y - rp.y, p.x - rp.x) * 7.0 + u_time * 7.5 + float(i));
+          // Two staggered concentric expanding ripple rings
+          float r1 = fract(u_time * 0.95 + rp.z) * maxR;
+          float r2 = fract(u_time * 0.95 + rp.z + 0.5) * maxR;
+          float ring1 = exp(-pow((d - r1) / 0.052, 2.0)) * (1.0 - r1 / maxR);
+          float ring2 = exp(-pow((d - r2) / 0.052, 2.0)) * (1.0 - r2 / maxR);
+          foam = max(foam, clamp(collar * splashJitter * 0.94 + (ring1 + ring2) * 0.74, 0.0, 1.0));
+        }
+      }
+      vec3 foamCol = mix(vec3(0.45, 0.80, 1.0), vec3(0.96, 0.99, 1.0), foam * 0.78);
+      lit = mix(lit, foamCol * max(0.32, dot(u_keyColor, vec3(0.3, 0.5, 0.2)) * 0.38 + 0.25), foam * 0.88);
+      // Translucent pond surface (0.55) so submerged underwater swimmers remain clearly visible beneath the water,
+      // rising toward opaque on bright white splash foam rings!
+      outAlpha = mix(0.55, 0.94, foam);
     }
 
-    // Warm flickering firelight ground pools around active fire walls / bombs
-    for (int i = 0; i < 6; i++) {
+    // Dynamic colored emissive ground glow pools (firelight in Night/Sunset, neon accents in Neon Arcade!)
+    for (int i = 0; i < 8; i++) {
       if (i >= u_glowCount) break;
       vec4 glw = u_glows[i];
       float d = length(p - glw.xy) / max(glw.z, 0.25);
-      float flick = 0.86 + 0.14 * sin(u_time * 12.0 + float(i) * 2.5);
-      lit += albedo * vec3(1.6, 0.62, 0.16) * exp(-d * d * 2.0) * glw.w * flick;
+      float flick = 0.86 + 0.14 * sin(u_time * 10.5 + float(i) * 2.3);
+      lit += (albedo + vec3(0.06)) * u_glowColors[i] * exp(-d * d * 2.1) * glw.w * flick;
     }
 
-    vec3 outCol = tgToSrgb(tgAces(lit * 1.04 * u_lightMix.z));
+    vec3 outCol = tgToSrgb(tgAces(lit * 1.06 * u_lightMix.z));
     if (u_lightMix.w > 0.001) {
-      vec3 flatCol = texSrgb * mix(1.0 - u_shadowStrength * 0.72, 1.0, sh);
+      vec3 flatCol = texSrgb * mix(1.0 - u_shadowStrength * 0.65, 1.0, sh);
       outCol = mix(outCol, flatCol, u_lightMix.w);
     }
 
@@ -693,14 +744,13 @@
     if (u_gridAlpha > 0.001) {
       vec2 gridD = abs(fract(p - 0.5) - 0.5) / max(fwidth(p), vec2(1e-4));
       float line = 1.0 - clamp(min(gridD.x, gridD.y), 0.0, 1.0);
-      // Slightly bolder major line every 5 tiles for fast tactical readability
       vec2 majD = abs(fract(p / 5.0 - 0.5) - 0.5) / max(fwidth(p / 5.0), vec2(1e-4));
       float majLine = 1.0 - clamp(min(majD.x, majD.y), 0.0, 1.0);
-      float alpha = clamp(line * u_gridAlpha + majLine * u_gridAlpha * 0.45, 0.0, 0.62);
-      outCol = mix(outCol, vec3(0.05, 0.07, 0.06), alpha);
+      float alpha = clamp(line * u_gridAlpha + majLine * u_gridAlpha * 0.45, 0.0, 0.72);
+      outCol = mix(outCol, u_gridColor, alpha);
     }
 
-    fragColor = vec4(outCol, 1.0);
+    fragColor = vec4(outCol, outAlpha);
   }`;
 
   function buildTileGroundMesh(gl, cols, rows, pad = 6.0) {
@@ -722,10 +772,82 @@
     return { vao, count: idx.length, cols, rows, dispose() { gl.deleteVertexArray(vao); bufs.forEach((b) => gl.deleteBuffer(b)); } };
   }
 
+  const PLINTH_VS = `#version 300 es
+  layout(location = 0) in vec3 a_position;
+  layout(location = 1) in vec3 a_normal;
+  uniform mat4 u_viewProj;
+  out vec3 v_worldPos, v_worldNormal;
+  void main() { v_worldPos = a_position; v_worldNormal = a_normal; gl_Position = u_viewProj * vec4(a_position, 1.0); }`;
+
+  const PLINTH_FS = `#version 300 es
+  precision highp float;
+  in vec3 v_worldPos, v_worldNormal;
+  uniform vec3 u_topBase, u_sideBase, u_ringColor, u_keyDir;
+  uniform vec4 u_shadows[6];
+  uniform int u_shadowCount;
+  uniform float u_halfSpanX, u_radius;
+  out vec4 fragColor;
+  void main() {
+    vec3 N = normalize(v_worldNormal);
+    float isTop = smoothstep(0.65, 0.95, N.y);
+    vec3 base = mix(u_sideBase, u_topBase, isTop) * (max(dot(N, u_keyDir), 0.0) * 0.48 + 0.58);
+    if (isTop > 0.5) {
+      float rNorm = length(vec2(max(abs(v_worldPos.x) - u_halfSpanX, 0.0), v_worldPos.z)) / max(u_radius, 0.01);
+      float rings = (1.0 - smoothstep(0.008, 0.022, abs(rNorm - 0.88))) * 0.45 + (1.0 - smoothstep(0.006, 0.018, abs(rNorm - 0.58))) * 0.25;
+      base = mix(base, u_ringColor, rings * isTop);
+      float shadow = 0.0;
+      for (int i = 0; i < 6; i++) {
+        if (i >= u_shadowCount) break;
+        vec2 q = (v_worldPos.xz - u_shadows[i].xy) / max(u_shadows[i].zw, vec2(0.05));
+        float d2 = dot(q, q);
+        shadow = max(shadow, exp(-d2 * 2.5) * 0.52 + exp(-d2 * 0.85) * 0.24);
+      }
+      base *= (1.0 - clamp(shadow, 0.0, 0.66));
+    }
+    fragColor = vec4(pow(clamp(base, 0.0, 1.0), vec3(1.0 / 2.2)), 1.0);
+  }`;
+
+  function buildPlinthMesh(gl, halfSpanX, radius) {
+    const clampV = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    const halfSegs = 24, perim = [];
+    for (const [cx, startA] of [[halfSpanX, -Math.PI * 0.5], [-halfSpanX, Math.PI * 0.5]]) {
+      for (let i = 0; i <= halfSegs; i++) {
+        const a = startA + (i / halfSegs) * Math.PI;
+        perim.push([cx + Math.cos(a) * radius, Math.sin(a) * radius]);
+      }
+    }
+    const n = perim.length, pos = [0, -0.002, 0], norm = [0, 1, 0], idx = [], scaleTop = (radius - 0.014) / radius;
+    for (let i = 0; i < n; i++) {
+      const [px, pz] = perim[i], cx = clampV(px, -halfSpanX, halfSpanX);
+      pos.push(cx + (px - cx) * scaleTop, -0.002, pz * scaleTop); norm.push(0, 1, 0); idx.push(0, 1 + ((i + 1) % n), 1 + i);
+    }
+    const ringStart = pos.length / 3;
+    for (const [ry, inset, ny] of [[-0.002, 0.014, 0.65], [-0.014, 0, 0.45], [-0.014, 0, 0], [-0.068, -0.012, 0]]) {
+      for (const [px, pz] of perim) {
+        const cx = clampV(px, -halfSpanX, halfSpanX), rx = px - cx, rl = Math.hypot(rx, pz) || 1;
+        const ux = rx / rl, uz = pz / rl, rad = radius - inset, nl = Math.hypot(ux, ny, uz) || 1;
+        pos.push(cx + ux * rad, ry, uz * rad); norm.push(ux / nl, ny / nl, uz / nl);
+      }
+    }
+    for (const [a, b] of [[0, 1], [2, 3]]) {
+      const r0 = ringStart + a * n, r1 = ringStart + b * n;
+      for (let i = 0; i < n; i++) { const nx = (i + 1) % n; idx.push(r0 + i, r0 + nx, r1 + nx, r0 + i, r1 + nx, r1 + i); }
+    }
+    const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+    const bufs = [
+      uploadBuffer(gl, gl.ARRAY_BUFFER, new Float32Array(pos), 0, 3),
+      uploadBuffer(gl, gl.ARRAY_BUFFER, new Float32Array(norm), 1, 3),
+      uploadBuffer(gl, gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx)),
+    ];
+    gl.bindVertexArray(null);
+    return { vao, count: idx.length, halfSpanX, radius, dispose() { gl.deleteVertexArray(vao); bufs.forEach((b) => gl.deleteBuffer(b)); } };
+  }
+
   window.__antFx = {
     FIRE_VS, FIRE_FS, buildFireParticles,
     SPARK_VS, SPARK_FS, buildSparkParticles,
     FUR_PROFILES, FUR_VS, FUR_FS,
+    PLINTH_VS, PLINTH_FS, buildPlinthMesh,
     SHADOW_VS, SHADOW_FS,
     TILE_GROUND_VS, TILE_GROUND_FS, buildTileGroundMesh,
     evalJelloWobble,

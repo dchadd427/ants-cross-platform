@@ -3,8 +3,7 @@
 (() => {
   const { clamp, mat4FromTRS, parseGlb } = window.__antGltf;
   const {
-    DEG, TEAMS, LIGHTING_ORDER, validLighting, populateLightingSelect,
-    wrapAngleDeg, AntRenderer, installToolbarRovingTabindex,
+    DEG, TEAMS, validLighting, wrapAngleDeg, AntRenderer, installToolbarRovingTabindex,
   } = window.__antRender;
 
   const $ = (id) => document.getElementById(id);
@@ -12,6 +11,8 @@
   // Exact 1:1 scale relative to 1 world unit = 1 original 32x32 game tile:
   // Original worker sprite agst301 is 23x40 px (0.72 x 1.25 tiles); worker.glb at 1.15 projects 1.25 tiles tall at 45 deg.
   const ANT_SCALE = 1.15;
+  // Underwater swim immersion depth: submerges head/body/antennae/mask/tank beneath Y=0 so ONLY the yellow snorkel rises above water!
+  const SWIMMER_SUBMERGE_Y = -1.05 * ANT_SCALE;
   const BASE_FIT_RADIUS = 11.0;
 
   const CAM_PRESETS = {
@@ -21,10 +22,23 @@
     top:   { label: "Top-Down",  yaw:   0, pitch: 80, zoom: 0.92, proj: "ortho" },
   };
 
+  // Distinct Lighting Scenarios with tailored sun angle, shadow intensity, grid tint, and dynamic atmosphere glow!
+  const LIGHT_SCENARIOS = {
+    daylight:  { label: "Daylight",  elev: 32, azim: -42, shadowStr: 0.68, gridAlpha: 0.24, gridCol: [0.05, 0.07, 0.06], glowMode: "none" },
+    golden:    { label: "Sunset",    elev: 19, azim: -68, shadowStr: 0.74, gridAlpha: 0.22, gridCol: [0.16, 0.08, 0.05], glowMode: "warm" },
+    night:     { label: "Night",     elev: 26, azim:  36, shadowStr: 0.72, gridAlpha: 0.22, gridCol: [0.22, 0.34, 0.58], glowMode: "night" },
+    moonlight: { label: "Moonlight", elev: 30, azim: -32, shadowStr: 0.72, gridAlpha: 0.24, gridCol: [0.30, 0.46, 0.74], glowMode: "moon" },
+    neon:      { label: "Neon",      elev: 28, azim: -50, shadowStr: 0.70, gridAlpha: 0.44, gridCol: [0.10, 0.92, 0.98], glowMode: "neon" },
+    overcast:  { label: "Overcast",  elev: 54, azim: -25, shadowStr: 0.44, gridAlpha: 0.22, gridCol: [0.08, 0.10, 0.12], glowMode: "none" },
+    flat:      { label: "1998 Flat", elev: 36, azim: -42, shadowStr: 0.42, gridAlpha: 0.24, gridCol: [0.05, 0.07, 0.06], glowMode: "none" },
+  };
+  const LIGHT_SCENARIO_ORDER = ["daylight", "golden", "night", "moonlight", "neon", "overcast", "flat"];
+
   // Curated regional focus bookmarks for each original 1998 .LVL map.
   const MAP_FOCUSES = {
     treasure: [
       { id: "center",   label: "Center Crossroads", target: [30.5, 0.3, 29.0], zoom: 0.92 },
+      { id: "pond",     label: "West Pond Swimmer", target: [16.5, 0.2, 29.5], zoom: 0.42 },
       { id: "can",      label: "Can & Slingshot",   target: [15.5, 0.3, 14.0], zoom: 0.66 },
       { id: "steak",    label: "Steak Whiz & Bear", target: [38.5, 0.3,  6.5], zoom: 0.78 },
       { id: "slinky",   label: "Slinky & Glasses",  target: [10.0, 0.3, 47.5], zoom: 0.72 },
@@ -48,88 +62,96 @@
     ],
   };
 
-  // Extra active ants placed around Treasure Map's signature outer landmarks so every region feels alive.
+  // Extra active ants placed around Treasure Map's signature landmarks (strict 8-way tile grid paths!).
   const TREASURE_LANDMARK_ANTS = [
     // Center mud crossroads clash beneath the giant flowers & clovers
-    { cls: "combat", team: "black", clip: "Attack",  x: 28.8, z: 27.9, face: [30.4, 29.3], phase: 0.05 },
-    { cls: "combat", team: "green", clip: "Attack",  x: 31.6, z: 28.1, face: [29.8, 29.4], phase: 0.32 },
-    { cls: "combat", team: "red",   clip: "Attack",  x: 28.9, z: 30.9, face: [30.6, 29.5], phase: 0.58 },
-    { cls: "combat", team: "blue",  clip: "Attack",  x: 31.5, z: 30.8, face: [29.7, 29.4], phase: 0.81 },
-    // NW Soda Can, Cola Spill & Slingshot raid (Black & Green scouts)
-    { cls: "worker", team: "black", clip: "Harvest", x: 16.5, z: 18.2, face: [16.6, 15.9], phase: 0.15 },
-    { cls: "worker", team: "black", clip: "Walk",    phase: 0.0, speed: 1.25,
-      path: [[21.0, 21.0], [18.5, 18.0], [16.0, 17.5], [19.2, 19.6]] },
-    { cls: "thief",  team: "black", clip: "Walk",    phase: 0.4, speed: 1.45,
-      path: [[10.5, 16.5], [15.5, 10.5], [18.5, 14.2], [13.2, 17.2]] },
-    { cls: "fire",   team: "green", clip: "StartFire", x: 19.2, z: 15.2, face: [16.6, 15.9], phase: 0.5 },
-    // North Steak Whiz, Shirt Button & Teddy Bear Body (Green & Black)
-    { cls: "worker", team: "green", clip: "Harvest", x: 30.2, z:  6.1, face: [29.5, 5.2], phase: 0.2 },
-    { cls: "worker", team: "green", clip: "Walk",    phase: 0.25, speed: 1.30,
-      path: [[36.5, 19.2], [35.0, 11.5], [32.8, 6.8], [36.2, 12.2]] },
-    { cls: "thief",  team: "green", clip: "Walk",    phase: 0.6, speed: 1.45,
-      path: [[42.5,  8.5], [46.5, 11.2], [49.5, 6.5], [44.0, 4.5]] },
-    // SW Metal Slinky, Eyeglasses & Stick (Red squad)
-    { cls: "combat", team: "red",   clip: "Walk",    phase: 0.1, speed: 1.35,
-      path: [[ 9.5, 45.5], [15.5, 47.2], [13.5, 53.0], [ 8.5, 49.5]] },
-    { cls: "bomber", team: "red",   clip: "PlantBomb", x: 8.6, z: 45.4, face: [6.0, 44.5], phase: 0.3 },
-    { cls: "worker", team: "red",   clip: "Harvest", x: 28.4, z: 54.8, face: [30.0, 55.0], phase: 0.7 },
-    // SE Roast Chicken, Mushroom & Potted Meat (Blue squad)
-    { cls: "worker", team: "blue",  clip: "Harvest", x: 40.8, z: 46.5, face: [43.0, 47.0], phase: 0.1 },
-    { cls: "worker", team: "blue",  clip: "Walk",    phase: 0.2, speed: 1.30,
-      path: [[38.8, 38.8], [40.5, 43.5], [41.5, 45.5], [38.2, 41.5]] },
-    { cls: "combat", team: "blue",  clip: "Idle",    x: 35.8, z: 44.2, face: [33.0, 44.0], phase: 0.4 },
-    { cls: "worker", team: "blue",  clip: "Harvest", x: 54.1, z: 30.2, face: [56.0, 29.5], phase: 0.6 },
-    // West Pizza Tube & Slice (Red vs Black contest)
-    { cls: "worker", team: "red",   clip: "Harvest", x:  5.8, z: 29.8, face: [4.2, 29.0], phase: 0.25 },
-    { cls: "combat", team: "black", clip: "Attack",  x:  6.4, z: 28.1, face: [5.8, 29.8], phase: 0.55 },
+    { cls: "combat", team: "black", clip: "Attack",    x: 28.5, z: 27.5, face: [30.5, 29.5], phase: 0.05 },
+    { cls: "combat", team: "green", clip: "Attack",    x: 31.5, z: 27.5, face: [29.5, 29.5], phase: 0.32 },
+    { cls: "combat", team: "red",   clip: "Attack",    x: 28.5, z: 30.5, face: [30.5, 28.5], phase: 0.58 },
+    { cls: "combat", team: "blue",  clip: "Attack",    x: 31.5, z: 30.5, face: [29.5, 28.5], phase: 0.81 },
+    // NW Soda Can, Cola Spill & Slingshot raid
+    { cls: "worker", team: "black", clip: "Harvest",   x: 16.5, z: 18.5, face: [16.5, 16.5], phase: 0.15 },
+    { cls: "worker", team: "black", clip: "Walk",      phase: 0.0, speed: 1.25,
+      path: [[21, 21], [18, 18], [16, 18], [19, 21]] },
+    { cls: "thief",  team: "black", clip: "Walk",      phase: 0.4, speed: 1.45,
+      path: [[10, 17], [15, 11], [19, 14], [14, 18]] },
+    { cls: "fire",   team: "green", clip: "StartFire", x: 19.5, z: 15.5, face: [16.5, 15.5], phase: 0.5 },
+    // North Steak Whiz, Shirt Button & Teddy Bear Body
+    { cls: "worker", team: "green", clip: "Harvest",   x: 30.5, z:  6.5, face: [29.5, 5.5], phase: 0.2 },
+    { cls: "worker", team: "green", clip: "Walk",      phase: 0.25, speed: 1.30,
+      path: [[36, 19], [35, 11], [33, 7], [36, 12]] },
+    { cls: "thief",  team: "green", clip: "Walk",      phase: 0.6, speed: 1.45,
+      path: [[42, 8], [46, 11], [50, 7], [44, 4]] },
+    // SW Metal Slinky, Eyeglasses & Stick
+    { cls: "combat", team: "red",   clip: "Walk",      phase: 0.1, speed: 1.35,
+      path: [[9, 45], [16, 47], [14, 53], [8, 49]] },
+    { cls: "bomber", team: "red",   clip: "PlantBomb", x:  8.5, z: 45.5, face: [6.5, 44.5], phase: 0.3 },
+    { cls: "worker", team: "red",   clip: "Harvest",   x: 28.5, z: 54.5, face: [30.5, 54.5], phase: 0.7 },
+    // SE Roast Chicken, Mushroom & Potted Meat
+    { cls: "worker", team: "blue",  clip: "Harvest",   x: 40.5, z: 46.5, face: [43.5, 46.5], phase: 0.1 },
+    { cls: "worker", team: "blue",  clip: "Walk",      phase: 0.2, speed: 1.30,
+      path: [[38, 39], [41, 44], [41, 46], [38, 42]] },
+    { cls: "combat", team: "blue",  clip: "Idle",      x: 35.5, z: 44.5, face: [33.5, 44.5], phase: 0.4 },
+    { cls: "worker", team: "blue",  clip: "Harvest",   x: 54.5, z: 30.5, face: [56.5, 30.5], phase: 0.6 },
+    // West Pizza Tube & Slice
+    { cls: "worker", team: "red",   clip: "Harvest",   x:  5.5, z: 29.5, face: [4.5, 29.5], phase: 0.25 },
+    { cls: "combat", team: "black", clip: "Attack",    x:  6.5, z: 28.5, face: [5.5, 29.5], phase: 0.55 },
   ];
 
   const MAP_ORDER = ["treasure", "tiny", "small", "islands"];
   const START_CLASS_CYCLE = ["worker", "combat", "worker", "thief", "bomber", "fire"];
 
-  // --- Arc-Length Closed Path Sampler ---
-  function preparePath(pts) {
+  // --- Strict 8-Way Compass Movement (Exact 45-Degree Grid Increments Like 1998 Ants) ---
+  const OCTANT = Math.PI / 4;
+  function snapYaw8(rad) {
+    return Math.round(rad / OCTANT) * OCTANT;
+  }
+
+  // Expand any tile waypoint loop into strict 8-way (45 deg diagonal + 90 deg cardinal) tile-center legs!
+  function prepareEightWayPath(rawPts) {
+    const snapped = rawPts.map(([x, z]) => [Math.floor(x) + 0.5, Math.floor(z) + 0.5]);
+    const expanded = [];
+    for (let i = 0; i < snapped.length; i++) {
+      const [ax, az] = snapped[i];
+      const [bx, bz] = snapped[(i + 1) % snapped.length];
+      expanded.push([ax, az]);
+      const dx = bx - ax, dz = bz - az;
+      const adx = Math.abs(dx), adz = Math.abs(dz);
+      const diag = Math.min(adx, adz);
+      if (diag > 0.01 && Math.abs(adx - adz) > 0.01) {
+        // Pure 45-degree diagonal leg first, then pure N/S/E/W cardinal leg!
+        expanded.push([ax + Math.sign(dx) * diag, az + Math.sign(dz) * diag]);
+      }
+    }
     const segs = [];
     let total = 0;
-    for (let i = 0; i < pts.length; i++) {
-      const a = pts[i], b = pts[(i + 1) % pts.length];
-      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    for (let i = 0; i < expanded.length; i++) {
+      const a = expanded[i], b = expanded[(i + 1) % expanded.length];
+      const dx = b[0] - a[0], dz = b[1] - a[1];
+      const len = Math.hypot(dx, dz);
       if (len > 1e-4) {
-        segs.push({ ax: a[0], az: a[1], bx: b[0], bz: b[1], len, start: total });
+        segs.push({ ax: a[0], az: a[1], bx: b[0], bz: b[1], len, start: total, yaw: snapYaw8(Math.atan2(dx, dz)) });
         total += len;
       }
     }
     return { segs, total: Math.max(total, 1e-4) };
   }
 
-  function samplePath(pathData, distRaw) {
+  function sampleEightWayPath(pathData, distRaw) {
     const { segs, total } = pathData;
     const d = ((distRaw % total) + total) % total;
     for (let i = 0; i < segs.length; i++) {
       const s = segs[i];
       if (d <= s.start + s.len || i === segs.length - 1) {
         const u = clamp((d - s.start) / s.len, 0, 1);
-        const x = s.ax + (s.bx - s.ax) * u;
-        const z = s.az + (s.bz - s.az) * u;
-        const currAng = Math.atan2(s.bx - s.ax, s.bz - s.az);
-        const nextSeg = segs[(i + 1) % segs.length];
-        const nextAng = Math.atan2(nextSeg.bx - nextSeg.ax, nextSeg.bz - nextSeg.az);
-        let yaw = currAng;
-        if (u > 0.80) {
-          const blend = (u - 0.80) / 0.20;
-          let diff = nextAng - currAng;
-          while (diff > Math.PI) diff -= Math.PI * 2;
-          while (diff < -Math.PI) diff += Math.PI * 2;
-          yaw = currAng + diff * (blend * blend * (3 - 2 * blend));
-        }
-        return { x, z, yaw };
+        return { x: s.ax + (s.bx - s.ax) * u, z: s.az + (s.bz - s.az) * u, yaw: s.yaw };
       }
     }
     return { x: 0, z: 0, yaw: 0 };
   }
 
   function buildWorldMat(model, x, z, scale, yawRad, yLift = 0) {
-    const minY = model && model.min ? model.min[1] : 0;
+    const minY = model && model.bounds && model.bounds.min ? model.bounds.min[1] : 0;
     const h = yawRad * 0.5;
     return mat4FromTRS([x, -minY * scale + yLift, z], [0, Math.sin(h), 0, Math.cos(h)], [scale, scale, scale]);
   }
@@ -152,14 +174,16 @@
   const initCamKey = CAM_PRESETS[params.get("cam")] ? params.get("cam") : "game";
   const initProj = params.get("proj") === "perspective" ? "perspective"
     : (params.get("proj") === "ortho" ? "ortho" : CAM_PRESETS[initCamKey].proj);
+  const initLight = LIGHT_SCENARIOS[params.get("light")] ? params.get("light") : "daylight";
+  const initLs = LIGHT_SCENARIOS[initLight];
 
   const state = {
     mapId: initMap,
     camPreset: initCamKey,
     focusId: "center",
-    lighting: validLighting(params.get("light")) || "daylight",
-    sunElev: clamp(Number(params.get("elev") || 32), 16, 72),
-    sunAzim: clamp(Number(params.get("azim") ?? -42), -180, 180),
+    lighting: initLight,
+    sunElev: clamp(Number(params.get("elev") || initLs.elev), 16, 72),
+    sunAzim: clamp(Number(params.get("azim") ?? initLs.azim), -180, 180),
     playing: params.get("play") !== "0",
     showGrid: params.get("grid") !== "0",
     castShadows: params.get("shadows") !== "0",
@@ -248,10 +272,25 @@
     }
   }
 
+  function applyLightingScenario(id) {
+    const key = LIGHT_SCENARIOS[id] ? id : "daylight";
+    const sc = LIGHT_SCENARIOS[key];
+    state.lighting = key;
+    state.sunElev = sc.elev;
+    state.sunAzim = sc.azim;
+    syncUi();
+    setStatus(`Lighting scenario: ${sc.label} (${sc.elev}° sun)`);
+  }
+
   function buildAntSpecsForMap(mapData) {
     const specs = [];
     const teamCounter = { black: 0, green: 0, red: 0, blue: 0 };
     const cx = mapData.cols * 0.5, cz = mapData.rows * 0.5;
+    const waterIdx = mapsCatalog ? mapsCatalog.water_tile_index : 45;
+    const isWaterTile = (c, r) => (
+      c >= 0 && r >= 0 && c < mapData.cols && r < mapData.rows
+      && mapData.tiles[r * mapData.cols + c] === waterIdx
+    );
 
     // 1. Every authentic team starting ant from Block 1 of the original .LVL file
     for (const st of mapData.starts) {
@@ -261,52 +300,111 @@
       const cls = START_CLASS_CYCLE[idx % START_CLASS_CYCLE.length];
       const sx = st.col + 0.5, sz = st.row + 0.5;
       const hill = mapData.hills[t];
-      // Give the first worker of each team a live foraging loop between its hill and start tile
       if (cls === "worker" && idx === 0 && hill) {
-        const mx = (sx + cx) * 0.5, mz = (sz + cz) * 0.5;
+        const mc = Math.round((st.col + cx) * 0.5), mr = Math.round((st.row + cz) * 0.5);
         specs.push({
           cls, team: t, clip: "Walk", phase: (idx * 0.23 + t.length * 0.11) % 1, speed: 1.25,
-          path: [[sx, sz], [mx, mz], [sx + (hill[0] - sx) * 0.4, sz + (hill[1] - sz) * 0.4]],
+          path: [[st.col, st.row], [mc, mr], [st.col, st.row]],
         });
       } else {
-        const clip = cls === "thief" ? "IdleLookout" : (cls === "combat" ? "Idle" : "Idle");
+        const clip = cls === "thief" ? "IdleLookout" : "Idle";
         specs.push({ cls, team: t, clip, x: sx, z: sz, face: [cx, cz], phase: (idx * 0.31) % 1 });
       }
     }
 
-    // 2. Swimmer ants actively swimming in every real water pond on the map!
+    // 2. Underwater submerged Swimmers patrolling strictly inside each pond's real w01a water tiles in 8-way steps!
     const pondTeams = ["blue", "green", "red", "black"];
     for (let i = 0; i < (mapData.ponds || []).length; i++) {
-      const [px, pz, cells] = mapData.ponds[i];
-      const rad = clamp(Math.sqrt(cells) * 0.22, 0.7, 1.35);
+      const [px, pz] = mapData.ponds[i];
+      const cc = Math.floor(px), cr = Math.floor(pz);
+      // Build a safe 8-way diamond/box loop strictly inside pure water cells (w01a)
+      const candidates = [
+        [cc - 1, cr], [cc, cr - 1], [cc + 1, cr], [cc, cr + 1],
+      ].filter(([c, r]) => isWaterTile(c, r));
+      const loop = candidates.length >= 2 ? candidates : [[cc, cr], [cc, cr]];
       specs.push({
         cls: "swimmer",
         team: pondTeams[i % pondTeams.length],
         clip: "Swim",
+        submerged: true,
+        yLift: SWIMMER_SUBMERGE_Y,
         phase: (i * 0.27) % 1,
-        speed: 1.05,
-        yLift: -0.18,
-        path: [
-          [px - rad, pz - rad * 0.5],
-          [px + rad, pz - rad * 0.5],
-          [px + rad, pz + rad * 0.5],
-          [px - rad, pz + rad * 0.5],
-        ],
+        speed: 0.92,
+        path: loop,
       });
     }
 
-    // 3. Curated active landmark battles & harvesters on Treasure Map
+    // 3. Curated active 8-way landmark battles & harvesters on Treasure Map
     if (mapData.id === "treasure") {
       for (const a of TREASURE_LANDMARK_ANTS) specs.push(a);
     }
     return specs;
   }
 
+  function buildAtmosphereGlows(mapData, antEntries, mode, focusTarget) {
+    if (mode === "none") return [];
+    const glows = [];
+    const hills = Object.entries(mapData.hills || {});
+    const fx = focusTarget ? focusTarget[0] : mapData.cols * 0.5;
+    const fz = focusTarget ? focusTarget[2] : mapData.rows * 0.5;
+    const dist2 = (x, z) => (x - fx) * (x - fx) + (z - fz) * (z - fz);
+
+    if (mode === "night") {
+      // Cozy amber lantern glow around all 4 anthills + flickering firelight around the 4 nearest Fire/Bomber ants
+      for (const [, [hx, hz]] of hills) {
+        if (glows.length < 4) glows.push([hx, hz, 3.5, 0.92, 1.75, 0.72, 0.22]);
+      }
+      const flames = antEntries
+        .filter((e) => e.spec.cls === "fire" || e.spec.cls === "bomber")
+        .sort((a, b) => dist2(a.x, a.z) - dist2(b.x, b.z));
+      for (const e of flames) {
+        if (glows.length >= 8) break;
+        glows.push([e.x, e.z, 2.2, 0.88, 1.95, 0.74, 0.18]);
+      }
+    } else if (mode === "moon") {
+      // Pure silvery-blue moonlight — shimmering moonbeam pools over ponds and cool highlights near hills (no orange blobs!)
+      const ponds = (mapData.ponds || []).slice().sort((a, b) => dist2(a[0], a[1]) - dist2(b[0], b[1]));
+      for (const [px, pz] of ponds) {
+        if (glows.length < 4) glows.push([px, pz, 4.2, 0.45, 0.55, 0.84, 1.40]);
+      }
+      for (const [, [hx, hz]] of hills) {
+        if (glows.length < 8) glows.push([hx, hz, 3.2, 0.26, 0.58, 0.78, 1.24]);
+      }
+    } else if (mode === "warm") {
+      // Sunset golden hour: subtle ember glow only on the nearest Fire/Bomber ants
+      const flames = antEntries
+        .filter((e) => e.spec.cls === "fire" || e.spec.cls === "bomber")
+        .sort((a, b) => dist2(a.x, a.z) - dist2(b.x, b.z));
+      for (const e of flames) {
+        if (glows.length >= 6) break;
+        glows.push([e.x, e.z, 1.9, 0.42, 1.85, 0.68, 0.16]);
+      }
+    } else if (mode === "neon") {
+      const teamGlow = {
+        green: [0.16, 1.95, 0.74],
+        red:   [2.15, 0.20, 0.88],
+        blue:  [0.22, 0.90, 2.20],
+        black: [1.35, 0.34, 2.15],
+      };
+      for (const [tid, [hx, hz]] of hills) {
+        if (glows.length < 4) {
+          const c = teamGlow[tid] || [0.2, 1.8, 1.8];
+          glows.push([hx, hz, 4.5, 1.35, c[0], c[1], c[2]]);
+        }
+      }
+      const ponds = (mapData.ponds || []).slice().sort((a, b) => dist2(a[0], a[1]) - dist2(b[0], b[1]));
+      for (const [px, pz] of ponds) {
+        if (glows.length < 8) glows.push([px, pz, 3.8, 1.15, 0.12, 1.75, 2.20]);
+      }
+    }
+    return glows;
+  }
+
   function renderHudAndSidebar(mapData, antCount) {
     const teams = Object.keys(mapData.hills || {});
     $("hud-title").textContent = `${mapData.label} (${mapData.file})`;
     $("hud-desc").textContent =
-      `Original ${mapData.cols}×${mapData.rows} tile grid at 1:1 scale — ${mapData.objects.length} placed 3D objects, ${teams.length} anthills, ${mapData.ponds.length} water ponds, and angled directional shadows.`;
+      `Original ${mapData.cols}×${mapData.rows} tile grid at 1:1 scale — 8-way ant movement, underwater pond swimmers, ${mapData.objects.length} placed 3D objects, and directional shadows.`;
     const teamsEl = $("hud-teams");
     teamsEl.textContent = "";
     for (const tid of ["green", "red", "blue", "black"]) {
@@ -320,7 +418,7 @@
       teamsEl.appendChild(pill);
     }
     $("badge-scene-stats").textContent = `${mapData.cols}×${mapData.rows} · ${antCount} ants · ${mapData.objects.length} props`;
-    $("meta-grid").textContent = `${mapData.cols} × ${mapData.rows} tiles (32px)`;
+    $("meta-grid").textContent = `${mapData.cols} × ${mapData.rows} tiles (8-way)`;
     $("meta-ants").textContent = `${antCount} (${teams.length} teams, all 6 classes)`;
     $("meta-items").textContent = `${mapData.objects.length} placed 3D models`;
 
@@ -415,17 +513,18 @@
       for (let i = 0; i < antSpecs.length; i++) {
         const spec = antSpecs[i];
         const model = await modelCache.get(`ant:${spec.cls}`);
-        const pathData = spec.path ? preparePath(spec.path) : null;
-        let x = spec.x || 0, z = spec.z || 0, yawRad = (spec.yaw || 0) * DEG;
+        const pathData = spec.path ? prepareEightWayPath(spec.path) : null;
+        let x = spec.x || 0, z = spec.z || 0, yawRad = snapYaw8((spec.yaw || 0) * DEG);
         if (pathData) {
-          const p0 = samplePath(pathData, (spec.phase || 0) * pathData.total);
+          const p0 = sampleEightWayPath(pathData, (spec.phase || 0) * pathData.total);
           x = p0.x; z = p0.z; yawRad = p0.yaw;
         } else if (spec.face) {
-          yawRad = Math.atan2(spec.face[0] - x, spec.face[1] - z);
+          yawRad = snapYaw8(Math.atan2(spec.face[0] - x, spec.face[1] - z));
         }
         const inst = {
           kind: "ant",
           cls: spec.cls,
+          submerged: Boolean(spec.submerged),
           teamColors: TEAMS[spec.team] || TEAMS.green,
           model,
           clipName: spec.clip || "Idle",
@@ -440,6 +539,7 @@
         mapData,
         itemEntries,
         antEntries,
+        ripples: [],
         scene: {
           instances: [],
           target: [mapData.cols * 0.5, 0.3, mapData.rows * 0.5],
@@ -473,7 +573,7 @@
       renderHudAndSidebar(mapData, antEntries.length);
       loadingEl.hidden = true;
       syncUi();
-      setStatus(`Loaded ${mapData.label}: ${mapData.cols}×${mapData.rows} original tiles, ${mapData.objects.length} 3D objects, ${antEntries.length} animated ants.`);
+      setStatus(`Loaded ${mapData.label}: ${mapData.cols}×${mapData.rows} original tiles, 8-way ant movement, ${antEntries.length} animated ants.`);
     } catch (err) {
       if (serial !== loadSerial) return;
       $("demo-loading-title").textContent = "Unable to load map";
@@ -490,10 +590,10 @@
     }
     const t = state.simTime;
 
-    // View-frustum culling around camera target (+ generous margin for angled shadow casters)
     const visHalfSpan = BASE_FIT_RADIUS * cam.zoom * 1.75 + 9.0;
     const tx = cam.target[0], tz = cam.target[2];
     const visible = [];
+    const ripples = [];
 
     for (let i = 0; i < itemEntries.length; i++) {
       const e = itemEntries[i];
@@ -506,15 +606,25 @@
       const { inst, spec, pathData } = e;
       if (pathData) {
         const travel = state.patrols ? t * (spec.speed || 1.2) : 0;
-        const pose = samplePath(pathData, (spec.phase || 0) * pathData.total + travel);
+        const pose = sampleEightWayPath(pathData, (spec.phase || 0) * pathData.total + travel);
         e.x = pose.x;
         e.z = pose.z;
         e.yawRad = pose.yaw;
-        inst.clipName = state.patrols ? (spec.clip || "Walk") : "Idle";
-        inst.offsetMat = buildWorldMat(inst.model, e.x, e.z, ANT_SCALE, e.yawRad, spec.yLift || 0);
+        inst.clipName = state.patrols ? (spec.clip || "Walk") : (spec.submerged ? "Swim" : "Idle");
+        // Gentle snorkel bobbing while submerged underwater (matches 1998 assw301 vertical bob!)
+        const swimBob = spec.submerged ? Math.sin(t * 4.6 + (spec.phase || 0) * 6.28) * 0.028 : 0;
+        inst.offsetMat = buildWorldMat(inst.model, e.x, e.z, ANT_SCALE, e.yawRad, (spec.yLift || 0) + swimBob);
       }
       if (Math.abs(e.x - tx) > visHalfSpan + 2.0 || Math.abs(e.z - tz) > visHalfSpan + 2.0) continue;
       inst.idleTime = t + (spec.phase || 0) * 1.4;
+      if (spec.submerged && ripples.length < 8) {
+        // Place animated water splash collar & wake ring dead-center on the protruding yellow snorkel!
+        const snkX = 0.23 * ANT_SCALE, snkZ = 0.30 * ANT_SCALE;
+        const cy = Math.cos(e.yawRad), sy = Math.sin(e.yawRad);
+        const rx = e.x + snkX * cy + snkZ * sy;
+        const rz = e.z - snkX * sy + snkZ * cy;
+        ripples.push([rx, rz, (spec.phase || 0), 0.72]);
+      }
       if (state.playing && !state.fixedTime && inst.blink) {
         if (inst.blink.active) {
           inst.blink.elapsed += dt;
@@ -534,6 +644,7 @@
       visible.push(inst);
     }
     scene.instances = visible;
+    activeMap.ripples = ripples;
   }
 
   function updateCamera(dt) {
@@ -681,6 +792,9 @@
     document.querySelectorAll("#map-group [data-map]").forEach((b) => {
       b.setAttribute("aria-pressed", String(b.dataset.map === state.mapId));
     });
+    document.querySelectorAll("#demo-light-grid [data-light]").forEach((b) => {
+      b.setAttribute("aria-pressed", String(b.dataset.light === state.lighting));
+    });
     document.querySelectorAll("#demo-dock [data-proj]").forEach((b) => {
       b.setAttribute("aria-pressed", String(b.dataset.proj === cam.projection));
     });
@@ -695,7 +809,6 @@
     $("out-sun-elev").textContent = `${Math.round(state.sunElev)}°`;
     $("range-sun-azim").value = String(Math.round(state.sunAzim));
     $("out-sun-azim").textContent = `${Math.round(state.sunAzim)}°`;
-    populateLightingSelect($("select-lighting"), state.lighting);
     syncCamButtons();
     syncFocusButtons();
   }
@@ -705,6 +818,10 @@
     btn.addEventListener("click", () => {
       if (btn.dataset.map !== state.mapId) activateMap(btn.dataset.map, false);
     });
+  });
+
+  document.querySelectorAll("#demo-light-grid [data-light]").forEach((btn) => {
+    btn.addEventListener("click", () => applyLightingScenario(btn.dataset.light));
   });
 
   document.querySelectorAll("#demo-dock [data-cam]").forEach((btn) => {
@@ -760,19 +877,6 @@
   $("range-sun-elev").addEventListener("input", (e) => { state.sunElev = Number(e.target.value); syncUi(); });
   $("range-sun-azim").addEventListener("input", (e) => { state.sunAzim = Number(e.target.value); syncUi(); });
 
-  const selectLighting = $("select-lighting");
-  selectLighting.addEventListener("change", () => {
-    state.lighting = validLighting(selectLighting.value) || "daylight";
-    syncUi();
-  });
-  const stepLighting = (dir) => {
-    const idx = Math.max(0, LIGHTING_ORDER.indexOf(state.lighting));
-    state.lighting = LIGHTING_ORDER[(idx + dir + LIGHTING_ORDER.length) % LIGHTING_ORDER.length];
-    syncUi();
-  };
-  $("btn-light-prev").addEventListener("click", () => stepLighting(-1));
-  $("btn-light-next").addEventListener("click", () => stepLighting(1));
-
   // Responsive controls drawer
   const panelEl = $("inspector-panel");
   const backdropEl = $("inspector-backdrop");
@@ -812,7 +916,8 @@
       $("btn-reset").click();
     } else if (k === "l") {
       e.preventDefault();
-      stepLighting(1);
+      const idx = Math.max(0, LIGHT_SCENARIO_ORDER.indexOf(state.lighting));
+      applyLightingScenario(LIGHT_SCENARIO_ORDER[(idx + 1) % LIGHT_SCENARIO_ORDER.length]);
     } else if (k === "w" || e.key === "ArrowUp")    { e.preventDefault(); panByPixels(0, 48); }
     else if (k === "s" || e.key === "ArrowDown")     { e.preventDefault(); panByPixels(0, -48); }
     else if (k === "a" || e.key === "ArrowLeft")     { e.preventDefault(); panByPixels(48, 0); }
@@ -837,13 +942,15 @@
 
     if (activeMap) {
       const [w, h] = resizeCanvas();
-      const { mapData, scene } = activeMap;
+      const { mapData, antEntries, scene, ripples } = activeMap;
+      const ls = LIGHT_SCENARIOS[state.lighting] || LIGHT_SCENARIOS.daylight;
       const sunDir = sunVectorFromAngles(state.sunElev, state.sunAzim);
       const shadowRadius = clamp(BASE_FIT_RADIUS * cam.zoom * 1.65, 9.5, 36.0);
+      const glows = buildAtmosphereGlows(mapData, antEntries, ls.glowMode, cam.target);
       renderer.drawScene(scene, cam, {
         width: w,
         height: h,
-        lighting: state.lighting,
+        lighting: validLighting(state.lighting) || "daylight",
         dark: isDark,
         team: "green",
         idleAnim: state.playing,
@@ -860,11 +967,13 @@
           atlasCols: mapsCatalog.atlas_cols,
           atlasRows: mapsCatalog.atlas_rows,
           waterTile: mapsCatalog.water_tile_index,
-          gridAlpha: state.showGrid ? 0.24 : 0.0,
+          gridAlpha: state.showGrid ? ls.gridAlpha : 0.0,
+          gridColor: ls.gridCol,
           crispPixels: !state.hiResTiles,
-          shadowStrength: 0.68,
+          shadowStrength: ls.shadowStr,
           time: state.simTime,
-          glows: [],
+          glows,
+          ripples,
         },
       });
     }
@@ -884,6 +993,7 @@
   window.__demoState = {
     get ready() { return Boolean(activeMap && $("demo-loading").hidden); },
     activateMap,
+    setLighting: applyLightingScenario,
     setFocus(id) {
       const focuses = MAP_FOCUSES[state.mapId] || [];
       const f = focuses.find((x) => x.id === id);
@@ -895,17 +1005,6 @@
         syncUi();
       }
     },
-    setPreset(key) {
-      const p = CAM_PRESETS[key];
-      if (p) {
-        state.camPreset = key;
-        cam.yaw = p.yaw; cam.pitch = p.pitch; cam.projection = p.proj;
-        camGoal = null;
-        syncUi();
-      }
-    },
-    setSun(elev, azim) { state.sunElev = elev; state.sunAzim = azim; syncUi(); },
-    setGrid(on) { state.showGrid = Boolean(on); syncUi(); },
     setCam(yaw, pitch, zoom, target, proj) {
       camGoal = null;
       cam.yaw = yaw; cam.pitch = pitch; cam.zoom = zoom;

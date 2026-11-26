@@ -193,6 +193,7 @@
   cursor: pointer;
 }
 
+.demo-light-grid,
 .demo-focus-grid {
   display: flex;
   flex-wrap: wrap;

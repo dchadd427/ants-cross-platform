@@ -153,15 +153,19 @@
           <button type="button" id="btn-close-panel" class="icon-btn" aria-label="Close controls panel">&times;</button>
         </div>
 
-        <section class="inspector-section" aria-label="Sunlight angle and shadows">
+        <section class="inspector-section" aria-label="Lighting scenarios and sun angle">
           <div class="inspector-section-head">
-            <span class="inspector-heading">Sun &amp; Shadows</span>
+            <span class="inspector-heading">Lighting Scenarios</span>
             <kbd class="hotkey-chip" aria-hidden="true">L</kbd>
           </div>
-          <div class="lighting-stepper">
-            <button type="button" id="btn-light-prev" class="stepper-btn" aria-label="Previous lighting preset" title="Previous lighting preset">&#x276E;</button>
-            <select id="select-lighting" class="inspector-select action-select" aria-label="Lighting preset" title="Switch lighting preset (L)"></select>
-            <button type="button" id="btn-light-next" class="stepper-btn" aria-label="Next lighting preset" title="Next lighting preset (L)">&#x276F;</button>
+          <div class="demo-light-grid" id="demo-light-grid" role="group" aria-label="Lighting scenario presets">
+            <button type="button" class="demo-focus-btn" data-light="daylight" aria-pressed="true" title="Crisp sunlit afternoon">Daylight</button>
+            <button type="button" class="demo-focus-btn" data-light="golden" aria-pressed="false" title="Warm low-angle golden hour sunset">Sunset</button>
+            <button type="button" class="demo-focus-btn" data-light="night" aria-pressed="false" title="Dark nighttime backyard with warm firelight pools">Night</button>
+            <button type="button" class="demo-focus-btn" data-light="moonlight" aria-pressed="false" title="Cool silver-blue full moonlight">Moonlight</button>
+            <button type="button" class="demo-focus-btn" data-light="neon" aria-pressed="false" title="Cyber arcade neon magenta and cyan glow">Neon</button>
+            <button type="button" class="demo-focus-btn" data-light="overcast" aria-pressed="false" title="Soft cloudy overcast sky">Overcast</button>
+            <button type="button" class="demo-focus-btn" data-light="flat" aria-pressed="false" title="Classic bright 1998 unlit palette">1998 Flat</button>
           </div>
           <div class="demo-slider-group">
             <label class="demo-slider-row" for="range-sun-elev">

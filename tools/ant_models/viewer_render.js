@@ -10,6 +10,7 @@
     FIRE_VS, FIRE_FS, buildFireParticles,
     SPARK_VS, SPARK_FS, buildSparkParticles,
     FUR_PROFILES, FUR_VS, FUR_FS,
+    PLINTH_VS, PLINTH_FS, buildPlinthMesh,
     SHADOW_VS, SHADOW_FS,
     TILE_GROUND_VS, TILE_GROUND_FS, buildTileGroundMesh,
     evalJelloWobble,
@@ -91,7 +92,7 @@
     },
   };
 
-  const LIGHTING_ORDER = ["studio", "daylight", "golden", "moonlight", "spotlight", "dramatic", "neon", "flat"];
+  const LIGHTING_ORDER = ["studio", "daylight", "golden", "night", "moonlight", "overcast", "neon", "spotlight", "dramatic", "flat"];
   const LIGHTING_PRESETS = {
     studio: {
       id: "studio", label: "Studio",
@@ -122,6 +123,30 @@
         bgTop: [0.16, 0.14, 0.26], bgMid: [0.46, 0.28, 0.22], bgBot: [0.14, 0.09, 0.12],
         plinthTop: [0.30, 0.22, 0.18], plinthSide: [0.14, 0.10, 0.09], plinthRing: [0.62, 0.40, 0.22],
         sky: [0.52, 0.44, 0.68], ground: [0.38, 0.22, 0.12], rimBoost: 0.96, darkPanel: true,
+      },
+    },
+    night: {
+      id: "night", label: "Nighttime",
+      keyBasis: [0.36, 0.56, -0.74], fillBasis: [0.46, 0.12, 0.88], rimBasis: [-0.52, 0.66, 0.54],
+      keyColor: [0.42, 0.58, 0.98], fillColor: [0.06, 0.10, 0.22], rimColor: [0.68, 0.88, 1.35],
+      envKeyTint: [0.46, 0.64, 0.96], envFillTint: [0.18, 0.28, 0.54], envRimTint: [0.62, 0.82, 1.0],
+      spotParams: [0.32, 1.24, 1.45], lightMix: [0.42, 1.22, 0.96, 0.0],
+      pal: {
+        bgTop: [0.012, 0.020, 0.052], bgMid: [0.028, 0.044, 0.098], bgBot: [0.008, 0.012, 0.032],
+        plinthTop: [0.048, 0.064, 0.108], plinthSide: [0.020, 0.028, 0.052], plinthRing: [0.18, 0.28, 0.46],
+        sky: [0.10, 0.16, 0.34], ground: [0.03, 0.04, 0.08], rimBoost: 1.32, darkPanel: true,
+      },
+    },
+    overcast: {
+      id: "overcast", label: "Overcast",
+      keyBasis: [0.32, 0.86, -0.38], fillBasis: [0.42, 0.36, 0.83], rimBasis: [-0.56, 0.52, 0.64],
+      keyColor: [1.75, 1.86, 1.98], fillColor: [0.58, 0.68, 0.80], rimColor: [0.54, 0.62, 0.72],
+      envKeyTint: [0.84, 0.90, 0.96], envFillTint: [0.68, 0.76, 0.88], envRimTint: [0.76, 0.84, 0.94],
+      spotParams: [0.76, 1.04, 0.65], lightMix: [1.28, 0.94, 0.96, 0.0],
+      pal: {
+        bgTop: [0.40, 0.48, 0.56], bgMid: [0.60, 0.66, 0.72], bgBot: [0.42, 0.46, 0.48],
+        plinthTop: [0.48, 0.52, 0.56], plinthSide: [0.30, 0.34, 0.38], plinthRing: [0.36, 0.42, 0.48],
+        sky: [0.56, 0.64, 0.74], ground: [0.32, 0.35, 0.36], rimBoost: 0.50, darkPanel: false,
       },
     },
     moonlight: {
@@ -269,7 +294,7 @@
   uniform vec3 u_keyColor, u_fillColor, u_rimColor, u_envKeyTint, u_envFillTint, u_envRimTint, u_spotParams;
   uniform vec4 u_lightMix;
   uniform float u_alpha, u_metallic, u_roughness, u_normalScale, u_rimBoost;
-  uniform int u_isOrtho, u_matKind, u_hasNormalTex, u_silhouette, u_useShadowMap;
+  uniform int u_isOrtho, u_matKind, u_hasNormalTex, u_silhouette, u_useShadowMap, u_allowUnderwater;
   uniform mat4 u_lightViewProj;
   uniform sampler2D u_baseTex, u_normalTex, u_mrTex, u_shadowMap;
   out vec4 fragColor;
@@ -362,7 +387,7 @@
   float fbm3(vec3 p) { return noise3(p) * 0.55 + noise3(p * 2.13 + vec3(13.7, 7.1, 4.3)) * 0.30 + noise3(p * 4.41 + vec3(5.2, 19.4, 11.8)) * 0.15; }
 
   void main() {
-    if (v_worldPos.y < -0.006) discard;
+    if (u_allowUnderwater == 0 && v_worldPos.y < -0.006) discard;
     if (u_silhouette != 0) {
       fragColor = vec4(u_silhouetteColor, 1.0);
       return;
@@ -499,42 +524,11 @@
       float specLuma = dot(acesFilm((specAcc * directAo + envSpec + envCoat + rimGlow) * 1.02), vec3(0.2126, 0.7152, 0.0722));
       outAlpha = clamp(baseA + pow(1.0 - NoV, 3.0) * 0.44 + specLuma * 0.58, 0.0, 0.90);
     }
-    fragColor = vec4(outCol, outAlpha);
-  }`;
-
-  const PLINTH_VS = `#version 300 es
-  layout(location = 0) in vec3 a_position;
-  layout(location = 1) in vec3 a_normal;
-  uniform mat4 u_viewProj;
-  out vec3 v_worldPos, v_worldNormal;
-  void main() { v_worldPos = a_position; v_worldNormal = a_normal; gl_Position = u_viewProj * vec4(a_position, 1.0); }`;
-
-  const PLINTH_FS = `#version 300 es
-  precision highp float;
-  in vec3 v_worldPos, v_worldNormal;
-  uniform vec3 u_topBase, u_sideBase, u_ringColor, u_keyDir;
-  uniform vec4 u_shadows[6];
-  uniform int u_shadowCount;
-  uniform float u_halfSpanX, u_radius;
-  out vec4 fragColor;
-  void main() {
-    vec3 N = normalize(v_worldNormal);
-    float isTop = smoothstep(0.65, 0.95, N.y);
-    vec3 base = mix(u_sideBase, u_topBase, isTop) * (max(dot(N, u_keyDir), 0.0) * 0.48 + 0.58);
-    if (isTop > 0.5) {
-      float rNorm = length(vec2(max(abs(v_worldPos.x) - u_halfSpanX, 0.0), v_worldPos.z)) / max(u_radius, 0.01);
-      float rings = (1.0 - smoothstep(0.008, 0.022, abs(rNorm - 0.88))) * 0.45 + (1.0 - smoothstep(0.006, 0.018, abs(rNorm - 0.58))) * 0.25;
-      base = mix(base, u_ringColor, rings * isTop);
-      float shadow = 0.0;
-      for (int i = 0; i < 6; i++) {
-        if (i >= u_shadowCount) break;
-        vec2 q = (v_worldPos.xz - u_shadows[i].xy) / max(u_shadows[i].zw, vec2(0.05));
-        float d2 = dot(q, q);
-        shadow = max(shadow, exp(-d2 * 2.5) * 0.52 + exp(-d2 * 0.85) * 0.24);
-      }
-      base *= (1.0 - clamp(shadow, 0.0, 0.66));
+    if (u_allowUnderwater != 0 && v_worldPos.y < 0.0) {
+      float depth = clamp(-v_worldPos.y, 0.0, 1.2);
+      outCol = mix(outCol * vec3(0.55, 0.86, 1.16), vec3(0.06, 0.26, 0.60), clamp(0.24 + (1.0 - exp(-depth * 1.45)) * 0.44, 0.0, 0.76));
     }
-    fragColor = vec4(pow(clamp(base, 0.0, 1.0), vec3(1.0 / 2.2)), 1.0);
+    fragColor = vec4(outCol, outAlpha);
   }`;
 
   function createProgram(gl, vsSrc, fsSrc) {
@@ -554,41 +548,6 @@
     const out = {};
     for (const name of names) out[name] = gl.getUniformLocation(prog, name);
     return out;
-  }
-
-  function buildPlinthMesh(gl, halfSpanX, radius) {
-    const halfSegs = 24, perim = [];
-    for (const [cx, startA] of [[halfSpanX, -Math.PI * 0.5], [-halfSpanX, Math.PI * 0.5]]) {
-      for (let i = 0; i <= halfSegs; i++) {
-        const a = startA + (i / halfSegs) * Math.PI;
-        perim.push([cx + Math.cos(a) * radius, Math.sin(a) * radius]);
-      }
-    }
-    const n = perim.length, pos = [0, -0.002, 0], norm = [0, 1, 0], idx = [], scaleTop = (radius - 0.014) / radius;
-    for (let i = 0; i < n; i++) {
-      const [px, pz] = perim[i], cx = clamp(px, -halfSpanX, halfSpanX);
-      pos.push(cx + (px - cx) * scaleTop, -0.002, pz * scaleTop); norm.push(0, 1, 0); idx.push(0, 1 + ((i + 1) % n), 1 + i);
-    }
-    const ringStart = pos.length / 3;
-    for (const [ry, inset, ny] of [[-0.002, 0.014, 0.65], [-0.014, 0, 0.45], [-0.014, 0, 0], [-0.068, -0.012, 0]]) {
-      for (const [px, pz] of perim) {
-        const cx = clamp(px, -halfSpanX, halfSpanX), rx = px - cx, rl = Math.hypot(rx, pz) || 1;
-        const ux = rx / rl, uz = pz / rl, rad = radius - inset, nl = Math.hypot(ux, ny, uz) || 1;
-        pos.push(cx + ux * rad, ry, uz * rad); norm.push(ux / nl, ny / nl, uz / nl);
-      }
-    }
-    for (const [a, b] of [[0, 1], [2, 3]]) {
-      const r0 = ringStart + a * n, r1 = ringStart + b * n;
-      for (let i = 0; i < n; i++) { const nx = (i + 1) % n; idx.push(r0 + i, r0 + nx, r1 + nx, r0 + i, r1 + nx, r1 + i); }
-    }
-    const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
-    const bufs = [
-      uploadBuffer(gl, gl.ARRAY_BUFFER, new Float32Array(pos), 0, 3),
-      uploadBuffer(gl, gl.ARRAY_BUFFER, new Float32Array(norm), 1, 3),
-      uploadBuffer(gl, gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx)),
-    ];
-    gl.bindVertexArray(null);
-    return { vao, count: idx.length, halfSpanX, radius, dispose() { gl.deleteVertexArray(vao); bufs.forEach((b) => gl.deleteBuffer(b)); } };
   }
 
   function matKindFor(mat) {
@@ -726,7 +685,7 @@
         "u_model", "u_normalMat", "u_viewProj", "u_jelloWobble", "u_cameraPos", "u_viewDir", "u_isOrtho",
         "u_baseColor", "u_alpha", "u_metallic", "u_roughness", "u_emissive", "u_normalScale",
         "u_matKind", "u_hasNormalTex", "u_baseTex", "u_normalTex", "u_mrTex", "u_shadowMap",
-        "u_useShadowMap", "u_lightViewProj",
+        "u_useShadowMap", "u_allowUnderwater", "u_lightViewProj",
         "u_keyDir", "u_fillDir", "u_rimDir", "u_skyColor", "u_groundColor", "u_rimBoost",
         "u_keyColor", "u_fillColor", "u_rimColor", "u_envKeyTint", "u_envFillTint", "u_envRimTint", "u_spotParams", "u_lightMix",
         "u_silhouette", "u_silhouetteColor",
@@ -750,14 +709,14 @@
         "u_shellFrac", "u_furLength", "u_furDroop", "u_furDensity", "u_isCotton",
         "u_silhouette", "u_silhouetteColor",
       ]);
-      this.uShadow = getUniforms(gl, this.shadowProg, ["u_model", "u_lightViewProj", "u_jelloWobble"]);
+      this.uShadow = getUniforms(gl, this.shadowProg, ["u_model", "u_lightViewProj", "u_jelloWobble", "u_clipBelowWater"]);
       this.uTileGround = getUniforms(gl, this.tileGroundProg, [
-        "u_viewProj", "u_lightViewProj", "u_atlasTex", "u_mapTex", "u_shadowMap",
+        "u_viewProj", "u_lightViewProj", "u_yOffset", "u_atlasTex", "u_mapTex", "u_shadowMap",
         "u_mapSize", "u_atlasGrid", "u_viewport", "u_waterTile", "u_gridAlpha",
-        "u_shadowStrength", "u_time", "u_crispPixels", "u_useShadowMap", "u_isOrtho",
+        "u_shadowStrength", "u_time", "u_crispPixels", "u_useShadowMap", "u_isOrtho", "u_waterPass",
         "u_cameraPos", "u_viewDir", "u_keyDir", "u_fillDir", "u_keyColor", "u_fillColor",
-        "u_skyColor", "u_groundColor", "u_bgTop", "u_bgMid", "u_bgBot", "u_lightMix",
-        "u_glows[0]", "u_glowCount",
+        "u_skyColor", "u_groundColor", "u_bgTop", "u_bgMid", "u_bgBot", "u_gridColor", "u_lightMix",
+        "u_glows[0]", "u_glowColors[0]", "u_glowCount", "u_ripples[0]", "u_rippleCount",
       ]);
       gl.useProgram(this.pbrProg);
       gl.uniform1i(this.uPbr.u_baseTex, 0);
@@ -936,6 +895,7 @@
           const jw = inst.model._isJello && (opts.idleAnim || opts.fixedIdleTime !== null)
             ? evalJelloWobble(fxTime, inst.model.size ? inst.model.size[1] : 0.64) : [0, 0, 0, 0];
           gl.uniform4f(this.uShadow.u_jelloWobble, jw[0], jw[1], jw[2], jw[3]);
+          gl.uniform1i(this.uShadow.u_clipBelowWater, inst.submerged ? 1 : 0);
           for (const item of inst.model.drawCalls) {
             const prim = item.prim, mn = prim.material.name;
             if (mn === "item_fire_volume" || mn === "item_spark_volume") continue;
@@ -961,38 +921,54 @@
       }
       gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
 
-      if (opts.tileGround && this.atlasTex && this.mapTex && this.tileGroundMesh && !opts.transparent) {
+      const hasTileGround = Boolean(opts.tileGround && this.atlasTex && this.mapTex && this.tileGroundMesh && !opts.transparent);
+      const drawTileGroundPass = (waterPass, yOffset) => {
         const tg = opts.tileGround;
-        gl.disable(gl.BLEND); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK); gl.frontFace(gl.CCW);
+        gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK); gl.frontFace(gl.CCW);
         gl.useProgram(this.tileGroundProg);
         gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.atlasTex);
         gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.mapTex);
         gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, useShadowMap ? this.shadowTex : this.fallbacks.white);
         gl.uniformMatrix4fv(this.uTileGround.u_viewProj, false, camera.viewProj);
         if (lightViewProj) gl.uniformMatrix4fv(this.uTileGround.u_lightViewProj, false, lightViewProj);
+        gl.uniform1f(this.uTileGround.u_yOffset, yOffset);
+        gl.uniform1i(this.uTileGround.u_waterPass, waterPass);
         gl.uniform1i(this.uTileGround.u_useShadowMap, useShadowMap ? 1 : 0);
         gl.uniform2f(this.uTileGround.u_mapSize, tg.cols, tg.rows);
         gl.uniform2f(this.uTileGround.u_atlasGrid, tg.atlasCols || 16, tg.atlasRows || 15);
         gl.uniform2f(this.uTileGround.u_viewport, opts.width, opts.height);
         gl.uniform1f(this.uTileGround.u_waterTile, tg.waterTile !== undefined ? tg.waterTile : 45);
         gl.uniform1f(this.uTileGround.u_gridAlpha, tg.gridAlpha !== undefined ? tg.gridAlpha : 0.24);
-        gl.uniform1f(this.uTileGround.u_shadowStrength, tg.shadowStrength !== undefined ? tg.shadowStrength : 0.62);
+        gl.uniform1f(this.uTileGround.u_shadowStrength, tg.shadowStrength !== undefined ? tg.shadowStrength : 0.68);
         gl.uniform1f(this.uTileGround.u_time, tg.time || 0);
         gl.uniform1i(this.uTileGround.u_crispPixels, tg.crispPixels !== false ? 1 : 0);
         gl.uniform1i(this.uTileGround.u_isOrtho, camera.isOrtho ? 1 : 0);
-        gl.uniform3fv(this.uTileGround.u_cameraPos, camera.eye);
-        gl.uniform3fv(this.uTileGround.u_viewDir, camera.viewDir);
+        gl.uniform3fv(this.uTileGround.u_cameraPos, camera.eye); gl.uniform3fv(this.uTileGround.u_viewDir, camera.viewDir);
         gl.uniform3fv(this.uTileGround.u_keyDir, keyDir); gl.uniform3fv(this.uTileGround.u_fillDir, fillDir);
         gl.uniform3fv(this.uTileGround.u_keyColor, lp.keyColor); gl.uniform3fv(this.uTileGround.u_fillColor, lp.fillColor);
         gl.uniform3fv(this.uTileGround.u_skyColor, pal.sky); gl.uniform3fv(this.uTileGround.u_groundColor, pal.ground);
         gl.uniform3fv(this.uTileGround.u_bgTop, pal.bgTop); gl.uniform3fv(this.uTileGround.u_bgMid, pal.bgMid); gl.uniform3fv(this.uTileGround.u_bgBot, pal.bgBot);
+        gl.uniform3fv(this.uTileGround.u_gridColor, tg.gridColor || [0.05, 0.07, 0.06]);
         gl.uniform4fv(this.uTileGround.u_lightMix, lp.lightMix);
-        const glwArr = tg.glows || [], glwCount = Math.min(glwArr.length, 6), glwData = new Float32Array(6 * 4);
-        for (let i = 0; i < glwCount; i++) glwData.set(glwArr[i], i * 4);
-        gl.uniform4fv(this.uTileGround["u_glows[0]"], glwData); gl.uniform1i(this.uTileGround.u_glowCount, glwCount);
+        const glwArr = tg.glows || [], glwCount = Math.min(glwArr.length, 8), glwData = new Float32Array(32), glwCol = new Float32Array(24);
+        for (let i = 0; i < glwCount; i++) {
+          glwData.set(glwArr[i].slice(0, 4), i * 4);
+          glwCol.set(glwArr[i].length >= 7 ? glwArr[i].slice(4, 7) : [1.6, 0.62, 0.16], i * 3);
+        }
+        gl.uniform4fv(this.uTileGround["u_glows[0]"], glwData); gl.uniform3fv(this.uTileGround["u_glowColors[0]"], glwCol);
+        gl.uniform1i(this.uTileGround.u_glowCount, glwCount);
+        const ripArr = tg.ripples || [], ripCount = Math.min(ripArr.length, 8), ripData = new Float32Array(32);
+        for (let i = 0; i < ripCount; i++) ripData.set(ripArr[i], i * 4);
+        gl.uniform4fv(this.uTileGround["u_ripples[0]"], ripData); gl.uniform1i(this.uTileGround.u_rippleCount, ripCount);
         gl.bindVertexArray(this.tileGroundMesh.vao);
         gl.drawElements(gl.TRIANGLES, this.tileGroundMesh.count, gl.UNSIGNED_SHORT, 0);
         gl.bindVertexArray(null);
+      };
+
+      if (hasTileGround) {
+        gl.disable(gl.BLEND); gl.depthMask(true);
+        drawTileGroundPass(0, 0.0);    // opaque land tiles
+        drawTileGroundPass(1, -1.35);  // recessed pond bed deep beneath submerged swimmers
       } else if (opts.showPlinth !== false && !opts.transparent) {
         const plinth = this.ensurePlinth(scene.plinthSpanX, scene.plinthRadius);
         gl.disable(gl.BLEND); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK); gl.frontFace(gl.CCW);
@@ -1038,6 +1014,7 @@
         } else { gl.disable(gl.BLEND); gl.depthMask(true); }
         scene.instances.forEach((inst, instIdx) => {
           const worldMats = instMats[instIdx];
+          gl.uniform1i(this.uPbr.u_allowUnderwater, inst.submerged ? 1 : 0);
           if (inst.model._isJello === undefined) {
             inst.model._isJello = inst.model.drawCalls.some((dc) => dc.prim.material.name === "item_jello_ruby");
           }
@@ -1101,6 +1078,14 @@
             if (prim.indexed) gl.drawElements(prim.mode, prim.drawCount, prim.indexType, 0); else gl.drawArrays(prim.mode, 0, prim.drawCount);
           }
         });
+        // Translucent shimmering water surface + swimmer ripples drawn right after opaque pass (over submerged swimmers, behind protruding snorkels!)
+        if (pass === 0 && hasTileGround) {
+          gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+          gl.depthMask(false);
+          drawTileGroundPass(2, 0.0);
+          gl.useProgram(this.pbrProg);
+          gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, useShadowMap ? this.shadowTex : this.fallbacks.white);
+        }
       }
       if (furCalls.length) {
         gl.useProgram(this.furProg);
