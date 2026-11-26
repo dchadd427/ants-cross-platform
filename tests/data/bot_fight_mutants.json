@@ -38,6 +38,24 @@
    "expect": "AI58.18"
   },
   {
+   "id": "foot_both_give_way",
+   "file": "src/ants_ai/bridge_headon.cpp",
+   "old": "if (!lower && now < e.second.since + 2u * params_.plug_ticks) continue;",
+   "new": "if (false && !lower && now < e.second.since + 2u * params_.plug_ticks) continue;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI58.19 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI58.19"
+  },
+  {
+   "id": "foot_tie_break_never_gives_up",
+   "file": "src/ants_ai/bridge_headon.cpp",
+   "old": "if (!lower && now < e.second.since + 2u * params_.plug_ticks) continue;",
+   "new": "if (!lower) continue;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI58.19 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI58.19"
+  },
+  {
    "id": "loaded_needs_three_swimmers",
    "file": "src/ants_ai/island_bridge.cpp",
    "old": "if ((few_swimmers && !(plan.bridge_loaded && swimmers >= 1)) ||",

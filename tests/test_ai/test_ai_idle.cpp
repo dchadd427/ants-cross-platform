@@ -10,6 +10,7 @@
 //   AI58.3  an enemy Thief that walks to the own hole is met by the idle ants (blockers on the three tiles, a blow for the Thief): the hill keeps its points; with the rule off the raid goes through
 //   AI58.4  with the food gone the idle ants hold the three tiles in front of the thief hole, and a raid of a Thief of another team ends in the can't-go clip; with the rule off it takes its 50 points
 //   AI58.15 an own ant that holds food stands in the can't-go clip at the foot of a one-tile bridge with an enemy ant on the bridge tile in front of it: it steps back off the foot and the enemy crosses; with the foot rule off both stand
+//   AI58.19 the same foot, an ant of team 0 and an ant of team 3 at the two feet of a bridge, each in the clip, each with a bot: only the lower team gives way; where the lower team's ant is a person's, the other gives way after 200 ticks
 //   AI58.18 the same foot, the ant looked at in 36 phases of its can't-go cycle: sent off the landing in every one, by a volley of clicks where the look finds it in the clip
 //   AI58.16 an ant that holds food and stands on a satellite with no walk home gets the bridge home from ONE Swimmer (the dig of the other ants asks for three) and banks its food; with the loaded rule off nobody digs
 //   AI58.17 whole matches on ISLANDS: with the loaded rule on the island guard gives back the ants that hold a load for a long time with no bridge home (the bridge planner digs for them); with it off it never does
@@ -658,6 +659,62 @@ void run_idle_tests() {
             }
         }
         ASSERT_TRUE(volleys >= 8u);                                                              // (the phases in which the bot's look found the ant in the clip: the rule acts from it)
+    } TEST_END();
+    TEST_CASE("AI58.19 The Foot Of A Bridge, Two Teams: An Ant Of Team 0 And An Ant Of Team 3 Stand At The Two Feet Of A Bridge, Each In The Can't-Go Clip, Each With A Bot Of Its Own: Only The Lower Team Gives Way (Both Giving Way Is Two Ants That Leave And Come Back); Where The Lower Team's Ant Is A Person's, The Bot Of Team 3 Gives Way After A Wait Of Its Own") {
+        struct Out {
+            uint32_t plugs0{0};
+            uint32_t plugs3{0};
+            uint32_t first_plug3{0};
+        };
+        const auto play = [&](bool bot0) {
+            sim::SimulationEngine sim;
+            river_with_bridge(sim);
+            sim.set_terrain(kBridgeX - 1, kRiverTop - 1, sim::TERRAIN_WATER);                    // (the landings are one tile each: the two beside each are water)
+            sim.set_terrain(kBridgeX + 1, kRiverTop - 1, sim::TERRAIN_WATER);
+            sim.set_terrain(kBridgeX - 1, kRiverBottom + 1, sim::TERRAIN_WATER);
+            sim.set_terrain(kBridgeX + 1, kRiverBottom + 1, sim::TERRAIN_WATER);
+            for (int y = 9; y <= 13; ++y) {                                                      // (a pocket of rocks that no walk reaches: a click on it is refused, the ant shows the can't-go clip)
+                for (int x = 9; x <= 13; ++x) {
+                    if (x < 10 || x > 12 || y < 10 || y > 12) sim.set_terrain(x, y, sim::TERRAIN_OBSTACLE);
+                }
+            }
+            const uint32_t north = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{kBridgeX, kRiverTop - 1});
+            const uint32_t south = sim.spawn_unit(3, sim::AntType::Worker, TileCoord{kBridgeX, kRiverBottom + 1});
+            Rig rig3(sim, 3, Level::Hard, std::make_unique<StandardBot>(plan_foot(true)), 4, 4);
+            std::unique_ptr<Rig> rig0;
+            if (bot0) rig0 = std::make_unique<Rig>(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_foot(true)), 4, 4);
+            const auto owner_of = [&](uint32_t ant) {
+                TaskId o = kNoTask;
+                if (bot0 && ant == north) o = rig0->as<StandardBot>().ledger().owner(ant);
+                if (ant == south) o = rig3.as<StandardBot>().ledger().owner(ant);
+                return o;
+            };
+            const auto hook = [&]() {                                                            // (the owners click their ants again as soon as they can take a click, unless a bot has taken the ant)
+                for (const auto& e : {std::make_pair(north, uint8_t{0}), std::make_pair(south, uint8_t{3})}) {
+                    const sim::AntSnapshot* a = snapshot_of(sim, e.first);
+                    if (a != nullptr && a->state == sim::UnitState::Idle && !sim.has_pending_path(e.first) && owner_of(e.first) == kNoTask) {
+                        sim.apply_command(command_of(CommandType::GroupMove, e.second, {e.first}, 11, 11));
+                    }
+                }
+            };
+            Out out;
+            for (int t = 0; t < 320; ++t) {
+                sim.tick();
+                hook();
+                if (rig0) rig0->follow();
+                rig3.follow();
+                if (out.first_plug3 == 0 && rig3.as<StandardBot>().head_on().plugs() > 0) out.first_plug3 = static_cast<uint32_t>(t) + 1u;
+            }
+            out.plugs0 = rig0 ? rig0->as<StandardBot>().head_on().plugs() : 0u;
+            out.plugs3 = rig3.as<StandardBot>().head_on().plugs();
+            return out;
+        };
+        const Out both = play(true);
+        ASSERT_TRUE(both.plugs0 >= 1u);                                                          // (the lower team gives way ...)
+        ASSERT_EQ(both.plugs3, 0u);                                                              // (... and the other stays where it stands)
+        const Out person = play(false);
+        ASSERT_TRUE(person.plugs3 >= 1u);                                                        // (nobody steps back for it: after 200 ticks of standing it gives way itself)
+        ASSERT_TRUE(person.first_plug3 >= 190u);
     } TEST_END();
     TEST_CASE("AI58.16 An Ant That Holds Food And Stands On The Satellite With No Walk Home Gets The Bridge From ONE Swimmer (The Dig For The Other Ants Needs Three: The Ferry's) And Banks Its Food; With The Loaded Rule Off Nobody Digs And The Food Stays Where It Is (ISLANDS, A Hard Bot)") {
         for (const bool rule : {true, false}) {

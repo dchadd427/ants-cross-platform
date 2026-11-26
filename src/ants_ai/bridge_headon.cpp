@@ -66,9 +66,11 @@ void BridgeHeadOnTask::step(TaskContext& c) {
         const bool on_bridge = grid.in_bounds(a->tile) && grid.get_cell(a->tile).has_completed_bridge();
         // (a plug at the foot of a bridge, plan.bridge_foot: it stands on land, and the click that has not been carried out is given again, at most max_orders times)
         const bool foot_again = it->second.loaded && it->second.orders < params_.max_orders;
-        if (a->tile != it->second.shore && now >= it->second.ordered + 40u && (on_bridge || foot_again)) {
-            if (a->takes_orders()) c.orders.move({a->id}, it->second.shore, Priority::Urgent);
-            else if (a->state == sim::UnitState::CantGo) c.orders.volley(a->id, it->second.shore, {0, 3, 7, 10, 14, 17}, Priority::Urgent);
+        // (only to an ant that can take it now: idle, or in the can't-go clip, where a volley is the click that takes; an ant that is still walking to the shore is left to walk, and a click that was not sent is not counted)
+        const bool clip = a->state == sim::UnitState::CantGo;
+        if (a->tile != it->second.shore && now >= it->second.ordered + 40u && (on_bridge || foot_again) && (a->idle() || clip)) {
+            if (clip) c.orders.volley(a->id, it->second.shore, {0, 3, 7, 10, 14, 17}, Priority::Urgent);
+            else c.orders.move({a->id}, it->second.shore, Priority::Urgent);
             it->second.ordered = now;
             ++it->second.orders;
         }
@@ -220,7 +222,15 @@ void BridgeHeadOnTask::clear_feet(TaskContext& c) {
         if (!grid.in_bounds(a->tile) || grid.get_cell(a->tile).has_any_bridge() || !at_bridge_foot(grid, a->tile)) continue;
         bool jammed = false;                                                                      // an ant that cannot go is near, or one stands on a bridge tile beside the ant
         for (const auto& j : jam_) {
-            if (j.first != a->id && j.second.looks >= 3 && now >= j.second.since + 40u && j.second.tile.chebyshev_dist(a->tile) <= params_.jam_tiles) jammed = true;
+            if (j.first == a->id || j.second.looks < 3 || now < j.second.since + 40u || j.second.tile.chebyshev_dist(a->tile) > params_.jam_tiles) continue;
+            // (plan.bridge_foot: an ant of another team that shows the clip at a foot of a bridge is a plug for its own bot too, and two plugs that step back for each other leave and come back. So the ant of the lower
+            // team gives way and the other stays, unless it has stood twice as long as a plug needs (the other may be a person's ant, or stuck for another reason).)
+            const AntView* other = foot ? find_ant(v.others(), j.first) : nullptr;
+            if (other != nullptr && grid.in_bounds(j.second.tile) && !grid.get_cell(j.second.tile).has_any_bridge() && at_bridge_foot(grid, j.second.tile)) {
+                const bool lower = a->team != other->team ? a->team < other->team : a->id < other->id;
+                if (!lower && now < e.second.since + 2u * params_.plug_ticks) continue;
+            }
+            jammed = true;
         }
         for (const auto& s : still_) {
             if (s.first != a->id && now >= s.second.since + params_.stand_ticks && s.second.tile.chebyshev_dist(a->tile) <= 1) jammed = true;
