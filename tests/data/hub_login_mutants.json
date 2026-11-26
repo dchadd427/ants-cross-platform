@@ -1428,7 +1428,7 @@
   {
    "id": "legal_forgets_to_say_how_to_forget",
    "file": "web/legal.html",
-   "old": "<strong>Forget me</strong> ends every login of your account, deletes your chat lines that are still kept and removes your username, display name and the copy of your picture from the site&rsquo;s records; a ban or a mute, if there is one, stays, and so does the operator&rsquo;s hiding of your picture, kept as one entry under the same kind of code, with no id and no name.",
+   "old": "<strong>Forget me</strong> ends every login of your account, deletes your chat lines that are still kept and removes your username, display name and the copy of your picture from the site&rsquo;s records, with your nickname and tag, the nicknames held for you and the note of your login name; a ban or a mute, if there is one, stays, and so does the operator&rsquo;s hiding of your picture, kept as one entry under the same kind of code, with no id and no name.",
    "new": "Ask us.",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
   },
@@ -1892,6 +1892,27 @@
    "file": "web/legal.html",
    "old": "shown to everyone who opens the front page, logged in or not,",
    "new": "shown to people who are logged in,",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_forgets_the_nickname_in_forget_me",
+   "file": "web/legal.html",
+   "old": ", with your nickname and tag, the nicknames held for you and the note of your login name; a ban",
+   "new": "; a ban",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_does_not_say_how_long_a_nickname_is_held",
+   "file": "web/legal.html",
+   "old": "A nickname that you give up is held for you for 30 days, so that nobody takes it to pass for you. ",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_does_not_say_that_a_login_name_is_noted",
+   "file": "web/legal.html",
+   "old": "While you have no nickname, the site keeps for 30 days a note of the login name that it signed for the game, so that two people do not play under one name. ",
+   "new": "",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
   }
  ]
