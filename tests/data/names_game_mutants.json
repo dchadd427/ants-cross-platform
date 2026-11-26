@@ -1,5 +1,5 @@
 {
- "note": "Mutants of what the game does with long names and with letters of two and three bytes (src/ants_app/scorecard_new.cpp, text_layout.cpp, map_select.cpp; docs/HUB_NICKNAMES.md 'In the game') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/test_app/test_scorecard_new_look.cpp (an alliance of long names is two lines in the winners' well and in a row of the others, a short one stays one; the bar and the little numbers follow) and tests/test_app/test_hud_layout_screens.cpp (a name or a label is cut at a whole letter, ends in dots without a blank before them, and the room's seat label cuts a long name that way). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/names_game_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught.",
+ "note": "Mutants of what the game does with long names and with letters of two and three bytes (src/ants_app/scorecard_new.cpp, text_layout.cpp, map_select.cpp, renderer_dialog_text.cpp; docs/HUB_NICKNAMES.md 'In the game') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/test_app/test_scorecard_new_look.cpp (an alliance of long names is two lines in the winners' well and in a row of the others, a short one stays one; the bar and the little numbers follow) and tests/test_app/test_hud_layout_screens.cpp (a name or a label is cut at a whole letter, ends in dots without a blank before them, and the room's seat label cuts a long name that way) and tests/test_app/test_hud_art_look.cpp (a sentence with a name in Cyrillic, which the windows' face lacks, is measured and drawn in the game's face). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/names_game_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught.",
  "mutants": [
   {
    "id": "alliance_of_the_winners_on_one_line",
@@ -112,6 +112,30 @@
    "new": "renderer.draw_text(fit_text(renderer, name, PLAYER_NAME_W, FontSize::Px18), PLAYER_NAME_X, PLAYER_THUMB_Y + row,",
    "build": "test_hud_layout",
    "test": "./build/tests/test_app/test_hud_layout"
+  },
+  {
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "id": "dialog_width_of_a_cyrillic_name_in_the_windows_face",
+   "file": "src/ants_app/renderer_dialog_text.cpp",
+   "old": "if (font != nullptr && !face_draws_all(font, text) && face_font(em_tenths) != nullptr) return face_text_width(text, em_tenths);",
+   "new": "if (false) return face_text_width(text, em_tenths);"
+  },
+  {
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "id": "dialog_picture_of_a_cyrillic_name_in_the_windows_face",
+   "file": "src/ants_app/renderer_dialog_text.cpp",
+   "old": "if (!face_draws_all(font, text) && face_font(em_tenths) != nullptr) { draw_face_text(text, x, baseline, color, em_tenths); return; }",
+   "new": "if (false) { draw_face_text(text, x, baseline, color, em_tenths); return; }"
+  },
+  {
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "id": "a_latin_sentence_in_the_game_face",
+   "file": "src/ants_app/renderer_dialog_text.cpp",
+   "old": "if (cp >= 0x20 && TTF_GlyphIsProvided(font, static_cast<Uint16>(cp)) == 0) return false;",
+   "new": "if (cp >= 0x20 && TTF_GlyphIsProvided(font, static_cast<Uint16>(cp)) != 0) return false;"
   }
  ]
 }

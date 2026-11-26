@@ -76,7 +76,7 @@ What may stand in a name is what the game's font draws: the Latin letters (A-Z, 
 
 ## In the game
 
-The results' alliance rows take two lines when the names are long (the winners' well, "A &" over "B"; the others' rows when "A & B" does not fit one line), the countdown card and the desktop game's room page cut a long name to whole characters and three dots (`fit_name`), and the text layout is UTF-8 safe (a letter of two or three bytes is never cut in half). The game takes the hub's pass on the command line with `--name-pass` (the web page does it for the wasm build).
+The results' alliance rows take two lines when the names are long (the winners' well, "A &" over "B"; the others' rows when "A & B" does not fit one line), the countdown card and the desktop game's room page cut a long name to whole characters and three dots (`fit_name`), the text layout is UTF-8 safe (a letter of two or three bytes is never cut in half), and a sentence of a window that has a letter which the windows' face (Libre Baskerville, Latin only) lacks, such as a Cyrillic name in "Victory!", is drawn in the game's own face. The game takes the hub's pass on the command line with `--name-pass` (the web page does it for the wasm build).
 
 ## Limits, and what is not here
 

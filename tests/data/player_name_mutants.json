@@ -781,7 +781,7 @@
   {
    "id": "name_block_lobby_says_no_words",
    "file": "web/lobby.html",
-   "old": "ui.said(kind === 'guest' ? 'You join as ' + name + '. ' + NAME_HINT.guest : NAME_HINT[kind] + (kind !== 'login' ? '' : how === 'other' ? NAME_HINT.other : swap ? NAME_HINT.swap : ''), how === 'login');",
+   "old": "ui.said(kind === 'guest' ? 'You join as ' + name + '. ' + NAME_HINT.guest : how === 'nick' ? NAME_HINT.nick : NAME_HINT[kind] + (kind !== 'login' ? '' : how === 'other' ? NAME_HINT.other : swap ? NAME_HINT.swap : ''), how === 'login');",
    "new": "",
    "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
   },
@@ -851,7 +851,7 @@
   {
    "id": "name_block_shell_says_no_words",
    "file": "web/shell.html",
-   "old": "ui.said(kind === 'guest' ? 'You join as ' + name + '. ' + NAME_HINT.guest : NAME_HINT[kind] + (kind !== 'login' ? '' : how === 'other' ? NAME_HINT.other : swap ? NAME_HINT.swap : ''), how === 'login');",
+   "old": "ui.said(kind === 'guest' ? 'You join as ' + name + '. ' + NAME_HINT.guest : how === 'nick' ? NAME_HINT.nick : NAME_HINT[kind] + (kind !== 'login' ? '' : how === 'other' ? NAME_HINT.other : swap ? NAME_HINT.swap : ''), how === 'login');",
    "new": "",
    "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
   },
@@ -935,8 +935,8 @@
   {
    "id": "how_other_never_told",
    "file": "web/front/player_name.js",
-   "old": "how: result.viaOther ? 'other' : ''",
-   "new": "how: ''",
+   "old": "how: result.viaOther ? 'other' : result.nick === true ? 'nick' : ''",
+   "new": "how: result.nick === true ? 'nick' : ''",
    "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
   },
   {
@@ -1254,6 +1254,27 @@
    "file": "web/lobby.html",
    "old": "if (client && kind === 'login' && pass) client.setPass(pass); });",
    "new": "if (client && kind === 'login' && pass) { /* nothing */ } });",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "how_nick_never_told",
+   "file": "web/front/player_name.js",
+   "old": "how: result.viaOther ? 'other' : result.nick === true ? 'nick' : ''",
+   "new": "how: result.viaOther ? 'other' : ''",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "a_nickname_is_not_known_to_the_card",
+   "file": "web/front/player_name.js",
+   "old": "if (typeof you.nick === 'string' && you.nick !== '' && name !== '') answer.nick = true;",
+   "new": "if (typeof you.nick === 'string' && you.nick !== '' && name !== '') answer.nick = false;",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "the_card_says_discord_name_to_a_nickname",
+   "file": "web/lobby.html",
+   "old": "how === 'nick' ? NAME_HINT.nick : NAME_HINT[kind] + (kind",
+   "new": "NAME_HINT[kind] + (kind",
    "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
   }
  ]

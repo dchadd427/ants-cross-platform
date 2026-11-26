@@ -1741,7 +1741,7 @@
             function go() { if (done || !pressed || chosen === null) return; ui.message.textContent = ''; ui.hide(); onDone(chosen, chosenPass); }
             ui.input.value = '';
             ui.show();
-            person.ready(function (name, kind, swap, how, pass) { chosen = name; chosenPass = pass || ''; ui.input.value = name; ui.said(kind === 'guest' ? 'You join as ' + name + '. ' + NAME_HINT.guest : NAME_HINT[kind] + (kind !== 'login' ? '' : how === 'other' ? NAME_HINT.other : swap ? NAME_HINT.swap : ''), how === 'login'); go(); });
+            person.ready(function (name, kind, swap, how, pass) { chosen = name; chosenPass = pass || ''; ui.input.value = name; ui.said(kind === 'guest' ? 'You join as ' + name + '. ' + NAME_HINT.guest : how === 'nick' ? NAME_HINT.nick : NAME_HINT[kind] + (kind !== 'login' ? '' : how === 'other' ? NAME_HINT.other : swap ? NAME_HINT.swap : ''), how === 'login'); go(); });
             function confirm() { pressed = true; go(); }
             ui.button.addEventListener('click', confirm);
             ui.input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { if (e.preventDefault) e.preventDefault(); confirm(); } });

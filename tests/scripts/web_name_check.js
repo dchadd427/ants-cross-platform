@@ -121,6 +121,13 @@ check('the words are plain text of the page\'s characters, short, and none of th
     check('nothing is done before the button', done.length === 0 && ui.hidden === 0);
     ui.button.listeners.click();
     same('the button goes on with the name that the card showed', done, ['maya']);
+    {   // a person who has a nickname: the words say that it is the nickname (not the Discord name, and no word about the chat menu's switch)
+        const ui2 = fakeUi();
+        const person2 = fakePerson();
+        names.runNameStep(ui2, person2, function () {});
+        person2.answer('[ANT] Zoe', 'login', true, 'nick');
+        same('a login with a nickname: the field shows "[TAG] Nickname" and the words say that it is the nickname, with no word of a switch', [ui2.input.value, ui2.hints], ['[ANT] Zoe', [HINT_NICK]]);
+    }
     check('... the step goes away', ui.hidden === 1);
     ui.button.listeners.click();
     ui.input.listeners.keydown({ key: 'Enter', preventDefault() {} });
@@ -1110,6 +1117,8 @@ for (const [what, me, shown] of [['a hub where nobody is logged in', 'guest', tr
     check('... the Hello is the guest name, in the room of the link, with no lobby block (a link only joins: a code with no room is not made) and no key', hex(hello) === hex(helloBytes(GUEST, 'k7m2xq', { join: true })) && env.replaced.length === 0, hex(hello));
 }
 {
+    const nick = runLobby('?room=k7m2xq', {}, { me: { login: true, you: { name: 'maya', mod: false, nick: 'Zoe', tag: 'ANT' }, play: { name: '[ANT] Zoe', pass: '' } } });
+    same('a link for a person who has a nickname: the field shows the name that the hub plays the person under, and the words say that it is the nickname', [nick.$('name-step-input').value, nick.$('name-step-hint').textContent], ['[ANT] Zoe', HINT_NICK]);
     const env = runLobby('?room=k7m2xq', {}, { me: MAYA });
     same('a link for a person who is logged in: the field shows the login\'s name, and the words say that it is the Discord name', [env.$('name-step-input').value, env.$('name-step-hint').textContent], ['maya', HINT_LOGIN]);
     env.$('name-step-go').click();

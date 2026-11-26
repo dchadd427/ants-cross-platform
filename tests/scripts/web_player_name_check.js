@@ -243,6 +243,7 @@ const GUEST_NAME = 'Guest 550000';                      // (the guest name that 
     // -- what the card is told besides the name (how): the other name was used, or a guest could be logged in
     for (const [what, body, want] of [['a login whose shown name fits', LOGIN('maya', 'maya_9'), ''], ['today\'s shape, a username', LOGIN('maya'), ''], ['a login whose shown name did not fit: the other name is used', LOGIN('\u540d\u524d', 'user_name'), 'other'],
         ['a login whose shown name has a letter that the game cannot draw: the other name is used', LOGIN('S\u03c3ren', 'soren_k'), 'other'], ['a login with no name that fits (the guest name is used)', LOGIN('\u540d\u524d', '\ud83d\ude00'), ''],
+        ['a login with a nickname (the card says "your nickname")', { login: true, you: { name: 'maya', nick: 'Zoe', tag: 'ANT', mod: false }, play: { name: '[ANT] Zoe', pass: '' } }, 'nick'],
         ['a guest of a hub that has a login (it could log in)', GUEST_PAGE, 'login']]) {
         const r = rig();
         r.ready();
@@ -636,6 +637,7 @@ const GUEST_NAME = 'Guest 550000';                      // (the guest name that 
         const PASS = '1700000120.' + 'a1b2c3d4'.repeat(4);
         const play = (name, pass) => ({ login: true, you: { name: 'maya', mod: false }, play: { name, pass } });
         same('fromMe: the name that the hub plays the person under and its pass are what the page takes (a nickname with its tag)', ME(play('[ANT] Zoe', PASS)), { kind: 'login', name: '[ANT] Zoe', pass: PASS, canSwitch: false, viaOther: false });
+        same('fromMe: a person who has a nickname says so (the card of a link says "your nickname"), and one who has none does not', [ME({ login: true, you: { name: 'maya', nick: 'Zoe', tag: 'ANT' }, play: { name: '[ANT] Zoe', pass: '' } }).nick, ME(play('Maya', '')).nick, ME({ login: true, you: { name: 'maya', nick: 'Zoe' }, play: { name: '\u540d\u524d', pass: '' } }).nick], [true, undefined, undefined]);
         same('... a pass of another shape (not digits, a dot and 32 hex digits) is none, and so is a pass that is not text', [ME(play('Zoe', '1700000120.xyz')).pass, ME(play('Zoe', 'a'.repeat(80))).pass, ME(play('Zoe', 5)).pass, ME(play('Zoe', undefined)).pass, ME(play('Zoe', PASS.toUpperCase())).pass], ['', '', '', '', '']);
         same('... a play name that does not fit the game is no name (the guest name is used) and gives no pass', ME(play('\u540d\u524d', PASS)), { kind: 'login', name: '', pass: '', canSwitch: false, viaOther: false });
         same('... a play name with blanks at its ends is cut, and then it is not the name that the pass was made for: no pass', ME(play('  Zoe ', PASS)).pass, '');

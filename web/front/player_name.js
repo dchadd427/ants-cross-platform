@@ -7,7 +7,7 @@
 //     once and kept in this browser (localStorage, GUEST_KEY and NAME_KEY; a browser that refuses its storage keeps them for the page). A login and a log out never change them. A guest's name has no pass: the server makes
 //     every name that has none a guest's, "Name (Guest)" (a typed name is checked by the hub's `name` frame before it is kept: docs/HUB_NICKNAMES.md).
 //   * ready(fn) calls fn(name, kind, canSwitch, how, pass) once: at once when the answer cannot change (a site with no login), else when the question is answered, failed or given up (ASK_MS). how: 'other' (the
-//     shown name did not fit: the other one is used), 'login' (a guest whom the hub could log in) or ''. A question on its way is shared by all who wait; a failed one is asked again at the next ready().
+//     shown name did not fit: the other one is used), 'nick' (the person has a nickname), 'login' (a guest whom the hub could log in) or ''. A question on its way is shared by all who wait; a failed one is asked again at the next ready().
 //   * ES5, no module system: a page gets the global AntsPlayerName, node gets module.exports. A name from the hub is text from strangers: cut before any work, and only the letters of a name are kept (name_letters.js).
 (function (root, factory) {
     var api = factory();
@@ -56,7 +56,9 @@
         if (!you || typeof you !== 'object' || Array.isArray(you)) return { kind: 'failed', name: '', canSwitch: false };
         var play = body.play && typeof body.play === 'object' && !Array.isArray(body.play) ? body.play : null;
         var shown = fit(you.name, check), name = play ? fit(play.name, check) : shown || fit(you.next, check) || fit(you.other, check);
-        return { kind: 'login', name: name, pass: play && name !== '' && name === play.name ? passOf(play.pass) : '', canSwitch: typeof you.other === 'string' && you.other !== '', viaOther: !shown && name !== '' && !(typeof you.nick === 'string' && you.nick !== '') };
+        var answer = { kind: 'login', name: name, pass: play && name !== '' && name === play.name ? passOf(play.pass) : '', canSwitch: typeof you.other === 'string' && you.other !== '', viaOther: !shown && name !== '' && !(typeof you.nick === 'string' && you.nick !== '') };
+        if (typeof you.nick === 'string' && you.nick !== '' && name !== '') answer.nick = true;       // (the person has a nickname: the card of a link says "your nickname", not "your Discord name")
+        return answer;
     }
     // Six digits that make a guest name: 100000 to 999999 from `random` (a number from 0 up to, not including, 1; anything else is the first)
     function guestDigits(random) {
@@ -113,7 +115,7 @@
         // every seat; only a site without a login stays
         function again(result) { return result.kind !== 'none'; }
         function answer(result) {
-            return result.kind === 'login' && result.name ? { name: result.name, kind: 'login', canSwitch: result.canSwitch, how: result.viaOther ? 'other' : '', pass: result.pass || '' } : { name: guestShown(), pass: '', kind: 'guest', canSwitch: false, how: result.kind === 'guest' ? 'login' : '' };
+            return result.kind === 'login' && result.name ? { name: result.name, kind: 'login', canSwitch: result.canSwitch, how: result.viaOther ? 'other' : result.nick === true ? 'nick' : '', pass: result.pass || '' } : { name: guestShown(), pass: '', kind: 'guest', canSwitch: false, how: result.kind === 'guest' ? 'login' : '' };
         }
         function tell(fn, result) {
             var a = answer(result);
