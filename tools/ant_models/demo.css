@@ -163,6 +163,36 @@
 }
 
 /* Landmark Focus Chips Grid in Sidebar */
+.demo-slider-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-block-start: 10px;
+}
+
+.demo-slider-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-secondary);
+}
+
+.demo-slider-row output {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.demo-range {
+  inline-size: 100%;
+  margin: 0 0 4px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 .demo-focus-grid {
   display: flex;
   flex-wrap: wrap;

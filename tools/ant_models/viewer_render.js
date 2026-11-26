@@ -10,7 +10,8 @@
     FIRE_VS, FIRE_FS, buildFireParticles,
     SPARK_VS, SPARK_FS, buildSparkParticles,
     FUR_PROFILES, FUR_VS, FUR_FS,
-    GROUND_VS, GROUND_FS, buildGroundMesh,
+    SHADOW_VS, SHADOW_FS,
+    TILE_GROUND_VS, TILE_GROUND_FS, buildTileGroundMesh,
     evalJelloWobble,
   } = window.__antFx;
 
@@ -268,9 +269,26 @@
   uniform vec3 u_keyColor, u_fillColor, u_rimColor, u_envKeyTint, u_envFillTint, u_envRimTint, u_spotParams;
   uniform vec4 u_lightMix;
   uniform float u_alpha, u_metallic, u_roughness, u_normalScale, u_rimBoost;
-  uniform int u_isOrtho, u_matKind, u_hasNormalTex, u_silhouette;
-  uniform sampler2D u_baseTex, u_normalTex, u_mrTex;
+  uniform int u_isOrtho, u_matKind, u_hasNormalTex, u_silhouette, u_useShadowMap;
+  uniform mat4 u_lightViewProj;
+  uniform sampler2D u_baseTex, u_normalTex, u_mrTex, u_shadowMap;
   out vec4 fragColor;
+
+  float samplePbrShadow(vec3 wp, vec3 N, vec3 L) {
+    vec4 lp = u_lightViewProj * vec4(wp + N * 0.055, 1.0);
+    vec3 proj = lp.xyz / lp.w * 0.5 + 0.5;
+    if (proj.x <= 0.002 || proj.x >= 0.998 || proj.y <= 0.002 || proj.y >= 0.998 || proj.z >= 0.999) return 1.0;
+    float bias = max(0.0012 * (1.0 - max(dot(N, L), 0.0)), 0.00075);
+    vec2 texel = vec2(1.0 / 2048.0);
+    float vis = 0.0;
+    for (int dy = -1; dy <= 1; dy++) {
+      for (int dx = -1; dx <= 1; dx++) {
+        float d = texture(u_shadowMap, proj.xy + vec2(float(dx), float(dy)) * texel * 1.25).r;
+        vis += (proj.z - bias <= d) ? 1.0 : 0.0;
+      }
+    }
+    return vis / 9.0;
+  }
 
   vec3 applyNormalMap(vec3 N, vec3 pos, vec2 uv, out float slope) {
     vec3 mapN = texture(u_normalTex, uv).xyz * 2.0 - 1.0;
@@ -406,8 +424,10 @@
     vec3 coatTint = u_matKind == 2 ? mix(vec3(1.0), clamp(albedo * 1.9 + vec3(0.24), 0.0, 1.0), 0.38) : vec3(1.0);
     float keyDot = max(dot(N, u_keyDir), 0.0);
     float spotFocus = mix(u_spotParams.x, u_spotParams.y, pow(keyDot, u_spotParams.z));
+    float shadowVis = (u_useShadowMap != 0 && keyDot > 0.0) ? samplePbrShadow(v_worldPos, N, u_keyDir) : 1.0;
+    float keyShadowMul = mix(0.24, 1.0, shadowVis);
     vec3 F0 = mix(vec3(0.045), albedo, met), specAcc = vec3(0.0);
-    vec3 Lo = evalLight(u_keyDir, u_keyColor * spotFocus, N, V, albedo, met, rough, F0, keyCoat, coatR, coatTint, specAcc)
+    vec3 Lo = evalLight(u_keyDir, u_keyColor * spotFocus * keyShadowMul, N, V, albedo, met, rough, F0, keyCoat, coatR, coatTint, specAcc)
             + evalLight(u_fillDir, u_fillColor, N, V, albedo, met, rough, F0, coatW * 0.22, coatR, coatTint, specAcc)
             + evalLight(u_rimDir, u_rimColor, N, V, albedo, met, rough, F0, coatW * 0.28, coatR, coatTint, specAcc);
     if (u_matKind == 5) {
@@ -691,10 +711,13 @@
       this.fireProg = createProgram(gl, FIRE_VS, FIRE_FS);
       this.sparkProg = createProgram(gl, SPARK_VS, SPARK_FS);
       this.furProg = createProgram(gl, FUR_VS, FUR_FS);
-      this.groundProg = createProgram(gl, GROUND_VS, GROUND_FS);
+      this.shadowProg = createProgram(gl, SHADOW_VS, SHADOW_FS);
+      this.tileGroundProg = createProgram(gl, TILE_GROUND_VS, TILE_GROUND_FS);
       this.fireParticles = buildFireParticles(gl);
       this.sparkParticles = buildSparkParticles(gl);
-      this.groundMesh = buildGroundMesh(gl, 48.0);
+      this.tileGroundMesh = null;
+      this.shadowFbo = null; this.shadowTex = null; this.shadowSize = 2048;
+      this.atlasTex = null; this.mapTex = null;
       this.emptyVao = gl.createVertexArray();
       this.fallbacks = createFallbackTextures(gl);
       this.plinth = null; this.plinthKey = "";
@@ -702,7 +725,8 @@
       this.uPbr = getUniforms(gl, this.pbrProg, [
         "u_model", "u_normalMat", "u_viewProj", "u_jelloWobble", "u_cameraPos", "u_viewDir", "u_isOrtho",
         "u_baseColor", "u_alpha", "u_metallic", "u_roughness", "u_emissive", "u_normalScale",
-        "u_matKind", "u_hasNormalTex", "u_baseTex", "u_normalTex", "u_mrTex",
+        "u_matKind", "u_hasNormalTex", "u_baseTex", "u_normalTex", "u_mrTex", "u_shadowMap",
+        "u_useShadowMap", "u_lightViewProj",
         "u_keyDir", "u_fillDir", "u_rimDir", "u_skyColor", "u_groundColor", "u_rimBoost",
         "u_keyColor", "u_fillColor", "u_rimColor", "u_envKeyTint", "u_envFillTint", "u_envRimTint", "u_spotParams", "u_lightMix",
         "u_silhouette", "u_silhouetteColor",
@@ -726,19 +750,83 @@
         "u_shellFrac", "u_furLength", "u_furDroop", "u_furDensity", "u_isCotton",
         "u_silhouette", "u_silhouetteColor",
       ]);
-      this.uGround = getUniforms(gl, this.groundProg, [
-        "u_viewProj", "u_cameraPos", "u_keyDir", "u_fillDir", "u_keyColor", "u_fillColor",
-        "u_skyColor", "u_groundColor", "u_bgTop", "u_bgMid", "u_bgBot", "u_viewport", "u_lightMix",
-        "u_shadows[0]", "u_shadowCount", "u_clearings[0]", "u_clearingCount",
-        "u_glows[0]", "u_glowCount", "u_zone", "u_zoneRot", "u_theme", "u_time",
+      this.uShadow = getUniforms(gl, this.shadowProg, ["u_model", "u_lightViewProj", "u_jelloWobble"]);
+      this.uTileGround = getUniforms(gl, this.tileGroundProg, [
+        "u_viewProj", "u_lightViewProj", "u_atlasTex", "u_mapTex", "u_shadowMap",
+        "u_mapSize", "u_atlasGrid", "u_viewport", "u_waterTile", "u_gridAlpha",
+        "u_shadowStrength", "u_time", "u_crispPixels", "u_useShadowMap", "u_isOrtho",
+        "u_cameraPos", "u_viewDir", "u_keyDir", "u_fillDir", "u_keyColor", "u_fillColor",
+        "u_skyColor", "u_groundColor", "u_bgTop", "u_bgMid", "u_bgBot", "u_lightMix",
+        "u_glows[0]", "u_glowCount",
       ]);
       gl.useProgram(this.pbrProg);
       gl.uniform1i(this.uPbr.u_baseTex, 0);
       gl.uniform1i(this.uPbr.u_normalTex, 1);
       gl.uniform1i(this.uPbr.u_mrTex, 2);
+      gl.uniform1i(this.uPbr.u_shadowMap, 3);
+      gl.uniform1i(this.uPbr.u_useShadowMap, 0);
+      gl.useProgram(this.tileGroundProg);
+      gl.uniform1i(this.uTileGround.u_atlasTex, 0);
+      gl.uniform1i(this.uTileGround.u_mapTex, 1);
+      gl.uniform1i(this.uTileGround.u_shadowMap, 3);
       gl.useProgram(null);
       gl.vertexAttrib2f(2, 0, 0);
       gl.vertexAttrib3f(3, 1, 1, 1);
+    }
+
+    ensureShadowMap() {
+      if (this.shadowFbo && this.shadowTex) return;
+      const gl = this.gl, sz = this.shadowSize;
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT24, sz, sz, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      const fbo = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, tex, 0);
+      gl.drawBuffers([gl.NONE]);
+      gl.readBuffer(gl.NONE);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      this.shadowFbo = fbo;
+      this.shadowTex = tex;
+    }
+
+    uploadTileAtlas(img) {
+      const gl = this.gl;
+      if (this.atlasTex) gl.deleteTexture(this.atlasTex);
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      this.atlasTex = tex;
+    }
+
+    uploadMapGrid(cols, rows, tileArray) {
+      const gl = this.gl;
+      if (this.mapTex) gl.deleteTexture(this.mapTex);
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, cols, rows, 0, gl.RED, gl.UNSIGNED_BYTE, new Uint8Array(tileArray));
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      this.mapTex = tex;
+      if (!this.tileGroundMesh || this.tileGroundMesh.cols !== cols || this.tileGroundMesh.rows !== rows) {
+        if (this.tileGroundMesh) this.tileGroundMesh.dispose();
+        this.tileGroundMesh = buildTileGroundMesh(gl, cols, rows, 36.0);
+      }
     }
 
     ensurePlinth(halfSpanX, radius) {
@@ -801,6 +889,69 @@
       const gl = this.gl, lp = getLightingPreset(opts.lighting);
       const pal = lp.pal || (opts.dark ? STUDIO_PALETTE.dark : STUDIO_PALETTE.light);
       const team = opts.teamColors || resolveTeam(opts.team, opts.customColor);
+      const camera = this.computeCamera(scene, cam, opts.width, opts.height, opts.overrideProj, opts);
+      let keyDir, fillDir, rimDir;
+      if (opts.sunDir) {
+        const sd = opts.sunDir, sl = Math.hypot(sd[0], sd[1], sd[2]) || 1;
+        keyDir = [sd[0] / sl, sd[1] / sl, sd[2] / sl];
+        const fl = Math.hypot(-keyDir[0], 0.42, -keyDir[2]) || 1;
+        fillDir = [-keyDir[0] / fl, 0.42 / fl, -keyDir[2] / fl];
+        const rl = Math.hypot(-keyDir[0] * 0.7, 0.58, keyDir[2] * 0.7) || 1;
+        rimDir = [-keyDir[0] * 0.7 / rl, 0.58 / rl, keyDir[2] * 0.7 / rl];
+      } else {
+        const lightCam = opts.worldSun ? { viewDir: [0.36, 0.56, 0.74] } : camera;
+        ({ keyDir, fillDir, rimDir } = this.cameraLights(lightCam, lp));
+      }
+
+      const instMats = scene.instances.length ? scene.instances.map((inst) => evaluateWorldMats(inst, opts)) : [];
+      let lightViewProj = null;
+      const useShadowMap = Boolean(opts.shadowMap && scene.instances.length);
+      if (useShadowMap) {
+        this.ensureShadowMap();
+        const prevFbo = gl.getParameter(gl.FRAMEBUFFER_BINDING);
+        const tgt = opts.customTarget || scene.target;
+        const R = opts.shadowRadius || 16.0;
+        const up = Math.abs(keyDir[1]) > 0.96 ? [0, 0, -1] : [0, 1, 0];
+        const c = [tgt[0], 0, tgt[2]];
+        const distL = Math.max(40, R * 2.2);
+        const lView = mat4LookAt([c[0] + keyDir[0] * distL, keyDir[1] * distL, c[2] + keyDir[2] * distL], c, up);
+        const texel = (2 * R) / this.shadowSize;
+        lView[12] = Math.round(lView[12] / texel) * texel;
+        lView[13] = Math.round(lView[13] / texel) * texel;
+        lightViewProj = mat4Multiply(mat4Ortho(-R, R, -R, R, 1.0, distL * 2.4), lView);
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFbo);
+        gl.viewport(0, 0, this.shadowSize, this.shadowSize);
+        gl.enable(gl.DEPTH_TEST); gl.depthMask(true); gl.disable(gl.BLEND); gl.disable(gl.CULL_FACE);
+        gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1.8, 2.4);
+        gl.clear(gl.DEPTH_BUFFER_BIT);
+        gl.useProgram(this.shadowProg);
+        gl.uniformMatrix4fv(this.uShadow.u_lightViewProj, false, lightViewProj);
+        scene.instances.forEach((inst, instIdx) => {
+          const worldMats = instMats[instIdx];
+          const fxTime = Number.isFinite(opts.fixedIdleTime) ? opts.fixedIdleTime : (inst.idleTime || 0);
+          if (inst.model._isJello === undefined) {
+            inst.model._isJello = inst.model.drawCalls.some((dc) => dc.prim.material.name === "item_jello_ruby");
+          }
+          const jw = inst.model._isJello && (opts.idleAnim || opts.fixedIdleTime !== null)
+            ? evalJelloWobble(fxTime, inst.model.size ? inst.model.size[1] : 0.64) : [0, 0, 0, 0];
+          gl.uniform4f(this.uShadow.u_jelloWobble, jw[0], jw[1], jw[2], jw[3]);
+          for (const item of inst.model.drawCalls) {
+            const prim = item.prim, mn = prim.material.name;
+            if (mn === "item_fire_volume" || mn === "item_spark_volume") continue;
+            const nodeMat = worldMats[item.nodeIndex] || item.worldMat;
+            const modelMat = inst.offsetMat ? mat4Multiply(inst.offsetMat, nodeMat) : nodeMat;
+            gl.uniformMatrix4fv(this.uShadow.u_model, false, modelMat);
+            gl.bindVertexArray(prim.vao);
+            if (prim.indexed) gl.drawElements(prim.mode, prim.drawCount, prim.indexType, 0);
+            else gl.drawArrays(prim.mode, 0, prim.drawCount);
+          }
+        });
+        gl.bindVertexArray(null);
+        gl.disable(gl.POLYGON_OFFSET_FILL);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, prevFbo);
+      }
+
       gl.viewport(0, 0, opts.width, opts.height); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       if (!opts.transparent) {
         gl.disable(gl.DEPTH_TEST); gl.depthMask(false); gl.disable(gl.BLEND); gl.disable(gl.CULL_FACE);
@@ -809,45 +960,38 @@
         gl.bindVertexArray(this.emptyVao); gl.drawArrays(gl.TRIANGLES, 0, 3); gl.bindVertexArray(null);
       }
       gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
-      const camera = this.computeCamera(scene, cam, opts.width, opts.height, opts.overrideProj, opts);
-      const lightCam = opts.worldSun ? { viewDir: [0.36, 0.56, 0.74] } : camera;
-      const { keyDir, fillDir, rimDir } = this.cameraLights(lightCam, lp);
 
-      if (opts.ground && !opts.transparent) {
-        const g = opts.ground;
+      if (opts.tileGround && this.atlasTex && this.mapTex && this.tileGroundMesh && !opts.transparent) {
+        const tg = opts.tileGround;
         gl.disable(gl.BLEND); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK); gl.frontFace(gl.CCW);
-        gl.useProgram(this.groundProg);
-        gl.uniformMatrix4fv(this.uGround.u_viewProj, false, camera.viewProj);
-        gl.uniform3fv(this.uGround.u_cameraPos, camera.eye);
-        gl.uniform3fv(this.uGround.u_keyDir, keyDir);
-        gl.uniform3fv(this.uGround.u_fillDir, fillDir);
-        gl.uniform3fv(this.uGround.u_keyColor, lp.keyColor);
-        gl.uniform3fv(this.uGround.u_fillColor, lp.fillColor);
-        gl.uniform3fv(this.uGround.u_skyColor, pal.sky);
-        gl.uniform3fv(this.uGround.u_groundColor, pal.ground);
-        gl.uniform3fv(this.uGround.u_bgTop, pal.bgTop);
-        gl.uniform3fv(this.uGround.u_bgMid, pal.bgMid);
-        gl.uniform3fv(this.uGround.u_bgBot, pal.bgBot);
-        gl.uniform2f(this.uGround.u_viewport, opts.width, opts.height);
-        gl.uniform4fv(this.uGround.u_lightMix, lp.lightMix);
-        const sArr = g.shadows || [], sCount = Math.min(sArr.length, 48), sData = new Float32Array(48 * 4);
-        for (let i = 0; i < sCount; i++) sData.set(sArr[i], i * 4);
-        gl.uniform4fv(this.uGround["u_shadows[0]"], sData);
-        gl.uniform1i(this.uGround.u_shadowCount, sCount);
-        const cArr = g.clearings || [], cCount = Math.min(cArr.length, 8), cData = new Float32Array(8 * 4);
-        for (let i = 0; i < cCount; i++) cData.set(cArr[i], i * 4);
-        gl.uniform4fv(this.uGround["u_clearings[0]"], cData);
-        gl.uniform1i(this.uGround.u_clearingCount, cCount);
-        const glwArr = g.glows || [], glwCount = Math.min(glwArr.length, 6), glwData = new Float32Array(6 * 4);
+        gl.useProgram(this.tileGroundProg);
+        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.atlasTex);
+        gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.mapTex);
+        gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, useShadowMap ? this.shadowTex : this.fallbacks.white);
+        gl.uniformMatrix4fv(this.uTileGround.u_viewProj, false, camera.viewProj);
+        if (lightViewProj) gl.uniformMatrix4fv(this.uTileGround.u_lightViewProj, false, lightViewProj);
+        gl.uniform1i(this.uTileGround.u_useShadowMap, useShadowMap ? 1 : 0);
+        gl.uniform2f(this.uTileGround.u_mapSize, tg.cols, tg.rows);
+        gl.uniform2f(this.uTileGround.u_atlasGrid, tg.atlasCols || 16, tg.atlasRows || 15);
+        gl.uniform2f(this.uTileGround.u_viewport, opts.width, opts.height);
+        gl.uniform1f(this.uTileGround.u_waterTile, tg.waterTile !== undefined ? tg.waterTile : 45);
+        gl.uniform1f(this.uTileGround.u_gridAlpha, tg.gridAlpha !== undefined ? tg.gridAlpha : 0.24);
+        gl.uniform1f(this.uTileGround.u_shadowStrength, tg.shadowStrength !== undefined ? tg.shadowStrength : 0.62);
+        gl.uniform1f(this.uTileGround.u_time, tg.time || 0);
+        gl.uniform1i(this.uTileGround.u_crispPixels, tg.crispPixels !== false ? 1 : 0);
+        gl.uniform1i(this.uTileGround.u_isOrtho, camera.isOrtho ? 1 : 0);
+        gl.uniform3fv(this.uTileGround.u_cameraPos, camera.eye);
+        gl.uniform3fv(this.uTileGround.u_viewDir, camera.viewDir);
+        gl.uniform3fv(this.uTileGround.u_keyDir, keyDir); gl.uniform3fv(this.uTileGround.u_fillDir, fillDir);
+        gl.uniform3fv(this.uTileGround.u_keyColor, lp.keyColor); gl.uniform3fv(this.uTileGround.u_fillColor, lp.fillColor);
+        gl.uniform3fv(this.uTileGround.u_skyColor, pal.sky); gl.uniform3fv(this.uTileGround.u_groundColor, pal.ground);
+        gl.uniform3fv(this.uTileGround.u_bgTop, pal.bgTop); gl.uniform3fv(this.uTileGround.u_bgMid, pal.bgMid); gl.uniform3fv(this.uTileGround.u_bgBot, pal.bgBot);
+        gl.uniform4fv(this.uTileGround.u_lightMix, lp.lightMix);
+        const glwArr = tg.glows || [], glwCount = Math.min(glwArr.length, 6), glwData = new Float32Array(6 * 4);
         for (let i = 0; i < glwCount; i++) glwData.set(glwArr[i], i * 4);
-        gl.uniform4fv(this.uGround["u_glows[0]"], glwData);
-        gl.uniform1i(this.uGround.u_glowCount, glwCount);
-        gl.uniform4fv(this.uGround.u_zone, g.zone || [0, 0, 0, 0]);
-        gl.uniform1f(this.uGround.u_zoneRot, g.zoneRot || 0);
-        gl.uniform1i(this.uGround.u_theme, g.theme || 0);
-        gl.uniform1f(this.uGround.u_time, g.time || 0);
-        gl.bindVertexArray(this.groundMesh.vao);
-        gl.drawElements(gl.TRIANGLES, this.groundMesh.count, gl.UNSIGNED_SHORT, 0);
+        gl.uniform4fv(this.uTileGround["u_glows[0]"], glwData); gl.uniform1i(this.uTileGround.u_glowCount, glwCount);
+        gl.bindVertexArray(this.tileGroundMesh.vao);
+        gl.drawElements(gl.TRIANGLES, this.tileGroundMesh.count, gl.UNSIGNED_SHORT, 0);
         gl.bindVertexArray(null);
       } else if (opts.showPlinth !== false && !opts.transparent) {
         const plinth = this.ensurePlinth(scene.plinthSpanX, scene.plinthRadius);
@@ -879,8 +1023,11 @@
       const isSil = Boolean(opts.silhouette);
       gl.uniform1i(this.uPbr.u_silhouette, isSil ? 1 : 0);
       gl.uniform3fv(this.uPbr.u_silhouetteColor, opts.dark ? [0.910, 0.933, 0.973] : [0.067, 0.086, 0.122]);
+      gl.uniform1i(this.uPbr.u_useShadowMap, useShadowMap ? 1 : 0);
+      if (lightViewProj) gl.uniformMatrix4fv(this.uPbr.u_lightViewProj, false, lightViewProj);
+      gl.activeTexture(gl.TEXTURE3);
+      gl.bindTexture(gl.TEXTURE_2D, useShadowMap ? this.shadowTex : this.fallbacks.white);
 
-      const instMats = scene.instances.map((inst) => evaluateWorldMats(inst, opts));
       const fireEmitters = [];
       const sparkEmitters = [];
       const furCalls = [];

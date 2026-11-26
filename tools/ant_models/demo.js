@@ -8,360 +8,86 @@
   } = window.__antRender;
 
   const $ = (id) => document.getElementById(id);
-  const ANT_SCALE = 0.62;
+
+  // Exact 1:1 scale relative to 1 world unit = 1 original 32x32 game tile:
+  // Original worker sprite agst301 is 23x40 px (0.72 x 1.25 tiles); worker.glb at 1.15 projects 1.25 tiles tall at 45 deg.
+  const ANT_SCALE = 1.15;
+  const BASE_FIT_RADIUS = 11.0;
 
   const CAM_PRESETS = {
-    rts:     { label: "RTS 45°",  yaw: -14, pitch: 45, zoom: 0.96, target: [0.0, 0.35, 0.0] },
-    hero:    { label: "Low Hero", yaw: -24, pitch: 20, zoom: 0.72, target: [0.0, 0.45, 0.0] },
-    closeup: { label: "Close-Up", yaw: -18, pitch: 28, zoom: 0.42, target: [0.2, 0.40, 0.0] },
-    top:     { label: "Top-Down", yaw:   0, pitch: 74, zoom: 1.05, target: [0.0, 0.15, 0.0] },
+    game:  { label: "Game View", yaw:   0, pitch: 50, zoom: 0.78, proj: "ortho" },
+    rts3d: { label: "3D RTS",    yaw: -14, pitch: 42, zoom: 0.80, proj: "perspective" },
+    hero:  { label: "Low Hero",  yaw: -22, pitch: 22, zoom: 0.56, proj: "perspective" },
+    top:   { label: "Top-Down",  yaw:   0, pitch: 80, zoom: 0.92, proj: "ortho" },
   };
 
-  // Curated 3D backyard RTS scenarios with authentic 1998 ant-to-item relative scales.
-  const SCENARIOS = {
-    picnic: {
-      id: "picnic",
-      title: "Picnic Feast Raid",
-      desc: "Green workers forage across a gingham picnic blanket loaded with Cheeseburger, wobbling Jell-O, Cereal, Corn Dog, and Steak Whiz while Red raiders contest a dropping Power Nectar.",
-      teams: ["green", "red"],
-      defaultLighting: "daylight",
-      fitRadius: 4.55,
-      halfWidth: 6.2,
-      ground: {
-        theme: 0,
-        zone: [0.5, -0.1, 3.25, 2.5],
-        zoneRot: 0.14,
-        clearings: [
-          [-4.8, 1.5, 2.0, 0.95],
-          [-2.8, 1.1, 1.15, 0.55],
-          [5.4, -1.8, 1.9, 0.90],
-        ],
-        glows: [],
-      },
-      focuses: [
-        { id: "overview", label: "Overview", target: [0.1, 0.35, 0.0], yaw: -14, pitch: 45, zoom: 0.96 },
-        { id: "burger",   label: "Cheeseburger", target: [0.2, 0.42, -0.5], yaw: -22, pitch: 26, zoom: 0.38 },
-        { id: "jello",    label: "Wobbling Jell-O", target: [-1.6, 0.46, -1.4], yaw: 18, pitch: 24, zoom: 0.36 },
-        { id: "steak",    label: "Steak Whiz", target: [1.1, 0.32, 1.35], yaw: -32, pitch: 28, zoom: 0.38 },
-        { id: "skirmish", label: "Nectar Clash", target: [3.15, 0.42, -0.65], yaw: -28, pitch: 24, zoom: 0.40 },
-        { id: "groucho",  label: "Groucho Daisy", target: [-3.5, 0.72, -2.9], yaw: 12, pitch: 22, zoom: 0.38 },
-        { id: "hill",     label: "Green Hill", target: [-4.6, 0.55, 1.5], yaw: 24, pitch: 30, zoom: 0.44 },
-      ],
-      items: [
-        { id: "GREENHILL", x: -4.8,  z:  1.5,  s: 2.35, yaw:  25 },
-        { id: "REDHILL",   x:  5.4,  z: -1.8,  s: 2.20, yaw: -145 },
-        // Picnic blanket feast
-        { id: "fdburgr1",  x:  0.15, z: -0.45, s: 1.85, yaw:  18 },
-        { id: "fdjelo1",   x: -1.65, z: -1.40, s: 1.65, yaw: -12 },
-        { id: "fdcer1",    x:  1.42, z: -1.68, s: 1.88, yaw:  34 },
-        { id: "fdcornd1",  x: -1.35, z:  1.10, s: 1.85, yaw: -26 },
-        { id: "steakwhiz", x:  1.55, z:  1.18, s: 1.55, yaw: -138 },
-        { id: "fdsteak1",  x:  0.42, z:  1.58, s: 0.88, yaw:  24 },
-        { id: "fdsteak2",  x:  0.98, z:  1.98, s: 0.80, yaw: -35 },
-        { id: "fdpmeat1",  x:  2.65, z:  0.55, s: 1.28, yaw: -22 },
-        { id: "fdskit1",   x: -0.35, z:  0.72, s: 0.72, yaw:  15 },
-        { id: "fdskit2",   x: -0.88, z:  0.30, s: 0.66, yaw:  80 },
-        // Power Nectar & backyard perimeter props
-        { id: "FD_COMB",   x:  3.25, z: -0.62, s: 1.48, yaw:   0, phase: 0.56 },
-        { id: "dflower1",  x: -3.55, z: -2.90, s: 2.15, yaw:  16 },
-        { id: "flower2a",  x:  3.95, z:  2.25, s: 1.75, yaw: -28 },
-        { id: "botcap1",   x: -2.65, z:  2.35, s: 0.92, yaw:  15 },
-        { id: "bigrock1",  x:  5.25, z:  1.55, s: 1.82, yaw: -25 },
-        { id: "grassbig1", x: -5.8,  z: -1.6,  s: 2.30, yaw:  20 },
-        { id: "grassbig2", x:  4.8,  z: -4.0,  s: 2.35, yaw: -35 },
-        { id: "grassmed1", x: -1.6,  z: -3.7,  s: 1.60, yaw:  10 },
-        { id: "grassmed2", x:  1.85, z: -3.95, s: 1.55, yaw: -20 },
-        { id: "grassmed3", x: -5.1,  z:  3.7,  s: 1.50, yaw:  40 },
-        { id: "clovers",   x: -3.75, z:  2.95, s: 1.15, yaw:  12 },
-        { id: "clover2",   x:  3.75, z:  1.55, s: 1.05, yaw: -40 },
-      ],
-      ants: [
-        // Live Green foraging train marching between Green Hill & Picnic Blanket
-        { cls: "worker", team: "green", clip: "Walk", phase: 0.00, speed: 0.72,
-          path: [[-3.45, 1.35], [-2.55, 0.70], [-2.15, 0.15], [-0.95, -0.08], [-2.15, 0.15], [-2.55, 0.70]] },
-        { cls: "worker", team: "green", clip: "Walk", phase: 0.33, speed: 0.72,
-          path: [[-3.45, 1.35], [-2.55, 0.70], [-2.15, 0.15], [-0.95, -0.08], [-2.15, 0.15], [-2.55, 0.70]] },
-        { cls: "worker", team: "green", clip: "Walk", phase: 0.66, speed: 0.72,
-          path: [[-3.45, 1.35], [-2.55, 0.70], [-2.15, 0.15], [-0.95, -0.08], [-2.15, 0.15], [-2.55, 0.70]] },
-        // Green harvesters chomping food
-        { cls: "worker", team: "green", clip: "Harvest", x: -0.78, z: -0.68, face: [0.15, -0.45], phase: 0.1 },
-        { cls: "worker", team: "green", clip: "Harvest", x: -1.78, z: -0.45, face: [-1.65, -1.4], phase: 0.45 },
-        { cls: "worker", team: "green", clip: "Harvest", x:  0.02, z:  1.58, face: [0.42, 1.58], phase: 0.75 },
-        // Frontline combat clash around Combat Power Nectar (clear of cereal bowl!)
-        { cls: "combat", team: "green", clip: "Attack",  x:  2.62, z: -0.42, face: [3.85, -0.65], phase: 0.05 },
-        { cls: "combat", team: "red",   clip: "Attack",  x:  3.95, z: -0.62, face: [2.62, -0.42], phase: 0.42 },
-        { cls: "combat", team: "green", clip: "Attack",  x:  2.72, z: -1.18, face: [3.82, -1.25], phase: 0.62 },
-        { cls: "combat", team: "red",   clip: "Attack",  x:  3.82, z: -1.28, face: [2.72, -1.18], phase: 0.22 },
-        // Sneaky Red thief flanking cleanly behind the cereal bowl
-        { cls: "thief",  team: "red",   clip: "Walk", phase: 0.15, speed: 0.85,
-          path: [[2.95, -2.65], [0.85, -2.75], [0.45, -2.35], [2.45, -2.45]] },
-        // Green Fire guard & Red supply worker
-        { cls: "fire",   team: "green", clip: "Idle",   x: -2.45, z: -0.45, face: [0.2, -0.5], phase: 0.3 },
-        { cls: "worker", team: "red",   clip: "Walk", phase: 0.5, speed: 0.68,
-          path: [[4.55, -1.05], [3.65, 0.25], [3.25, 0.55], [4.15, -0.45]] },
-      ],
-    },
-
-    toys: {
-      id: "toys",
-      title: "Toybox Backyard Skirmish",
-      desc: "Blue and Red squads clash on a flagstone patio across a standing Metal Slinky, Wireless Mouse & HDMI plug, Teddy Bear, Rubber Ducky, Toy Dino, Santa Head, Bottle Cap, and blazing Fire Wall.",
-      teams: ["blue", "red"],
-      defaultLighting: "daylight",
-      fitRadius: 4.65,
-      halfWidth: 6.3,
-      ground: {
-        theme: 1,
-        zone: [0.0, 0.0, 3.85, 2.85],
-        zoneRot: -0.07,
-        clearings: [
-          [-5.2, 1.2, 1.95, 0.94],
-          [5.2, -1.3, 1.95, 0.94],
-        ],
-        glows: [
-          [0.62, 0.78, 1.85, 0.98],
-          [1.42, 1.25, 1.85, 0.95],
-          [-1.50, 1.48, 1.15, 0.58],
-          [2.15, 0.12, 1.15, 0.58],
-        ],
-      },
-      focuses: [
-        { id: "overview", label: "Overview",       target: [0.0, 0.35, 0.0],   yaw: -14, pitch: 45, zoom: 0.96 },
-        { id: "slinky",   label: "Metal Slinky",   target: [-0.35, 0.45, -0.55], yaw: -16, pitch: 22, zoom: 0.38 },
-        { id: "mouse",    label: "Mouse & HDMI",   target: [-1.85, 0.30, -1.65], yaw: 24,  pitch: 28, zoom: 0.40 },
-        { id: "firewall", label: "Fire Wall",      target: [1.05, 0.48, 0.85],  yaw: -28, pitch: 24, zoom: 0.40 },
-        { id: "santa",    label: "Santa & Bear",   target: [-1.65, 0.52, 1.85], yaw: 14,  pitch: 24, zoom: 0.42 },
-        { id: "cap",      label: "Cap & Button",   target: [-1.30, 0.22, 0.56], yaw: -12, pitch: 38, zoom: 0.34 },
-        { id: "ducky",    label: "Ducky & Bomber", target: [2.45, 0.45, 0.85],  yaw: -36, pitch: 25, zoom: 0.40 },
-      ],
-      items: [
-        { id: "BLUEHILL",  x: -5.2,  z:  1.2,  s: 2.30, yaw:  30 },
-        { id: "REDHILL",   x:  5.2,  z: -1.3,  s: 2.30, yaw: -150 },
-        // Signature patio toys & upgraded props
-        { id: "slinky",    x: -0.40, z: -0.95, s: 2.22, yaw:  18 },
-        { id: "mouse1",    x: -2.62, z: -1.52, s: 2.02, yaw:  32 },
-        { id: "mouse2",    x: -1.18, z: -2.18, s: 1.18, yaw:  58 },
-        { id: "can1",      x:  2.45, z: -1.82, s: 2.10, yaw: -28 },
-        { id: "bearhed",   x: -3.38, z:  1.38, s: 1.72, yaw:  24 },
-        { id: "ducky1",    x:  2.98, z:  1.52, s: 1.55, yaw: -42 },
-        { id: "dino",      x:  0.98, z: -2.35, s: 1.85, yaw: -20 },
-        { id: "santahed",  x: -0.35, z:  2.38, s: 1.62, yaw:  10 },
-        { id: "botcap1",   x: -2.05, z:  0.48, s: 0.95, yaw:   0 },
-        { id: "shtbut1",   x: -1.08, z:  0.95, s: 0.88, yaw:  22 },
-        // Volumetric Fire Wall, Sizzling Bombs & Power Nectar
-        { id: "wallup04",  x:  0.62, z:  0.78, s: 1.18, yaw:  25 },
-        { id: "wallup04",  x:  1.42, z:  1.25, s: 1.10, yaw: -18 },
-        { id: "bluebomb",  x: -1.55, z:  1.62, s: 0.84, yaw:  10 },
-        { id: "redbomb",   x:  2.15, z:  0.12, s: 0.82, yaw: -20 },
-        { id: "FD_FIRE",   x:  3.55, z: -0.58, s: 1.48, yaw:   0, phase: 0.45 },
-        // Backyard lawn border framing
-        { id: "dflower1",  x:  4.35, z:  2.55, s: 2.05, yaw: -22 },
-        { id: "grassbig1", x: -4.85, z: -2.55, s: 2.25, yaw:  15 },
-        { id: "grassbig2", x:  4.55, z: -3.55, s: 2.30, yaw: -30 },
-        { id: "grassmed1", x: -2.05, z: -3.85, s: 1.55, yaw:   5 },
-        { id: "clover1",   x: -4.05, z:  3.15, s: 1.15, yaw:  18 },
-      ],
-      ants: [
-        // Bombers & Fire Ant triggering effects
-        { cls: "bomber",  team: "blue", clip: "PlantBomb",   x: -2.12, z:  1.68, face: [-1.55, 1.62], phase: 0.1 },
-        { cls: "fire",    team: "red",  clip: "StartFire",   x:  1.42, z:  0.22, face: [0.62, 0.78], phase: 0.35 },
-        { cls: "bomber",  team: "red",  clip: "PlantBomb",   x:  2.65, z:  0.05, face: [2.15, 0.12], phase: 0.65 },
-        // Center duel cleanly in front of the Slinky Arch & Shirt Button
-        { cls: "combat",  team: "blue", clip: "Attack",      x: -0.35, z:  0.22, face: [0.55, -0.05], phase: 0.0 },
-        { cls: "combat",  team: "red",  clip: "Attack",      x:  0.55, z: -0.08, face: [-0.35, 0.22], phase: 0.38 },
-        // Blue Thief sneaking behind the Wireless Mouse & HDMI plug
-        { cls: "thief",   team: "blue", clip: "Walk", phase: 0.1, speed: 0.88,
-          path: [[-3.65, -0.45], [-3.25, -2.65], [-0.45, -2.95], [-1.85, -0.45]] },
-        // Red Thief lookout near soda can
-        { cls: "thief",   team: "red",  clip: "IdleLookout", x:  3.25, z: -2.45, face: [0.0, 0.0], phase: 0.25 },
-        // Marching workers & reinforcements
-        { cls: "worker",  team: "blue", clip: "Walk", phase: 0.2, speed: 0.70,
-          path: [[-4.0, 0.65], [-2.55, -0.15], [-3.45, -0.05]] },
-        { cls: "worker",  team: "red",  clip: "Walk", phase: 0.7, speed: 0.70,
-          path: [[4.05, -0.95], [3.15, -0.35], [3.85, -1.25]] },
-        { cls: "combat",  team: "blue", clip: "Idle",        x: -2.08, z:  2.42, face: [0.62, 0.78], phase: 0.5 },
-        { cls: "swimmer", team: "blue", clip: "Idle",        x:  0.48, z:  2.28, face: [1.42, 1.25], phase: 0.8 },
-        { cls: "combat",  team: "red",  clip: "Walk", phase: 0.4, speed: 0.76,
-          path: [[2.95, 0.65], [1.95, 0.95], [2.45, 0.45]] },
-      ],
-    },
-
-    colony: {
-      id: "colony",
-      title: "Backyard Colony Base",
-      desc: "A thriving Green meadow colony harvesting Roast Chicken, Pizza Tube, Twinkie, Pretzel, Cola Spill, and Fried Eggs surrounded by clovers, mossy rocks, Googly Flower, and Groucho Daisy.",
-      teams: ["green", "black"],
-      defaultLighting: "daylight",
-      fitRadius: 4.7,
-      halfWidth: 6.3,
-      ground: {
-        theme: 2,
-        zone: [0, 0, 0, 0],
-        zoneRot: 0,
-        clearings: [
-          [-1.8, -0.3, 2.35, 0.96],
-          [1.65, -1.05, 1.45, 0.65],
-          [1.45, 1.65, 1.55, 0.68],
-          [-1.05, 2.25, 1.30, 0.55],
-        ],
-        glows: [],
-      },
-      focuses: [
-        { id: "overview", label: "Overview",       target: [0.0, 0.35, 0.0],   yaw: -14, pitch: 45, zoom: 0.96 },
-        { id: "hill",     label: "Green Colony",   target: [-1.8, 0.55, -0.3], yaw: -20, pitch: 30, zoom: 0.42 },
-        { id: "chicken",  label: "Roast Chicken",  target: [2.15, 0.40, -1.2], yaw: -32, pitch: 26, zoom: 0.38 },
-        { id: "pizza",    label: "Pizza Tube",     target: [1.95, 0.32, 1.65], yaw: -26, pitch: 28, zoom: 0.40 },
-        { id: "groucho",  label: "Groucho Daisy",  target: [-3.6, 0.72, -2.55], yaw: 18, pitch: 22, zoom: 0.38 },
-        { id: "nectar",   label: "Swim Nectar",    target: [3.65, 0.45, 0.25], yaw: -40, pitch: 24, zoom: 0.38 },
-      ],
-      items: [
-        { id: "GREENHILL", x: -1.8,  z: -0.3,  s: 2.45, yaw:  15 },
-        // Harvest food ring
-        { id: "fdchick1",  x:  2.2,  z: -1.2,  s: 1.80, yaw: -20 },
-        { id: "pizzatube", x:  2.55, z:  1.35, s: 1.65, yaw: -140 },
-        { id: "fdpizz1",   x:  1.35, z:  1.95, s: 1.12, yaw:  25 },
-        { id: "fdtwink1",  x: -0.4,  z:  2.55, s: 1.55, yaw:  12 },
-        { id: "fdpretz1",  x: -2.6,  z:  2.35, s: 1.38, yaw: -18 },
-        { id: "fdcola1",   x:  0.35, z: -2.68, s: 1.72, yaw:  10 },
-        { id: "fdeggs1",   x: -3.95, z:  1.35, s: 1.55, yaw:  28 },
-        { id: "fdgumw1",   x: -0.6,  z:  1.25, s: 1.28, yaw:  42 },
-        { id: "fdcrakr1",  x:  0.55, z:  0.65, s: 0.96, yaw: -15 },
-        // Power Nectars
-        { id: "FD_SWIM",   x:  3.85, z:  0.25, s: 1.48, yaw:   0, phase: 0.42 },
-        { id: "FD_THIEF",  x: -4.35, z: -1.25, s: 1.48, yaw:   0, phase: 0.62 },
-        // Wild meadow flora & mossy rocks
-        { id: "dflower1",  x: -3.6,  z: -2.55, s: 2.15, yaw:  22 },
-        { id: "flower3c",  x:  3.8,  z: -2.4,  s: 1.95, yaw: -25 },
-        { id: "flower2a",  x: -4.85, z:  2.85, s: 1.80, yaw:  35 },
-        { id: "mush2a",    x: -1.5,  z: -2.85, s: 1.45, yaw:  10 },
-        { id: "bigrock2",  x:  4.55, z: -1.15, s: 2.05, yaw: -30 },
-        { id: "bigrock1",  x: -4.95, z:  0.35, s: 1.85, yaw:  20 },
-        { id: "medrock3",  x:  4.05, z:  3.10, s: 1.30, yaw: -15 },
-        { id: "smlrock1",  x: -2.85, z: -1.65, s: 0.90, yaw:  40 },
-        { id: "grassbig1", x: -5.3,  z: -2.15, s: 2.30, yaw:  12 },
-        { id: "grassbig2", x:  4.95, z:  1.65, s: 2.25, yaw: -22 },
-        { id: "grassmed2", x:  2.05, z: -3.55, s: 1.60, yaw: -10 },
-        { id: "clover1",   x: -3.3,  z:  0.20, s: 1.10, yaw:   0 },
-        { id: "clover3",   x:  2.4,  z:  2.95, s: 1.15, yaw:  30 },
-        { id: "clovers",   x: -1.7,  z:  3.35, s: 1.20, yaw: -20 },
-      ],
-      ants: [
-        // Two busy worker foraging loops
-        { cls: "worker",  team: "green", clip: "Walk", phase: 0.00, speed: 0.72,
-          path: [[-0.55, -0.45], [0.45, -0.85], [1.35, -1.05], [0.45, -0.35]] },
-        { cls: "worker",  team: "green", clip: "Walk", phase: 0.50, speed: 0.72,
-          path: [[-0.55, -0.45], [0.45, -0.85], [1.35, -1.05], [0.45, -0.35]] },
-        { cls: "worker",  team: "green", clip: "Walk", phase: 0.20, speed: 0.68,
-          path: [[-0.85, 0.65], [0.15, 1.45], [0.95, 1.85], [-0.15, 1.75]] },
-        { cls: "worker",  team: "green", clip: "Walk", phase: 0.72, speed: 0.68,
-          path: [[-0.85, 0.65], [0.15, 1.45], [0.95, 1.85], [-0.15, 1.75]] },
-        // Active harvesters
-        { cls: "worker",  team: "green", clip: "Harvest",     x:  1.45, z: -1.05, face: [2.2, -1.2], phase: 0.12 },
-        { cls: "worker",  team: "green", clip: "Harvest",     x:  0.98, z:  1.72, face: [1.35, 1.95], phase: 0.44 },
-        { cls: "worker",  team: "green", clip: "Harvest",     x: -3.22, z:  1.25, face: [-3.95, 1.35], phase: 0.78 },
-        // Colony guards & specialists
-        { cls: "combat",  team: "green", clip: "Idle",        x:  0.35, z: -1.48, face: [2.2, -1.2], phase: 0.3 },
-        { cls: "swimmer", team: "green", clip: "Idle",        x:  3.12, z:  0.30, face: [3.85, 0.25], phase: 0.6 },
-        { cls: "fire",    team: "green", clip: "Walk", phase: 0.1, speed: 0.62,
-          path: [[-2.55, 1.25], [-1.35, 1.65], [-2.15, 1.75]] },
-        { cls: "thief",   team: "green", clip: "IdleLookout", x: -3.62, z: -1.12, face: [-4.35, -1.25], phase: 0.2 },
-        // Sneaky Black Thief creeping cleanly in front of the outer rock
-        { cls: "thief",   team: "black", clip: "Walk", phase: 0.35, speed: 0.84,
-          path: [[3.65, 2.05], [2.85, 2.55], [3.35, 1.65]] },
-      ],
-    },
-
-    melee: {
-      id: "melee",
-      title: "Four-Team Backyard Melee",
-      desc: "All four teams (Green, Red, Blue, Black) and all six ant classes collide in a sun-baked central arena over a giant Cheeseburger, Metal Slinky, Wireless Mouse, Power Nectars, Bombs, and Fire Wall.",
-      teams: ["green", "red", "blue", "black"],
-      defaultLighting: "daylight",
-      fitRadius: 4.9,
-      halfWidth: 6.5,
-      ground: {
-        theme: 3,
-        zone: [0, 0, 0, 0],
-        zoneRot: 0,
-        clearings: [
-          [-4.55, 2.85, 1.9, 0.94],
-          [4.55, -2.85, 1.9, 0.94],
-          [-4.55, -2.85, 1.9, 0.94],
-          [4.55, 2.85, 1.9, 0.94],
-        ],
-        glows: [
-          [-0.15, 1.48, 1.95, 1.0],
-          [1.48, -0.55, 1.15, 0.58],
-          [-1.48, -0.75, 1.15, 0.58],
-        ],
-      },
-      focuses: [
-        { id: "overview", label: "Overview",    target: [0.0, 0.35, 0.0],   yaw: -14, pitch: 45, zoom: 0.98 },
-        { id: "center",   label: "Center Clash", target: [0.0, 0.42, -0.15], yaw: -22, pitch: 24, zoom: 0.42 },
-        { id: "firewall", label: "Fire Duel",   target: [-0.15, 0.48, 1.45], yaw: 14,  pitch: 22, zoom: 0.38 },
-        { id: "slinky",   label: "Slinky Flank", target: [0.0, 0.45, -2.55], yaw: -16, pitch: 24, zoom: 0.40 },
-        { id: "mouse",    label: "Mouse South", target: [0.15, 0.32, 3.15],  yaw: 22,  pitch: 28, zoom: 0.38 },
-      ],
-      items: [
-        // 4 quadrant anthills
-        { id: "GREENHILL", x: -4.55, z:  2.85, s: 2.15, yaw:  42 },
-        { id: "REDHILL",   x:  4.55, z: -2.85, s: 2.15, yaw: -138 },
-        { id: "BLUEHILL",  x: -4.55, z: -2.85, s: 2.15, yaw:  138 },
-        { id: "BLACKHILL", x:  4.55, z:  2.85, s: 2.15, yaw: -42 },
-        // Contested center arena
-        { id: "fdburgr1",  x:  0.0,  z: -0.15, s: 1.85, yaw:  10 },
-        { id: "slinky",    x:  0.0,  z: -2.65, s: 2.05, yaw:   0 },
-        { id: "fdjelo1",   x: -2.85, z:  0.30, s: 1.45, yaw:  15 },
-        { id: "steakwhiz", x:  2.48, z:  0.35, s: 1.42, yaw: -135 },
-        { id: "wallup04",  x: -0.15, z:  1.48, s: 1.15, yaw:   0 },
-        { id: "redbomb",   x:  1.48, z: -0.55, s: 0.82, yaw: -20 },
-        { id: "greenbomb", x: -1.55, z: -0.92, s: 0.82, yaw:  25 },
-        { id: "FD_BOMB",   x:  1.95, z: -1.92, s: 1.42, yaw:   0, phase: 0.48 },
-        { id: "FD_COMB",   x: -1.98, z:  1.88, s: 1.42, yaw:   0, phase: 0.66 },
-        { id: "botcap1",   x:  1.58, z:  1.65, s: 0.92, yaw:   0 },
-        { id: "shtbut1",   x: -2.08, z: -2.18, s: 0.86, yaw:  15 },
-        { id: "mouse1",    x:  0.15, z:  3.15, s: 1.80, yaw: -18 },
-        // Perimeter flora & rocks
-        { id: "dflower1",  x: -2.45, z: -3.95, s: 1.95, yaw:  18 },
-        { id: "bigrock2",  x:  2.65, z: -4.05, s: 1.85, yaw: -35 },
-        { id: "grassbig1", x: -5.85, z:  0.0,  s: 2.25, yaw:  20 },
-        { id: "grassbig2", x:  5.85, z:  0.0,  s: 2.25, yaw: -20 },
-        { id: "flower2a",  x:  2.55, z:  3.95, s: 1.70, yaw: -25 },
-        { id: "clovers",   x: -2.45, z:  3.85, s: 1.15, yaw:  10 },
-      ],
-      ants: [
-        // Green squad (SW)
-        { cls: "combat",  team: "green", clip: "Attack",      x: -1.08, z:  0.55, face: [0.0, -0.15], phase: 0.05 },
-        { cls: "fire",    team: "green", clip: "StartFire",   x: -0.88, z:  1.40, face: [-0.15, 1.48], phase: 0.20 },
-        { cls: "bomber",  team: "green", clip: "PlantBomb",   x: -2.15, z: -0.95, face: [-1.55, -0.92], phase: 0.45 },
-        { cls: "worker",  team: "green", clip: "Walk", phase: 0.1, speed: 0.72,
-          path: [[-3.45, 2.05], [-1.75, 1.05], [-2.55, 1.85]] },
-        // Red squad (NE)
-        { cls: "combat",  team: "red",   clip: "Attack",      x:  1.08, z: -0.22, face: [0.0, -0.15], phase: 0.38 },
-        { cls: "bomber",  team: "red",   clip: "PlantBomb",   x:  1.98, z: -0.68, face: [1.48, -0.55], phase: 0.72 },
-        { cls: "thief",   team: "red",   clip: "Walk", phase: 0.3, speed: 0.88,
-          path: [[2.95, -1.65], [1.25, -2.05], [2.15, -1.35]] },
-        { cls: "worker",  team: "red",   clip: "Walk", phase: 0.6, speed: 0.72,
-          path: [[3.45, -1.95], [2.25, -0.95], [3.15, -1.35]] },
-        // Blue squad (NW)
-        { cls: "combat",  team: "blue",  clip: "Attack",      x: -0.78, z: -1.18, face: [0.0, -0.15], phase: 0.55 },
-        { cls: "swimmer", team: "blue",  clip: "Walk", phase: 0.15, speed: 0.75,
-          path: [[-3.55, -1.95], [-2.65, -1.55], [-3.05, -2.55]] },
-        { cls: "thief",   team: "blue",  clip: "IdleLookout", x: -1.18, z: -1.85, face: [0.0, -0.15], phase: 0.15 },
-        { cls: "worker",  team: "blue",  clip: "Harvest",     x: -2.05, z:  0.15, face: [-2.85, 0.30], phase: 0.80 },
-        // Black squad (SE)
-        { cls: "combat",  team: "black", clip: "Attack",      x:  0.98, z:  0.88, face: [0.0, -0.15], phase: 0.75 },
-        { cls: "fire",    team: "black", clip: "StartFire",   x:  0.60, z:  1.58, face: [-0.15, 1.48], phase: 0.52 },
-        { cls: "swimmer", team: "black", clip: "Idle",        x:  2.42, z:  1.55, face: [0.0, 0.0], phase: 0.35 },
-        { cls: "worker",  team: "black", clip: "Walk", phase: 0.85, speed: 0.72,
-          path: [[3.45, 1.95], [2.05, 1.15], [2.95, 1.75]] },
-      ],
-    },
+  // Curated regional focus bookmarks for each original 1998 .LVL map.
+  const MAP_FOCUSES = {
+    treasure: [
+      { id: "center",   label: "Center Crossroads", target: [30.5, 0.3, 29.0], zoom: 0.92 },
+      { id: "can",      label: "Can & Slingshot",   target: [15.5, 0.3, 14.0], zoom: 0.66 },
+      { id: "steak",    label: "Steak Whiz & Bear", target: [38.5, 0.3,  6.5], zoom: 0.78 },
+      { id: "slinky",   label: "Slinky & Glasses",  target: [10.0, 0.3, 47.5], zoom: 0.72 },
+      { id: "chicken",  label: "Chicken & Pond",    target: [38.5, 0.3, 45.0], zoom: 0.72 },
+      { id: "pizza",    label: "Pizza Tube",        target: [ 4.5, 0.3, 28.5], zoom: 0.52 },
+      { id: "full",     label: "Full 60×60 Map",    target: [30.0, 0.2, 30.0], zoom: 2.55 },
+    ],
+    tiny: [
+      { id: "center",   label: "Center Arena",      target: [15.5, 0.3, 15.5], zoom: 0.95 },
+      { id: "green",    label: "Green Corner",      target: [ 7.0, 0.3,  7.0], zoom: 0.62 },
+      { id: "red",      label: "Red Corner",        target: [24.0, 0.3, 24.0], zoom: 0.62 },
+      { id: "full",     label: "Full 31×31 Map",    target: [15.5, 0.2, 15.5], zoom: 1.48 },
+    ],
+    small: [
+      { id: "center",   label: "Center Pond",       target: [20.0, 0.3, 20.0], zoom: 0.96 },
+      { id: "full",     label: "Full 40×40 Map",    target: [20.0, 0.2, 20.0], zoom: 1.85 },
+    ],
+    islands: [
+      { id: "center",   label: "Center Islands",    target: [30.0, 0.3, 30.0], zoom: 1.05 },
+      { id: "full",     label: "Full 60×60 Map",    target: [30.0, 0.2, 30.0], zoom: 2.55 },
+    ],
   };
 
-  const SCENARIO_ORDER = ["picnic", "toys", "colony", "melee"];
+  // Extra active ants placed around Treasure Map's signature outer landmarks so every region feels alive.
+  const TREASURE_LANDMARK_ANTS = [
+    // Center mud crossroads clash beneath the giant flowers & clovers
+    { cls: "combat", team: "black", clip: "Attack",  x: 28.8, z: 27.9, face: [30.4, 29.3], phase: 0.05 },
+    { cls: "combat", team: "green", clip: "Attack",  x: 31.6, z: 28.1, face: [29.8, 29.4], phase: 0.32 },
+    { cls: "combat", team: "red",   clip: "Attack",  x: 28.9, z: 30.9, face: [30.6, 29.5], phase: 0.58 },
+    { cls: "combat", team: "blue",  clip: "Attack",  x: 31.5, z: 30.8, face: [29.7, 29.4], phase: 0.81 },
+    // NW Soda Can, Cola Spill & Slingshot raid (Black & Green scouts)
+    { cls: "worker", team: "black", clip: "Harvest", x: 16.5, z: 18.2, face: [16.6, 15.9], phase: 0.15 },
+    { cls: "worker", team: "black", clip: "Walk",    phase: 0.0, speed: 1.25,
+      path: [[21.0, 21.0], [18.5, 18.0], [16.0, 17.5], [19.2, 19.6]] },
+    { cls: "thief",  team: "black", clip: "Walk",    phase: 0.4, speed: 1.45,
+      path: [[10.5, 16.5], [15.5, 10.5], [18.5, 14.2], [13.2, 17.2]] },
+    { cls: "fire",   team: "green", clip: "StartFire", x: 19.2, z: 15.2, face: [16.6, 15.9], phase: 0.5 },
+    // North Steak Whiz, Shirt Button & Teddy Bear Body (Green & Black)
+    { cls: "worker", team: "green", clip: "Harvest", x: 30.2, z:  6.1, face: [29.5, 5.2], phase: 0.2 },
+    { cls: "worker", team: "green", clip: "Walk",    phase: 0.25, speed: 1.30,
+      path: [[36.5, 19.2], [35.0, 11.5], [32.8, 6.8], [36.2, 12.2]] },
+    { cls: "thief",  team: "green", clip: "Walk",    phase: 0.6, speed: 1.45,
+      path: [[42.5,  8.5], [46.5, 11.2], [49.5, 6.5], [44.0, 4.5]] },
+    // SW Metal Slinky, Eyeglasses & Stick (Red squad)
+    { cls: "combat", team: "red",   clip: "Walk",    phase: 0.1, speed: 1.35,
+      path: [[ 9.5, 45.5], [15.5, 47.2], [13.5, 53.0], [ 8.5, 49.5]] },
+    { cls: "bomber", team: "red",   clip: "PlantBomb", x: 8.6, z: 45.4, face: [6.0, 44.5], phase: 0.3 },
+    { cls: "worker", team: "red",   clip: "Harvest", x: 28.4, z: 54.8, face: [30.0, 55.0], phase: 0.7 },
+    // SE Roast Chicken, Mushroom & Potted Meat (Blue squad)
+    { cls: "worker", team: "blue",  clip: "Harvest", x: 40.8, z: 46.5, face: [43.0, 47.0], phase: 0.1 },
+    { cls: "worker", team: "blue",  clip: "Walk",    phase: 0.2, speed: 1.30,
+      path: [[38.8, 38.8], [40.5, 43.5], [41.5, 45.5], [38.2, 41.5]] },
+    { cls: "combat", team: "blue",  clip: "Idle",    x: 35.8, z: 44.2, face: [33.0, 44.0], phase: 0.4 },
+    { cls: "worker", team: "blue",  clip: "Harvest", x: 54.1, z: 30.2, face: [56.0, 29.5], phase: 0.6 },
+    // West Pizza Tube & Slice (Red vs Black contest)
+    { cls: "worker", team: "red",   clip: "Harvest", x:  5.8, z: 29.8, face: [4.2, 29.0], phase: 0.25 },
+    { cls: "combat", team: "black", clip: "Attack",  x:  6.4, z: 28.1, face: [5.8, 29.8], phase: 0.55 },
+  ];
 
-  // --- Arc-Length Parameterized Closed Path Evaluator ---
+  const MAP_ORDER = ["treasure", "tiny", "small", "islands"];
+  const START_CLASS_CYCLE = ["worker", "combat", "worker", "thief", "bomber", "fire"];
+
+  // --- Arc-Length Closed Path Sampler ---
   function preparePath(pts) {
     const segs = [];
     let total = 0;
@@ -385,13 +111,12 @@
         const u = clamp((d - s.start) / s.len, 0, 1);
         const x = s.ax + (s.bx - s.ax) * u;
         const z = s.az + (s.bz - s.az) * u;
-        // Blend heading smoothly across corners so ants turn cleanly instead of snapping
         const currAng = Math.atan2(s.bx - s.ax, s.bz - s.az);
         const nextSeg = segs[(i + 1) % segs.length];
         const nextAng = Math.atan2(nextSeg.bx - nextSeg.ax, nextSeg.bz - nextSeg.az);
         let yaw = currAng;
-        if (u > 0.82) {
-          const blend = (u - 0.82) / 0.18;
+        if (u > 0.80) {
+          const blend = (u - 0.80) / 0.20;
           let diff = nextAng - currAng;
           while (diff > Math.PI) diff -= Math.PI * 2;
           while (diff < -Math.PI) diff += Math.PI * 2;
@@ -403,20 +128,17 @@
     return { x: 0, z: 0, yaw: 0 };
   }
 
-  function buildWorldMat(model, x, z, scale, yawRad) {
+  function buildWorldMat(model, x, z, scale, yawRad, yLift = 0) {
     const minY = model && model.min ? model.min[1] : 0;
     const h = yawRad * 0.5;
-    return mat4FromTRS([x, -minY * scale, z], [0, Math.sin(h), 0, Math.cos(h)], [scale, scale, scale]);
+    return mat4FromTRS([x, -minY * scale + yLift, z], [0, Math.sin(h), 0, Math.cos(h)], [scale, scale, scale]);
   }
 
-  function itemShadowParams(model, id, scale) {
-    const sx = model && model.size ? model.size[0] : 0.8;
-    const sz = model && model.size ? model.size[2] : 0.8;
-    const baseRad = 0.52 * Math.max(sx, sz) * scale;
-    if (/^(grass|flower|dflower|clover)/.test(id)) return [baseRad * 0.72, 0.54];
-    if (/^(FD_|wallup)/.test(id)) return [baseRad * 0.85, 0.42];
-    if (/HILL$/.test(id)) return [baseRad * 0.96, 0.84];
-    return [baseRad * 0.90, 0.78];
+  function sunVectorFromAngles(elevDeg, azimDeg) {
+    const el = elevDeg * DEG;
+    const az = azimDeg * DEG;
+    const ce = Math.cos(el);
+    return [ce * Math.sin(az), Math.sin(el), -ce * Math.cos(az)];
   }
 
   // --- App State ---
@@ -426,20 +148,23 @@
   darkMq.addEventListener("change", (e) => { isDark = e.matches; });
 
   const params = new URLSearchParams(window.location.search);
-  const initScenario = SCENARIOS[params.get("scenario")] ? params.get("scenario") : "picnic";
-  const initCamKey = CAM_PRESETS[params.get("cam")] ? params.get("cam") : "rts";
-  const initProj = params.get("proj") === "ortho" ? "ortho" : "perspective";
-  const initLight = validLighting(params.get("light")) || SCENARIOS[initScenario].defaultLighting;
+  const initMap = MAP_ORDER.includes(params.get("map")) ? params.get("map") : "treasure";
+  const initCamKey = CAM_PRESETS[params.get("cam")] ? params.get("cam") : "game";
+  const initProj = params.get("proj") === "perspective" ? "perspective"
+    : (params.get("proj") === "ortho" ? "ortho" : CAM_PRESETS[initCamKey].proj);
 
   const state = {
-    scenarioId: initScenario,
+    mapId: initMap,
     camPreset: initCamKey,
-    focusId: "overview",
-    lighting: initLight,
+    focusId: "center",
+    lighting: validLighting(params.get("light")) || "daylight",
+    sunElev: clamp(Number(params.get("elev") || 32), 16, 72),
+    sunAzim: clamp(Number(params.get("azim") ?? -42), -180, 180),
     playing: params.get("play") !== "0",
-    orbit: params.get("orbit") === "1" && !reducedMotionMq.matches,
+    showGrid: params.get("grid") !== "0",
+    castShadows: params.get("shadows") !== "0",
+    hiResTiles: params.get("hires") !== "0",
     patrols: params.get("patrols") !== "0",
-    pixelMode: params.get("pixel") === "1",
     showHud: params.get("hud") !== "0",
     simTime: Number.isFinite(Number(params.get("t"))) ? Number(params.get("t")) : 0,
     fixedTime: params.has("t") && params.get("play") === "0",
@@ -450,7 +175,7 @@
     pitch: CAM_PRESETS[initCamKey].pitch,
     zoom: CAM_PRESETS[initCamKey].zoom,
     projection: initProj,
-    target: CAM_PRESETS[initCamKey].target.slice(),
+    target: [30.5, 0.3, 29.0],
   };
   let camGoal = null;
 
@@ -458,17 +183,52 @@
   const renderer = new AntRenderer(canvas);
   const gl = renderer.gl;
   const modelCache = new Map();
-  let activeScene = null;
+  let mapsCatalog = null;
+  let atlasLoaded = false;
+  let activeMap = null;
   let loadSerial = 0;
 
   async function loadModel(key, url) {
     if (modelCache.has(key)) return modelCache.get(key);
-    const p = fetch(url).then((res) => {
-      if (!res.ok) throw new Error(`HTTP ${res.status} loading ${url}`);
-      return res.arrayBuffer();
-    }).then((ab) => parseGlb(ab, gl));
+    const p = (async () => {
+      let lastErr;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error(`HTTP ${res.status} loading ${url}`);
+          const ab = await res.arrayBuffer();
+          return parseGlb(ab, gl);
+        } catch (err) {
+          lastErr = err;
+          await new Promise((r) => setTimeout(r, 60 * (attempt + 1)));
+        }
+      }
+      modelCache.delete(key);
+      throw lastErr;
+    })();
     modelCache.set(key, p);
     return p;
+  }
+
+  async function runPool(items, limit, fn) {
+    let idx = 0, done = 0;
+    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (idx < items.length) {
+        const cur = items[idx++];
+        await fn(cur, ++done);
+      }
+    });
+    await Promise.all(workers);
+  }
+
+  function loadImage(url) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.decoding = "async";
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(`Failed to load ${url}`));
+      img.src = url;
+    });
   }
 
   function setStatus(msg) {
@@ -488,12 +248,69 @@
     }
   }
 
-  function renderHudAndSidebar(sc, triCount) {
-    $("hud-title").textContent = sc.title;
-    $("hud-desc").textContent = sc.desc;
+  function buildAntSpecsForMap(mapData) {
+    const specs = [];
+    const teamCounter = { black: 0, green: 0, red: 0, blue: 0 };
+    const cx = mapData.cols * 0.5, cz = mapData.rows * 0.5;
+
+    // 1. Every authentic team starting ant from Block 1 of the original .LVL file
+    for (const st of mapData.starts) {
+      const t = st.team;
+      const idx = teamCounter[t] || 0;
+      teamCounter[t] = idx + 1;
+      const cls = START_CLASS_CYCLE[idx % START_CLASS_CYCLE.length];
+      const sx = st.col + 0.5, sz = st.row + 0.5;
+      const hill = mapData.hills[t];
+      // Give the first worker of each team a live foraging loop between its hill and start tile
+      if (cls === "worker" && idx === 0 && hill) {
+        const mx = (sx + cx) * 0.5, mz = (sz + cz) * 0.5;
+        specs.push({
+          cls, team: t, clip: "Walk", phase: (idx * 0.23 + t.length * 0.11) % 1, speed: 1.25,
+          path: [[sx, sz], [mx, mz], [sx + (hill[0] - sx) * 0.4, sz + (hill[1] - sz) * 0.4]],
+        });
+      } else {
+        const clip = cls === "thief" ? "IdleLookout" : (cls === "combat" ? "Idle" : "Idle");
+        specs.push({ cls, team: t, clip, x: sx, z: sz, face: [cx, cz], phase: (idx * 0.31) % 1 });
+      }
+    }
+
+    // 2. Swimmer ants actively swimming in every real water pond on the map!
+    const pondTeams = ["blue", "green", "red", "black"];
+    for (let i = 0; i < (mapData.ponds || []).length; i++) {
+      const [px, pz, cells] = mapData.ponds[i];
+      const rad = clamp(Math.sqrt(cells) * 0.22, 0.7, 1.35);
+      specs.push({
+        cls: "swimmer",
+        team: pondTeams[i % pondTeams.length],
+        clip: "Swim",
+        phase: (i * 0.27) % 1,
+        speed: 1.05,
+        yLift: -0.18,
+        path: [
+          [px - rad, pz - rad * 0.5],
+          [px + rad, pz - rad * 0.5],
+          [px + rad, pz + rad * 0.5],
+          [px - rad, pz + rad * 0.5],
+        ],
+      });
+    }
+
+    // 3. Curated active landmark battles & harvesters on Treasure Map
+    if (mapData.id === "treasure") {
+      for (const a of TREASURE_LANDMARK_ANTS) specs.push(a);
+    }
+    return specs;
+  }
+
+  function renderHudAndSidebar(mapData, antCount) {
+    const teams = Object.keys(mapData.hills || {});
+    $("hud-title").textContent = `${mapData.label} (${mapData.file})`;
+    $("hud-desc").textContent =
+      `Original ${mapData.cols}×${mapData.rows} tile grid at 1:1 scale — ${mapData.objects.length} placed 3D objects, ${teams.length} anthills, ${mapData.ponds.length} water ponds, and angled directional shadows.`;
     const teamsEl = $("hud-teams");
     teamsEl.textContent = "";
-    for (const tid of sc.teams) {
+    for (const tid of ["green", "red", "blue", "black"]) {
+      if (!teams.includes(tid)) continue;
       const pill = document.createElement("span");
       pill.className = "demo-team-pill";
       const dot = document.createElement("span");
@@ -502,14 +319,17 @@
       pill.append(dot, document.createTextNode(TEAMS[tid].label));
       teamsEl.appendChild(pill);
     }
-    $("badge-scene-stats").textContent = `${sc.ants.length} ants · ${sc.items.length} items`;
-    $("meta-ants").textContent = `${sc.ants.length} (${sc.teams.map((t) => TEAMS[t].label).join(" vs ")})`;
-    $("meta-items").textContent = `${sc.items.length} 3D props`;
-    $("meta-tris").textContent = triCount ? triCount.toLocaleString() : "—";
+    $("badge-scene-stats").textContent = `${mapData.cols}×${mapData.rows} · ${antCount} ants · ${mapData.objects.length} props`;
+    $("meta-grid").textContent = `${mapData.cols} × ${mapData.rows} tiles (32px)`;
+    $("meta-ants").textContent = `${antCount} (${teams.length} teams, all 6 classes)`;
+    $("meta-items").textContent = `${mapData.objects.length} placed 3D models`;
 
+    const focuses = MAP_FOCUSES[mapData.id] || [
+      { id: "center", label: "Center", target: [mapData.cols * 0.5, 0.3, mapData.rows * 0.5], zoom: 0.92 },
+    ];
     const focusGrid = $("demo-focus-grid");
     focusGrid.textContent = "";
-    for (const f of sc.focuses) {
+    for (const f of focuses) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "demo-focus-btn";
@@ -518,62 +338,83 @@
       btn.textContent = f.label;
       btn.addEventListener("click", () => {
         state.focusId = f.id;
-        state.camPreset = f.id === "overview" ? "rts" : "";
-        setCamGoal(f.target, f.yaw, f.pitch, f.zoom);
+        setCamGoal(f.target, cam.yaw, cam.pitch, f.zoom);
         syncUi();
-        setStatus(`Focused on ${f.label} in ${sc.title}`);
+        setStatus(`Focused on ${f.label} in ${mapData.label}`);
       });
       focusGrid.appendChild(btn);
     }
   }
 
-  async function activateScenario(scenarioId, preserveCam = false) {
-    const sc = SCENARIOS[scenarioId] || SCENARIOS.picnic;
-    state.scenarioId = sc.id;
-    state.focusId = "overview";
+  async function ensureCatalog() {
+    if (!mapsCatalog) {
+      const res = await fetch("models/demo/maps.json");
+      if (!res.ok) throw new Error(`HTTP ${res.status} loading models/demo/maps.json`);
+      mapsCatalog = await res.json();
+    }
+    if (!atlasLoaded) {
+      const img = await loadImage("models/demo/ground.png");
+      renderer.uploadTileAtlas(img);
+      atlasLoaded = true;
+    }
+  }
+
+  async function activateMap(mapId, preserveCam = false) {
     const serial = ++loadSerial;
+    state.mapId = mapId;
+    state.focusId = "center";
     const loadingEl = $("demo-loading");
     loadingEl.hidden = false;
-    $("demo-loading-title").textContent = `Loading ${sc.title}…`;
-    $("demo-loading-msg").textContent = "Streaming animated ants and 3D backyard props.";
+    $("demo-loading-title").textContent = "Loading Original 1998 Map…";
+    $("demo-loading-msg").textContent = "Streaming original terrain tiles and 1:1 3D models.";
     syncUi();
 
     try {
-      const uniqueAnts = [...new Set(sc.ants.map((a) => a.cls))];
-      const uniqueItems = [...new Set(sc.items.map((it) => it.id))];
-      const jobs = [
-        ...uniqueAnts.map((cls) => loadModel(`ant:${cls}`, `models/${cls}.glb`)),
-        ...uniqueItems.map((id) => loadModel(`item:${id}`, `models/items/${id}.glb`)),
+      await ensureCatalog();
+      if (serial !== loadSerial) return;
+      const mapData = mapsCatalog.maps.find((m) => m.id === mapId) || mapsCatalog.maps[0];
+      state.mapId = mapData.id;
+      $("demo-loading-title").textContent = `Loading ${mapData.label} (${mapData.cols}×${mapData.rows})…`;
+
+      const antSpecs = buildAntSpecsForMap(mapData);
+      const uniqueAnts = [...new Set(antSpecs.map((a) => a.cls))];
+      const uniqueItems = [...new Set(mapData.objects.map((o) => o.id))];
+      const queue = [
+        ...uniqueAnts.map((cls) => [`ant:${cls}`, `models/${cls}.glb`]),
+        ...uniqueItems.map((id) => [`item:${id}`, `models/items/${id}.glb`]),
       ];
-      await Promise.all(jobs);
+      let loadedCount = 0;
+      await runPool(queue, 8, async ([key, url]) => {
+        await loadModel(key, url);
+        loadedCount++;
+        if (serial === loadSerial && (loadedCount % 6 === 0 || loadedCount === queue.length)) {
+          $("demo-loading-msg").textContent = `Streaming 3D models (${loadedCount} / ${queue.length})…`;
+        }
+      });
       if (serial !== loadSerial) return;
 
-      const instances = [];
-      const itemEntries = [];
-      const antEntries = [];
-      let totalTris = 0;
+      renderer.uploadMapGrid(mapData.cols, mapData.rows, mapData.tiles);
 
-      for (const spec of sc.items) {
+      const itemEntries = [];
+      for (let i = 0; i < mapData.objects.length; i++) {
+        const spec = mapData.objects[i];
         const model = await modelCache.get(`item:${spec.id}`);
-        totalTris += model.triCount || 0;
-        const yawRad = (spec.yaw || 0) * DEG;
-        const [rad, op] = itemShadowParams(model, spec.id, spec.s);
+        const radius = 0.65 * Math.max(model.size[0], model.size[2], 0.8) * spec.s;
         const inst = {
           kind: "item",
           id: spec.id,
           model,
           clipName: "Idle",
-          idleTime: ((spec.x * 0.37 + spec.z * 0.53) % 1 + 1) % 1,
-          offsetMat: buildWorldMat(model, spec.x, spec.z, spec.s, yawRad),
+          idleTime: ((i * 0.29) % 1.1),
+          offsetMat: buildWorldMat(model, spec.x, spec.z, spec.s, 0),
         };
-        instances.push(inst);
-        itemEntries.push({ inst, spec, shadow: [spec.x, spec.z, rad, op] });
+        itemEntries.push({ inst, spec, x: spec.x, z: spec.z, radius });
       }
 
-      for (let i = 0; i < sc.ants.length; i++) {
-        const spec = sc.ants[i];
+      const antEntries = [];
+      for (let i = 0; i < antSpecs.length; i++) {
+        const spec = antSpecs[i];
         const model = await modelCache.get(`ant:${spec.cls}`);
-        totalTris += model.triCount || 0;
         const pathData = spec.path ? preparePath(spec.path) : null;
         let x = spec.x || 0, z = spec.z || 0, yawRad = (spec.yaw || 0) * DEG;
         if (pathData) {
@@ -590,60 +431,90 @@
           clipName: spec.clip || "Idle",
           idleTime: (spec.phase || 0) * 1.4,
           blink: { active: false, elapsed: 0, nextIn: 1.4 + ((i * 1.73) % 3.6) },
-          offsetMat: buildWorldMat(model, x, z, ANT_SCALE, yawRad),
+          offsetMat: buildWorldMat(model, x, z, ANT_SCALE, yawRad, spec.yLift || 0),
         };
-        instances.push(inst);
         antEntries.push({ inst, spec, pathData, x, z, yawRad });
       }
 
-      activeScene = {
-        sc,
-        instances,
+      activeMap = {
+        mapData,
         itemEntries,
         antEntries,
-        target: [0, 0.35, 0],
-        fitRadius: sc.fitRadius,
-        halfWidth: sc.halfWidth,
-        plinthSpanX: 0,
-        plinthRadius: 1,
-        shadows: [],
+        scene: {
+          instances: [],
+          target: [mapData.cols * 0.5, 0.3, mapData.rows * 0.5],
+          fitRadius: BASE_FIT_RADIUS,
+          halfWidth: BASE_FIT_RADIUS * 1.35,
+          plinthSpanX: 0,
+          plinthRadius: 1,
+          shadows: [],
+        },
       };
 
-      if (!preserveCam) {
-        const preset = CAM_PRESETS[state.camPreset] || CAM_PRESETS.rts;
-        setCamGoal(preset.target, preset.yaw, preset.pitch, preset.zoom);
+      const focuses = MAP_FOCUSES[mapData.id] || [];
+      const initFocus = focuses.find((f) => f.id === params.get("focus")) || focuses[0];
+      if (!preserveCam || !activeMap._inited) {
+        const preset = CAM_PRESETS[state.camPreset] || CAM_PRESETS.game;
+        const tgt = initFocus ? initFocus.target : [mapData.cols * 0.5, 0.3, mapData.rows * 0.5];
+        const zm = initFocus ? initFocus.zoom : preset.zoom;
+        state.focusId = initFocus ? initFocus.id : "center";
+        if (preserveCam) {
+          cam.target = tgt.slice();
+          cam.yaw = preset.yaw;
+          cam.pitch = preset.pitch;
+          cam.zoom = zm;
+          camGoal = null;
+        } else {
+          setCamGoal(tgt, preset.yaw, preset.pitch, zm);
+        }
+        activeMap._inited = true;
       }
-      renderHudAndSidebar(sc, totalTris);
+
+      renderHudAndSidebar(mapData, antEntries.length);
       loadingEl.hidden = true;
-      setStatus(`Loaded ${sc.title}: ${sc.ants.length} animated ants and ${sc.items.length} 3D map items.`);
+      syncUi();
+      setStatus(`Loaded ${mapData.label}: ${mapData.cols}×${mapData.rows} original tiles, ${mapData.objects.length} 3D objects, ${antEntries.length} animated ants.`);
     } catch (err) {
       if (serial !== loadSerial) return;
-      $("demo-loading-title").textContent = "Unable to load 3D scenario";
+      $("demo-loading-title").textContent = "Unable to load map";
       $("demo-loading-msg").textContent = String(err && err.message ? err.message : err);
       setStatus(`Load error: ${err && err.message ? err.message : err}`);
     }
   }
 
   function updateSimulation(dt) {
-    if (!activeScene) return;
-    const { sc, itemEntries, antEntries } = activeScene;
+    if (!activeMap) return;
+    const { itemEntries, antEntries, scene } = activeMap;
     if (state.playing && !state.fixedTime) {
       state.simTime += dt;
     }
     const t = state.simTime;
 
+    // View-frustum culling around camera target (+ generous margin for angled shadow casters)
+    const visHalfSpan = BASE_FIT_RADIUS * cam.zoom * 1.75 + 9.0;
+    const tx = cam.target[0], tz = cam.target[2];
+    const visible = [];
+
     for (let i = 0; i < itemEntries.length; i++) {
       const e = itemEntries[i];
-      const basePhase = Number.isFinite(e.spec.phase) ? e.spec.phase : ((i * 0.29) % 1.1);
-      e.inst.idleTime = t + basePhase;
+      if (Math.abs(e.x - tx) > visHalfSpan + e.radius || Math.abs(e.z - tz) > visHalfSpan + e.radius) continue;
+      e.inst.idleTime = t + ((i * 0.29) % 1.1);
+      visible.push(e.inst);
     }
-
-    const shadows = [];
-    for (const e of itemEntries) shadows.push(e.shadow);
 
     for (const e of antEntries) {
       const { inst, spec, pathData } = e;
-      inst.idleTime = t * (spec.animSpeed || 1.0) + (spec.phase || 0) * 1.4;
+      if (pathData) {
+        const travel = state.patrols ? t * (spec.speed || 1.2) : 0;
+        const pose = samplePath(pathData, (spec.phase || 0) * pathData.total + travel);
+        e.x = pose.x;
+        e.z = pose.z;
+        e.yawRad = pose.yaw;
+        inst.clipName = state.patrols ? (spec.clip || "Walk") : "Idle";
+        inst.offsetMat = buildWorldMat(inst.model, e.x, e.z, ANT_SCALE, e.yawRad, spec.yLift || 0);
+      }
+      if (Math.abs(e.x - tx) > visHalfSpan + 2.0 || Math.abs(e.z - tz) > visHalfSpan + 2.0) continue;
+      inst.idleTime = t + (spec.phase || 0) * 1.4;
       if (state.playing && !state.fixedTime && inst.blink) {
         if (inst.blink.active) {
           inst.blink.elapsed += dt;
@@ -660,55 +531,34 @@
           }
         }
       }
-      if (pathData) {
-        const travel = state.patrols ? t * (spec.speed || 0.72) : 0;
-        const pose = samplePath(pathData, (spec.phase || 0) * pathData.total + travel);
-        e.x = pose.x;
-        e.z = pose.z;
-        e.yawRad = pose.yaw;
-        inst.clipName = state.patrols ? (spec.clip || "Walk") : "Idle";
-        inst.offsetMat = buildWorldMat(inst.model, e.x, e.z, ANT_SCALE, e.yawRad);
-      }
-      shadows.push([e.x, e.z, 0.34, 0.74]);
+      visible.push(inst);
     }
-    activeScene.shadows = shadows;
-    activeScene.groundOpts = {
-      theme: sc.ground.theme,
-      zone: sc.ground.zone,
-      zoneRot: sc.ground.zoneRot,
-      clearings: sc.ground.clearings,
-      glows: sc.ground.glows,
-      shadows,
-      time: t,
-    };
+    scene.instances = visible;
   }
 
   function updateCamera(dt) {
-    if (camGoal) {
-      const alpha = 1 - Math.exp(-dt * 7.5);
-      let dYaw = camGoal.yaw - cam.yaw;
-      while (dYaw > 180) dYaw -= 360;
-      while (dYaw < -180) dYaw += 360;
-      cam.yaw = wrapAngleDeg(cam.yaw + dYaw * alpha);
-      cam.pitch += (camGoal.pitch - cam.pitch) * alpha;
-      cam.zoom += (camGoal.zoom - cam.zoom) * alpha;
-      for (let i = 0; i < 3; i++) cam.target[i] += (camGoal.target[i] - cam.target[i]) * alpha;
-      const err = Math.abs(dYaw) + Math.abs(camGoal.pitch - cam.pitch) + Math.abs(camGoal.zoom - cam.zoom) * 40
-        + Math.hypot(camGoal.target[0] - cam.target[0], camGoal.target[2] - cam.target[2]) * 20;
-      if (err < 0.08) {
-        cam.yaw = camGoal.yaw;
-        cam.pitch = camGoal.pitch;
-        cam.zoom = camGoal.zoom;
-        cam.target = camGoal.target.slice();
-        camGoal = null;
-      }
-    } else if (state.orbit && state.playing && !pointerState.dragging) {
-      cam.yaw = wrapAngleDeg(cam.yaw + dt * 9.5);
+    if (!camGoal) return;
+    const alpha = 1 - Math.exp(-dt * 8.0);
+    let dYaw = camGoal.yaw - cam.yaw;
+    while (dYaw > 180) dYaw -= 360;
+    while (dYaw < -180) dYaw += 360;
+    cam.yaw = wrapAngleDeg(cam.yaw + dYaw * alpha);
+    cam.pitch += (camGoal.pitch - cam.pitch) * alpha;
+    cam.zoom += (camGoal.zoom - cam.zoom) * alpha;
+    for (let i = 0; i < 3; i++) cam.target[i] += (camGoal.target[i] - cam.target[i]) * alpha;
+    const err = Math.abs(dYaw) + Math.abs(camGoal.pitch - cam.pitch) + Math.abs(camGoal.zoom - cam.zoom) * 35
+      + Math.hypot(camGoal.target[0] - cam.target[0], camGoal.target[2] - cam.target[2]) * 14;
+    if (err < 0.08) {
+      cam.yaw = camGoal.yaw;
+      cam.pitch = camGoal.pitch;
+      cam.zoom = camGoal.zoom;
+      cam.target = camGoal.target.slice();
+      camGoal = null;
     }
   }
 
   function resizeCanvas() {
-    const dpr = state.pixelMode ? 0.34 : Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = Math.max(120, Math.floor(canvas.clientWidth * dpr));
     const h = Math.max(80, Math.floor(canvas.clientHeight * dpr));
     if (canvas.width !== w || canvas.height !== h) {
@@ -718,17 +568,27 @@
     return [w, h];
   }
 
-  // --- Interactive Orbit, Pan & Pinch-Zoom Pointer Controller ---
-  const pointerState = { dragging: false, pointers: new Map(), mode: "orbit", lastX: 0, lastY: 0, lastPinch: 0 };
+  // --- RTS Map Pan (Left-Drag) & 3D Orbit (Right-Drag / Shift+Drag) + Zoom ---
+  const ptr = { pointers: new Map(), mode: "pan", lastX: 0, lastY: 0, lastPinch: 0 };
+
+  function clampTarget() {
+    if (!activeMap) return;
+    const { cols, rows } = activeMap.mapData;
+    cam.target[0] = clamp(cam.target[0], 1, cols - 1);
+    cam.target[2] = clamp(cam.target[2], 1, rows - 1);
+  }
 
   function panByPixels(dx, dy) {
     camGoal = null;
-    const scale = 0.0085 * cam.zoom * (activeScene ? activeScene.fitRadius * 0.42 : 2.0);
+    const viewH = Math.max(canvas.clientHeight, 300);
+    const worldPerPx = (2.0 * BASE_FIT_RADIUS * cam.zoom) / viewH;
     const yawRad = cam.yaw * DEG;
+    const pitchSin = Math.max(0.32, Math.sin(cam.pitch * DEG));
     const rightX = Math.cos(yawRad), rightZ = -Math.sin(yawRad);
     const fwdX = -Math.sin(yawRad), fwdZ = -Math.cos(yawRad);
-    cam.target[0] = clamp(cam.target[0] - (rightX * dx - fwdX * dy) * scale, -7.2, 7.2);
-    cam.target[2] = clamp(cam.target[2] - (rightZ * dx - fwdZ * dy) * scale, -6.2, 6.2);
+    cam.target[0] -= (rightX * dx - fwdX * (dy / pitchSin)) * worldPerPx;
+    cam.target[2] -= (rightZ * dx - fwdZ * (dy / pitchSin)) * worldPerPx;
+    clampTarget();
     state.focusId = "";
     syncFocusButtons();
   }
@@ -737,70 +597,68 @@
 
   canvas.addEventListener("pointerdown", (e) => {
     canvas.setPointerCapture(e.pointerId);
-    pointerState.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    pointerState.dragging = true;
+    ptr.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     camGoal = null;
-    if (pointerState.pointers.size === 1) {
-      pointerState.mode = (e.button === 2 || e.button === 1 || e.shiftKey) ? "pan" : "orbit";
-      pointerState.lastX = e.clientX;
-      pointerState.lastY = e.clientY;
-    } else if (pointerState.pointers.size === 2) {
-      const [a, b] = [...pointerState.pointers.values()];
-      pointerState.lastPinch = Math.hypot(b.x - a.x, b.y - a.y);
-      pointerState.lastX = 0.5 * (a.x + b.x);
-      pointerState.lastY = 0.5 * (a.y + b.y);
+    if (ptr.pointers.size === 1) {
+      ptr.mode = (e.button === 2 || e.button === 1 || e.shiftKey) ? "orbit" : "pan";
+      ptr.lastX = e.clientX;
+      ptr.lastY = e.clientY;
+    } else if (ptr.pointers.size === 2) {
+      const [a, b] = [...ptr.pointers.values()];
+      ptr.lastPinch = Math.hypot(b.x - a.x, b.y - a.y);
+      ptr.lastX = 0.5 * (a.x + b.x);
+      ptr.lastY = 0.5 * (a.y + b.y);
     }
   });
 
   canvas.addEventListener("pointermove", (e) => {
-    if (!pointerState.pointers.has(e.pointerId)) return;
-    pointerState.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pointerState.pointers.size === 1) {
-      const dx = e.clientX - pointerState.lastX;
-      const dy = e.clientY - pointerState.lastY;
-      pointerState.lastX = e.clientX;
-      pointerState.lastY = e.clientY;
-      if (pointerState.mode === "pan") {
+    if (!ptr.pointers.has(e.pointerId)) return;
+    ptr.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (ptr.pointers.size === 1) {
+      const dx = e.clientX - ptr.lastX;
+      const dy = e.clientY - ptr.lastY;
+      ptr.lastX = e.clientX;
+      ptr.lastY = e.clientY;
+      if (ptr.mode === "pan") {
         panByPixels(dx, dy);
       } else {
         cam.yaw = wrapAngleDeg(cam.yaw - dx * 0.34);
-        cam.pitch = clamp(cam.pitch + dy * 0.28, 8, 84);
+        cam.pitch = clamp(cam.pitch + dy * 0.28, 12, 86);
         state.camPreset = "";
         syncCamButtons();
       }
-    } else if (pointerState.pointers.size === 2) {
-      const [a, b] = [...pointerState.pointers.values()];
+    } else if (ptr.pointers.size === 2) {
+      const [a, b] = [...ptr.pointers.values()];
       const cx = 0.5 * (a.x + b.x), cy = 0.5 * (a.y + b.y);
       const dist = Math.hypot(b.x - a.x, b.y - a.y);
-      if (pointerState.lastPinch > 1 && dist > 1) {
-        cam.zoom = clamp(cam.zoom * (pointerState.lastPinch / dist), 0.22, 1.95);
+      if (ptr.lastPinch > 1 && dist > 1) {
+        cam.zoom = clamp(cam.zoom * (ptr.lastPinch / dist), 0.24, 3.0);
       }
-      panByPixels(cx - pointerState.lastX, cy - pointerState.lastY);
-      pointerState.lastPinch = dist;
-      pointerState.lastX = cx;
-      pointerState.lastY = cy;
+      panByPixels(cx - ptr.lastX, cy - ptr.lastY);
+      ptr.lastPinch = dist;
+      ptr.lastX = cx;
+      ptr.lastY = cy;
     }
   });
 
-  const endPointer = (e) => {
-    pointerState.pointers.delete(e.pointerId);
-    if (pointerState.pointers.size === 0) pointerState.dragging = false;
-    else if (pointerState.pointers.size === 1) {
-      const [rem] = [...pointerState.pointers.values()];
-      pointerState.lastX = rem.x;
-      pointerState.lastY = rem.y;
-      pointerState.mode = "orbit";
+  const endPtr = (e) => {
+    ptr.pointers.delete(e.pointerId);
+    if (ptr.pointers.size === 1) {
+      const [rem] = [...ptr.pointers.values()];
+      ptr.lastX = rem.x;
+      ptr.lastY = rem.y;
+      ptr.mode = "pan";
     }
   };
-  canvas.addEventListener("pointerup", endPointer);
-  canvas.addEventListener("pointercancel", endPointer);
-  canvas.addEventListener("lostpointercapture", endPointer);
+  canvas.addEventListener("pointerup", endPtr);
+  canvas.addEventListener("pointercancel", endPtr);
+  canvas.addEventListener("lostpointercapture", endPtr);
 
   canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
     camGoal = null;
     const factor = Math.exp(clamp(e.deltaY, -180, 180) * 0.0014);
-    cam.zoom = clamp(cam.zoom * factor, 0.22, 1.95);
+    cam.zoom = clamp(cam.zoom * factor, 0.24, 3.0);
   }, { passive: false });
 
   // --- UI Synchronization ---
@@ -814,34 +672,38 @@
     document.querySelectorAll("#demo-focus-grid [data-focus]").forEach((b) => {
       b.setAttribute("aria-pressed", String(b.dataset.focus === state.focusId));
     });
-    const sc = SCENARIOS[state.scenarioId];
-    const activeFocus = sc && sc.focuses.find((f) => f.id === state.focusId);
+    const focuses = MAP_FOCUSES[state.mapId] || [];
+    const activeFocus = focuses.find((f) => f.id === state.focusId);
     $("focus-readout").textContent = activeFocus ? activeFocus.label : "Custom";
   }
 
   function syncUi() {
-    document.querySelectorAll("#scenario-group [data-scenario]").forEach((b) => {
-      b.setAttribute("aria-pressed", String(b.dataset.scenario === state.scenarioId));
+    document.querySelectorAll("#map-group [data-map]").forEach((b) => {
+      b.setAttribute("aria-pressed", String(b.dataset.map === state.mapId));
     });
     document.querySelectorAll("#demo-dock [data-proj]").forEach((b) => {
       b.setAttribute("aria-pressed", String(b.dataset.proj === cam.projection));
     });
     $("btn-play").setAttribute("aria-pressed", String(state.playing));
-    $("btn-orbit").setAttribute("aria-pressed", String(state.orbit));
+    $("btn-grid").setAttribute("aria-pressed", String(state.showGrid));
+    $("btn-shadows").setAttribute("aria-pressed", String(state.castShadows));
+    $("btn-hires-tiles").setAttribute("aria-pressed", String(state.hiResTiles));
     $("btn-patrols").setAttribute("aria-pressed", String(state.patrols));
-    $("btn-pixel-mode").setAttribute("aria-pressed", String(state.pixelMode));
     $("btn-hud").setAttribute("aria-pressed", String(state.showHud));
     $("demo-hud-card").hidden = !state.showHud;
-    canvas.classList.toggle("pixel-mode", state.pixelMode);
+    $("range-sun-elev").value = String(Math.round(state.sunElev));
+    $("out-sun-elev").textContent = `${Math.round(state.sunElev)}°`;
+    $("range-sun-azim").value = String(Math.round(state.sunAzim));
+    $("out-sun-azim").textContent = `${Math.round(state.sunAzim)}°`;
     populateLightingSelect($("select-lighting"), state.lighting);
     syncCamButtons();
     syncFocusButtons();
   }
 
-  // --- Bind Controls ---
-  document.querySelectorAll("#scenario-group [data-scenario]").forEach((btn) => {
+  // --- Control Bindings ---
+  document.querySelectorAll("#map-group [data-map]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      if (btn.dataset.scenario !== state.scenarioId) activateScenario(btn.dataset.scenario, false);
+      if (btn.dataset.map !== state.mapId) activateMap(btn.dataset.map, false);
     });
   });
 
@@ -851,10 +713,10 @@
       const p = CAM_PRESETS[key];
       if (!p) return;
       state.camPreset = key;
-      state.focusId = key === "rts" ? "overview" : "";
-      setCamGoal(p.target, p.yaw, p.pitch, p.zoom);
+      cam.projection = p.proj;
+      setCamGoal(cam.target, p.yaw, p.pitch, Math.min(cam.zoom, key === "hero" ? 0.56 : 1.0));
       syncUi();
-      setStatus(`Camera set to ${p.label}`);
+      setStatus(`Camera view: ${p.label}`);
     });
   });
 
@@ -862,7 +724,6 @@
     btn.addEventListener("click", () => {
       cam.projection = btn.dataset.proj === "ortho" ? "ortho" : "perspective";
       syncUi();
-      setStatus(`Projection set to ${cam.projection === "ortho" ? "Orthographic" : "Perspective"}`);
     });
   });
 
@@ -870,40 +731,34 @@
     state.playing = !state.playing;
     state.fixedTime = false;
     syncUi();
-    setStatus(state.playing ? "Scene animation playing" : "Scene animation paused");
+    setStatus(state.playing ? "Animations playing" : "Animations paused");
   });
 
-  $("btn-orbit").addEventListener("click", () => {
-    state.orbit = !state.orbit;
+  $("btn-grid").addEventListener("click", () => {
+    state.showGrid = !state.showGrid;
     syncUi();
-    setStatus(state.orbit ? "Cinematic camera orbit on" : "Cinematic camera orbit off");
+    setStatus(state.showGrid ? "32px tile grid overlay on" : "Tile grid overlay hidden");
   });
 
   $("btn-reset").addEventListener("click", () => {
-    state.camPreset = "rts";
-    state.focusId = "overview";
-    const p = CAM_PRESETS.rts;
-    setCamGoal(p.target, p.yaw, p.pitch, p.zoom);
+    const p = CAM_PRESETS.game;
+    const focuses = MAP_FOCUSES[state.mapId] || [];
+    const f0 = focuses[0];
+    state.camPreset = "game";
+    state.focusId = f0 ? f0.id : "center";
+    cam.projection = p.proj;
+    setCamGoal(f0 ? f0.target : cam.target, p.yaw, p.pitch, f0 ? f0.zoom : p.zoom);
     syncUi();
-    setStatus("Camera reset to RTS 45° overview");
+    setStatus("Camera reset to Game View");
   });
 
-  $("btn-patrols").addEventListener("click", () => {
-    state.patrols = !state.patrols;
-    syncUi();
-    setStatus(state.patrols ? "Live ant patrols enabled" : "Ants holding formation");
-  });
+  $("btn-shadows").addEventListener("click", () => { state.castShadows = !state.castShadows; syncUi(); });
+  $("btn-hires-tiles").addEventListener("click", () => { state.hiResTiles = !state.hiResTiles; syncUi(); });
+  $("btn-patrols").addEventListener("click", () => { state.patrols = !state.patrols; syncUi(); });
+  $("btn-hud").addEventListener("click", () => { state.showHud = !state.showHud; syncUi(); });
 
-  $("btn-pixel-mode").addEventListener("click", () => {
-    state.pixelMode = !state.pixelMode;
-    syncUi();
-    setStatus(state.pixelMode ? "1998 retro pixel mode enabled" : "Crisp HD 3D rendering enabled");
-  });
-
-  $("btn-hud").addEventListener("click", () => {
-    state.showHud = !state.showHud;
-    syncUi();
-  });
+  $("range-sun-elev").addEventListener("input", (e) => { state.sunElev = Number(e.target.value); syncUi(); });
+  $("range-sun-azim").addEventListener("input", (e) => { state.sunAzim = Number(e.target.value); syncUi(); });
 
   const selectLighting = $("select-lighting");
   selectLighting.addEventListener("change", () => {
@@ -918,7 +773,7 @@
   $("btn-light-prev").addEventListener("click", () => stepLighting(-1));
   $("btn-light-next").addEventListener("click", () => stepLighting(1));
 
-  // Responsive controls panel drawer (same interaction pattern as items.html / viewer.html)
+  // Responsive controls drawer
   const panelEl = $("inspector-panel");
   const backdropEl = $("inspector-backdrop");
   const toggleBtn = $("btn-toggle-panel");
@@ -941,36 +796,31 @@
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const tag = document.activeElement && document.activeElement.tagName;
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    const k = e.key.toLowerCase();
     if (e.key >= "1" && e.key <= "4") {
-      const targetId = SCENARIO_ORDER[Number(e.key) - 1];
-      if (targetId) { e.preventDefault(); activateScenario(targetId, false); }
-    } else if (e.key === " " || e.key.toLowerCase() === "i") {
+      const id = MAP_ORDER[Number(e.key) - 1];
+      if (id) { e.preventDefault(); activateMap(id, false); }
+    } else if (e.key === " " || k === "i") {
       if (e.key === " " && tag === "BUTTON") return;
       e.preventDefault();
       $("btn-play").click();
-    } else if (e.key.toLowerCase() === "t") {
+    } else if (k === "g") {
       e.preventDefault();
-      $("btn-orbit").click();
-    } else if (e.key.toLowerCase() === "r") {
+      $("btn-grid").click();
+    } else if (k === "r") {
       e.preventDefault();
       $("btn-reset").click();
-    } else if (e.key.toLowerCase() === "l") {
+    } else if (k === "l") {
       e.preventDefault();
       stepLighting(1);
-    } else if (e.key.toLowerCase() === "p") {
-      e.preventDefault();
-      $("btn-pixel-mode").click();
-    } else if (document.activeElement === canvas) {
-      if (e.key === "ArrowLeft")  { e.preventDefault(); camGoal = null; cam.yaw = wrapAngleDeg(cam.yaw + 8); }
-      if (e.key === "ArrowRight") { e.preventDefault(); camGoal = null; cam.yaw = wrapAngleDeg(cam.yaw - 8); }
-      if (e.key === "ArrowUp")    { e.preventDefault(); camGoal = null; cam.pitch = clamp(cam.pitch + 5, 8, 84); }
-      if (e.key === "ArrowDown")  { e.preventDefault(); camGoal = null; cam.pitch = clamp(cam.pitch - 5, 8, 84); }
-      if (e.key === "+" || e.key === "=") { e.preventDefault(); camGoal = null; cam.zoom = clamp(cam.zoom * 0.88, 0.22, 1.95); }
-      if (e.key === "-" || e.key === "_") { e.preventDefault(); camGoal = null; cam.zoom = clamp(cam.zoom * 1.14, 0.22, 1.95); }
-    }
+    } else if (k === "w" || e.key === "ArrowUp")    { e.preventDefault(); panByPixels(0, 48); }
+    else if (k === "s" || e.key === "ArrowDown")     { e.preventDefault(); panByPixels(0, -48); }
+    else if (k === "a" || e.key === "ArrowLeft")     { e.preventDefault(); panByPixels(48, 0); }
+    else if (k === "d" || e.key === "ArrowRight")    { e.preventDefault(); panByPixels(-48, 0); }
+    else if (e.key === "+" || e.key === "=") { e.preventDefault(); camGoal = null; cam.zoom = clamp(cam.zoom * 0.86, 0.24, 3.0); }
+    else if (e.key === "-" || e.key === "_") { e.preventDefault(); camGoal = null; cam.zoom = clamp(cam.zoom * 1.16, 0.24, 3.0); }
   });
 
-  // Only install roving-tabindex fallback when native focusgroup is unsupported.
   if (!("focusGroup" in HTMLElement.prototype)) {
     installToolbarRovingTabindex($("demo-toolbar"));
     installToolbarRovingTabindex($("demo-dock"));
@@ -985,9 +835,12 @@
     updateCamera(dt);
     updateSimulation(dt);
 
-    if (activeScene) {
+    if (activeMap) {
       const [w, h] = resizeCanvas();
-      renderer.drawScene(activeScene, cam, {
+      const { mapData, scene } = activeMap;
+      const sunDir = sunVectorFromAngles(state.sunElev, state.sunAzim);
+      const shadowRadius = clamp(BASE_FIT_RADIUS * cam.zoom * 1.65, 9.5, 36.0);
+      renderer.drawScene(scene, cam, {
         width: w,
         height: h,
         lighting: state.lighting,
@@ -997,9 +850,22 @@
         fixedIdleTime: state.playing ? null : state.simTime,
         clipName: "Idle",
         showPlinth: false,
-        worldSun: true,
+        sunDir,
+        shadowMap: state.castShadows,
+        shadowRadius,
         customTarget: cam.target,
-        ground: activeScene.groundOpts,
+        tileGround: {
+          cols: mapData.cols,
+          rows: mapData.rows,
+          atlasCols: mapsCatalog.atlas_cols,
+          atlasRows: mapsCatalog.atlas_rows,
+          waterTile: mapsCatalog.water_tile_index,
+          gridAlpha: state.showGrid ? 0.24 : 0.0,
+          crispPixels: !state.hiResTiles,
+          shadowStrength: 0.68,
+          time: state.simTime,
+          glows: [],
+        },
       });
     }
 
@@ -1008,37 +874,48 @@
     if (fpsAccum >= 0.6) {
       const fps = Math.round(fpsFrames / fpsAccum);
       $("meta-fps").textContent = `${fps} fps`;
-      $("meta-cam").textContent = `${Math.round(cam.yaw)}° / ${Math.round(cam.pitch)}° · ${cam.zoom.toFixed(2)}×`;
+      $("meta-cam").textContent = `(${cam.target[0].toFixed(1)}, ${cam.target[2].toFixed(1)}) · ${Math.round(cam.pitch)}° · ${cam.zoom.toFixed(2)}×`;
       fpsAccum = 0;
       fpsFrames = 0;
     }
     requestAnimationFrame(frame);
   }
 
-  // Expose light inspection hook for automated visual snapshots
   window.__demoState = {
-    get ready() { return Boolean(activeScene && $("demo-loading").hidden); },
-    activateScenario,
+    get ready() { return Boolean(activeMap && $("demo-loading").hidden); },
+    activateMap,
     setFocus(id) {
-      const sc = SCENARIOS[state.scenarioId];
-      const f = sc && sc.focuses.find((x) => x.id === id);
+      const focuses = MAP_FOCUSES[state.mapId] || [];
+      const f = focuses.find((x) => x.id === id);
       if (f) {
         state.focusId = f.id;
         cam.target = f.target.slice();
-        cam.yaw = f.yaw; cam.pitch = f.pitch; cam.zoom = f.zoom;
+        cam.zoom = f.zoom;
         camGoal = null;
         syncUi();
       }
     },
-    setLighting(l) { state.lighting = validLighting(l) || "daylight"; syncUi(); },
-    setCam(yaw, pitch, zoom, target) {
+    setPreset(key) {
+      const p = CAM_PRESETS[key];
+      if (p) {
+        state.camPreset = key;
+        cam.yaw = p.yaw; cam.pitch = p.pitch; cam.projection = p.proj;
+        camGoal = null;
+        syncUi();
+      }
+    },
+    setSun(elev, azim) { state.sunElev = elev; state.sunAzim = azim; syncUi(); },
+    setGrid(on) { state.showGrid = Boolean(on); syncUi(); },
+    setCam(yaw, pitch, zoom, target, proj) {
       camGoal = null;
       cam.yaw = yaw; cam.pitch = pitch; cam.zoom = zoom;
       if (target) cam.target = target.slice();
+      if (proj) cam.projection = proj;
+      syncUi();
     },
   };
 
   syncUi();
-  activateScenario(state.scenarioId, true);
+  activateMap(state.mapId, true);
   requestAnimationFrame(frame);
 })();

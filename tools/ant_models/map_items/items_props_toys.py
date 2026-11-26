@@ -250,7 +250,7 @@ def build_bobber() -> SceneBuilder:
     top_hook = torus_arc(0.025, 0.006, u_segs=18, v_segs=6, plane="xy", name="bobber_hook_top", material="item_chrome_spring").translate(0.0, 0.376, 0.0)
     bot_hook = torus_arc(0.024, 0.006, u_segs=18, v_segs=6, plane="xy", name="bobber_hook_bot", material="item_chrome_spring").translate(0.0, -0.258, 0.0)
     sc.add("bobber", [collar, plunger, cap_groove, top_hook, bot_hook])
-    sc.nodes["bobber"] = [p.rotate_xyz(rx=14.0, ry=-10.0, rz=-42.0, degrees=True) for p in sc.nodes["bobber"]]
+    sc.nodes["bobber"] = [p.rotate_xyz(rx=14.0, ry=-10.0, rz=-66.0, degrees=True) for p in sc.nodes["bobber"]]
     return _finalize_item(sc, target_span=0.88)
 
 

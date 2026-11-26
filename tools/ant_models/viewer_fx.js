@@ -533,8 +533,29 @@
     ];
   }
 
-  // --- Procedural Backyard Map Ground Plane Shader (Grass, Soil Clearings, Picnic Cloth, Patio, Contact Shadows & Fire Glow) ---
-  const GROUND_VS = `#version 300 es
+  // --- Hardware Directional Shadow Depth Pass Shaders (2048x2048 DEPTH_COMPONENT24) ---
+  const SHADOW_VS = `#version 300 es
+  layout(location = 0) in vec3 a_position;
+  uniform mat4 u_model, u_lightViewProj;
+  uniform vec4 u_jelloWobble;
+  void main() {
+    vec3 lp = a_position;
+    if (u_jelloWobble.w > 0.01) {
+      float h = clamp(lp.y / u_jelloWobble.w, 0.0, 1.0);
+      float sway = h * h, midW = sin(h * 3.14159265);
+      lp.xz *= 1.0 + u_jelloWobble.z * midW;
+      lp.x += u_jelloWobble.x * sway;
+      lp.z += u_jelloWobble.y * sway;
+    }
+    gl_Position = u_lightViewProj * (u_model * vec4(lp, 1.0));
+  }`;
+
+  const SHADOW_FS = `#version 300 es
+  precision highp float;
+  void main() {}`;
+
+  // --- Original 1998 Ants Tile-Grid Ground Shader (ground.png Atlas + Crisp Grid + Real Hardware PCF Shadows) ---
+  const TILE_GROUND_VS = `#version 300 es
   layout(location = 0) in vec3 a_position;
   uniform mat4 u_viewProj;
   out vec3 v_worldPos;
@@ -543,237 +564,152 @@
     gl_Position = u_viewProj * vec4(a_position, 1.0);
   }`;
 
-  const GROUND_FS = `#version 300 es
+  const TILE_GROUND_FS = `#version 300 es
   precision highp float;
   in vec3 v_worldPos;
-  uniform vec3 u_cameraPos, u_keyDir, u_fillDir, u_keyColor, u_fillColor, u_skyColor, u_groundColor;
+  uniform sampler2D u_atlasTex, u_mapTex, u_shadowMap;
+  uniform mat4 u_lightViewProj;
+  uniform vec2 u_mapSize, u_atlasGrid, u_viewport;
+  uniform float u_waterTile, u_gridAlpha, u_shadowStrength, u_time;
+  uniform int u_crispPixels, u_useShadowMap, u_isOrtho;
+  uniform vec3 u_cameraPos, u_viewDir, u_keyDir, u_fillDir, u_keyColor, u_fillColor, u_skyColor, u_groundColor;
   uniform vec3 u_bgTop, u_bgMid, u_bgBot;
-  uniform vec2 u_viewport;
   uniform vec4 u_lightMix;
-  uniform vec4 u_shadows[48];
-  uniform int u_shadowCount;
-  uniform vec4 u_clearings[8];
-  uniform int u_clearingCount;
   uniform vec4 u_glows[6];
   uniform int u_glowCount;
-  uniform vec4 u_zone;      // xy = center, zw = half-extents (e.g. picnic blanket or patio slab)
-  uniform float u_zoneRot;  // radians
-  uniform int u_theme;      // 0 = picnic lawn, 1 = toybox patio/lawn, 2 = wild colony meadow, 3 = melee dirt clearing
-  uniform float u_time;
   out vec4 fragColor;
 
-  float gHash(vec2 p) {
-    p = fract(p * vec2(127.1, 311.7));
-    p += dot(p, p + 34.23);
-    return fract(p.x * p.y);
+  vec3 tgToLinear(vec3 c) { return mix(c / 12.92, pow(max((c + 0.055) / 1.055, 0.0), vec3(2.4)), step(0.04045, c)); }
+  vec3 tgToSrgb(vec3 c) { return mix(12.92 * c, 1.055 * pow(max(c, 0.0), vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
+  vec3 tgAces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+  float tgHash(vec2 p) { p = fract(p * vec2(127.1, 311.7)); p += dot(p, p + 34.23); return fract(p.x * p.y); }
+  float tgNoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(tgHash(i), tgHash(i + vec2(1.0, 0.0)), u.x), mix(tgHash(i + vec2(0.0, 1.0)), tgHash(i + vec2(1.0, 1.0)), u.x), u.y);
   }
-  float gNoise(vec2 p) {
-    vec2 i = floor(p), f = fract(p);
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(
-      mix(gHash(i), gHash(i + vec2(1.0, 0.0)), u.x),
-      mix(gHash(i + vec2(0.0, 1.0)), gHash(i + vec2(1.0, 1.0)), u.x),
-      u.y
-    );
+
+  float sampleTileShadow(vec3 wp) {
+    if (u_useShadowMap == 0) return 1.0;
+    vec4 lp = u_lightViewProj * vec4(wp, 1.0);
+    vec3 proj = lp.xyz / lp.w * 0.5 + 0.5;
+    if (proj.x <= 0.002 || proj.x >= 0.998 || proj.y <= 0.002 || proj.y >= 0.998 || proj.z >= 0.999) return 1.0;
+    float bias = 0.00085;
+    vec2 texel = vec2(1.0 / 2048.0);
+    float vis = 0.0;
+    for (int dy = -1; dy <= 1; dy++) {
+      for (int dx = -1; dx <= 1; dx++) {
+        float d = texture(u_shadowMap, proj.xy + vec2(float(dx), float(dy)) * texel * 1.35).r;
+        vis += (proj.z - bias <= d) ? 1.0 : 0.0;
+      }
+    }
+    return vis / 9.0;
   }
-  float gFbm(vec2 p) {
-    float v = 0.0, a = 0.52;
-    mat2 r = mat2(0.80, 0.60, -0.60, 0.80);
-    for (int i = 0; i < 4; i++) { v += a * gNoise(p); p = r * p * 2.03 + vec2(3.1, 7.4); a *= 0.48; }
-    return v;
-  }
-  vec3 gAces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
-  vec3 gToSrgb(vec3 c) { return mix(12.92 * c, 1.055 * pow(max(c, 0.0), vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
 
   void main() {
     vec2 p = v_worldPos.xz;
-    float distCam = length(v_worldPos - u_cameraPos);
-    float distOrig = length(p);
-
-    // Rich multi-scale sunlit backyard turf (classic 1998 emerald-olive lawn + fine blade stipple)
-    float macro = gFbm(p * 0.24 + vec2(4.2, -1.9));
-    float clump = gFbm(p * 1.15 + vec2(-2.7, 5.1));
-    float blades = gNoise(p * 9.5 + vec2(clump * 1.8, macro * 1.4));
-    float micro = gNoise(p * 26.0);
-    float stripe = 0.5 + 0.5 * sin((p.x * 0.62 + p.y * 0.34) * 1.35);
-
-    vec3 grassDeep = vec3(0.068, 0.195, 0.048);
-    vec3 grassMid  = vec3(0.118, 0.305, 0.068);
-    vec3 grassSun  = vec3(0.215, 0.385, 0.088);
-    vec3 grassDry  = vec3(0.235, 0.275, 0.085);
-
-    vec3 albedo = mix(grassDeep, grassMid, smoothstep(0.22, 0.78, macro));
-    albedo = mix(albedo, grassSun, smoothstep(0.45, 0.85, clump) * 0.55);
-    albedo = mix(albedo, grassDry, smoothstep(0.68, 0.92, macro * 0.6 + clump * 0.4) * 0.22);
-    albedo *= 0.92 + 0.10 * stripe;
-    albedo *= 0.86 + 0.24 * blades + 0.06 * (micro - 0.5);
-    // Subtle tiny white/yellow lawn clover & dandelion flecks
-    float fleck = gHash(floor(p * 4.2));
-    if (fleck > 0.972 && distOrig < 13.0) {
-      vec2 fp = fract(p * 4.2) - 0.5;
-      float fMask = smoothstep(0.22, 0.06, length(fp));
-      vec3 fCol = fleck > 0.988 ? vec3(0.82, 0.68, 0.12) : vec3(0.76, 0.78, 0.68);
-      albedo = mix(albedo, fCol, fMask * 0.42);
-    }
-
-    // Normal perturbation for grass/dirt texture crispness
-    float nX = gNoise((p + vec2(0.06, 0.0)) * 7.5) - gNoise((p - vec2(0.06, 0.0)) * 7.5);
-    float nZ = gNoise((p + vec2(0.0, 0.06)) * 7.5) - gNoise((p - vec2(0.0, 0.06)) * 7.5);
-    vec3 N = normalize(vec3(-nX * 0.36, 1.0, -nZ * 0.36));
-    float roughness = 0.88;
-
-    // Warm packed backyard soil & anthill clearings
-    vec3 soilDark = vec3(0.145, 0.098, 0.056);
-    vec3 soilWarm = vec3(0.275, 0.192, 0.112);
-    vec3 soilSandy = vec3(0.355, 0.268, 0.165);
-    float soilTex = gFbm(p * 2.4 + vec2(8.1, -3.3));
-    float pebble = gNoise(p * 16.0);
-    vec3 soilCol = mix(soilDark, soilWarm, soilTex);
-    soilCol = mix(soilCol, soilSandy, smoothstep(0.55, 0.85, pebble) * 0.35);
-
-    float dirtMask = 0.0;
-    if (u_theme == 3) {
-      // Four-Team Melee central sun-baked battle clearing with radiating trails
-      float cDist = length(p * vec2(0.88, 1.05)) + (macro - 0.5) * 1.45;
-      dirtMask = max(dirtMask, 1.0 - smoothstep(2.9, 5.4, cDist));
-    }
-    for (int i = 0; i < 8; i++) {
-      if (i >= u_clearingCount) break;
-      vec4 cl = u_clearings[i];
-      float d = length(p - cl.xy) + (clump - 0.5) * (0.45 * cl.z);
-      float m = 1.0 - smoothstep(cl.z * 0.52, cl.z * 1.12, d);
-      dirtMask = max(dirtMask, m * cl.w);
-    }
-    if (dirtMask > 0.001) {
-      albedo = mix(albedo, soilCol, dirtMask);
-      roughness = mix(roughness, 0.94, dirtMask);
-    }
-
-    // Special scenario zone overlays:
-    // Theme 0: Iconic Red & White Gingham Picnic Blanket!
-    if (u_theme == 0 && u_zone.z > 0.1 && u_zone.w > 0.1) {
-      vec2 rel = p - u_zone.xy;
-      float cs = cos(-u_zoneRot), sn = sin(-u_zoneRot);
-      vec2 q = vec2(rel.x * cs - rel.y * sn, rel.x * sn + rel.y * cs);
-      // Organic cloth edge flutter & hem
-      float edgeWobble = sin(q.x * 2.4) * 0.055 + cos(q.y * 2.7) * 0.055;
-      vec2 bd = abs(q) - (u_zone.zw + vec2(edgeWobble));
-      float sdf = max(bd.x, bd.y);
-      // Soft ambient drop shadow right under the blanket hem
-      float hemShadow = (1.0 - smoothstep(0.0, 0.24, max(sdf, 0.0))) * step(0.0, sdf);
-      albedo *= 1.0 - 0.34 * hemShadow;
-      if (sdf < 0.02) {
-        float clothMask = 1.0 - smoothstep(-0.04, 0.02, sdf);
-        float checkSize = 0.58;
-        float gx = step(0.5, fract(q.x / checkSize + 0.5));
-        float gy = step(0.5, fract(q.y / checkSize + 0.5));
-        float weave = 0.94 + 0.06 * sin(q.x * 78.0) * sin(q.y * 78.0);
-        float fold = gFbm(q * 0.85 + vec2(1.4, -0.8));
-        vec3 cWhite = vec3(0.84, 0.81, 0.74);
-        vec3 cPink  = vec3(0.76, 0.25, 0.24);
-        vec3 cRed   = vec3(0.56, 0.075, 0.085);
-        vec3 cloth = (gx + gy > 1.5) ? cRed : ((gx + gy > 0.5) ? cPink : cWhite);
-        // Subtle stitched hem border inset 0.14 from edge
-        float borderBand = smoothstep(-0.19, -0.15, sdf) * (1.0 - smoothstep(-0.11, -0.07, sdf));
-        cloth = mix(cloth, cRed * 0.85, borderBand * 0.45);
-        cloth *= weave * (0.91 + 0.16 * fold);
-        albedo = mix(albedo, cloth, clothMask);
-        vec3 clothN = normalize(vec3(sin(q.x * 1.9 + fold * 2.0) * 0.04, 1.0, cos(q.y * 2.1 + fold * 2.0) * 0.04));
-        N = normalize(mix(N, clothN, clothMask));
-        roughness = mix(roughness, 0.86, clothMask);
-      }
-    }
-    // Theme 1: Warm Backyard Flagstone Patio Slab surrounded by lawn!
-    if (u_theme == 1 && u_zone.z > 0.1 && u_zone.w > 0.1) {
-      vec2 rel = p - u_zone.xy;
-      float cs = cos(-u_zoneRot), sn = sin(-u_zoneRot);
-      vec2 q = vec2(rel.x * cs - rel.y * sn, rel.x * sn + rel.y * cs);
-      vec2 bd = abs(q) - u_zone.zw;
-      float sdf = max(bd.x, bd.y) + (clump - 0.5) * 0.22;
-      if (sdf < 0.05) {
-        float patioMask = 1.0 - smoothstep(-0.12, 0.05, sdf);
-        // Flagstone paver grid with warm mortar seams & mossy crevices
-        vec2 tileCoord = q * vec2(0.58, 0.52);
-        float row = floor(tileCoord.y);
-        tileCoord.x += mod(row, 2.0) * 0.46;
-        vec2 cell = floor(tileCoord), f = fract(tileCoord);
-        float seam = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
-        float tileVar = gHash(cell + vec2(11.3, 4.7));
-        float stoneGrain = gFbm(q * 3.8 + cell * 2.1);
-        vec3 stoneA = vec3(0.36, 0.34, 0.30);
-        vec3 stoneB = vec3(0.45, 0.40, 0.33);
-        vec3 stoneC = vec3(0.30, 0.32, 0.34);
-        vec3 stone = mix(mix(stoneA, stoneB, tileVar), stoneC, smoothstep(0.65, 0.95, tileVar) * 0.55);
-        stone *= 0.84 + 0.28 * stoneGrain;
-        float seamMask = 1.0 - smoothstep(0.025, 0.065, seam);
-        vec3 mortar = mix(vec3(0.16, 0.15, 0.12), vec3(0.11, 0.22, 0.07), smoothstep(0.42, 0.78, clump));
-        stone = mix(stone, mortar, seamMask);
-        albedo = mix(albedo, stone, patioMask);
-        roughness = mix(roughness, 0.78, patioMask);
-      }
-    }
-
-    // Contact + soft directional sun-offset ground shadows under every ant & prop
-    float shadow = 1.0;
-    vec2 sunOff = -normalize(u_keyDir.xz + vec2(1e-4, 1e-4));
-    for (int i = 0; i < 48; i++) {
-      if (i >= u_shadowCount) break;
-      vec4 sh = u_shadows[i];
-      float rad = max(sh.z, 0.05);
-      // 1) Crisp ambient-occlusion core directly beneath the object
-      float dCore = length(p - sh.xy) / rad;
-      float sCore = 1.0 - sh.w * 0.62 * exp(-dCore * dCore * 2.05);
-      // 2) Elongated directional shadow lobe shifted opposite the sun
-      vec2 relS = p - (sh.xy + sunOff * rad * 0.46);
-      float along = dot(relS, sunOff);
-      float perp = length(relS - sunOff * along);
-      float dCast = length(vec2(along / (rad * 1.26), perp / (rad * 0.92)));
-      float sCast = 1.0 - sh.w * 0.44 * exp(-dCast * dCast * 1.75);
-      shadow *= min(sCore, sCast);
-    }
-    shadow = clamp(shadow, 0.26, 1.0);
-
-    // PBR-matched outdoor directional + hemisphere lighting
-    float NoL = max(dot(N, u_keyDir), 0.0);
-    float NoF = max(dot(N, u_fillDir), 0.0);
-    vec3 direct = (albedo / 3.14159265) * (u_keyColor * NoL * shadow + u_fillColor * NoF * 0.65);
-    vec3 hemi = mix(u_groundColor * 0.85, u_skyColor, N.y * 0.5 + 0.5) * albedo * 0.34 * u_lightMix.x * mix(0.68, 1.0, shadow);
-
-    // Subtle sunlit specular sheen on patio stone / grass dew
-    vec3 V = normalize(u_cameraPos - v_worldPos);
-    vec3 H = normalize(u_keyDir + V);
-    float spec = pow(max(dot(N, H), 0.0), mix(18.0, 6.0, roughness)) * (1.0 - roughness) * 0.32 * shadow;
-    vec3 lit = direct + hemi + u_keyColor * spec;
-
-    // Warm flickering firelight / spark pools on the ground around fire walls & bombs
-    for (int i = 0; i < 6; i++) {
-      if (i >= u_glowCount) break;
-      vec4 glw = u_glows[i];
-      float d = length(p - glw.xy) / max(glw.z, 0.2);
-      float flicker = 0.84 + 0.16 * sin(u_time * 13.0 + float(i) * 2.7) * cos(u_time * 7.3 + float(i));
-      float falloff = exp(-d * d * 2.2) * glw.w * flicker;
-      lit += albedo * vec3(1.55, 0.56, 0.12) * falloff * 1.85;
-    }
-
-    vec3 outCol = gToSrgb(gAces(lit * u_lightMix.z));
-    if (u_lightMix.w > 0.001) outCol = mix(outCol, gToSrgb(gAces(albedo * mix(0.65, 1.05, shadow))), u_lightMix.w);
-
-    // Soft atmospheric horizon blend matching BACKDROP_FS pixel-for-pixel so zero ground seam ever appears
+    bool inMap = p.x >= 0.0 && p.y >= 0.0 && p.x < u_mapSize.x && p.y < u_mapSize.y;
     vec2 suv = gl_FragCoord.xy / max(u_viewport, vec2(1.0));
     float rad = clamp(length((suv - vec2(0.5, 0.48)) * vec2(1.15, 1.0)) * 1.15, 0.0, 1.0);
     vec3 skyMatch = mix(u_bgMid, mix(u_bgBot, u_bgTop, smoothstep(0.0, 1.0, suv.y)), smoothstep(0.05, 0.95, rad));
-    float fog = max(smoothstep(10.5, 22.5, distOrig), smoothstep(24.0, 44.0, distCam));
-    outCol = mix(outCol, skyMatch, clamp(fog, 0.0, 1.0));
+
+    if (!inMap) {
+      // Clean dark framed game-table mat outside the map boundary; only blends to sky on low perspective hero angles
+      vec2 edgeD = max(max(-p, p - u_mapSize), vec2(0.0));
+      float dOut = length(edgeD);
+      float frame = 1.0 - smoothstep(0.0, 0.24, dOut);
+      float fade = (u_isOrtho != 0) ? 0.0 : smoothstep(1.2, 6.0, dOut);
+      vec3 matCol = mix(vec3(0.075, 0.088, 0.108), vec3(0.20, 0.23, 0.27), frame * 0.55);
+      fragColor = vec4(mix(matCol, skyMatch, fade), 1.0);
+      return;
+    }
+
+    vec2 cell = floor(p);
+    vec2 localUv = fract(p);
+    float rawIdx = floor(texture(u_mapTex, (cell + 0.5) / u_mapSize).r * 255.0 + 0.5);
+    float aCol = mod(rawIdx, u_atlasGrid.x);
+    float aRow = floor(rawIdx / u_atlasGrid.x);
+    vec2 pxUv = (u_crispPixels != 0)
+      ? (floor(localUv * 32.0) + 0.5) / 32.0
+      : clamp(localUv, 0.5 / 32.0, 31.5 / 32.0);
+    vec2 atlasUv = (vec2(aCol, aRow) + pxUv) / u_atlasGrid;
+    vec3 texSrgb = texture(u_atlasTex, atlasUv).rgb;
+    vec3 albedo = tgToLinear(texSrgb);
+
+    // Subtle animated sunlit ripple glint on original 1998 blue water tiles (w01a),
+    // plus crisp Hi-Res surface micro-grain & normal relief on soil/mud/stone when smooth Hi-Res mode is active
+    bool isWater = abs(rawIdx - u_waterTile) < 0.5;
+    vec3 N = vec3(0.0, 1.0, 0.0);
+    if (isWater) {
+      float rip1 = sin(p.x * 9.5 + p.y * 5.2 + u_time * 2.4);
+      float rip2 = cos(p.x * 6.3 - p.y * 8.7 + u_time * 1.9);
+      N = normalize(vec3(rip1 * 0.065, 1.0, rip2 * 0.065));
+    } else if (u_crispPixels == 0) {
+      float grain = tgNoise(p * 18.0) * 0.55 + tgNoise(p * 46.0) * 0.45;
+      albedo *= 0.91 + 0.18 * grain;
+      float gx = tgNoise((p + vec2(0.025, 0.0)) * 22.0) - tgNoise((p - vec2(0.025, 0.0)) * 22.0);
+      float gz = tgNoise((p + vec2(0.0, 0.025)) * 22.0) - tgNoise((p - vec2(0.0, 0.025)) * 22.0);
+      N = normalize(vec3(-gx * 0.34, 1.0, -gz * 0.34));
+    }
+
+    float sh = sampleTileShadow(v_worldPos);
+    float NoL = max(dot(N, u_keyDir), 0.0);
+    float NoF = max(dot(N, u_fillDir), 0.0);
+
+    // Normalize angled sunlight intensity so unshadowed original tiles match authentic 1998 earthy color & depth,
+    // while shadowed tiles drop crisply into cool angled sky-lit relief.
+    float keyNorm = max(u_keyDir.y, 0.30);
+    vec3 sunTint = u_keyColor / max(max(u_keyColor.r, max(u_keyColor.g, u_keyColor.b)), 0.01);
+    float keyBright = clamp(dot(u_keyColor, vec3(0.299, 0.587, 0.114)) * 0.38, 0.32, 1.25);
+    float sunFactor = (NoL / keyNorm) * mix(1.0 - u_shadowStrength, 1.0, sh);
+    vec3 shadowCool = mix(vec3(0.72, 0.82, 1.06), vec3(1.0), sh);
+    vec3 lit = albedo * (sunTint * keyBright * sunFactor * 0.64 + u_skyColor * 0.20 * u_lightMix.x * shadowCool + u_fillColor * NoF * 0.10);
+
+    if (isWater) {
+      // Gentle rippling blue pond shimmer (orthographic-safe view vector, never blows out to white!)
+      float wave = 0.5 + 0.5 * sin(p.x * 7.5 + p.y * 4.5 + u_time * 2.2) * cos(p.x * 4.8 - p.y * 6.9 + u_time * 1.6);
+      vec3 V = u_isOrtho != 0 ? normalize(u_viewDir) : normalize(u_cameraPos - v_worldPos);
+      vec3 H = normalize(u_keyDir + V);
+      float spec = pow(max(dot(N, H), 0.0), 84.0) * 0.14 * sh;
+      lit *= 0.92 + 0.14 * wave;
+      lit += sunTint * (spec + wave * 0.025 * sh);
+    }
+
+    // Warm flickering firelight ground pools around active fire walls / bombs
+    for (int i = 0; i < 6; i++) {
+      if (i >= u_glowCount) break;
+      vec4 glw = u_glows[i];
+      float d = length(p - glw.xy) / max(glw.z, 0.25);
+      float flick = 0.86 + 0.14 * sin(u_time * 12.0 + float(i) * 2.5);
+      lit += albedo * vec3(1.6, 0.62, 0.16) * exp(-d * d * 2.0) * glw.w * flick;
+    }
+
+    vec3 outCol = tgToSrgb(tgAces(lit * 1.04 * u_lightMix.z));
+    if (u_lightMix.w > 0.001) {
+      vec3 flatCol = texSrgb * mix(1.0 - u_shadowStrength * 0.72, 1.0, sh);
+      outCol = mix(outCol, flatCol, u_lightMix.w);
+    }
+
+    // Razor-sharp 1px screen-space tile grid overlay aligned cleanly to every original 32x32 cell
+    if (u_gridAlpha > 0.001) {
+      vec2 gridD = abs(fract(p - 0.5) - 0.5) / max(fwidth(p), vec2(1e-4));
+      float line = 1.0 - clamp(min(gridD.x, gridD.y), 0.0, 1.0);
+      // Slightly bolder major line every 5 tiles for fast tactical readability
+      vec2 majD = abs(fract(p / 5.0 - 0.5) - 0.5) / max(fwidth(p / 5.0), vec2(1e-4));
+      float majLine = 1.0 - clamp(min(majD.x, majD.y), 0.0, 1.0);
+      float alpha = clamp(line * u_gridAlpha + majLine * u_gridAlpha * 0.45, 0.0, 0.62);
+      outCol = mix(outCol, vec3(0.05, 0.07, 0.06), alpha);
+    }
+
     fragColor = vec4(outCol, 1.0);
   }`;
 
-  function buildGroundMesh(gl, halfSize = 48.0) {
-    const s = halfSize;
+  function buildTileGroundMesh(gl, cols, rows, pad = 6.0) {
+    const x0 = -pad, z0 = -pad, x1 = cols + pad, z1 = rows + pad;
     const verts = new Float32Array([
-      -s, 0, -s,
-       s, 0, -s,
-       s, 0,  s,
-      -s, 0,  s,
+      x0, 0, z0,
+      x1, 0, z0,
+      x1, 0, z1,
+      x0, 0, z1,
     ]);
     const idx = new Uint16Array([0, 2, 1, 0, 3, 2]);
     const vao = gl.createVertexArray();
@@ -783,14 +719,15 @@
       uploadBuffer(gl, gl.ELEMENT_ARRAY_BUFFER, idx),
     ];
     gl.bindVertexArray(null);
-    return { vao, count: idx.length, dispose() { gl.deleteVertexArray(vao); bufs.forEach((b) => gl.deleteBuffer(b)); } };
+    return { vao, count: idx.length, cols, rows, dispose() { gl.deleteVertexArray(vao); bufs.forEach((b) => gl.deleteBuffer(b)); } };
   }
 
   window.__antFx = {
     FIRE_VS, FIRE_FS, buildFireParticles,
     SPARK_VS, SPARK_FS, buildSparkParticles,
     FUR_PROFILES, FUR_VS, FUR_FS,
-    GROUND_VS, GROUND_FS, buildGroundMesh,
+    SHADOW_VS, SHADOW_FS,
+    TILE_GROUND_VS, TILE_GROUND_FS, buildTileGroundMesh,
     evalJelloWobble,
   };
 })();

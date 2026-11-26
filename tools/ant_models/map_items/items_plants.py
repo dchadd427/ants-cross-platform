@@ -236,8 +236,8 @@ def build_grass2() -> SceneBuilder:
 
 
 def build_grass3() -> SceneBuilder:
-    """Full tall lush backyard meadow grass tuft (`1322:grass3`)."""
-    return _build_grass_cluster("item_grass3", n_blades=116, spread_x=0.25, spread_z=0.20, h_min=0.56, h_max=0.90, width_scale=1.08, lean_bias_x=0.0, n_culms=5, seed=1322)
+    """Full lush backyard meadow grass tuft matching 2x2 tile footprint (`1322:grass3`)."""
+    return _build_grass_cluster("item_grass3", n_blades=116, spread_x=0.28, spread_z=0.18, h_min=0.42, h_max=0.68, width_scale=1.08, lean_bias_x=0.0, n_culms=5, seed=1322)
 
 
 def build_grass4() -> SceneBuilder:
@@ -318,8 +318,8 @@ def _build_grass_strip(
 
 
 def build_grassmed1() -> SceneBuilder:
-    """Horizontal lush meadow grass hedge strip (`1324:grassmed1`)."""
-    return _build_grass_strip("item_grassmed1", n_blades=196, length=0.92, thickness=0.22, strip_angle_deg=0.0, h_min=0.42, h_max=0.68, seed=1324)
+    """Horizontal lush meadow grass hedge strip matching 5x2 tile footprint (`1324:grassmed1`)."""
+    return _build_grass_strip("item_grassmed1", n_blades=196, length=1.12, thickness=0.20, strip_angle_deg=0.0, h_min=0.26, h_max=0.44, seed=1324)
 
 
 def build_grassmed2() -> SceneBuilder:
@@ -1014,8 +1014,8 @@ def build_mush2a() -> SceneBuilder:
     # Plump curved fibrous grey-tan mushroom stalk with spotted base matching `329:mush2a`!
     stalk = gradient_y_tint(
         curved_tube(
-            [(+0.11, 0.02, +0.04), (+0.13, 0.14, +0.02), (+0.05, 0.27, +0.00), (-0.02, 0.39, -0.02)],
-            [(0.102, 0.096), (0.078, 0.076), (0.070, 0.068), (0.082, 0.080)],
+            [(+0.11, 0.02, +0.04), (+0.13, 0.11, +0.02), (+0.05, 0.21, +0.00), (-0.02, 0.30, -0.02)],
+            [(0.112, 0.104), (0.086, 0.084), (0.078, 0.074), (0.090, 0.086)],
             samples_per_seg=5,
             radial_segs=22,
             cap_rings=4,
@@ -1027,7 +1027,7 @@ def build_mush2a() -> SceneBuilder:
     )
     sc.add("mushroom", stalk)
     # Iconic bright mint-green spots right on the curving stalk surface (`329:mush2a`)!
-    for idx, (sx, sy, sz, sr) in enumerate(((+0.13, 0.13, +0.105, 0.030), (+0.18, 0.08, +0.065, 0.024), (+0.05, 0.22, +0.070, 0.022))):
+    for idx, (sx, sy, sz, sr) in enumerate(((+0.13, 0.11, +0.115, 0.032), (+0.18, 0.07, +0.070, 0.026), (+0.05, 0.18, +0.076, 0.024))):
         sc.add("mushroom", ellipsoid(sr, sr * 0.90, sr * 0.52, u_segs=14, v_segs=10, name=f"mush_stalk_spot_{idx}", material="item_mush_spot").translate(sx, sy, sz))
 
     # Build the cap, underside gills, AND raised orange + mint-jade spots in LOCAL cap space BEFORE tilting!
@@ -1037,7 +1037,7 @@ def build_mush2a() -> SceneBuilder:
         p = pos.copy()
         r = np.hypot(p[:, 0], p[:, 2])
         ang = np.arctan2(p[:, 2], p[:, 0])
-        rim_wave = 0.024 * np.sin(ang * 4.0 + 0.6) * np.clip(r / 0.28, 0.0, 1.0) ** 1.5
+        rim_wave = 0.024 * np.sin(ang * 4.0 + 0.6) * np.clip(r / 0.30, 0.0, 1.0) ** 1.5
         p[:, 1] = np.where(p[:, 1] < 0.0, p[:, 1] * 0.22, p[:, 1]) + rim_wave
         p[:, 0] *= 1.0 + 0.07 * np.cos(ang * 3.0)
         return p
@@ -1054,13 +1054,13 @@ def build_mush2a() -> SceneBuilder:
         return np.clip(grey_tan * (1.0 - org_w) + rust_org * org_w, 0.2, 1.0)
 
     cap = tint_part(
-        superellipsoid(0.32, 0.22, 0.30, e1=0.84, e2=0.92, u_segs=36, v_segs=22, name="mush_cap", material="item_mush_cap").deform(_mush_cap),
+        superellipsoid(0.36, 0.21, 0.34, e1=0.84, e2=0.92, u_segs=36, v_segs=22, name="mush_cap", material="item_mush_cap").deform(_mush_cap),
         _mush_mottle,
     )
     cap_parts.append(cap)
 
     # Radial pale gills underneath the cap skirt.
-    gills = cylinder(0.28, 0.26, 0.025, radial_segs=32, axis="y", name="mush_gills", material="item_mush_stem").translate(0.0, -0.028, 0.0)
+    gills = cylinder(0.32, 0.29, 0.025, radial_segs=32, axis="y", name="mush_gills", material="item_mush_stem").translate(0.0, -0.028, 0.0)
     cap_parts.append(gills)
 
     # Proud raised bright mint-green spots seated flush on the LOCAL cap ellipsoid dome (impossible to bury!)
@@ -1076,7 +1076,7 @@ def build_mush2a() -> SceneBuilder:
         (2.05, 1.08, 0.048, False),
         (3.95, 1.06, 0.048, False),
     )
-    rx_cap, ry_cap, rz_cap = 0.32, 0.22, 0.30
+    rx_cap, ry_cap, rz_cap = 0.36, 0.21, 0.34
     for idx, (th, phi, sr, has_halo) in enumerate(local_spots):
         nx = math.sin(phi) * math.cos(th)
         ny = math.cos(phi)
@@ -1103,5 +1103,5 @@ def build_mush2a() -> SceneBuilder:
 
     # Tilt the whole cap assembly boldly forward-left just like `329:mush2a`!
     for p in cap_parts:
-        sc.add("mushroom", p.rotate_xyz(rx=22.0, ry=-12.0, rz=26.0, degrees=True).translate(-0.04, 0.39, +0.02))
+        sc.add("mushroom", p.rotate_xyz(rx=22.0, ry=-12.0, rz=26.0, degrees=True).translate(-0.04, 0.30, +0.02))
     return _finalize_item(sc, target_span=0.90)

@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
   <meta name="robots" content="noindex">
-  <meta name="description" content="Interactive 3D backyard RTS map scenarios combining animated Ants (1998) units with 3D map items across sunlit lawn, picnic blanket, and patio scenes.">
+  <meta name="description" content="High-resolution 3D Ants (1998) live map demo running authentic original .LVL tile grids (Treasure Map, Tiny, Small, Islands) at exact 1:1 scale with directional shadows.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23183825'/%3E%3Ccircle cx='16' cy='12' r='5' fill='%23e0b029'/%3E%3Ccircle cx='16' cy='21' r='6' fill='%23297040'/%3E%3C/svg%3E">
-  <title>3D Map Scenarios Demo — Ants (1998)</title>
+  <title>3D Map Demo — Ants (1998)</title>
   <link rel="stylesheet" href="viewer.css">
   <link rel="stylesheet" href="demo.css">
   <script src="viewer_gltf.js" defer></script>
@@ -32,20 +32,20 @@
         class="topbar-toolbar"
         id="demo-toolbar"
         role="toolbar"
-        aria-label="Backyard map scenario selector"
+        aria-label="Original 1998 game map selector"
         focusgroup="toolbar wrap"
         aria-controls="demo-stage"
       >
-        <div class="segmented demo-scenario-group" id="scenario-group" role="group" aria-label="Map scenario">
-          <button type="button" data-scenario="picnic" aria-pressed="true" title="Picnic Feast Raid scenario (1)">Picnic Raid</button>
-          <button type="button" data-scenario="toys" aria-pressed="false" title="Toybox Backyard Skirmish scenario (2)">Toybox Skirmish</button>
-          <button type="button" data-scenario="colony" aria-pressed="false" title="Backyard Colony Base scenario (3)">Colony Base</button>
-          <button type="button" data-scenario="melee" aria-pressed="false" title="Four-Team Backyard Melee scenario (4)">4-Team Melee</button>
+        <div class="segmented demo-scenario-group" id="map-group" role="group" aria-label="Original map">
+          <button type="button" data-map="treasure" aria-pressed="true" title="Original TREASURE.LVL 60x60 map (1)">Treasure (60&times;60)</button>
+          <button type="button" data-map="tiny" aria-pressed="false" title="Original TINY.LVL 31x31 map (2)">Tiny (31&times;31)</button>
+          <button type="button" data-map="small" aria-pressed="false" title="Original SMALL.LVL 40x40 map (3)">Small (40&times;40)</button>
+          <button type="button" data-map="islands" aria-pressed="false" title="Original ISLANDS.LVL 60x60 map (4)">Islands (60&times;60)</button>
         </div>
       </div>
 
       <div class="topbar-right">
-        <span class="badge demo-scene-badge" id="badge-scene-stats" title="Active animated ants and 3D map items">Loading&hellip;</span>
+        <span class="badge demo-scene-badge" id="badge-scene-stats" title="Active ants and 3D map objects">Loading&hellip;</span>
         <button
           type="button"
           class="panel-toggle-btn"
@@ -66,27 +66,27 @@
           <canvas
             id="demo-canvas"
             tabindex="0"
-            aria-label="Interactive 3D backyard Ants map scenario viewport. Left-drag to orbit, right-drag or shift-drag to pan, scroll or pinch to zoom. Press arrow keys to orbit, plus or minus to zoom, Space to pause or resume, R to reset camera, and 1 through 4 to switch scenarios."
+            aria-label="Interactive high-resolution 3D Ants map viewport on authentic 1998 tile grid. Left-drag to pan across the map in Game View or right-drag to orbit 3D, scroll or pinch to zoom. Press arrow keys or WASD to pan, Space to pause, G to toggle grid, R to reset camera, and 1 through 4 to switch maps."
           ></canvas>
 
           <div class="demo-hud-card" id="demo-hud-card" aria-live="polite">
             <div class="demo-hud-head">
-              <h2 class="demo-hud-title" id="hud-title">Picnic Feast Raid</h2>
-              <div class="demo-team-chips" id="hud-teams" aria-label="Teams in scenario"></div>
+              <h2 class="demo-hud-title" id="hud-title">Treasure Map (TREASURE.LVL)</h2>
+              <div class="demo-team-chips" id="hud-teams" aria-label="Teams on map"></div>
             </div>
             <p class="demo-hud-desc" id="hud-desc">
-              Green workers forage across a gingham picnic blanket while Red raiders contest a dropping Combat Power Nectar.
+              Original 60&times;60 tile grid at 1:1 scale with 207 placed 3D objects, 4 anthills, 4 water ponds, and angled directional shadows.
             </p>
           </div>
 
           <div class="demo-hint" aria-hidden="true">
-            Drag: Orbit &middot; Right-Drag / Shift+Drag: Pan &middot; Scroll / Pinch: Zoom &middot; 1&ndash;4: Scenarios &middot; Space: Pause &middot; R: Reset
+            Left-Drag: Pan Map &middot; Right-Drag / Shift+Drag: 3D Orbit &middot; Scroll: Zoom &middot; G: Grid &middot; Space: Pause &middot; R: Reset
           </div>
 
           <div class="empty-overlay" id="demo-loading">
             <div class="empty-card">
-              <h2 id="demo-loading-title">Loading 3D Backyard Scene&hellip;</h2>
-              <p id="demo-loading-msg">Streaming animated ant classes and 3D map item models.</p>
+              <h2 id="demo-loading-title">Loading Treasure Map (60&times;60)&hellip;</h2>
+              <p id="demo-loading-msg">Loading original 1998 terrain tiles and 3D models at 1:1 scale.</p>
             </div>
           </div>
         </main>
@@ -105,8 +105,8 @@
               id="btn-play"
               class="play-btn"
               aria-pressed="true"
-              aria-label="Play or pause scene animations"
-              title="Play or pause scene animations (Space)"
+              aria-label="Play or pause animations"
+              title="Play or pause animations (Space)"
             >
               <svg class="icon-pause" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="3" y="2.5" width="3.5" height="11" rx="1" fill="currentColor"/><rect x="9.5" y="2.5" width="3.5" height="11" rx="1" fill="currentColor"/></svg>
               <svg class="icon-play" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4.2 2.6L13.2 8L4.2 13.4Z" fill="currentColor"/></svg>
@@ -114,21 +114,21 @@
 
             <button
               type="button"
-              id="btn-orbit"
+              id="btn-grid"
               class="dock-toggle-btn"
-              aria-pressed="false"
-              title="Toggle gentle cinematic camera orbit (T)"
-            >Orbit</button>
+              aria-pressed="true"
+              title="Toggle 32px tile grid overlay (G)"
+            >Grid</button>
           </div>
 
           <span class="dock-sep" role="separator" aria-orientation="vertical"></span>
 
           <div class="dock-group">
-            <div class="segmented" role="group" aria-label="Camera angle preset">
-              <button type="button" data-cam="rts" aria-pressed="true" title="Classic 1998 RTS 45 degree tactical angle">RTS 45&deg;</button>
-              <button type="button" data-cam="hero" aria-pressed="false" title="Low backyard hero camera angle">Low Hero</button>
-              <button type="button" data-cam="closeup" aria-pressed="false" title="Zoomed close-up of the central skirmish">Close-Up</button>
-              <button type="button" data-cam="top" aria-pressed="false" title="High tactical top-down map overview">Top-Down</button>
+            <div class="segmented" role="group" aria-label="Camera view preset">
+              <button type="button" data-cam="game" aria-pressed="true" title="Classic grid-aligned orthographic game view">Game View</button>
+              <button type="button" data-cam="rts3d" aria-pressed="false" title="Slightly angled 3D perspective RTS camera">3D RTS</button>
+              <button type="button" data-cam="hero" aria-pressed="false" title="Low dramatic backyard hero angle">Low Hero</button>
+              <button type="button" data-cam="top" aria-pressed="false" title="High tactical top-down grid view">Top-Down</button>
             </div>
           </div>
 
@@ -136,8 +136,8 @@
 
           <div class="dock-group" role="group" aria-label="Projection and reset">
             <div class="segmented" role="group" aria-label="Camera projection">
-              <button type="button" data-proj="perspective" aria-pressed="true" title="Natural 3D perspective camera">Persp</button>
-              <button type="button" data-proj="ortho" aria-pressed="false" title="Isometric-feel orthographic camera">Ortho</button>
+              <button type="button" data-proj="ortho" aria-pressed="true" title="Grid-aligned orthographic projection like the original game">Ortho</button>
+              <button type="button" data-proj="perspective" aria-pressed="false" title="3D perspective projection">Persp</button>
             </div>
             <button type="button" id="btn-reset" class="icon-btn" aria-label="Reset camera view" title="Reset camera view (R)">
               <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3.2 7.8a4.8 4.8 0 1 1 1.2 3.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M2.2 4.3v3.8h3.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -147,48 +147,64 @@
       </div>
 
       <div class="inspector-backdrop" id="inspector-backdrop" hidden></div>
-      <aside class="inspector-panel" id="inspector-panel" aria-label="Scene lighting, display, and landmark focus controls">
+      <aside class="inspector-panel" id="inspector-panel" aria-label="Sunlight angle, display options, and map landmarks">
         <div class="inspector-drawer-head">
-          <span class="inspector-drawer-title">Scene Controls</span>
+          <span class="inspector-drawer-title">Map Controls</span>
           <button type="button" id="btn-close-panel" class="icon-btn" aria-label="Close controls panel">&times;</button>
         </div>
 
-        <section class="inspector-section" aria-label="Lighting preset">
+        <section class="inspector-section" aria-label="Sunlight angle and shadows">
           <div class="inspector-section-head">
-            <span class="inspector-heading">Lighting</span>
+            <span class="inspector-heading">Sun &amp; Shadows</span>
             <kbd class="hotkey-chip" aria-hidden="true">L</kbd>
           </div>
           <div class="lighting-stepper">
             <button type="button" id="btn-light-prev" class="stepper-btn" aria-label="Previous lighting preset" title="Previous lighting preset">&#x276E;</button>
-            <select id="select-lighting" class="inspector-select action-select" aria-label="3D lighting preset" title="Switch 3D lighting preset (L)"></select>
+            <select id="select-lighting" class="inspector-select action-select" aria-label="Lighting preset" title="Switch lighting preset (L)"></select>
             <button type="button" id="btn-light-next" class="stepper-btn" aria-label="Next lighting preset" title="Next lighting preset (L)">&#x276F;</button>
           </div>
+          <div class="demo-slider-group">
+            <label class="demo-slider-row" for="range-sun-elev">
+              <span>Sun Angle</span>
+              <output id="out-sun-elev" for="range-sun-elev">32&deg;</output>
+            </label>
+            <input type="range" id="range-sun-elev" class="demo-range" min="16" max="72" step="1" value="32">
+            <label class="demo-slider-row" for="range-sun-azim">
+              <span>Sun Direction</span>
+              <output id="out-sun-azim" for="range-sun-azim">-42&deg;</output>
+            </label>
+            <input type="range" id="range-sun-azim" class="demo-range" min="-180" max="180" step="2" value="-42">
+          </div>
         </section>
 
-        <section class="inspector-section" aria-label="Display options">
+        <section class="inspector-section" aria-label="Grid and rendering options">
           <div class="inspector-section-head">
-            <span class="inspector-heading">Scene Options</span>
+            <span class="inspector-heading">Grid &amp; Display</span>
           </div>
           <div class="toggle-list">
-            <button type="button" class="toggle-row" id="btn-patrols" aria-pressed="true" title="Toggle live foraging and patrol paths">
-              <span class="toggle-label">Live Ant Patrols</span>
+            <button type="button" class="toggle-row" id="btn-shadows" aria-pressed="true" title="Toggle real-time directional cast shadows">
+              <span class="toggle-label">Cast Shadows</span>
               <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
             </button>
-            <button type="button" class="toggle-row" id="btn-pixel-mode" aria-pressed="false" title="Render scene at nostalgic low-resolution pixel scale (P)">
-              <span class="toggle-label">1998 Pixel Mode</span>
+            <button type="button" class="toggle-row" id="btn-hires-tiles" aria-pressed="true" title="Enhance original 32px ground tiles with Hi-Res micro-detail">
+              <span class="toggle-label">Hi-Res Tile Detail</span>
               <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
             </button>
-            <button type="button" class="toggle-row" id="btn-hud" aria-pressed="true" title="Show or hide scenario caption card">
-              <span class="toggle-label">Scene Caption</span>
+            <button type="button" class="toggle-row" id="btn-patrols" aria-pressed="true" title="Toggle live ant marching and swimming patrols">
+              <span class="toggle-label">Live Ant Activity</span>
+              <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+            </button>
+            <button type="button" class="toggle-row" id="btn-hud" aria-pressed="true" title="Show or hide map caption overlay">
+              <span class="toggle-label">Map Caption</span>
               <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
             </button>
           </div>
         </section>
 
-        <section class="inspector-section" aria-label="Jump to featured landmarks">
+        <section class="inspector-section" aria-label="Jump to map landmarks">
           <div class="inspector-section-head">
-            <span class="inspector-heading">Focus Landmark</span>
-            <span class="inspector-readout" id="focus-readout">Overview</span>
+            <span class="inspector-heading">Map Regions</span>
+            <span class="inspector-readout" id="focus-readout">Center</span>
           </div>
           <div class="demo-focus-grid" id="demo-focus-grid"></div>
         </section>
@@ -196,21 +212,21 @@
         <div class="inspector-foot">
           <details class="inspector-details" open>
             <summary>
-              <span>Scene Breakdown</span>
+              <span>Map Breakdown</span>
               <span class="details-summary-meta" id="meta-fps">&mdash;</span>
             </summary>
-            <dl class="meta-list" aria-label="Active scenario statistics">
+            <dl class="meta-list" aria-label="Active map statistics">
+              <div class="meta-row">
+                <dt>Grid</dt>
+                <dd id="meta-grid">&mdash;</dd>
+              </div>
               <div class="meta-row">
                 <dt>Units</dt>
                 <dd id="meta-ants">&mdash;</dd>
               </div>
               <div class="meta-row">
-                <dt>Map Items</dt>
+                <dt>3D Props</dt>
                 <dd id="meta-items">&mdash;</dd>
-              </div>
-              <div class="meta-row">
-                <dt>Triangles</dt>
-                <dd id="meta-tris">&mdash;</dd>
               </div>
               <div class="meta-row">
                 <dt>Camera</dt>
@@ -218,7 +234,7 @@
               </div>
             </dl>
           </details>
-          <p role="status" class="status-region" id="status-region">Loading 3D map scenario&hellip;</p>
+          <p role="status" class="status-region" id="status-region">Loading Treasure Map&hellip;</p>
         </div>
       </aside>
     </div>
