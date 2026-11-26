@@ -1,6 +1,7 @@
 #include "ants_replay/match_stats.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <exception>
 #include <stdexcept>
 #include <utility>
@@ -151,12 +152,6 @@ void MatchStatsCollector::count(MatchStats::Action kind, uint32_t turns, uint32_
     series[bucket] += events;
 }
 
-// A hit that the ants of another seat took from this seat's team, in the bucket of the turn
-void MatchStatsCollector::credit_hit(uint32_t bucket, uint8_t seat) {
-    if (stats_.hit_credit.size() <= bucket) stats_.hit_credit.resize(bucket + 1);
-    ++stats_.hit_credit[bucket][seat];
-}
-
 void MatchStatsCollector::fail(const char* what) {
     if (failed_) return;
     failed_ = true;
@@ -230,7 +225,6 @@ void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine)
         // 1. the totals: the score's rises are what the hill banked (a hatch is paid out of it: the cost is the one rule of hatch_request, so a rise in the tick of a hatch is not hidden by it)
         std::array<int32_t, kSeats> score{};
         std::array<uint32_t, kSeats> hatched{};
-        std::array<uint32_t, kSeats> lit_now{};                          // the fires that each seat lit in this tick
         uint32_t planted = 0, defused = 0;
         for (size_t s = 0; s < kSeats; ++s) {
             const sim::PlayerMatchStats& st = engine.stats_manager().get_player_stats(static_cast<uint8_t>(s));
@@ -240,10 +234,7 @@ void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine)
             defused += st.bombs_defused;
             stats_.bombs_planted[s] = st.bombs_planted;
             stats_.fires_lit[s] = st.fires_lit;
-            if (st.fires_lit > prev_fires_[s]) {
-                lit_now[s] = st.fires_lit - prev_fires_[s];
-                count(MatchStats::Action::Fire, turns, lit_now[s]);                                                        // (a fire lit in this tick)
-            }
+            if (st.fires_lit > prev_fires_[s]) count(MatchStats::Action::Fire, turns, st.fires_lit - prev_fires_[s]);          // (a fire lit in this tick)
             prev_fires_[s] = st.fires_lit;
             if (!plays(roster_, s)) continue;
             int64_t cost = 0;
@@ -255,11 +246,16 @@ void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine)
         prev_score_ = score;
         prev_hatched_ = hatched;
 
-        // 2. the grid's size, looked at once (it never changes while a match plays), and the fire walls that the map itself has: nobody lit them
+        // 2. the grid's size and the hills, looked at once (they never change while a match plays)
         if (stats_.map_width == 0) {
             stats_.map_width = engine.grid().width();
             stats_.map_height = engine.grid().height();
-            fires_ = scan(engine, false);
+            for (size_t s = 0; s < kSeats; ++s) {
+                const auto* hill = engine.grid().find_anthill(static_cast<uint8_t>(s));
+                if (hill == nullptr) continue;
+                stats_.hill_x[s] = hill->x;
+                stats_.hill_y[s] = hill->y;
+            }
         }
 
         // 3. the ants: hit points that fell, a type that changed, food picked up, a raid that began; and the ants that are gone
@@ -272,6 +268,7 @@ void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine)
             if (snap.player_id < kSeats) ++alive[snap.player_id];
             if (!ant.alive) {                                           // a new ant (the ants of the start, a hatched one)
                 ant = Ant{true, snap.player_id, static_cast<uint8_t>(snap.raw_type), snap.hp, snap.is_holding, snap.target_team_id, snap.tile_x, snap.tile_y, turns};
+                ant.thief = snap.type == sim::AntType::Thief;
                 continue;
             }
             if (snap.player_id < kSeats) {
@@ -285,7 +282,6 @@ void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine)
                     if (ant.hit_bucket != turns / MatchStats::kSampleTurns) {          // (once for an ant in a bucket: a fight that goes on does not make a bigger one)
                         ant.hit_bucket = turns / MatchStats::kSampleTurns;
                         count(MatchStats::Action::Hit, turns);
-                        if (source != MatchStats::kNoKiller && source != snap.player_id) credit_hit(turns / MatchStats::kSampleTurns, source);
                     }
                     const uint32_t lost = static_cast<uint32_t>(ant.hp - snap.hp);
                     stats_.damage_taken[snap.player_id] += lost;
@@ -336,9 +332,11 @@ void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine)
             ant.own_type = static_cast<uint8_t>(snap.raw_type);
             ant.holding = snap.is_holding;
             ant.target_team = snap.target_team_id;
+            ant.thief = snap.type == sim::AntType::Thief;
             ant.tile_x = snap.tile_x;
             ant.tile_y = snap.tile_y;
         }
+        const size_t first_new_kill = stats_.kills.size();
         for (size_t id = 1; id < ants_.size(); ++id) {
             Ant& ant = ants_[id];
             if (!ant.alive || ant.last_seen == turns) continue;
@@ -351,6 +349,10 @@ void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine)
             kill.victim_type = ant.own_type;
             kill.tile_x = ant.tile_x;
             kill.tile_y = ant.tile_y;
+            if (ant.thief) {                                            // (what it was doing at its last look: raiding a hill, carrying the loot of a raid)
+                if (ant.target_team < kSeats) kill.raid_on = ant.target_team;
+                kill.carried_loot = ant.loot >= 0;
+            }
             try {
                 const sim::AntUnit& unit = engine.get_unit(static_cast<uint32_t>(id));
                 kill.drowned = unit.death_status == sim::DeathStatus::Drowned;
@@ -363,9 +365,18 @@ void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine)
             }
         }
 
-        // 4. the bombs and the fire walls on the map: which went off, which were lit and where
+        // the ants of a victim's own seat that are still about it (a group that is wiped out leaves none): looked at in the snapshot of this tick, so the ants that fell in it are not counted
+        for (size_t k = first_new_kill; k < stats_.kills.size(); ++k) {
+            MatchStats::Kill& kill = stats_.kills[k];
+            uint32_t mates = 0;
+            for (const sim::AntSnapshot& snap : ants) {
+                if (snap.player_id == kill.victim && std::max(std::abs(snap.tile_x - kill.tile_x), std::abs(snap.tile_y - kill.tile_y)) <= MatchStats::kMatesTiles) ++mates;
+            }
+            kill.mates_near = static_cast<uint8_t>(std::min<uint32_t>(mates, 255u));
+        }
+
+        // 4. the bombs on the map: which went off
         track_bombs(engine, turns, planted, defused, ants);
-        track_fires(engine, turns, lit_now);
 
         // 5. a seat without an ant: wiped out (an egg gives it one for free), and out for good when it has no egg and no hatch either
         for (size_t s = 0; s < kSeats; ++s) {
@@ -398,14 +409,14 @@ void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine)
     }
 }
 
-// The bombs (or the fire walls) that lie on the map, row by row: tile and owner
-std::vector<MatchStatsCollector::Spot> MatchStatsCollector::scan(sim::SimulationEngine& engine, bool bombs) {
+// The bombs that lie on the map, row by row: tile and planter
+std::vector<MatchStatsCollector::Spot> MatchStatsCollector::scan_bombs(sim::SimulationEngine& engine) {
     std::vector<Spot> out;
     const sim::Grid& grid = engine.grid();
     for (uint32_t y = 0; y < grid.height(); ++y) {
         for (uint32_t x = 0; x < grid.width(); ++x) {
             const sim::TileCell& cell = grid.get_cell(x, y);
-            if (bombs ? cell.has_bomb() : cell.has_fire()) out.push_back(Spot{static_cast<int32_t>(x), static_cast<int32_t>(y), cell.interactive_owner});
+            if (cell.has_bomb()) out.push_back(Spot{static_cast<int32_t>(x), static_cast<int32_t>(y), cell.interactive_owner});
         }
     }
     return out;
@@ -414,11 +425,11 @@ std::vector<MatchStatsCollector::Spot> MatchStatsCollector::scan(sim::Simulation
 // The bombs: a bomb leaves the map only when an ant takes it away (the engine's count of bombs defused says so) or when an ant walks onto it and it goes off, so the bombs that are gone since the last look, less the ones that the
 // count of defused bombs rose by, went off (and, whatever a game queued in its cues, nothing of them is read here). New bombs come only with the count of bombs planted rising: the map is looked through then, and in no other tick
 // (a bomb that is known is asked about by its tile, a few asks a tick). When a bomb was defused in the tick in which another went off nothing in the counts says which was which, but the ant that a bomb throws stands on the
-// bomb's tile in the action of a bomb's victim (the world of that tick shows it) and the ant that defuses stands beside it; if that does not settle it either (and a bomb of a seat is among them) `events_ok` says so.
+// bomb's tile in the action of a bomb's victim (the world of that tick shows it) and the ant that defuses stands beside it; if that does not settle it either the first ones in the order of the map are taken to be the defused.
 void MatchStatsCollector::track_bombs(sim::SimulationEngine& engine, uint32_t turns, uint32_t planted, uint32_t defused, const std::vector<sim::AntSnapshot>& ants) {
     std::vector<Spot> gone;
     if (planted != bombs_planted_) {
-        std::vector<Spot> now = scan(engine, true);
+        std::vector<Spot> now = scan_bombs(engine);
         for (const Spot& old : bombs_) {
             const bool still = std::any_of(now.begin(), now.end(), [&](const Spot& b) { return b.x == old.x && b.y == old.y; });
             if (!still) gone.push_back(old);
@@ -442,50 +453,13 @@ void MatchStatsCollector::track_bombs(sim::SimulationEngine& engine, uint32_t tu
             const bool struck = std::any_of(ants.begin(), ants.end(), [&](const sim::AntSnapshot& ant) { return ant.tile_x == bomb.x && ant.tile_y == bomb.y && ant.action == sim::AntUnit::kActionBlast; });
             if (struck) off.push_back(bomb);
         }
-        if (off.size() != gone.size() - taken_away) {                    // (not settled: the first ones in the order of the map are taken to be the defused)
-            off.assign(gone.begin() + static_cast<std::ptrdiff_t>(taken_away), gone.end());
-            if (std::any_of(gone.begin(), gone.end(), [](const Spot& bomb) { return bomb.owner < kSeats; })) stats_.events_ok = false;
-        }
+        if (off.size() != gone.size() - taken_away) off.assign(gone.begin() + static_cast<std::ptrdiff_t>(taken_away), gone.end());      // (not settled)
     }
     for (const Spot& bomb : off) {
         if (bomb.owner >= kSeats) continue;                              // (a bomb of the map: nobody planted it)
         ++stats_.bombs_off[bomb.owner];
         count(MatchStats::Action::Bomb, turns);
-        stats_.bomb_events.push_back(MatchStats::BombOff{turns, bomb.owner, bomb.x, bomb.y});
     }
-}
-
-// The fire walls: the engine counts a fire for the seat that lit it when its wall is placed. Walls that have burnt out or been put out are forgotten each tick (a few asks), and in a tick in which any seat's count rose the map
-// is looked through: the new walls of the seat are its fires, in the order of the map. A count with no new wall to go with it (the engine does not place a wall at the entrance of a hill, and counts the fire all the same)
-// is a fire with no tile; a new wall that no count accounts for (more new walls of a seat than it lit fires, or one that is nobody's) is not believed (`events_ok`).
-void MatchStatsCollector::track_fires(sim::SimulationEngine& engine, uint32_t turns, const std::array<uint32_t, MatchStats::kSeats>& lit_now) {
-    fires_.erase(std::remove_if(fires_.begin(), fires_.end(), [&](const Spot& f) { return !engine.has_fire_at(sim::TileCoord{f.x, f.y}); }), fires_.end());
-    if (std::all_of(lit_now.begin(), lit_now.end(), [](uint32_t n) { return n == 0; })) return;
-    std::vector<Spot> now = scan(engine, false);
-    for (size_t seat = 0; seat < kSeats; ++seat) {
-        std::vector<const Spot*> fresh;
-        for (const Spot& wall : now) {
-            const bool known = std::any_of(fires_.begin(), fires_.end(), [&](const Spot& f) { return f.x == wall.x && f.y == wall.y; });
-            if (!known && wall.owner == seat) fresh.push_back(&wall);
-        }
-        if (fresh.size() > lit_now[seat]) stats_.events_ok = false;
-        for (uint32_t i = 0; i < lit_now[seat]; ++i) {
-            MatchStats::FireLit fire;
-            fire.turn = turns;
-            fire.seat = static_cast<uint8_t>(seat);
-            if (i < fresh.size()) {
-                fire.has_tile = true;
-                fire.tile_x = fresh[i]->x;
-                fire.tile_y = fresh[i]->y;
-            }
-            stats_.fire_events.push_back(fire);
-        }
-    }
-    for (const Spot& wall : now) {                                       // (a new wall that belongs to no seat: nobody lit it)
-        const bool known = std::any_of(fires_.begin(), fires_.end(), [&](const Spot& f) { return f.x == wall.x && f.y == wall.y; });
-        if (!known && wall.owner >= kSeats) stats_.events_ok = false;
-    }
-    fires_ = std::move(now);
 }
 
 StatsPlayback::StatsPlayback(const Replay& replay, const assets::LevelData& level) : collector_(replay), playback_(replay, level, collector_.hooks()) {}

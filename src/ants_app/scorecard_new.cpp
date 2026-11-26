@@ -2,6 +2,7 @@
 // second page "Match stats", and the buttons between them. The layout is in units (a unit is a whole number of device pixels); the rows are the same as the original's page has, and the numbers that were counted
 // (match_report.hpp) are shown only when the count is whole: without them the page shows the original's numbers and nothing else.
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -348,20 +349,76 @@ void draw_honors(const Ctx& c, const Podium& p) {
     }
 }
 
-/// What the Play of the game says, in two lines: the seat's name and what follows it ("Bea" "'s bomb takes out"), then the rest ("6 ants")
-struct PlayWords {
-    std::string who, first, second;
-};
-PlayWords play_words(const Ctx& c, const MatchReport::Play& play) {
-    const std::string who = c.m.seat_name(play.seat);
-    const std::string count = std::to_string(play.count);
-    switch (play.kind) {
-        case MatchReport::PlayKind::Bomb: return {who, "'s bomb takes out", count + (play.count == 1 ? " ant" : " ants")};
-        case MatchReport::PlayKind::Raid: return {who, "'s raid", "steals " + count + (play.count == 1 ? " point" : " points")};
-        case MatchReport::PlayKind::Fire: return {who, "'s fire wall", "burns " + count + (play.count == 1 ? " ant" : " ants")};
-        case MatchReport::PlayKind::Fight: return {who, " wins a fight", count + (play.count == 1 ? " kill" : " kills") + " in 10 seconds"};
+/// What the kills of a moment are called: "1 kill", then the streaks by their names ("double kill", "triple kill", "quad kill") and, from 5, "5-kill streak" and so on
+std::string kills_called(uint32_t kills) {
+    switch (kills) {
+        case 1: return "1 kill";
+        case 2: return "double kill";
+        case 3: return "triple kill";
+        case 4: return "quad kill";
+        default: return std::to_string(kills) + "-kill streak";
     }
-    return {who, std::string(), std::string()};
+}
+
+/// What the Play of the game says, in two lines (match_report.hpp, Play): the seat, its kills and the seconds they took ("Gory: triple kill in 8 seconds,"), then the big moments that the kills had ("saved the hill, wiped out a group").
+/// Nothing that has a number in it is ever cut: a line that is too long for the card takes its shorter wording ("8 s"), and the name of the seat is the last thing to give way, cut at its end (or left out when it would keep fewer than 4 letters). The bonuses are named as many as fit,
+/// the most points first (a knockout, the saved hill, the wiped out group, the thief that had loot), each in its shorter wording before one is left out. The first line ends in a comma when a second follows it.
+struct PlayWords {
+    std::string kills;                                              // the first line
+    std::string moments;                                            // the second line ("" when the moment has none)
+};
+PlayWords play_words(const Ctx& c, const MatchReport::Play& play, int32_t room) {
+    PlayWords words;
+    struct Moment {
+        std::string full, shorter;
+    };
+    std::vector<Moment> moments;
+    if ((play.bonuses & MatchReport::kKnockedOut) != 0) moments.push_back({"knocked out " + c.m.seat_name(play.knocked_out), "a knockout"});
+    if ((play.bonuses & MatchReport::kSavedHill) != 0) moments.push_back({"saved the hill", "saved the hill"});
+    if ((play.bonuses & MatchReport::kWipedGroup) != 0) moments.push_back({"wiped out a group", "wiped a group"});
+    if ((play.bonuses & MatchReport::kStoppedLoot) != 0) moments.push_back({"caught a Thief with loot", "caught a loot Thief"});
+    const auto joined = [&](size_t count, bool shorter) {
+        std::string line;
+        for (size_t i = 0; i < count; ++i) line += (i == 0 ? "" : ", ") + (shorter ? moments[i].shorter : moments[i].full);
+        return line;
+    };
+    for (size_t count = moments.size(); count > 0 && words.moments.empty(); --count) {
+        for (const bool shorter : {false, true}) {
+            if (c.pen.width(joined(count, shorter), 12.0) <= room) {
+                words.moments = joined(count, shorter);
+                break;
+            }
+        }
+    }
+    if (words.moments.empty() && !moments.empty()) words.moments = moments[0].shorter;      // (even the shortest wording of the first is longer than the card: the line cuts it at its end)
+
+    std::string who = c.m.seat_name(play.seat);
+    const std::string kills = kills_called(play.kills);
+    const std::string seconds = std::to_string(play.seconds);
+    const std::string tail = words.moments.empty() ? std::string() : ",";
+    std::vector<std::string> wordings;
+    if (play.seconds == 0) {
+        wordings.push_back(": " + kills + tail);
+    } else {
+        wordings.push_back(": " + kills + " in " + seconds + (play.seconds == 1 ? " second" : " seconds") + tail);
+        wordings.push_back(": " + kills + " in " + seconds + " s" + tail);
+    }
+    for (const std::string& wording : wordings) {
+        if (c.pen.width(who + wording, 12.0) <= room) {
+            words.kills = who + wording;
+            return words;
+        }
+    }
+    const int32_t name_room = std::max(0, room - c.pen.width(wordings.back(), 12.0));
+    if (c.pen.width(who, 12.0) > name_room && who.find(' ') != std::string::npos && c.pen.width(who.substr(0, who.find(' ')), 12.0) <= name_room) who = who.substr(0, who.find(' '));     // ("Bartholomew: ...", not "Bartholomew the Third of Antw...: ...")
+    if (name_room < c.pen.width("Abcd...", 12.0)) {                 // a name that would keep fewer than 4 letters says nothing: the line is the kills alone, so that no number is cut
+        std::string alone = wordings.back().substr(2);
+        alone[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(alone[0])));
+        words.kills = alone;
+        return words;
+    }
+    words.kills = fit_pen(c, who, name_room, 12.0) + wordings.back();
+    return words;
 }
 
 void draw_play(const Ctx& c, const Podium& p) {
@@ -375,19 +432,21 @@ void draw_play(const Ctx& c, const Podium& p) {
     draw_ant(c, play.seat, p.play_picture.x + (p.play_picture.w - ant_w) / 2.0, p.play_picture.y, a, false);
     c.sheet.lettering("sc_k_play", p.play_text_x, p.play_label_base);
     const int32_t room = c.W(p.play.right() - 8 - p.play_text_x);
-    const PlayWords words = play_words(c, play);
     const std::string when = "at " + clock_of(play.turn);
-    const int32_t name_room = std::max(0, room - c.pen.width(words.first, 12.0));
-    std::string who = words.who;
-    if (c.pen.width(who, 12.0) > name_room && who.find(' ') != std::string::npos && c.pen.width(who.substr(0, who.find(' ')), 12.0) <= name_room) who = who.substr(0, who.find(' '));     // ("Bartholomew's fire wall", not "Bartholomew the Third of Antw...'s fire wall")
-    std::array<std::string, 2> lines = {fit_pen(c, who, name_room, 12.0) + words.first, words.second};
-    if (p.narrow) lines[1] += "  " + when;
+    const PlayWords words = play_words(c, play, room);
+    std::vector<std::string> lines = {words.kills};
+    if (!words.moments.empty()) lines.push_back(words.moments);
+    bool when_on_a_line = true;                                     // the time has a line of its own, under the words, when it does not fit at the end of the last one
+    if (p.narrow && c.pen.width(lines.back() + "  " + when, 12.0) <= room) {
+        lines.back() += "  " + when;
+        when_on_a_line = false;
+    }
     int32_t base = p.play_line_base;
     for (const std::string& line : lines) {
         c.pen.draw(fit_pen(c, line, room, 12.0), c.X(p.play_text_x), c.Y(base), kCream, 12.0, 0);
         base += p.play_pitch;
     }
-    if (!p.narrow) c.pen.draw(when, c.X(p.play_text_x), c.Y(base), kDim, 10.0, 0);
+    if (when_on_a_line) c.pen.draw(when, c.X(p.play_text_x), c.Y(base), kDim, 10.0, 0);
     if (c.m.watch_available()) c.sheet.put(std::string("sc_watch_") + state_of(c.m.watch_look()), p.watch.x, p.watch.y);
 }
 

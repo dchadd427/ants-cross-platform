@@ -32,6 +32,7 @@ struct MatchStats {
     static constexpr uint32_t kSampleTurns = 100;          // the totals are read every 100 turns (5 seconds)
     static constexpr uint32_t kMinuteTurns = 1200;         // a minute of play
     static constexpr uint8_t kNoKiller = 255;
+    static constexpr int32_t kMatesTiles = 4;              // ants of one seat within this many tiles of each other (the larger of the two tile differences) are one group: Kill::mates_near, the results screen's Play of the game
 
     /// The kinds of order that a seat gives, as the page counts them. A special order is what the ant's type does with it: the first ant of the group that has an ability type decides (bomb, fire, bridge, raid);
     /// for a group of workers and combat ants it is a plain "special". Quit and Drop are no orders.
@@ -62,6 +63,12 @@ struct MatchStats {
         bool drowned{false};
         int32_t tile_x{0};
         int32_t tile_y{0};
+        /// What the results screen's Play of the game needs to know about the kill (ants_app/match_report.hpp), read from the same looks at the world: `raid_on` is the seat whose hill the victim, a Thief, was raiding at its
+        /// last look (the engine's target team of a Thief, from the order to raid to the end of the raid clip that takes the loot; kNoKiller: none, or not a Thief); `carried_loot` that the victim, a Thief, carried the loot
+        /// of a raid (the points are lost with it); `mates_near` how many ants of the victim's own seat were still alive within kMatesTiles tiles of its tile after the tick (the most it counts is 255).
+        uint8_t raid_on{kNoKiller};
+        bool carried_loot{false};
+        uint8_t mates_near{0};
     };
     /// A Thief started to raid a hill; `points` is the loot that the raid took (the hill lost it, the thief carried it off: 0 for a hill with nothing); `tile_x` / `tile_y` the tile the thief stood on when the raid began
     struct Raid {
@@ -72,23 +79,6 @@ struct MatchStats {
         int32_t tile_x{0};
         int32_t tile_y{0};
     };
-    /// A bomb that went off: the seat that planted it, the turn of the tick in which it was gone, the tile it lay on
-    struct BombOff {
-        uint32_t turn{0};
-        uint8_t owner{0};
-        int32_t tile_x{0};
-        int32_t tile_y{0};
-    };
-    /// A fire that a seat lit (the engine's own count of fires lit says when; the fire wall that appeared says where: `has_tile` is false for a fire that the engine counted and that left no wall, which it does not place
-    /// on the tiles at the entrance of a hill)
-    struct FireLit {
-        uint32_t turn{0};
-        uint8_t seat{0};
-        bool has_tile{false};
-        int32_t tile_x{0};
-        int32_t tile_y{0};
-    };
-
     bool ok{false};                                        // false: the pass could not count this match (`why`); nothing below is to be believed
     std::string why;
     uint32_t turns{0};
@@ -106,16 +96,10 @@ struct MatchStats {
     std::array<std::vector<uint32_t>, kActionKinds> action;
     std::array<std::array<uint32_t, 5>, kSeats> powerups{};            // [seat][bomber, fire, thief, combat, swimmer]: power-ups taken that changed the ant's type
     // What the results screen needs besides the totals (ants_app/match_report.hpp); all of it only added, nothing above changed
-    std::vector<BombOff> bomb_events;                      // the bombs that went off, in the order they did (their count is `bombs_off`)
-    std::vector<FireLit> fire_events;                      // the fires that were lit, in the order they were (their count is `fires_lit`)
+    std::array<int32_t, kSeats> hill_x{-1, -1, -1, -1};    // the tile at the top left of the seat's hill, a mound of 4 by 4 tiles (-1: the seat has no hill); read once, at the first look (a hill never moves)
+    std::array<int32_t, kSeats> hill_y{-1, -1, -1, -1};
     std::array<uint32_t, kSeats> bombs_planted{};          // the engine's own count of bombs a seat planted
     std::array<uint32_t, kSeats> fires_lit{};              // ... and of fires it lit
-    /// hit_credit[bucket][seat]: the hits of `action` (an ant that lost hit points, once for an ant in a bucket) that were taken by the ants of OTHER seats from damage of this seat's team, the team of the last damage that
-    /// the ant had taken (a hit that no team did, or that a seat did to its own ants, is nobody's)
-    std::vector<std::array<uint32_t, kSeats>> hit_credit;
-    /// false: the place or the owner of a bomb or a fire could not be told for sure (a bomb was defused in the same tick as another went off, and nothing says which was which; a fire wall that no count of fires lit accounts
-    /// for). The totals are still right. `ok` does not depend on it: the match pages never read the lists above; the results screen does, and shows no honors then.
-    bool events_ok{true};
     std::array<uint32_t, kSeats> food_trips{};             // times an ant picked food up
     std::array<int64_t, kSeats> food_points{};             // the points it held then
     std::array<int64_t, kSeats> banked{};                  // what the hill gained: the score's rises, a thief's loot included, the cost of a hatch not taken off
@@ -177,11 +161,10 @@ private:
         uint32_t work_state{0};
         int32_t raid{-1};                                  // (a Thief) the entry of `raids` of its latest raid, until its loot is picked up
         int32_t loot{-1};                                  // (a Thief) the entry of `raids` whose loot it carries
+        bool thief{false};                                 // it is a Thief (what it IS, as the world shows it: a Worker on a map whose default ant is the Thief is one) at the last look
     };
     void count(MatchStats::Action kind, uint32_t turns, uint32_t events = 1);
-    void credit_hit(uint32_t bucket, uint8_t seat);
     void track_bombs(sim::SimulationEngine& engine, uint32_t turns, uint32_t planted, uint32_t defused, const std::vector<sim::AntSnapshot>& ants);
-    void track_fires(sim::SimulationEngine& engine, uint32_t turns, const std::array<uint32_t, MatchStats::kSeats>& lit_now);
     void work_of(const sim::AntSnapshot& snap, sim::SimulationEngine& engine, Work& kind, int32_t& x, int32_t& y) const;
     void settle(Ant& ant, Work now, int32_t x, int32_t y, sim::SimulationEngine& engine);
     void note_work(Ant& ant, Work now, int32_t x, int32_t y, sim::SimulationEngine& engine) const;
@@ -197,14 +180,13 @@ private:
     std::array<bool, MatchStats::kSeats> was_wiped_{};
     uint32_t bombs_planted_{0};
     uint32_t bombs_defused_{0};
-    struct Spot {                                          // a bomb or a fire wall on the map: its tile and the seat that owns it
+    struct Spot {                                          // a bomb on the map: its tile and the seat that planted it
         int32_t x{0};
         int32_t y{0};
         uint8_t owner{255};
     };
-    static std::vector<Spot> scan(sim::SimulationEngine& engine, bool bombs);
+    static std::vector<Spot> scan_bombs(sim::SimulationEngine& engine);
     std::vector<Spot> bombs_;                              // the bombs on the map as last looked at
-    std::vector<Spot> fires_;                              // the fire walls on the map as last looked at (the owner of a wall is the seat that lit it; the map's own walls are known from the first tick)
     std::vector<std::array<int32_t, 3>> settled_;          // the work (kind, tile) that was found done in this tick: one fire put out or one bridge dug away is one, whatever the number of ants that were at it
 };
 
