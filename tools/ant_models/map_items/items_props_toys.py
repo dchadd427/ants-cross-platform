@@ -480,33 +480,201 @@ def build_brush() -> SceneBuilder:
     return _finalize_item(sc, target_span=0.96)
 
 
+def _slinky_flat_ribbon_arch(
+    arch_rad: float = 0.272,
+    coil_rad: float = 0.174,
+    n_arch_turns: float = 61.5,
+    n_foot_turns: float = 1.5,
+    pts_per_turn: int = 18,
+    ribbon_hw: float = 0.0125,
+    ribbon_ht: float = 0.0018,
+    material: str = "item_slinky_steel",
+    name: str = "slinky_spring",
+) -> MeshPart:
+    """Build a continuous flat-wire steel Slinky standing upright in a 180-degree vertical half-circle arch.
+
+    Both circular ends rest flush on Y = 0 and ease smoothly (C1) from flat stacked foot coils into
+    the circular arch so the spring stands stably on its own with zero transition kinks.
+    """
+    n_total = n_arch_turns + 2.0 * n_foot_turns
+    total_steps = int(round(n_total * pts_per_turn))
+    t_ax = 2.0 * ribbon_ht
+    dz_foot = 1.12 * t_ax
+    th0 = -0.5 * math.pi
+
+    def _smoothstep(x: float) -> float:
+        x = max(0.0, min(1.0, x))
+        return x * x * (3.0 - 2.0 * x)
+
+    # Smooth C1 arch curvature weight w(u) in [0, 1]: 0 on flat grounded feet, smoothly easing to 1 in arch.
+    u_arr = np.linspace(0.0, n_total, total_steps + 1, dtype=np.float64)
+    ramp_turns = 5.0
+    w_arr = np.zeros_like(u_arr)
+    for k, u_t in enumerate(u_arr):
+        if u_t <= n_foot_turns or u_t >= n_total - n_foot_turns:
+            w_arr[k] = 0.0
+        else:
+            d_start = (u_t - n_foot_turns) / ramp_turns
+            d_end = (n_total - n_foot_turns - u_t) / ramp_turns
+            w_arr[k] = _smoothstep(min(d_start, d_end))
+
+    # Integrate alpha smoothly from 0 to pi, and symmetric vertical foot-stack height y_base.
+    du = n_total / float(total_steps)
+    w_mid = 0.5 * (w_arr[:-1] + w_arr[1:])
+    alpha_cum = np.concatenate([[0.0], np.cumsum(w_mid)])
+    alphas = math.pi * (alpha_cum / max(float(alpha_cum[-1]), 1e-12))
+
+    # On each half, stack vertically when w < 1, while keeping the outer 0.5 turn at each foot flat on Y = 0.
+    y_bases = np.full(total_steps + 1, ribbon_ht, dtype=np.float64)
+    half_k = total_steps // 2
+    for k in range(1, half_k + 1):
+        u_m = 0.5 * (u_arr[k - 1] + u_arr[k])
+        if u_m <= 0.5:
+            dy = 0.0
+        elif u_m <= 1.0:
+            dy = 2.0 * dz_foot * du
+        else:
+            dy = (1.0 - w_mid[k - 1]) * dz_foot * du
+        y_bases[k] = y_bases[k - 1] + dy
+    # Exact mirror symmetry for the second half so both feet finish identically flush on Y = 0.
+    for k in range(half_k + 1, total_steps + 1):
+        y_bases[k] = y_bases[total_steps - k]
+
+    thetas = th0 + 2.0 * math.pi * u_arr
+    ca, sa = np.cos(alphas), np.sin(alphas)
+    ct, st = np.cos(thetas), np.sin(thetas)
+    # Arch frame in vertical XY plane: N_a = (ca, sa, 0), T_a = (-sa, ca, 0), B_a = (0, 0, 1).
+    rx, ry, rz = ca * ct, sa * ct, st
+    centers = np.column_stack([arch_rad * ca + coil_rad * rx, y_bases + arch_rad * sa + coil_rad * ry, coil_rad * rz])
+    rad_dirs = np.column_stack([rx, ry, rz])
+    ax_dirs = np.column_stack([-sa, ca, np.zeros_like(ca)])
+
+    # Compute smooth orthonormal ribbon frame (E_rad, E_ax_perp, T_curve) at every ring.
+    tangents = np.zeros_like(centers)
+    tangents[1:-1] = centers[2:] - centers[:-2]
+    tangents[0] = centers[1] - centers[0]
+    tangents[-1] = centers[-1] - centers[-2]
+    tangents /= np.maximum(np.linalg.norm(tangents, axis=1, keepdims=True), 1e-12)
+    e_rad = rad_dirs - np.sum(rad_dirs * tangents, axis=1, keepdims=True) * tangents
+    e_rad /= np.maximum(np.linalg.norm(e_rad, axis=1, keepdims=True), 1e-12)
+    e_ax = np.cross(tangents, e_rad)
+    e_ax /= np.maximum(np.linalg.norm(e_ax, axis=1, keepdims=True), 1e-12)
+    # Keep axial vector aligned with +T_a so winding stays strictly outward everywhere.
+    flip = np.sum(e_ax * ax_dirs, axis=1, keepdims=True) < 0.0
+    e_ax = np.where(flip, -e_ax, e_ax)
+
+    # 8-vertex beveled flat spring-steel ribbon cross-section (counterclockwise in (e_rad, e_ax)).
+    hw, ht = ribbon_hw, ribbon_ht
+    b_r, b_a = 0.0014, 0.00050
+    profile = np.array(
+        [
+            [+hw,       -ht + b_a, +0.97, -0.24],
+            [+hw,       +ht - b_a, +0.97, +0.24],
+            [+hw - b_r, +ht,       +0.24, +0.97],
+            [-hw + b_r, +ht,       -0.24, +0.97],
+            [-hw,       +ht - b_a, -0.97, +0.24],
+            [-hw,       -ht + b_a, -0.97, -0.24],
+            [-hw + b_r, -ht,       -0.24, -0.97],
+            [+hw - b_r, -ht,       +0.24, -0.97],
+        ],
+        dtype=np.float64,
+    )
+    n_prof = len(profile)
+    n_rings = total_steps + 1
+
+    # Vectorized swept ribbon positions, analytic normals, and UVs.
+    p_r = profile[None, :, 0:1]
+    p_a = profile[None, :, 1:2]
+    n_r = profile[None, :, 2:3]
+    n_a = profile[None, :, 3:4]
+    pos_grid = centers[:, None, :] + p_r * e_rad[:, None, :] + p_a * e_ax[:, None, :]
+    nrm_grid = n_r * e_rad[:, None, :] + n_a * e_ax[:, None, :]
+    nrm_grid /= np.maximum(np.linalg.norm(nrm_grid, axis=2, keepdims=True), 1e-12)
+
+    u_ring = np.linspace(0.0, n_total, n_rings, dtype=np.float32)[:, None]
+    v_prof = np.linspace(0.0, 1.0, n_prof, endpoint=False, dtype=np.float32)[None, :]
+    uv_grid = np.stack([np.broadcast_to(u_ring, (n_rings, n_prof)), np.broadcast_to(v_prof, (n_rings, n_prof))], axis=2)
+
+    # Subtle crevice ambient occlusion on tight inner arch belly & coil interior, gleaming rim outside.
+    ct_ring = np.cos(thetas)[:, None]
+    arch_mid = np.sin(alphas)[:, None]
+    outer_bias = np.clip(0.5 + 0.5 * ct_ring, 0.0, 1.0)
+    radial_side = np.clip(0.5 + 0.5 * (profile[None, :, 0] / hw), 0.0, 1.0)
+    ao = 0.62 + 0.25 * outer_bias + 0.13 * radial_side - 0.15 * arch_mid * (1.0 - outer_bias)
+    ao = np.clip(ao, 0.44, 1.00)
+    # Warm-neutral dark pewter spring-steel tint matching `242:slinky` (offsets cool sky reflection).
+    col_grid = ao[:, :, None] * np.array([[[1.00, 0.98, 0.93]]], dtype=np.float64)
+
+    positions = pos_grid.reshape(-1, 3)
+    normals = nrm_grid.reshape(-1, 3)
+    uvs = uv_grid.reshape(-1, 2)
+    colors = col_grid.reshape(-1, 3)
+
+    # Side quad triangles with guaranteed outward winding: (a0, a1, b1), (a0, b1, b0).
+    ri = np.arange(n_rings - 1, dtype=np.uint32)[:, None]
+    pj = np.arange(n_prof, dtype=np.uint32)[None, :]
+    pj_next = (pj + 1) % n_prof
+    a0 = ri * n_prof + pj
+    a1 = ri * n_prof + pj_next
+    b0 = (ri + 1) * n_prof + pj
+    b1 = (ri + 1) * n_prof + pj_next
+    tris_side = np.stack([a0, a1, b1, a0, b1, b0], axis=2).reshape(-1, 3)
+
+    # Watertight flat cut steel ends at both start (k=0) and end (k=n_rings-1).
+    cap_pts = []
+    cap_nrms = []
+    cap_uvs = []
+    cap_cols = []
+    cap_tris = []
+    base_v = len(positions)
+    for is_end, ring_idx, sign in ((False, 0, -1.0), (True, n_rings - 1, +1.0)):
+        c_pos = centers[ring_idx]
+        c_nrm = tangents[ring_idx] * sign
+        ring_p = pos_grid[ring_idx]
+        c_idx = base_v
+        cap_pts.append(c_pos)
+        cap_nrms.append(c_nrm)
+        cap_uvs.append((0.5, 0.5))
+        cap_cols.append((0.90, 0.88, 0.84))
+        for j in range(n_prof):
+            cap_pts.append(ring_p[j])
+            cap_nrms.append(c_nrm)
+            cap_uvs.append((0.5, 0.5))
+            cap_cols.append((0.90, 0.88, 0.84))
+        for j in range(n_prof):
+            v1 = c_idx + 1 + j
+            v2 = c_idx + 1 + ((j + 1) % n_prof)
+            if is_end:
+                cap_tris.append((c_idx, v1, v2))
+            else:
+                cap_tris.append((c_idx, v2, v1))
+        base_v += 1 + n_prof
+
+    all_pos = np.vstack([positions, np.asarray(cap_pts, dtype=np.float64)]).astype(np.float32)
+    all_nrm = np.vstack([normals, np.asarray(cap_nrms, dtype=np.float64)]).astype(np.float32)
+    all_uv = np.vstack([uvs, np.asarray(cap_uvs, dtype=np.float64)]).astype(np.float32)
+    all_col = np.vstack([colors, np.asarray(cap_cols, dtype=np.float64)]).astype(np.float32)
+    all_idx = np.vstack([tris_side, np.asarray(cap_tris, dtype=np.uint32)]).reshape(-1).astype(np.uint32)
+    return MeshPart(name=name, material=material, positions=all_pos, normals=all_nrm, indices=all_idx, uvs=all_uv, colors=all_col)
+
+
 def build_slinky() -> SceneBuilder:
-    """Classic gunmetal spring-steel Slinky arched in a wide flat-ribbon C-bend (`242:slinky`)."""
+    """Classic gunmetal flat-ribbon spring-steel Slinky standing upright in a half-circle arch (`242:slinky`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_slinky")
-    n_turns, pts_per_turn = 26, 14
-    total_pts = n_turns * pts_per_turn
-    arc_rad, coil_rad = 0.295, 0.172
-    pts: List[Tuple[float, float, float]] = []
-    for k in range(total_pts + 1):
-        u = k / float(total_pts)
-        ang_c = math.radians(-156.0 + 158.0 * u)
-        cx = arc_rad * math.cos(ang_c)
-        cz = arc_rad * math.sin(ang_c) + 0.10
-        rx, rz = math.cos(ang_c), math.sin(ang_c)
-        th = 2.0 * math.pi * n_turns * u
-        pts.append((cx + rx * (coil_rad * math.cos(th)), coil_rad * math.sin(th) + coil_rad + 0.012, cz + rz * (coil_rad * math.cos(th))))
-    coil = curved_tube(pts, [0.0105] * len(pts), samples_per_seg=1, radial_segs=6, cap_rings=1, name="slinky_spring", material="item_slinky_steel")
-    # Warm pewter-gunmetal metallic sheen matching `242:slinky`!
-    coil = tint_part(
-        coil,
-        lambda pos, nrm: np.clip(
-            (0.68 + 0.26 * np.clip(nrm[:, 1] + 0.35, 0.0, 1.0) + 0.08 * np.sin(pos[:, 0] * 18.0))[:, None] * np.array([[0.98, 0.95, 0.90]]),
-            0.34,
-            1.0,
-        ),
+    coil = _slinky_flat_ribbon_arch(
+        arch_rad=0.272,
+        coil_rad=0.174,
+        n_arch_turns=61.5,
+        n_foot_turns=1.5,
+        pts_per_turn=18,
+        ribbon_hw=0.0125,
+        ribbon_ht=0.0018,
+        material="item_slinky_steel",
+        name="slinky_spring",
     )
-    sc.add("slinky", coil.rotate_xyz(ry=18.0, degrees=True))
+    # Rotate vertical arch so front-left open circular foot faces lower-left and back-right foot rests upper-right (`242:slinky`).
+    sc.add("slinky", coil.rotate_xyz(ry=28.0, degrees=True))
     return _finalize_item(sc, target_span=0.96)
 
 
