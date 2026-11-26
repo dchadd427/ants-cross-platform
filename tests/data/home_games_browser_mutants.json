@@ -238,6 +238,34 @@
    "old": "    .quick::before { display: none; }\n}\n/* ---- ... under 773 px the type shrinks again ---- */",
    "new": "    .quick::before { display: none; }\n    .hbar .mine .pill { display: none; }\n}\n/* ---- ... under 773 px the type shrinks again ---- */",
    "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "empty_cards_may_cause_a_scroll_in_the_browser",
+   "file": "web/home/games.js",
+   "old": "return popBody.scrollHeight <= popBody.clientHeight; }",
+   "new": "return popBody.scrollHeight <= popBody.clientHeight + 120; }",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "the_players_column_does_not_change_the_empty_cards",
+   "file": "web/home/games.js",
+   "old": "gridWatch.observe(popBody); gridWatch.observe(liveBox);",
+   "new": "gridWatch.observe(liveBox);",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "the_plus_is_not_a_press_in_the_browser",
+   "file": "web/home/games.js",
+   "old": "            pic.addEventListener('click', guard(function () { b.click(); }));",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "the_plus_has_no_hand_in_the_browser",
+   "file": "web/home/games.css",
+   "old": "box-shadow: none; cursor: pointer; }",
+   "new": "box-shadow: none; }",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
   }
  ]
 }
