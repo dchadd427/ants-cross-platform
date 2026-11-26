@@ -468,29 +468,44 @@ def build_pencal1() -> SceneBuilder:
 
 
 def build_shtbut1() -> SceneBuilder:
-    """Glossy teal-green 4-hole round plastic shirt button with beveled rim (`322:shtbut1`)."""
+    """Glossy teal-green 4-hole round shirt button with a proud stepped raised outer rim & deep dish (`322:shtbut1`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_shtbut1")
     parts: List[MeshPart] = []
 
-    # Sculpted round shirt button with raised outer bevel rim & gently concave central dish!
+    # Classic 4-hole dress-shirt button: proud sculpted raised outer rim (`y=0.098`) stepping cleanly down
+    # into a deep recessed central dish (`y=0.044`) with crisp rim bevels so the raised edge reads unmistakably!
     prof = [
         (0.000, 0.000),
-        (0.240, 0.000),
-        (0.265, 0.016),
-        (0.268, 0.042),
-        (0.250, 0.068),
-        (0.215, 0.072),
-        (0.188, 0.052),
-        (0.000, 0.048),
+        (0.232, 0.000),
+        (0.258, 0.012),
+        (0.270, 0.034),
+        (0.270, 0.068),
+        (0.264, 0.088),
+        (0.248, 0.098),
+        (0.226, 0.098),
+        (0.213, 0.088),
+        (0.204, 0.056),
+        (0.194, 0.048),
+        (0.148, 0.046),
+        (0.000, 0.044),
     ]
-    disc = lathe(prof, radial_segs=38, cap_bottom=True, cap_top=True, axis="y", name="button_disc", material="item_teal_button")
-    parts.append(disc)
+    disc = lathe(prof, radial_segs=64, cap_bottom=False, cap_top=False, axis="y", name="button_disc", material="item_teal_button")
 
-    # Four crisp dark recessed buttonhole wells arranged in a classic shirt-button square!
-    for idx, (hx, hz) in enumerate(((-0.068, -0.068), (+0.068, -0.068), (-0.068, +0.068), (+0.068, +0.068))):
-        parts.append(cylinder(0.026, 0.028, 0.014, radial_segs=16, axis="y", name=f"button_hole_{idx}", material="item_soil_hole").translate(hx, 0.047, hz))
-        parts.append(torus_arc(0.028, 0.0045, u_segs=16, v_segs=6, plane="xz", name=f"button_hrim_{idx}", material="item_teal_button").translate(hx, 0.053, hz))
+    def _button_rim_ao(pos: np.ndarray, nrm: np.ndarray) -> np.ndarray:
+        r = np.hypot(pos[:, 0], pos[:, 2])
+        # Subtle crevice AO tucked right into the inner stepped rim groove (`r ~ 0.194..0.214`), luminous raised rim top!
+        groove = np.exp(-((r - 0.200) / 0.014) ** 2) * np.clip((pos[:, 1] - 0.030) / 0.035, 0.0, 1.0) * (1.0 - np.clip((pos[:, 1] - 0.072) / 0.020, 0.0, 1.0))
+        rim_crest = np.exp(-((r - 0.238) / 0.026) ** 2) * np.clip((pos[:, 1] - 0.078) / 0.020, 0.0, 1.0)
+        shade = np.clip(0.94 - 0.26 * groove + 0.08 * rim_crest + 0.04 * nrm[:, 1], 0.62, 1.05)
+        return np.column_stack([shade * 0.96, shade * 1.00, shade * 0.98])
+
+    parts.append(tint_part(disc, _button_rim_ao))
+
+    # Four crisp smooth dark countersunk buttonholes flush inside the recessed center dish (visible top & bottom!).
+    for idx, (hx, hz) in enumerate(((-0.074, -0.074), (+0.074, -0.074), (-0.074, +0.074), (+0.074, +0.074))):
+        parts.append(cylinder(0.032, 0.033, 0.0465, radial_segs=22, axis="y", name=f"button_hole_{idx}", material="item_hair_black").translate(hx, 0.0230, hz))
+        parts.append(torus_arc(0.035, 0.0038, u_segs=22, v_segs=8, plane="xz", name=f"button_chamfer_{idx}", material="item_teal_button").translate(hx, 0.0452, hz))
 
     sc.add("shtbut1", [p.rotate_xyz(ry=14.0, degrees=True) for p in parts])
     return _finalize_item(sc, target_span=0.72)
