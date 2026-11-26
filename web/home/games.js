@@ -199,7 +199,7 @@
         var docked = !!env.dock, rows = [], loaded = false, off = false, failures = 0, isOpen = docked, polling = false, round = 0, pollTimer = null, gone = !!env.handoff, joining = false, joinButtons = [];
         var tracked = null, lastRoom = null, lastSent = 0, refreshTimer = null, refreshFor = null, pending = null, pendingTimer = null, askedAt = 0, locked = false, lockTimer = null, hint = '', lastInput = now(), lastLook = 0, floorTimer = null, joinSeq = 0, cancelTimer = null, paintedSig = null;
         var dialog = null, noticeKind = '', quiet = [], finding = false, priv = [];             // priv: the locked rows (private rooms) of the last good answer
-        var live = [], liveLoaded = false, liveOff = false, liveFails = 0, liveTimer = null, liveBusy = false, liveRound = 0, lastLive = 0, liveSig = null, liveLens = [], opened = Object.create(null), hostFrom = null;       // opened: the ids of the matches whose scoreboard the visitor opened (nothing is kept past the page)
+        var live = [], liveLoaded = false, liveOff = false, liveFails = 0, liveTimer = null, liveBusy = false, liveRound = 0, lastLive = 0, liveSig = null, liveLens = [], opened = Object.create(null), hostFrom = null, lastCols = 0;       // opened: the ids of the matches whose scoreboard the visitor opened (nothing is kept past the page)
         var sided = [], matches = false, talk = null;                   // sided: the ids of matches whose Watch the page showed while it held a room; matches: it held a room, so its Matches links were new tabs; talk: the channel of those tabs
 
         function el(tag, cls, text) {
@@ -747,7 +747,7 @@
             return width <= 700 ? 1 : width < 1250 ? 2 : 3;
         }
         function slotCount(taken) {                        // two rows of the grid (3 cards on a phone), one row while matches are in progress (2 on a phone); the rooms take the first places, and what is left is empty cards
-            var cols = columns(), places = cols === 1 ? (hasLive() ? SLOT_PHONE_LIVE : SLOT_PHONE) : cols * (hasLive() ? SLOT_ROWS_LIVE : SLOT_ROWS);
+            var cols = lastCols = columns(), places = cols === 1 ? (hasLive() ? SLOT_PHONE_LIVE : SLOT_PHONE) : cols * (hasLive() ? SLOT_ROWS_LIVE : SLOT_ROWS);
             return Math.max(0, places - taken);
         }
         function slotNode(n) {                             // a dashed card with a plus: no name and no count, nobody waits; its button is Quick host (the question first: Public or Invite only)
@@ -1059,6 +1059,8 @@
         }));
         win.addEventListener('resize', guard(function () { if (isOpen) place(); placeToast(); }));
         win.addEventListener('resize', guard(function () { if (isOpen) paintList(); }));          // (the list is painted again: its rows of cards may hold more or fewer, and the empty cards fill what is left)
+        var gridWatch = win.ResizeObserver ? new win.ResizeObserver(guard(function () { if (isOpen && lastCols && columns() !== lastCols) paintList(); })) : null;          // (the grid took more or fewer columns without the window changing, for example when the players' column came in: the empty cards are counted again)
+        if (gridWatch) gridWatch.observe(popList);
         var toastWatch = win.MutationObserver ? new win.MutationObserver(guard(function () { if (!toast.hidden) placeToast(); pollLive(); })) : null, lastFocus = null;
         if (toastWatch) toastWatch.observe(doc.body, { attributes: true, subtree: true, attributeFilter: ['data-tab', 'data-open', 'data-screen', 'hidden'] });       // (the list is drawn or covered again: the looks at /live follow; a phone's view, the chat's fold or one of the page's strips changes: the toast is placed again)
         doc.addEventListener('focusin', guard(function (e) { if (e && e.target && !toast.contains(e.target)) lastFocus = e.target; }));       // (where the focus was before it went to the toast)
@@ -1072,6 +1074,7 @@
         function opening() {                               // START reached the page: nothing here takes a press or a timer or looks at the list any more
             gone = true; closeAll(); clearNotice();
             if (toastWatch) toastWatch.disconnect();
+            if (gridWatch) gridWatch.disconnect();
             [pollTimer, refreshTimer, pendingTimer, lockTimer, floorTimer, cancelTimer, liveTimer].forEach(function (t) { if (t !== null) cancel(t); });
             pollTimer = refreshTimer = pendingTimer = lockTimer = floorTimer = cancelTimer = liveTimer = null; liveRound++;
         }

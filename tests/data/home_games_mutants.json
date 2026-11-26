@@ -3192,6 +3192,20 @@
    "old": "var slots = loaded && !off ? slotCount(shown.length) : 0,",
    "new": "var slots = loaded && !off ? slotCount(visibleRows().length) : 0,",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "grid_changes_are_not_noticed",
+   "file": "web/home/games.js",
+   "old": "if (gridWatch) gridWatch.observe(popList);",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "grid_change_that_keeps_the_columns_paints_again",
+   "file": "web/home/games.js",
+   "old": "if (isOpen && lastCols && columns() !== lastCols) paintList();",
+   "new": "if (isOpen) { paintedSig = null; paintList(); }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   }
  ]
 }

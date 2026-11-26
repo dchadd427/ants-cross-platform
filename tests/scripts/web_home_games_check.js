@@ -904,6 +904,21 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
         await flush();
         check('the popover (a list that is given no dock) is one card wide: three empty cards', slotsOf(pop).length === 3);
     }
+    {   // the grid takes more or fewer columns with no change of the window (the players' column comes in after the list was first painted): the list counts its empty cards again
+        const mine = [];
+        class Watch { constructor(fn) { this.fn = fn; } observe(el) { if (String(el.className).indexOf('glist') !== -1) mine.push(this); } unobserve() {} disconnect() {} }
+        const site = fakeSite();
+        site.body = listOf(OPEN(1));
+        const env = await page({ site, options: { popover: false, innerWidth: 1000, win: { ResizeObserver: Watch } } });
+        await wait(env, 6000);
+        check('(two columns: one room and three empty cards; the list is watched for its size)', kinds(env).join() === 'room,slot,slot,slot' && mine.length === 1);
+        env.win.innerWidth = 1366;       // (the fake has no layout: the width stands in for the grid's own columns)
+        mine[0].fn([]);
+        check('a change in the grid\'s size that is not the window\'s counts the empty cards again: three columns hold one room and five empty cards', kinds(env).join() === 'room,slot,slot,slot,slot,slot');
+        const before = first(popOf(env), 'glist').children.slice();
+        mine[0].fn([]);
+        check('... a change that leaves the columns as they are paints nothing again', first(popOf(env), 'glist').children.every((li, i) => li === before[i]) && first(popOf(env), 'glist').children.length === before.length);
+    }
     {   // the window changes (a phone turned, a window made wider): the empty cards are painted again for the columns that there are
         const env = await docked(1000, 1, 0);
         check('(two columns: one room and three empty cards)', kinds(env).join() === 'room,slot,slot,slot');
