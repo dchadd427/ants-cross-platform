@@ -9,6 +9,10 @@
 //   AI58.2  one free ant beside an enemy that stands still strikes it (and not when the enemy is the stronger, when an enemy Combat Ant stands near, for a Swimmer, with the rule off)
 //   AI58.3  an enemy Thief that walks to the own hole is met by the idle ants (blockers on the three tiles, a blow for the Thief): the hill keeps its points; with the rule off the raid goes through
 //   AI58.4  with the food gone the idle ants hold the three tiles in front of the thief hole, and a raid of a Thief of another team ends in the can't-go clip; with the rule off it takes its 50 points
+//   AI58.15 an own ant that holds food stands in the can't-go clip at the foot of a one-tile bridge with an enemy ant on the bridge tile in front of it: it steps back off the foot and the enemy crosses; with the foot rule off both stand
+//   AI58.18 the same foot, the ant looked at in 36 phases of its can't-go cycle: sent off the landing in every one, by a volley of clicks where the look finds it in the clip
+//   AI58.16 an ant that holds food and stands on a satellite with no walk home gets the bridge home from ONE Swimmer (the dig of the other ants asks for three) and banks its food; with the loaded rule off nobody digs
+//   AI58.17 whole matches on ISLANDS: with the loaded rule on the island guard gives back the ants that hold a load for a long time with no bridge home (the bridge planner digs for them); with it off it never does
 //   AI58.14 the posts at the thief hole are held while a Thief was seen lately and no food can be carried, and given up a latch after the last sighting
 //   AI58.5  a hurt ant that stands idle walks home and is whole again; with the rule off it stands
 //   AI58.6  whole matches on ISLANDS: with the endgame Thief on the bots take the Thieves that fall at the strips, dig the chains and steal; with it off nobody steals; the matches replay
@@ -51,6 +55,13 @@ void river_with_bridge(sim::SimulationEngine& sim, uint32_t seed = 31) {
 LevelPlan plan_headon(bool on) {
     LevelPlan p = peace_plan(Level::Hard);
     p.bridge_headon = on;
+    return p;
+}
+
+LevelPlan plan_foot(bool foot) {
+    LevelPlan p = peace_plan(Level::Hard);
+    p.bridge_headon = true;
+    p.bridge_foot = foot;
     return p;
 }
 
@@ -543,5 +554,166 @@ void run_idle_tests() {
                 ASSERT_EQ(on.seats[i].raided, off.seats[i].raided);
             }
         }
+    } TEST_END();
+    TEST_CASE("AI58.15 The Foot Of A Bridge: An Own Ant That Holds Food Shows The Can't-Go Clip At The One Tile Of A Landing While An Enemy Ant Stands On The Bridge Tile In Front Of It (Each Wants The Other's Tile); With The Foot Rule On It Steps Back Off The Landing And The Enemy Crosses; With The Rule Off Both Stand For Good") {
+        struct Out {
+            bool crossed{false};
+            uint32_t plugs{0};
+            bool looped{false};
+            bool kept_load{true};
+        };
+        const auto play = [&](bool foot) {
+            sim::SimulationEngine sim;
+            river_with_bridge(sim);
+            sim.set_terrain(kBridgeX - 1, kRiverTop - 1, sim::TERRAIN_WATER);                    // (the landing is one tile: the two beside it are water)
+            sim.set_terrain(kBridgeX + 1, kRiverTop - 1, sim::TERRAIN_WATER);
+            // the seat is the black one (its hill at the south edge): the ant that holds food stands at the north foot and wants to go south, home; the enemy (seat 0) is on the first bridge tile and wants to go north
+            const uint32_t mine = sim.spawn_unit(3, sim::AntType::Worker, TileCoord{kBridgeX, kRiverTop - 1});
+            const uint32_t enemy = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{kBridgeX, kRiverTop});
+            sim.get_unit(mine).pick_up_food(1, 25);
+            sim.apply_command(command_of(CommandType::GroupMove, 0, {enemy}, kBridgeX, kRiverTop - 6));
+            sim.apply_command(command_of(CommandType::GroupMove, 3, {mine}, kBridgeX, kRiverBottom + 5));
+            Rig rig(sim, 3, Level::Hard, std::make_unique<StandardBot>(plan_foot(foot)), 4, 4);
+            rig.after_sim_tick = [&]() {                                                         // (the two owners click their ants again when they stand idle: the engine's meeting leaves each in the clip, then idle)
+                if (sim.current_tick() % 40 != 0) return;
+                const sim::AntSnapshot* a = snapshot_of(sim, mine);
+                if (a != nullptr && a->state == sim::UnitState::Idle && a->tile_y < kRiverBottom && !sim.has_pending_path(mine) && rig.as<StandardBot>().ledger().owner(mine) == kNoTask) {
+                    sim.apply_command(command_of(CommandType::GroupMove, 3, {mine}, kBridgeX, kRiverBottom + 5));
+                }
+                const sim::AntSnapshot* e = snapshot_of(sim, enemy);
+                if (e != nullptr && e->state == sim::UnitState::Idle && e->tile_y > kRiverTop - 6 && !sim.has_pending_path(enemy)) {
+                    sim.apply_command(command_of(CommandType::GroupMove, 0, {enemy}, kBridgeX, kRiverTop - 6));
+                }
+            };
+            Out out;
+            for (int t = 0; t < 1500; ++t) {
+                rig.tick();
+                const sim::AntSnapshot* e = snapshot_of(sim, enemy);
+                const sim::AntSnapshot* m = snapshot_of(sim, mine);
+                if (e != nullptr && e->tile_y < kRiverTop - 1) out.crossed = true;
+                if (m != nullptr && m->state == sim::UnitState::CantGo) out.looped = true;
+                if (m != nullptr && m->tile_y < kRiverTop && m->carried_points == 0) out.kept_load = false;                // (it keeps its food while it is on the north bank)
+            }
+            out.plugs = rig.as<StandardBot>().head_on().plugs();
+            return out;
+        };
+        const Out off = play(false);
+        ASSERT_FALSE(off.crossed);                                                               // the engine's rule: neither ant gives way, an ant of another team in the way is no way at all
+        ASSERT_EQ(off.plugs, 0u);
+        const Out on = play(true);
+        ASSERT_TRUE(on.plugs >= 1u);                                                             // the ant with the food stepped off the landing (it was in the clip or idle), with its load
+        ASSERT_TRUE(on.crossed);
+        ASSERT_TRUE(on.kept_load);
+    } TEST_END();
+    TEST_CASE("AI58.18 The Foot Of A Bridge, The First Click: The Ant With The Food Is Looked At In 36 Phases Of Its Sixteen-Tick Can't-Go Cycle (Six Spacings Of The Looks, Six Reaction Times; The Clip Lasts Eight Ticks): It Is Sent Off The Landing In Every Phase, And At A Look At Which It Shows The Clip The Click Is A Volley, Which Takes Between Two Clips; With The Rule Off It Is Never Sent") {
+        struct Out {
+            bool plugged{false};
+            bool in_clip{false};
+            size_t clicks{0};
+        };
+        const auto play = [&](bool foot, uint32_t delay, uint32_t interval, uint32_t reaction) {
+            sim::SimulationEngine sim;
+            river_with_bridge(sim);
+            sim.set_terrain(kBridgeX - 1, kRiverTop - 1, sim::TERRAIN_WATER);                    // (the landing is one tile: the two beside it are water)
+            sim.set_terrain(kBridgeX + 1, kRiverTop - 1, sim::TERRAIN_WATER);
+            const uint32_t mine = sim.spawn_unit(3, sim::AntType::Worker, TileCoord{kBridgeX, kRiverTop - 1});
+            const uint32_t enemy = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{kBridgeX, kRiverTop});
+            sim.get_unit(mine).pick_up_food(1, 25);
+            sim.apply_command(command_of(CommandType::GroupMove, 0, {enemy}, kBridgeX, kRiverTop - 6));
+            Rig rig(sim, 3, Level::Hard, std::make_unique<StandardBot>(plan_foot(foot)), interval, reaction);
+            rig.after_sim_tick = [&]() {                                                         // (the ant's own errand starts `delay` ticks late: the phase of its can't-go cycle against the bot's looks)
+                if (sim.current_tick() == delay) sim.apply_command(command_of(CommandType::GroupMove, 3, {mine}, kBridgeX, kRiverBottom + 5));
+                if (sim.current_tick() % 40 != 0) return;
+                const sim::AntSnapshot* e = snapshot_of(sim, enemy);
+                if (e != nullptr && e->state == sim::UnitState::Idle && e->tile_y > kRiverTop - 6 && !sim.has_pending_path(enemy)) {
+                    sim.apply_command(command_of(CommandType::GroupMove, 0, {enemy}, kBridgeX, kRiverTop - 6));
+                }
+            };
+            Out out;
+            for (int t = 0; t < 140 && !out.plugged; ++t) {
+                rig.tick();
+                if (rig.as<StandardBot>().head_on().plugs() == 0) continue;
+                out.plugged = true;                                                              // (the look of this tick began the plug: what it saw is the world as it stands now)
+                const sim::AntSnapshot* m = snapshot_of(sim, mine);
+                out.in_clip = m != nullptr && m->state == sim::UnitState::CantGo;
+                for (const auto& p : rig.proposed) {
+                    if (p.first == sim.current_tick() && p.second.type == CommandType::GroupMove && !p.second.ants.empty() && p.second.ants[0] == mine && p.second.tile_y == kRiverTop - 2) ++out.clicks;
+                }
+            }
+            return out;
+        };
+        size_t volleys = 0;
+        for (uint32_t interval = 3; interval <= 8; ++interval) {                                // (the looks of the bot against the sixteen ticks of the ant's can't-go cycle: 36 phases)
+            for (uint32_t reaction = 1; reaction <= 6; ++reaction) {
+                const Out off = play(false, 0, interval, reaction);
+                ASSERT_FALSE(off.plugged);                                                       // (a load was a reason to stand for good, before the rule)
+                const Out on = play(true, 0, interval, reaction);
+                ASSERT_TRUE(on.plugged);                                                         // (whatever the phase, the ant with the food is sent off the landing: after 100 ticks of standing)
+                if (on.in_clip) {
+                    ASSERT_TRUE(on.clicks >= 4u);                                                // (in the clip a single click is lost: the volley is the click that takes)
+                    ++volleys;
+                } else {
+                    ASSERT_TRUE(on.clicks >= 1u);
+                }
+            }
+        }
+        ASSERT_TRUE(volleys >= 8u);                                                              // (the phases in which the bot's look found the ant in the clip: the rule acts from it)
+    } TEST_END();
+    TEST_CASE("AI58.16 An Ant That Holds Food And Stands On The Satellite With No Walk Home Gets The Bridge From ONE Swimmer (The Dig For The Other Ants Needs Three: The Ferry's) And Banks Its Food; With The Loaded Rule Off Nobody Digs And The Food Stays Where It Is (ISLANDS, A Hard Bot)") {
+        for (const bool rule : {true, false}) {
+            Lab lab([rule](LevelPlan& p) {
+                p.island_return = true;
+                p.island_ferry = false;
+                p.island_endraid = false;
+                p.bridge_loaded = rule;
+                p.bridge_hold_release = 600;
+            });
+            std::vector<uint32_t> start_ants;
+            for (const auto& a : lab.sim.get_world_state().ants) start_ants.push_back(a.id);
+            for (const uint32_t id : start_ants) lab.sim.kill_unit(id);
+            lab.sim.spawn_unit(0, sim::AntType::Swimmer, TileCoord{14, 19});                     // ONE Swimmer: fewer than the ferry's three
+            const uint32_t ant = lab.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{12, 23});
+            lab.sim.get_unit(ant).pick_up_food(1, 25);
+            lab.run(3600);
+            const sim::AntSnapshot* a = lab.ant(ant);
+            const uint32_t tiles = lab.bot()->flower_link().bridges().tiles_ordered(BridgeJob::Kind::Return);
+            if (rule) {
+                ASSERT_TRUE(tiles >= 1u);                                                        // a chain was dug for it
+                ASSERT_TRUE(lab.sim.get_world_state().player_scores[0] >= 25);                   // ... and its food is in the hill
+            } else {
+                ASSERT_EQ(tiles, 0u);
+                ASSERT_TRUE(a != nullptr && a->tile_x < 17 && a->is_holding);                    // (it stands where it stood, with its load)
+                ASSERT_EQ(lab.sim.get_world_state().player_scores[0], 0);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI58.17 Whole Matches Of Four Hard Bots On ISLANDS: The Island Guard Gives Back The Ants That Hold A Load For 600 Ticks With No Bridge Home When The Loaded Rule Is On (The Bridge Planner Digs For Them), And Never With It Off; Every Match Replays") {
+        assets::LevelData level;
+        ASSERT_TRUE(level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/ISLANDS.LVL"));
+        uint32_t released[2] = {0, 0};
+        for (const int rule : {1, 0}) {
+            for (const uint32_t seed : {12u, 16u}) {                                           // (two matches in which a guard held a load for 600 ticks with no bridge home: the arena's seeds 12 and 16)
+                ArenaSpec spec;
+                spec.level = &level;
+                spec.seed = seed;
+                spec.record = rule == 1;
+                for (uint8_t seat = 0; seat < 4; ++seat) {
+                    BotSpec b;
+                    b.seat = seat;
+                    b.level = Level::Hard;
+                    spec.bots.push_back(b);
+                }
+                spec.factory = [rule](const BotSpec& b) {
+                    return std::unique_ptr<Bot>(std::make_unique<StandardBot>(b.level, Style::Random, [rule](LevelPlan& plan) { plan.bridge_loaded = rule == 1; }));
+                };
+                const ArenaResult r = play_match(spec);
+                ASSERT_TRUE(r.error.empty());
+                if (spec.record) ASSERT_TRUE(replay_commands(spec, r).ok);
+                for (const ArenaSeatResult& seat : r.seats) released[rule == 1 ? 0 : 1] += seat.fight_batch.loads_released;
+            }
+        }
+        ASSERT_TRUE(released[0] >= 2u);
+        ASSERT_EQ(released[1], 0u);
     } TEST_END();
 }

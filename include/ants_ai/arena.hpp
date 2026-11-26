@@ -304,6 +304,17 @@ inline bool operator==(const IdleBatchResult& a, const IdleBatchResult& b) noexc
            a.home_tiles == b.home_tiles;
 }
 
+/// What the rules of the fight batch did (part 2 of G9, docs/BOT_CONTEST.md; format 10); everything is 0 for a seat that has no standard bot or no work for the rule
+struct FightBatchResult {
+    uint32_t foot_plugs{0};                    // own ants that stood at the foot of a bridge in the way of another and stepped off it (BridgeHeadOnTask::plugs), with a load or in the can't-go clip or not
+    uint32_t loads_released{0};                // ants that held a load and were given back by the island guard after a long hold (IslandTask::loads_released)
+    uint32_t return_tiles{0};                  // water tiles that Swimmers were told to dig for an ant that stands away from the hill (BridgePlanner::tiles_ordered(Return))
+};
+
+inline bool operator==(const FightBatchResult& a, const FightBatchResult& b) noexcept {
+    return a.foot_plugs == b.foot_plugs && a.loads_released == b.loads_released && a.return_tiles == b.return_tiles;
+}
+
 /// What a standard bot's Bomber flight to the island of the ring pile did (MinerFlightTask); the ticks are 0 for what never happened
 struct MinerFlightResult {
     uint32_t started{0};
@@ -378,6 +389,7 @@ struct ArenaSeatResult {
     ExpeditionResult expedition;
     MinerFlightResult miner_flight;
     IdleBatchResult idle_batch;
+    FightBatchResult fight_batch;
     BotController::SeatStats stats;
     /// commands released per second of game time, in thousandths
     uint32_t milli_commands_per_second(uint64_t ticks) const noexcept {

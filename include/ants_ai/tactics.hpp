@@ -292,6 +292,11 @@ struct LevelPlan {
     // Hard's swarm and bridge planner, and are inert elsewhere)
     bool bridge_headon{true};            // two ants face to face on a bridge: the own one that is nearer to land steps back and is held there until the other has passed (BridgeHeadOnTask; `headon=0`: the bot as it was)
     bool contact_strike{true};           // a free ant strikes an enemy that stands beside it, when it is not the weaker and nothing that fights stands near (ContactTask; `contact=0`: the bot as it was)
+    bool bridge_loaded{true};            // part 2 of the fight batch (docs/BOT_UNSTUCK.md, "Ants that hold a load"): an ant that holds food and stands away from the hill gets a bridge home like an ant that is hurt, and one Swimmer is enough for
+                                         // an ant that holds a load or loot (BridgePlanner::look; `bloaded=0`: the bot as it was)
+    uint32_t bridge_hold_release{600};   // ... the island guard gives back an ant that holds a load and has been held on land this many ticks with no bridge that gets it home (`bholdrel`)
+    bool bridge_foot{true};              // part 2 of the fight batch (docs/BOT_UNSTUCK.md, "The foot of a bridge"): an own ant that holds food or loot, or shows the can't-go clip, at the foot of a bridge with an ant of another team on the
+                                         // bridge tile in front of it steps back off the foot and lets the other pass, as an ant without a load did (BridgeHeadOnTask::clear_feet; `foot=0`: the bot as it was)
     bool island_endraid{true};           // (Hard's island play) once the food is nearly gone an own Thief is wanted: an idle Swimmer or a spare at a flower strip takes the Thief that falls, a Swimmer digs the chain from its island to the
                                          // own hill's and to the richest enemy hill's, and the raid task raids over it (`endraid=0`: the bot as it was)
     uint32_t endraid_from{1200};         // ... the Thief is wanted from this tick even while food is left (the first drop of a Thief falls after the first minute; measured: the sooner the better, docs/BOT_IDLE.md)

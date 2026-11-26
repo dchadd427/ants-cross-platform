@@ -721,7 +721,7 @@ void selftest_tool(SelfTest& t) {
     t.check(!text.empty() && JsonChecker(text).valid() && JsonReader(text).parse(tree), "the report file is there, valid JSON, and reads back");
     const JsonValue* matches = tree.get("matches");
     const JsonValue* summary = tree.get("summary");
-    t.check(tree.get("tool") != nullptr && tree.get("tool")->text == "bot_arena" && tree.get("format") != nullptr && tree.get("format")->u64() == 9 && matches != nullptr && matches->items.size() == 1 &&
+    t.check(tree.get("tool") != nullptr && tree.get("tool")->text == "bot_arena" && tree.get("format") != nullptr && tree.get("format")->u64() == 10 && matches != nullptr && matches->items.size() == 1 &&
                 summary != nullptr && summary->get("matches") != nullptr && summary->get("matches")->u64() == 1 && summary->get("failures") != nullptr && summary->get("failures")->u64() == 0,
             "the tool, the format and the summary");
     // the numbers of the report are the numbers of the match: play the same match in-process and compare every field

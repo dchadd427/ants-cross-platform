@@ -164,7 +164,9 @@ const BridgeJob* BridgePlanner::look(TaskContext& c, const Tactics& tactics, con
     for (const AntView& a : v.mine()) {
         // (a Thief with loot that no walk takes home stands idle or in its can't-go clip: it waits for a chain home like the others, plan.island_endraid)
         const bool loaded_thief = raid_on && a.type == sim::AntType::Thief && (a.holding || a.carried_points > 0);
-        if (a.type == sim::AntType::Swimmer || !(a.idle() || (loaded_thief && a.state == sim::UnitState::CantGo)) || ((a.holding || a.carried_points > 0) && !loaded_thief) || c.ledger.owner(a.id) != kNoTask) continue;
+        // (plan.bridge_loaded: an ant that holds food and stands away from the hill waits for its chain home like an ant without a load: the load is the reason to bring it home)
+        const bool loaded_carrier = plan.bridge_loaded && return_on && !loaded_thief && a.holding;
+        if (a.type == sim::AntType::Swimmer || !(a.idle() || (loaded_thief && a.state == sim::UnitState::CantGo)) || ((a.holding || a.carried_points > 0) && !loaded_thief && !loaded_carrier) || c.ledger.owner(a.id) != kNoTask) continue;
         const auto was = still_.find(a.id);
         next[a.id] = was != still_.end() && was->second.tile == a.tile ? was->second : Still{a.tile, now};
     }
@@ -174,7 +176,9 @@ const BridgeJob* BridgePlanner::look(TaskContext& c, const Tactics& tactics, con
     more_ = more;
     const uint32_t chain_tiles = more ? std::max(plan.island_bridge_tiles, plan.bridge_more_tiles) : plan.island_bridge_tiles;
     const uint32_t idle_wait = more ? std::min(plan.island_bridge_idle, plan.bridge_more_idle) : plan.island_bridge_idle;
-    if (swimmers < (more ? 1u : params_.min_swimmers) || v.ticks_left() < (more ? std::min<uint32_t>(params_.min_ticks_left, 1800u) : params_.min_ticks_left)) return nullptr;
+    // (plan.bridge_loaded: with fewer Swimmers than a dig needs of the ferry, one is enough for an ant that holds a load: food or loot that is lost when the way home never stands)
+    const bool few_swimmers = swimmers < (more ? 1u : params_.min_swimmers);
+    if ((few_swimmers && !(plan.bridge_loaded && swimmers >= 1)) || v.ticks_left() < (more ? std::min<uint32_t>(params_.min_ticks_left, 1800u) : params_.min_ticks_left)) return nullptr;
     const int32_t hill_comp = c.map.hill_component(c.seat);
     if (hill_comp < 0) return nullptr;
     // the ants that wait for a bridge
@@ -394,6 +398,7 @@ const BridgeJob* BridgePlanner::look(TaskContext& c, const Tactics& tactics, con
         if (raid_best != nullptr) consider(raid_job, raid_path, from, raid_pool, raid_hop_only ? hill_comp : -1);
     };
     for (const AntView* a : waiting) {
+        if (few_swimmers && !(a->holding || a->carried_points > 0)) continue;                    // (the Swimmers are few: only an ant that holds a load gets a dig)
         const int32_t from = sets.find(c.map.ant_component(c.seat, a->tile));
         if (raid_on && a->type == sim::AntType::Thief) {                                         // (a Thief waits for its raid chain; the older kinds are for the other ants)
             if (a->holding || a->carried_points > 0) {                                           // ... one that has the loot waits for the way home (the engine walks it, when a walk leads there)
@@ -445,7 +450,7 @@ const BridgeJob* BridgePlanner::look(TaskContext& c, const Tactics& tactics, con
                 BridgeJob job;
                 job.ant = a->id;
                 bool wanted = false;
-                if (return_on && (a->hp <= params_.return_hp || more)) {
+                if (return_on && (a->hp <= params_.return_hp || more || (plan.bridge_loaded && a->holding))) {
                     job.kind = BridgeJob::Kind::Return;
                     wanted = true;
                 } else if (feeder_on) {

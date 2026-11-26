@@ -631,6 +631,9 @@ ArenaResult play_match(const ArenaSpec& spec) {
             r.idle_batch.homed = sb->raids().homed();
             r.idle_batch.raid_tiles = sb->flower_link().bridges().tiles_ordered(BridgeJob::Kind::Raid);
             r.idle_batch.home_tiles = sb->flower_link().bridges().tiles_ordered(BridgeJob::Kind::Home);
+            r.fight_batch.foot_plugs = sb->head_on().plugs();
+            r.fight_batch.loads_released = sb->islands().loads_released();
+            r.fight_batch.return_tiles = sb->flower_link().bridges().tiles_ordered(BridgeJob::Kind::Return);
             r.miner_flight = read_miner_flight(sb->miner_flight());
         }
         read_seat_result(sim, b.seat, r);
