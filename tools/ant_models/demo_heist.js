@@ -17,13 +17,24 @@
     { thiefTeam: "red",   victimTeam: "blue",  phase: 6.2 },
   ];
   const CYCLE_DUR = 10.2;
-  const LUNCHBOX_SCALE = 0.56;
+  const LUNCHBOX_SCALE = 0.53;
+
+  function quatMul(a, b) {
+    return [
+      a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
+      a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+      a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
+      a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2],
+    ];
+  }
+
+  function quatAxis(ax, ay, az, rad) {
+    const h = rad * 0.5, s = Math.sin(h);
+    return [ax * s, ay * s, az * s, Math.cos(h)];
+  }
 
   function quatYawPitch(yaw, pitch) {
-    const hy = yaw * 0.5, hx = pitch * 0.5;
-    const cy = Math.cos(hy), sy = Math.sin(hy);
-    const cx = Math.cos(hx), sx = Math.sin(hx);
-    return [cy * sx, sy * cx, -sy * sx, cy * cx];
+    return quatMul(quatAxis(0, 1, 0, yaw), quatAxis(1, 0, 0, pitch));
   }
 
   function buildAntPoseMat(model, x, y, z, scale, yawRad, pitchRad = 0) {
@@ -32,22 +43,54 @@
     return mat4FromTRS([x, -minY * scale + y, z], q, [scale, scale, scale]);
   }
 
-  // Authentic 1998 carried lunchbox (`hgwg301`/`htwg301`): dangling in the ant's left hand (+X local),
-  // swinging smoothly forward & back in sync with the walking stride (or held forward on heist pop-out!).
-  function buildCarriedLunchboxMat(lunchboxModel, x, y, z, yawRad, walkDist, isWalking, antScale, heldFront = false) {
+  // Authentic 1998 carried lunchbox (`hgwg301`/`htwg301`):
+  // - Rotated +114° (canceling -24° bake + 90° turn) so the handle runs front-to-back along the ant's side
+  //   with the brass clasp facing outward and the flat broad side parallel to the hip.
+  // - Pivoted cleanly around the top handle grip (`0.685 * sc`), locked to the left hand's `Walk` arm swing (0.60 s cycle)
+  //   with lively pendulum swing forward & backward!
+  function buildCarriedLunchboxMat(lunchboxModel, x, y, z, yawRad, animTime, isWalking, antScale, heldFront = false) {
     const sc = LUNCHBOX_SCALE * (antScale / 1.15);
-    const minY = lunchboxModel && lunchboxModel.bounds && lunchboxModel.bounds.min ? lunchboxModel.bounds.min[1] : 0;
+    const handleGripY = 0.685 * sc;
     const cy = Math.cos(yawRad), sy = Math.sin(yawRad);
-    const swing = isWalking ? Math.sin(walkDist * 7.25) : 0;
-    const lx = heldFront ? 0.0 : (+0.23 * antScale);
-    const ly = (heldFront ? 0.36 : 0.14) * antScale;
-    const lz = (heldFront ? 0.32 : (0.13 + swing * 0.12)) * antScale;
-    const wx = x + lx * cy + lz * sy;
-    const wz = z - lx * sy + lz * cy;
-    const wy = y + ly - minY * sc;
-    const pitchSwing = heldFront ? -0.18 : (-swing * 0.24);
-    const q = quatYawPitch(yawRad + (heldFront ? 0.15 : 0.35), pitchSwing);
-    return mat4FromTRS([wx, wy, wz], q, [sc, sc, sc]);
+
+    // Exact phase match with `shared_clips_loco.py` Walk clip (0.60 s period): s1 > 0 lifts/swings left arm forward (+Y/+Z).
+    const phi = (animTime / 0.60) * Math.PI * 2;
+    const s1 = isWalking ? Math.sin(phi) : 0;
+    const sLag = isWalking ? Math.sin(phi - 0.25) : 0;
+
+    // Ant-local left paw trajectory measured directly from `worker.glb`/`thief.glb` Walk `forearm_left` tip
+    // so the top handle stays firmly gripped in the ant's left hand at every frame of the stride!
+    const handX = heldFront ? 0.0 : ((0.136 + 0.014 * s1) * antScale);
+    const handY = heldFront ? (0.56 * antScale) : ((0.378 + 0.078 * s1 + 0.012 * s1 * s1) * antScale);
+    const handZ = heldFront ? (0.30 * antScale) : ((0.180 + 0.020 * s1) * antScale);
+
+    // Lively pendulum swing (~±40°) around the gripped handle in the ant's sagittal walking plane!
+    const swingRx = heldFront ? -0.18 : (-0.70 * sLag);
+    // Positive Rz tilts the bottom gently outward (+X) so the box clears the hip/legs while handle stays in the paw!
+    const outRollRz = heldFront ? 0.0 : (0.18 + 0.04 * Math.abs(s1));
+    // +114° turns `lunchbox.glb` (baked at -24°) to +90° so handle runs front-to-back parallel to the ant's side!
+    const boxYawLocal = heldFront ? (24 * Math.PI / 180) : (114 * Math.PI / 180);
+
+    // Compose: worldYaw * antSagittalPitch * slightOutwardRoll * boxSideYaw
+    const qSwing = quatMul(quatAxis(1, 0, 0, swingRx), quatAxis(0, 0, 1, outRollRz));
+    const qAntToWorld = quatMul(quatAxis(0, 1, 0, yawRad), qSwing);
+    const qTotal = quatMul(qAntToWorld, quatAxis(0, 1, 0, boxYawLocal));
+
+    // Rotate handle vector (0, handleGripY, 0) by qSwing into ant-local space so handle stays glued in the left paw!
+    const cR = Math.cos(outRollRz), sR = Math.sin(outRollRz);
+    const cP = Math.cos(swingRx), sP = Math.sin(swingRx);
+    const gxLoc = -handleGripY * sR;
+    const gyLoc = handleGripY * cR * cP;
+    const gzLoc = handleGripY * cR * sP;
+
+    const bxLoc = handX - gxLoc;
+    const byLoc = handY - gyLoc;
+    const bzLoc = handZ - gzLoc;
+
+    const wx = x + bxLoc * cy + bzLoc * sy;
+    const wz = z - bxLoc * sy + bzLoc * cy;
+    const wy = Math.max(0.015, y + byLoc);
+    return mat4FromTRS([wx, wy, wz], qTotal, [sc, sc, sc]);
   }
 
   function findHillHoleWorld(hillEntry) {
@@ -275,8 +318,8 @@
         }
         y = walking ? Math.abs(Math.sin(walkDist * 14.5)) * 0.024 : 0;
         inst.clipName = walking ? "Walk" : "IdleLookout";
-        inst.animTime = undefined;
         inst.idleTime = walking ? walkDist * 1.75 : t * 1.2;
+        inst.animTime = walking ? inst.idleTime : undefined;
       }
 
       if (Math.abs(x - tx) > visHalfSpan + 3.0 || Math.abs(z - tz) > visHalfSpan + 3.0) continue;
@@ -285,7 +328,8 @@
         visible.push(inst);
       }
       if (showLoot) {
-        lootInst.offsetMat = buildCarriedLunchboxMat(lunchboxModel, x, y, z, yaw, walkDist, walking, antScale, lootFront);
+        const lootAnimT = Number.isFinite(inst.animTime) ? inst.animTime : (inst.idleTime || 0);
+        lootInst.offsetMat = buildCarriedLunchboxMat(lunchboxModel, x, y, z, yaw, lootAnimT, walking, antScale, lootFront);
         visible.push(lootInst);
       }
     }

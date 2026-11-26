@@ -740,7 +740,8 @@
       visible.push(inst);
       if (e.lunchboxInst && activeMap.lunchboxModel) {
         const lbBob = isWalking ? Math.abs(Math.sin(e.walkDist * 14.5)) * 0.024 : 0;
-        e.lunchboxInst.offsetMat = buildCarriedLunchboxMat(activeMap.lunchboxModel, e.x, lbBob, e.z, e.renderYaw, e.walkDist, isWalking, ANT_SCALE, false);
+        const lbAnimT = (state.playing && !state.fixedTime) ? (inst.idleTime || 0) : t;
+        e.lunchboxInst.offsetMat = buildCarriedLunchboxMat(activeMap.lunchboxModel, e.x, lbBob, e.z, e.renderYaw, lbAnimT, isWalking, ANT_SCALE, false);
         visible.push(e.lunchboxInst);
       }
     }
