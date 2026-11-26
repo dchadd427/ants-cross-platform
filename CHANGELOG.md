@@ -26,7 +26,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.21.5 - 2026-11-24 - The Podium results, messages on phones and smarter bots
 
 **For players:**
 - **New ground** (the first part of the new world art). The settings row **HUD art** is now **Art**: one switch, New (the default) or Classic, for the whole look. Big mud fields get a deeper look in the middle (darker and wetter, faint ripples, color patches, bigger and more bubbles), growing with the distance from the banks. Where two plain tiles of different ground meet in a hard line (water against gravel, slate against dirt, and every other pair, in the players' maps), a natural transition is drawn: a bank on the water, soft steps between mud, gravel and dirt, rock for slate, thin on checkerboards. The fire wall and the bomb's explosion are drawn as light (the explosion smooth, with no hard step): see-through, glowing, with a warm glow on the ground (an ant in a fire is seen through the flames, one in front of it covers them); the four teams' bombs are redrawn. The grass and the plants (clovers, flowers, the animated flower, leaves, sticks, the mushroom, the ivy) are redrawn too, with more detail and sharper at 2x and 3x. Gravel, dirt, slate, mud with its bubbles, water, the edges between them and the bridge the Swimmer digs are redrawn in the game's own matte, hand-drawn look, sharper at 2x and 3x, with sixteen pictures for a plain tile so that a field does not repeat. The tiles, the animations and the rules are the original's; Classic draws the original's sprites exactly as before.
@@ -37,6 +37,8 @@ Work that is not released yet is written in the same template under a heading th
 
 **Fixes:**
 - Private messages on a phone: the conversation is a sheet that follows what you can see, so with the keyboard open the field sits just above it, the head with the name and the X stays on the screen and the messages fill the room over the field. The X, the arrow, Escape, a pull down on the head and the phone's Back button each close the sheet and leave you on the page where you were, not on the bell's list.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/df4b4255...36deb771)
 
 ## v0.21.4 - 2026-11-24 - Special ants on the match page, What's new fits a phone
 
