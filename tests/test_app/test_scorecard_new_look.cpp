@@ -471,9 +471,9 @@ void test_play_card(const assets::AssetArchive& arc, const hud_art::Art& art) {
         }
         check(kills_line && moments_line && !all.cut_number, "six kills in nine seconds with every bonus: both numbers, and the big moments that fit" + at);
         const PlayCard each = play_card_of(arc, art, screen, Play{true, 1, 2, 45, 4, MatchReport::kWipedGroup, 0, 3000, 5, 5});
-        bool group = false;
-        for (const std::string& line : each.lines) group = group || line.find("group") != std::string::npos;
-        check(group && !each.cut_number, "a wiped out group is named" + at);
+        bool named = false;
+        for (const std::string& line : each.lines) named = named || line.find("group") != std::string::npos;
+        check(named && !each.cut_number, "a wiped out group is named" + at);
     }
 }
 

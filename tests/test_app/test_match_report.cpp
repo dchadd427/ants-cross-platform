@@ -875,7 +875,7 @@ int main(int argc, char* argv[]) {
         base.hill_y = {20, 40, -1, 5};
         const auto saved = [&](int32_t x, int32_t y, uint8_t raid_on, uint8_t killer) {
             MatchStats st = base;
-            add_kill(st, thief_kill(100, killer, killer == 2 ? 3 : 2, x, y, raid_on, false));
+            add_kill(st, thief_kill(100, killer, static_cast<uint8_t>(killer == 2 ? 3 : 2), x, y, raid_on, false));
             return report_of(st, seat_wins(0)).play;
         };
         MatchReport::Play p = saved(21, 21, 0, 0);                                 // on the mound
