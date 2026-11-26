@@ -1,7 +1,7 @@
 // The map maker's tools in the page (docs/MAP_EDITOR.md): which tool is chosen, the palette of the tool (tiles, or the team and the number of ants, or the stages of a pile), the brush, the
 // fill, undo and redo, the keys for them, and the painter that the canvas calls while a mouse or a finger paints or taps (web/front/mapmaker_canvas.js). The arithmetic of a stroke, the patches
 // and the history are web/front/mapmaker_edit.js; hills, ants and food piles are web/front/mapmaker_blocks.js; bigger objects are web/front/mapmaker_objects.js; the tools and their tiles are
-// web/front/mapmaker_palette.js. This script only
+// web/front/mapmaker_palette.js; the switch "Fill a box" is web/front/mapmaker_fill.js. This script only
 // joins them to the buttons. A browser script (it needs a document).
 (function (root, factory) {
     'use strict';
@@ -21,6 +21,7 @@
         pickup: 'Tap an object, hill, ant, food pile or plant to pick it up, then move, copy or delete it. Drag empty ground to look around.',
         pan: 'Drag to look around. Nothing is changed.'
     };
+    var FILL_HINT = 'Drag a box on the map. Let go, and it fills.';          // (the hint of the placing tools while "Fill a box" is on; a phone's line under the switch says it and the count)
     var PHONE_HINTS = {
         ground: 'Tap to paint. Drag for a line.', objects: 'Tap to put one. Drag for a line.', bigger: 'Tap to put one whole. Erase takes it whole.', hills: 'Tap to put the hill. Tap again to move it.', ants: 'Tap to put a clump of ants here.',
         food: 'Tap to put a food pile.', erase: 'Tap to take something away.', pickup: 'Tap something to pick it up. Drag empty ground to look around.', pan: 'Drag to look around.'
@@ -31,14 +32,15 @@
     function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
 
     // env: {doc, win, canvas (MapCanvas), host: {tools (buttons with data-tool), box, title, swatches, name, tile (the phone's one button for the palette), hint, brushes (inputs or buttons with data-brush), fill, undo, redo,
-    //       stepper, stepperLabel, stepLess, stepValue, stepMore},
+    //       stepper, stepperLabel, stepLess, stepValue, stepMore, fillRow and fillBtn (the switch "Fill a box" and its line, optional)},
     //       file() -> the open map's reader view, rebase(bytes) -> the reader view of other bytes (the dictionary grew, or a list changed its length), onEdit() after a change, busy() -> a dialog is open,
     //       dialogs (MapDialog.create: the palette of a phone is a sheet), say(title, text) -> a plain message}
     function create(env) {
         var doc = env.doc, canvas = env.canvas, host = env.host;
-        var state = { tool: 'ground', ground: 485, objects: 302, big: Palette.BIGGER[0][0], brush: 1, fill: false, autoEdges: (function () { try { return !!(env.win && env.win.localStorage && env.win.localStorage.getItem('ants_mapmaker_auto_edges') === '1'); } catch (e) { return false; } })(), team: 0, ants: 4, antType: 0, stages: 4, dropper: 0, food: 0, units: 0, points: 0 };
+        var state = { tool: 'ground', ground: 485, objects: 302, big: Palette.BIGGER[0][0], brush: 1, fill: false, autoEdges: (function () { try { return !!(env.win && env.win.localStorage && env.win.localStorage.getItem('ants_mapmaker_auto_edges') === '1'); } catch (e) { return false; } })(), team: 0, ants: 4, antType: 0, stages: 4, dropper: 0, food: 0, units: 0, points: 0,
+                      fillBox: (function () { try { return !!(env.win && env.win.localStorage && env.win.localStorage.getItem('ants_mapmaker_fill_box') === '1'); } catch (e) { return false; } })() };
         var editor = null, current = null, told = false, fits = '';      // `fits`: a note when fewer ants than asked for found room, until the next choice
-        var ground = null, sprites = null, edges = null, ants = null, asked = false, pick = null, askedPick = false;    // the lazily loaded parts (mapmaker_ground.js, mapmaker_sprites.js, mapmaker_edges.js; mapmaker_ants.js: the Ants tool's box, mapmaker_pickup.js: the Pick up tool, each asked for when the tool is first chosen)
+        var ground = null, sprites = null, edges = null, ants = null, asked = false, pick = null, askedPick = false, fill = null, askedFill = false;    // the lazily loaded parts (mapmaker_ground.js, mapmaker_sprites.js, mapmaker_edges.js; mapmaker_ants.js: the Ants tool's box, mapmaker_pickup.js: the Pick up tool, each asked for when the tool is first chosen; mapmaker_fill.js: the switch "Fill a box", asked for when it is first on)
         var ICONS = { ground: [0, 485], objects: [1, 302], bigger: [1, 1323], hills: [1, 248], food: [1, 264] };           // the tool buttons' pictures: [layer 2?, tile]
 
         function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
@@ -46,6 +48,9 @@
         function paints() { return Palette.paints(state.tool) && !isPlant(); }
         function places() { return Palette.places(state.tool) || isPlant(); }
         function hasTeams() { return state.tool === 'hills' || state.tool === 'ants'; }
+        function fillable() { return state.tool === 'objects' || state.tool === 'food' || state.tool === 'ants'; }          // (the tools that put one thing on one cell: not Bigger, Hills, Ground or Pick up)
+        function fillMode() { return state.fillBox && fillable(); }
+        function fillOn() { return !!fill && fillMode(); }
         // a picture in a chip (the atlas), or false when there is none yet (the chip keeps its flat color)
         function picture(node, layer2, id, px) { return !!sprites && sprites.ready() && sprites.chip(node, layer2, id, px); }
         // the palette's item of a tile, or any ground tile that the sheet of a kind offers (the game's own name goes into the map's dictionary)
@@ -135,9 +140,13 @@
             host.box.hidden = !hasPalette;
             host.tile.hidden = !hasPalette;
             host.hint.textContent = '';
-            if (!own) { host.hint.appendChild(el('span', 'dsk', HINTS[state.tool])); host.hint.appendChild(el('span', 'mob', PHONE_HINTS[state.tool])); }
+            if (!own) { host.hint.appendChild(el('span', 'dsk', fillMode() ? FILL_HINT : HINTS[state.tool])); host.hint.appendChild(el('span', 'mob', fillMode() ? '' : PHONE_HINTS[state.tool])); }
             if (hasPalette) showPalette();
-            if (ants) ants.show(own);
+            if (host.fillRow) host.fillRow.hidden = !fillable();
+            if (host.fillBtn) { host.fillBtn.disabled = false; host.fillBtn.setAttribute('aria-checked', String(state.fillBox)); }
+            if (fillMode()) askFill();
+            if (ants) ants.show(own && !fillMode());
+            if (fill) fill.show(fillOn());
             if (pick) pick.show(state.tool === 'pickup');
             showButtons();
             canvas.refresh();
@@ -187,6 +196,7 @@
             if (host.name) host.name.textContent = infoText();
             if (warned && host.name && host.name.scrollIntoView) host.name.scrollIntoView({ block: 'nearest' });      // (the sentence is four lines: the column scrolls just far enough to show all of it, and the page never moves)
             if (ants) ants.refresh();
+            if (fill) fill.refresh();
             if (pick) pick.refresh();
         }
 
@@ -421,6 +431,28 @@
             });
         }
 
+        // The switch "Fill a box" is a script of its own (mapmaker_fill.js and its style), asked for the first time the switch is on; when it did not load the page says so and the switch is off
+        function askFill() {
+            if (askedFill || !env.loadFill) return;
+            askedFill = true;
+            env.loadFill(function (Part) {
+                if (!Part) { askedFill = false; state.fillBox = false; if (env.say) env.say('This part did not load', 'The part of the page that fills a box did not load. Check your connection and switch Fill a box on again.'); showTools(); return; }
+                fill = Part.create({
+                    doc: doc, win: env.win, host: { tools: host.hint.parentNode, hint: host.hint, side: host.side, cv: host.map && host.map.parentNode, map: host.map, row: host.fillRow }, file: env.file, act: act, say: env.say, dialogs: env.dialogs, busy: env.busy,
+                    state: function () { return api.state(); }, setTeam: chooseTeam, setAntType: function (at) { state.antType = at; }, pic: function (node, layer2, id, px) { picture(node, layer2, id, px); },
+                    sprites: function () { return sprites && sprites.ready() ? sprites : null; }, view: function () { return canvas.state(); }, refresh: function () { canvas.refresh(); }, stroking: function () { return canvas.isStroking(); }, cancel: function () { canvas.cancelStroke(); },
+                    step: function () { return editor ? { top: editor.history.top(), redo: editor.history.canRedo() } : null; }
+                });
+                if (editor) fill.setMap();
+                showTools();
+            });
+        }
+        function setFillBox(on) {
+            state.fillBox = !!on;
+            try { if (env.win && env.win.localStorage) env.win.localStorage.setItem('ants_mapmaker_fill_box', state.fillBox ? '1' : '0'); } catch (e) {}
+            showTools();
+        }
+
         function chooseTool(id) {
             if (!Palette.usable(id)) return;
             if (canvas.isStroking()) return;
@@ -527,12 +559,12 @@
         }
 
         // the box of the Ants tool takes the canvas's taps and drags (One at a time, Clump and the drag of a Mix)
-        function mine() { return !!ants && state.tool === 'ants' ? ants.painter : (!!pick && state.tool === 'pickup' ? pick.painter : null); }
+        function mine() { return fillOn() ? fill.painter : (!!ants && state.tool === 'ants' ? ants.painter : (!!pick && state.tool === 'pickup' ? pick.painter : null)); }
         var painter = {
             // the size of the square that the canvas marks under the pointer: the brush, a hill (4 x 4), a cell for ants, food and plants (a bigger object marks its own box: shape); 0 for a tool that does not mark
             size: function () { return !editor ? 0 : (mine() ? mine().size() : (paints() ? state.brush : (places() ? (state.tool === 'hills' ? Blocks.HILL : 1) : 0))); },
             // the picture that follows the pointer: a bigger object's or a plant's tile id (0 for the other tools)
-            ghost: function () { return editor && state.tool === 'bigger' ? state.big : (editor && isPlant() ? state.objects : 0); },
+            ghost: function () { return editor && state.tool === 'bigger' ? state.big : (editor && !fillOn() && isPlant() ? state.objects : 0); },
             // a tool that puts one whole thing with a tap: a drag looks around instead of painting
             tapOnly: function (cell) { return !!editor && (mine() ? mine().tapOnly(cell) : places()); },
             // the Pick up tool: a press on a thing that can be dragged (the thing that is picked up, or the ghost) is a drag, a press anywhere else looks around and a tap there is the tool's
@@ -659,6 +691,7 @@
             });
         });
         host.fill.addEventListener('click', function () { state.fill = !state.fill; showButtons(); });
+        if (host.fillBtn) host.fillBtn.addEventListener('click', function () { setFillBox(!state.fillBox); });
         Array.prototype.forEach.call(host.autoEdges || [], function (b) { if (b) b.addEventListener('click', function () { setAutoEdges(!state.autoEdges); }); });
         host.tile.addEventListener('click', openPicker);
         host.stepLess.addEventListener('click', function () { stepBy(-1); });
@@ -670,9 +703,9 @@
         canvas.setPainter(painter);
         showTools();
 
-        return {
+        var api = {
             // A map is open (a new one, or one from the disk): the history starts empty
-            setMap: function (file) { rev++; gapKept = gapWant = null; editor = Edit.create(file, { rebase: env.rebase, erase: Blocks.eraseAt, guard: Blocks.blockedText }); current = null; if (ants) ants.setMap(); if (pick) pick.setMap(); showButtons(); showInfo(); },
+            setMap: function (file) { rev++; gapKept = gapWant = null; editor = Edit.create(file, { rebase: env.rebase, erase: Blocks.eraseAt, guard: Blocks.blockedText }); current = null; if (ants) ants.setMap(); if (pick) pick.setMap(); if (fill) fill.setMap(); showButtons(); showInfo(); },
             choose: chooseTool, undo: undo, redo: redo,
             // The lazily loaded parts came in (mapmaker_ground.js: the sheets of the kinds; mapmaker_sprites.js: the pictures, or null when the atlas failed): the palette and the tool buttons show them
             use: function (g, s, e) {
@@ -683,6 +716,7 @@
                 showPalette();
                 showButtons();
                 if (ants) ants.refresh();
+                if (fill) fill.refresh();
             },
             useEdges: function (e) { edges = e || null; showButtons(); },
             setAutoEdges: setAutoEdges,
@@ -692,8 +726,10 @@
             isSaved: function () { return !editor || editor.history.isSaved(); },
             markSaved: function () { if (editor) editor.history.markSaved(); },
             markUnsaved: function () { if (editor) editor.history.markUnsaved(); },
-            state: function () { return { tool: state.tool, ground: state.ground, objects: state.objects, brush: state.brush, fill: state.fill, autoEdges: state.autoEdges, team: state.team, ants: state.ants, stages: state.stages, dropper: state.dropper, food: state.food, units: foodUnits(), points: foodPoints(), big: state.big, history: editor ? editor.history.size() : null }; }
+            state: function () { return { tool: state.tool, ground: state.ground, objects: state.objects, brush: state.brush, fill: state.fill, fillBox: state.fillBox, autoEdges: state.autoEdges, team: state.team, ants: state.ants, antType: state.antType, stages: state.stages, dropper: state.dropper, food: state.food, units: foodUnits(), points: foodPoints(), big: state.big, history: editor ? editor.history.size() : null }; },
+            setFillBox: setFillBox
         };
+        return api;
     }
 
     return { create: create };

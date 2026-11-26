@@ -903,6 +903,7 @@ class TheTools(AiTest):
         return self.door(key or self.key, path="/hub/ai/mcp", body={"jsonrpc": "2.0", "id": ident, "method": method, "params": params or {}}, **kw)
 
     def test_the_arguments_are_checked_before_the_tab_is_asked(self):
+        BOX = {"row": 0, "column": 0, "rows": 5, "columns": 5}
         bad = [("map_info", {"x": 1}), ("get_region", {"row": 0, "column": 0, "rows": 129, "columns": 5}), ("get_region", {"row": 0, "column": 0, "rows": 5}), ("get_region", {"row": -1, "column": 0, "rows": 5, "columns": 5}),
                ("get_region", {"row": "0", "column": 0, "rows": 5, "columns": 5}), ("get_region", {"row": 0.5, "column": 0, "rows": 5, "columns": 5}), ("get_region", {"row": True, "column": 0, "rows": 5, "columns": 5}),
                ("paint", {"layer": "sky", "tile": 485, "cells": [[0, 0]]}), ("paint", {"layer": "ground", "tile": 5000, "cells": [[0, 0]]}), ("paint", {"layer": "ground", "tile": 485}),
@@ -917,7 +918,15 @@ class TheTools(AiTest):
                ("resize_map", {"rows": 0, "columns": 5}), ("new_map", {"kind": "huge", "rows": 5, "columns": 5}), ("undo", {"steps": 0}), ("undo", {"steps": 21}), ("save_draft", {"name": ""}), ("save_draft", {"name": "x" * 41}),
                ("note", {"text": ""}), ("note", {"text": "x" * 201}), ("note", {}), ("read_guide", {"topic": "everything"}), ("read_guide", {}), ("list_tiles", {"group": "secrets"}),
                ("view_library_map", {"view": "info"}), ("view_library_map", {"name": "x", "view": "region"}), ("view_library_map", {"name": "x", "view": "region", "row": 0, "column": 0, "rows": 129, "columns": 5}),
-               ("get_picture", {"row": 0}), ("get_picture", {"max_px": 5000}), ("note", {"text": "a\x00b"})]
+               ("get_picture", {"row": 0}), ("get_picture", {"max_px": 5000}), ("note", {"text": "a\x00b"}),
+               ("fill_area", {"object": 129}), ("fill_area", {"rect": BOX}), ("fill_area", {"rect": BOX, "object": 129, "plant": {"tile": 404}}), ("fill_area", {"rect": BOX, "object": 129, "pattern": "spiral"}),
+               ("fill_area", {"rect": BOX, "object": 129, "pattern": "rows", "n": 1}), ("fill_area", {"rect": BOX, "object": 129, "pattern": "rows", "n": 10}), ("fill_area", {"rect": BOX, "object": 129, "n": 3}),
+               ("fill_area", {"rect": BOX, "object": 129, "pattern": "random", "density": 4}), ("fill_area", {"rect": BOX, "object": 129, "pattern": "random", "density": 96}), ("fill_area", {"rect": BOX, "object": 129, "density": 30}),
+               ("fill_area", {"rect": BOX, "object": 129, "pattern": "random", "seed": 0}), ("fill_area", {"rect": BOX, "object": 129, "pattern": "random", "seed": 10000}), ("fill_area", {"rect": BOX, "object": 129, "seed": 5}),
+               ("fill_area", {"rect": {"row": 0, "column": 0, "rows": 0, "columns": 5}, "object": 129}), ("fill_area", {"rect": {"row": 0, "column": 0, "rows": 5}, "object": 129}), ("fill_area", {"rect": BOX, "object": -1}),
+               ("fill_area", {"rect": BOX, "plant": {"dropper": 30}}), ("fill_area", {"rect": BOX, "plant": {"tile": 421, "dropper": 181}}), ("fill_area", {"rect": BOX, "food": {"stages": 7}}), ("fill_area", {"rect": BOX, "food": {"bites": 4}}),
+               ("fill_area", {"rect": BOX, "ants": {}}), ("fill_area", {"rect": BOX, "ants": {"team": "purple"}}), ("fill_area", {"rect": BOX, "ants": {"team": "red", "type": "dragon"}}), ("fill_area", {"rect": BOX, "ants": {"team": "red", "count": 5}}),
+               ("fill_area", {"rect": BOX, "object": 129, "extra": 1}), ("fill_area", {"rect": BOX, "object": 129, "base": -1})]
         for tool, args in bad:
             r = self.door(self.key, tool, args)
             self.assertIn(r.status, (400, 413), (tool, args))
@@ -931,6 +940,13 @@ class TheTools(AiTest):
             r = self.door(self.key, "paint", args)
             self.assertEqual((r.status, r.json()["error"]), (413, "too_big"), args)
         self.assertEqual(self.door(self.key, "erase", {"rect": {"row": 0, "column": 0, "rows": 5001, "columns": 1}}).json()["error"], "too_big")
+        for rect in ({"row": 0, "column": 0, "rows": 100, "columns": 51}, {"row": 0, "column": 0, "rows": 5001, "columns": 1}):
+            r = self.door(self.key, "fill_area", {"rect": rect, "object": 129})
+            self.assertEqual((r.status, r.json()["error"]), (413, "too_big"), rect)
+        self.assertEqual(self.ask(self.tab, self.key, "fill_area", {"rect": {"row": 0, "column": 0, "rows": 100, "columns": 50}, "object": 129})[1].status, 200)           # (5,000 cells exactly: the tab judges the rest)
+        for thing in ({"object": 129, "plant": {"tile": 404}}, {"plant": {"tile": 404}, "food": {}}, {"food": {}, "ants": {"team": "red"}}):
+            r = self.door(self.key, "fill_area", dict(thing, rect={"row": 0, "column": 0, "rows": 5, "columns": 5}))
+            self.assertEqual((r.status, r.json()["error"]), (400, "bad_args"), thing)           # (one thing, not two and not none)
         ok = {"layer": "ground", "tile": 485, "rect": {"row": 0, "column": 0, "rows": 100, "columns": 50}}
         self.assertEqual(self.ask(self.tab, self.key, "paint", ok)[1].status, 200)
         fill = {"layer": "ground", "tile": 485, "fill": {"row": 0, "column": 0}}
