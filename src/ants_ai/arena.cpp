@@ -640,6 +640,11 @@ ArenaResult play_match(const ArenaSpec& spec) {
             r.fight_batch.stand_taken = sb->power_stand().taken();
             r.fight_batch.stand_refuge = sb->power_stand().stands(PowerStandTask::Why::Refuge);
             r.fight_batch.stand_deny = sb->power_stand().stands(PowerStandTask::Why::Deny);
+            r.fight_batch.plan_engagements = sb->fight_plan().engagements();
+            r.fight_batch.plan_fights = sb->fight_plan().fights();
+            r.fight_batch.plan_skipped = sb->fight_plan().skipped();
+            r.fight_batch.plan_pulls = sb->fight_plan().pulls();
+            r.fight_batch.plan_attacks = sb->fight_plan().attacks();
             r.miner_flight = read_miner_flight(sb->miner_flight());
         }
         read_seat_result(sim, b.seat, r);

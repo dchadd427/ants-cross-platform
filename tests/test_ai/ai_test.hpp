@@ -244,6 +244,7 @@ void run_gone_tests();
 void run_unstick_tests();
 void run_idle_tests();
 void run_powerstand_tests();
+void run_fightplan_tests();
 void run_gang2_tests();
 void run_group_tests();
 void run_hit_tests();

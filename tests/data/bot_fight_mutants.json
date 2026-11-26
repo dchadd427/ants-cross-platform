@@ -153,6 +153,69 @@
    "build": "test_ai",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI59.2 ' ./build/tests/test_ai/test_ai",
    "expect": "AI59.2"
+  },
+  {
+   "id": "plan_fights_without_an_edge",
+   "file": "src/ants_ai/fight_plan.cpp",
+   "old": "const bool edge = ours.n > 0 && ours.value() * 100u >= theirs.value() * plan.fp_edge_percent;",
+   "new": "const bool edge = ours.n > 0;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI60.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI60.2"
+  },
+  {
+   "id": "plan_nearest_not_weakest",
+   "file": "src/ants_ai/fight_plan.cpp",
+   "old": "const bool better = plan.fp_focus ?",
+   "new": "const bool better = false ?",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI60.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI60.3"
+  },
+  {
+   "id": "plan_hurt_not_pulled",
+   "file": "src/ants_ai/fight_plan.cpp",
+   "old": "if (!plan.fp_pull || !v.hill_enterable() || !hill.present) continue;",
+   "new": "continue;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI60.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI60.4"
+  },
+  {
+   "id": "plan_chases_onto_a_bridge",
+   "file": "src/ants_ai/fight_plan.cpp",
+   "old": "if (plan.fp_bridge_hold && grid.get_cell(target->tile).has_completed_bridge()) {",
+   "new": "if (false && grid.get_cell(target->tile).has_completed_bridge()) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI60.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI60.5"
+  },
+  {
+   "id": "plan_carrier_is_no_contact",
+   "file": "src/ants_ai/fight_plan.cpp",
+   "old": "if ((m.holding || m.carried_points > 0) && !plan.fp_guard) continue;",
+   "new": "if ((m.holding || m.carried_points > 0)) continue;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI60.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI60.6"
+  },
+  {
+   "id": "plan_takes_held_ants_too",
+   "file": "src/ants_ai/fight_plan.cpp",
+   "old": "if (plan.fp_spare_only && owner != kNoTask) continue;",
+   "new": "",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI60.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI60.8"
+  },
+  {
+   "id": "plan_master_switch_ignored",
+   "file": "src/ants_ai/fight_plan.cpp",
+   "old": "if (!plan.fight_plan || !v.has_grid() || v.game_mode() != sim::GameMode::HighestScore) {",
+   "new": "if (false || !v.has_grid() || v.game_mode() != sim::GameMode::HighestScore) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI60.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI60.1"
   }
  ]
 }

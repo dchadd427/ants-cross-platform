@@ -310,6 +310,18 @@ struct LevelPlan {
     uint32_t stand_deny_calm{600};       // ... a deny is left after this many ticks without an enemy near (`pdenycalm`)
     uint8_t stand_deny_kinds{0x1E};      // ... the kinds that are denied, a bit for every sim::AntType: Bomber 2, Fire 4, Thief 8, Combat 16 (`pdenykinds`)
     uint32_t stand_max{2};               // ... ants that stand or walk to stand at a time (`pmax`)
+    // part 2 of the fight batch, rule 2 (docs/BOT_CONTEST.md, "A fight with a plan"): fight only with an edge, strike the weakest enemy, pull the hurt back. OFF at every level (the arena shows no win: `fplan=1`
+    // plays it). EXPIRES with v0.21.8 (AGENTS.md rule 9): the rule is removed with its task, tests and mutants, or turned on where a measurement shows a win
+    bool fight_plan{false};              // the task runs (FightPlanTask)
+    uint32_t fp_edge_percent{150};       // ... the own side strikes when its strength is at least this many percent of the enemy's at the place (`fpedge`)
+    int32_t fp_reach{8};                 // ... the own ants that can fight within this many tiles of the place join (`fpreach`)
+    uint32_t fp_max_force{6};            // ... at most this many ants strike (`fpforce`)
+    bool fp_focus{true};                 // ... they strike the enemy ant with the fewest hit points (false: the nearest) (`fpfocus`)
+    bool fp_pull{true};                  // ... a hurt ant of a place where the own side has no edge walks home (`fppull`)
+    uint32_t fp_pull_hp{3};              // ... a hurt ant has at most this many hit points (`fppullhp`)
+    bool fp_bridge_hold{true};           // ... no strike at an enemy that stands on a bridge tile: the ants hold the shore (`fpbridge`)
+    bool fp_guard{true};                 // ... an own carrier that an enemy is near is a contact: the ants near it guard it (`fpguard`)
+    bool fp_spare_only{false};           // ... only ants that no task holds (the ones that the economy has no pile for) are sent to strike: the fight costs no food (`fpspare`)
     bool island_endraid{true};           // (Hard's island play) once the food is nearly gone an own Thief is wanted: an idle Swimmer or a spare at a flower strip takes the Thief that falls, a Swimmer digs the chain from its island to the
                                          // own hill's and to the richest enemy hill's, and the raid task raids over it (`endraid=0`: the bot as it was)
     uint32_t endraid_from{1200};         // ... the Thief is wanted from this tick even while food is left (the first drop of a Thief falls after the first minute; measured: the sooner the better, docs/BOT_IDLE.md)

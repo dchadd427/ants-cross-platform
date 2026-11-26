@@ -38,6 +38,7 @@ add_library(ants_ai STATIC
     miner_flight_task.cpp
     plug_task.cpp
     power_stand.cpp
+    fight_plan.cpp
     free_thief_task.cpp
     bridge_headon.cpp
     contact_task.cpp

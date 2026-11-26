@@ -150,6 +150,16 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "pdenycalm") { p.stand_deny_calm = static_cast<uint32_t>(v); return true; }
     if (key == "pdenykinds") { p.stand_deny_kinds = static_cast<uint8_t>(v); return true; }
     if (key == "pmax") { p.stand_max = static_cast<uint32_t>(v); return true; }
+    if (key == "fplan") return flag(p.fight_plan);                                  // a fight with a plan (docs/BOT_CONTEST.md): the master switch, off in every shipped plan; expires with v0.21.8
+    if (key == "fpedge") { p.fp_edge_percent = static_cast<uint32_t>(v); return true; }
+    if (key == "fpreach") { p.fp_reach = static_cast<int32_t>(v); return true; }
+    if (key == "fpforce") { p.fp_max_force = static_cast<uint32_t>(v); return true; }
+    if (key == "fpfocus") return flag(p.fp_focus);
+    if (key == "fppull") return flag(p.fp_pull);
+    if (key == "fppullhp") { p.fp_pull_hp = static_cast<uint32_t>(v); return true; }
+    if (key == "fpbridge") return flag(p.fp_bridge_hold);
+    if (key == "fpguard") return flag(p.fp_guard);
+    if (key == "fpspare") return flag(p.fp_spare_only);
     if (key == "bloaded") return flag(p.bridge_loaded);                             // an ant that holds a load gets a bridge home, with one Swimmer (0: the bot as it was; docs/BOT_UNSTUCK.md)
     if (key == "bholdrel") { p.bridge_hold_release = static_cast<uint32_t>(v); return true; }
     if (key == "foot") return flag(p.bridge_foot);                                  // an ant with a load or in the can't-go clip steps back off the foot of a bridge (0: the bot as it was; docs/BOT_UNSTUCK.md)

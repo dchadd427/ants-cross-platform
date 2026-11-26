@@ -315,11 +315,17 @@ struct FightBatchResult {
     uint32_t stand_taken{0};
     uint32_t stand_refuge{0};
     uint32_t stand_deny{0};
+    uint32_t plan_engagements{0};              // rule 2 (FightPlanTask): the places where an own and an enemy ant were in contact, those where the own side had the edge and struck, those where it had none, the hurt ants pulled back
+    uint32_t plan_fights{0};                   // ... and the attack orders given
+    uint32_t plan_skipped{0};
+    uint32_t plan_pulls{0};
+    uint32_t plan_attacks{0};
 };
 
 inline bool operator==(const FightBatchResult& a, const FightBatchResult& b) noexcept {
     bool same = a.foot_plugs == b.foot_plugs && a.loads_released == b.loads_released && a.return_tiles == b.return_tiles;
     same = same && a.stand_chains == b.stand_chains && a.stand_held == b.stand_held && a.stand_missed == b.stand_missed && a.stand_taken == b.stand_taken && a.stand_refuge == b.stand_refuge && a.stand_deny == b.stand_deny;
+    same = same && a.plan_engagements == b.plan_engagements && a.plan_fights == b.plan_fights && a.plan_skipped == b.plan_skipped && a.plan_pulls == b.plan_pulls && a.plan_attacks == b.plan_attacks;
     return same;
 }
 
