@@ -73,7 +73,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     copy with nothing changed must pass"""
     FILES = (["web/lobby.html", "web/shell.html", "web/shapes.js", "web/rejoin_key.js", "web/alert_core.js", "web/home/home.js", "web/home/games.js", "web/home/alerts.js", "web/home/alerts.css", "web/home/chat.js", "web/home/messages.js", "web/home/messages.css",
               "tests/scripts/web_home_messages_check.js", "tests/scripts/web_page_harness.js"]
-             + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "room_fog.js", "room_sheet.js", "seat_menu.js", "map_picker.js", "player_name.js", "map_maker_link.js")])
+             + ["web/front/" + n for n in ("name_letters.js", "lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "room_fog.js", "room_sheet.js", "seat_menu.js", "map_picker.js", "player_name.js", "map_maker_link.js")])
 
     @classmethod
     def setUpClass(cls):

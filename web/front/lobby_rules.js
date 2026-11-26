@@ -57,13 +57,17 @@
         var s = name.toLowerCase().replace(/0/g, 'o');
         return /^[^a-z0-9()\[\]{}<>]*(?:bot|b[^a-z0-9()\[\]{}<>]+o[^a-z0-9()\[\]{}<>]+t)[^a-z0-9()\[\]{}<>]*[(\[{<]/.test(s) || /[(\[{<][^a-z0-9()\[\]{}<>]*(?:bot(?=[^a-z0-9])|b[^a-z0-9()\[\]{}<>]+o[^a-z0-9()\[\]{}<>]+t(?=[^a-z0-9])(?! +[a-z0-9]))/.test(s);
     }
-    // The rules of a name, the same as the game page's own name step (the NAME block of web/shell.html and web/lobby.html, which tests/scripts/web_lobby_rules_check.js compares with this): printable ASCII only,
-    // the blanks at both ends cut off, at most 32 characters, nothing that reads as a computer player's label: "Bot (...)", "Pip (bot)", "Pip (bot, Hard)" (blanks, signs between the letters and case ignored). Empty is fine: it is no name. { ok: true, name } or { ok: false, why }.
+    // The rules of a name, the same as the game page's own name step (the NAME block of web/shell.html and web/lobby.html, which tests/scripts/web_lobby_rules_check.js compares with this): printable ASCII and the
+    // letters of front/name_letters.js (a script tag of the page, read when a name is checked), the blanks at both ends cut off, at most 32 characters, nothing that reads as a computer player's label: "Bot (...)",
+    // "Pip (bot)", "Pip (bot, Hard)" (blanks, signs between the letters and case ignored). Empty is fine: it is no name. { ok: true, name } or { ok: false, why }.
     function nameCheck(text) {
+        var NL = (typeof self !== 'undefined' && self.AntsNameLetters) || (typeof globalThis !== 'undefined' && globalThis.AntsNameLetters) || null;
         var raw = typeof text === 'string' ? text.replace(/[\t\r\n]/g, '') : '';
-        if (/[^\x20-\x7e]/.test(raw)) return { ok: false, why: 'A name can hold printable ASCII characters only: letters, digits and signs without accents.' };
+        var points = NL ? NL.codePoints(raw) : null, i;
+        for (i = 0; points && i < points.length; i++) { if (!NL.isWireCodePoint(points[i])) points = null; }
+        if (!points) return { ok: false, why: 'A name can hold Latin and Cyrillic letters, digits and signs: the game cannot draw other letters yet.' };
         var name = raw.replace(/^ +/, '').replace(/ +$/, '');
-        if (name.length > 32) return { ok: false, why: 'A name has at most 32 characters.' };
+        if (NL.codePoints(name).length > 32) return { ok: false, why: 'A name has at most 32 characters.' };
         if (readsAsBot(name)) return { ok: false, why: 'A name like "Bot (...)" or "Pip (bot)" is for computer players. Please choose another name.' };
         return { ok: true, name: name };
     }

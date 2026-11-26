@@ -191,7 +191,7 @@ std::vector<uint8_t> encode(const HelloMsg& m) {
     ByteWriter w(out);
     w.u8(static_cast<uint8_t>(MsgType::Hello));
     w.u16(m.version);
-    w.str8(clip(m.name, kMaxNameChars));
+    w.str8(clip_wire_name(m.name));
     w.u16(m.listen_port);
     w.u8(m.want_seat);
     w.str8(clip(m.room, kMaxRoomCodeChars));
@@ -200,6 +200,7 @@ std::vector<uint8_t> encode(const HelloMsg& m) {
     w.u32(m.have_turns);
     w.u8(m.platform);
     w.u8(m.client_kind);
+    w.str8(valid_pass_shape(m.name_pass) ? m.name_pass : std::string());                // (protocol 29: the pass of the name, or none)
     if (m.create) {                                                                    // the create block ends the message
         w.str8(m.create->map_name);
         w.u8(m.create->seats);
@@ -224,6 +225,7 @@ bool decode(const uint8_t* data, size_t size, HelloMsg& out) {
     m.have_turns = r->u32();
     m.platform = r->u8();
     m.client_kind = r->u8();
+    m.name_pass = r->str8();
     if (r->ok() && r->left() > 0) {                                                    // a create block, strictly: whatever it is, it is the end of the message
         CreateBlock block;
         block.map_name = r->str8();
@@ -234,11 +236,8 @@ bool decode(const uint8_t* data, size_t size, HelloMsg& out) {
         if (!r->ok() || !valid_create_block(block)) return false;
         m.create = std::move(block);
     }
-    if (!r->done() || !valid_platform(m.platform) || m.client_kind > kClientPage || m.name.size() > kMaxNameChars || m.token.size() > kMaxTokenChars || !valid_room_code(m.room)) return false;
+    if (!r->done() || !valid_platform(m.platform) || m.client_kind > kClientPage || !valid_wire_name(m.name) || (!m.name_pass.empty() && !valid_pass_shape(m.name_pass)) || m.token.size() > kMaxTokenChars || !valid_room_code(m.room)) return false;
     if (key_is_zero(m.key) && m.have_turns != 0) return false;                  // a new player has no turns: a count needs the key that it belongs to
-    for (char c : m.name) {
-        if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) > 0x7E) return false;
-    }
     for (char c : m.token) {
         if (static_cast<unsigned char>(c) < 0x21 || static_cast<unsigned char>(c) > 0x7E) return false;       // a token has no spaces and no control characters
     }
@@ -252,10 +251,7 @@ bool decode_hello_prefix(const uint8_t* data, size_t size, HelloMsg& out) {
     HelloMsg m;
     m.version = r->u16();
     m.name = r->str8();
-    if (!r->ok() || m.name.size() > kMaxNameChars) return false;       // what follows is the layout of some version: not read
-    for (char c : m.name) {
-        if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) > 0x7E) return false;
-    }
+    if (!r->ok() || !valid_wire_name(m.name)) return false;           // what follows is the layout of some version: not read (a name of an older version is ASCII, which is a name here too)
     out = std::move(m);
     return true;
 }
@@ -416,7 +412,7 @@ std::vector<uint8_t> encode(const ChatMsg& m) {
     w.u8(static_cast<uint8_t>(MsgType::Chat));
     w.u8(m.sender);
     w.u8(m.team ? 1 : 0);
-    w.str8(clip(m.text, kMaxChatChars));
+    w.str8(m.sender == kRoomSender ? clip_wire_name(m.text, kMaxChatChars, kMaxNoticeBytes) : clip(m.text, kMaxChatChars));       // (protocol 29: the room's own notices name people, so they may hold a name's letters)
     return out;
 }
 bool decode(const uint8_t* data, size_t size, ChatMsg& out) {
@@ -427,24 +423,19 @@ bool decode(const uint8_t* data, size_t size, ChatMsg& out) {
     m.sender = r->u8();
     const uint8_t team = r->u8();
     m.text = r->str8();
-    if (!r->done() || team > 1 || m.text.size() > kMaxChatChars) return false;
-    for (char c : m.text) {
-        if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) > 0x7E) return false;
+    if (!r->done() || team > 1) return false;
+    if (m.sender == kRoomSender) {
+        if (!valid_wire_name(m.text, kMaxChatChars, kMaxNoticeBytes)) return false;                      // (protocol 29: the room's own notices name people)
+    } else {
+        if (m.text.size() > kMaxChatChars) return false;
+        for (char c : m.text) {
+            if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) > 0x7E) return false;
+        }
     }
     m.team = team == 1;
     out = std::move(m);
     return true;
 }
-
-namespace {
-bool printable_name(const std::string& s, size_t max) {
-    if (s.size() > max) return false;
-    for (char c : s) {
-        if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) > 0x7E) return false;
-    }
-    return true;
-}
-}  // namespace
 
 std::vector<uint8_t> encode(const RoomMsg& m) {
     std::vector<uint8_t> out;
@@ -452,7 +443,7 @@ std::vector<uint8_t> encode(const RoomMsg& m) {
     w.u8(static_cast<uint8_t>(MsgType::Room));
     for (const auto& slot : m.slots) {
         w.u8(static_cast<uint8_t>(slot.state));
-        w.str8(clip(slot.name, kMaxNameChars));
+        w.str8(clip_wire_name(slot.name));
         w.u16(slot.rtt_ms);
         w.u8(slot.platform);
     }
@@ -479,7 +470,7 @@ bool decode(const uint8_t* data, size_t size, RoomMsg& out) {
         slot.name = r->str8();
         slot.rtt_ms = r->u16();
         slot.platform = r->u8();
-        if (st > static_cast<uint8_t>(SlotState::Bot) || !printable_name(slot.name, kMaxNameChars)) return false;
+        if (st > static_cast<uint8_t>(SlotState::Bot) || !valid_wire_name(slot.name)) return false;
         slot.state = static_cast<SlotState>(st);
         // what a seat runs on: a person's (the host or a guest) says an operating system or nothing; a seat that holds nobody, and a bot, say nothing
         if (!valid_platform(slot.platform) || (slot.platform != kPlatformUnknown && slot.state != SlotState::Host && slot.state != SlotState::Client)) return false;
@@ -548,7 +539,7 @@ std::vector<uint8_t> encode(const StartMsg& m) {
     w.u64(m.map_hash);
     w.u8(m.fog ? 1 : 0);
     w.u8(m.roster);
-    for (const auto& n : m.names) w.str8(clip(n, kMaxNameChars));
+    for (const auto& n : m.names) w.str8(clip_wire_name(n));
     for (const auto& e : m.endpoints) {
         w.str8(e.address.size() > 64 ? std::string() : e.address);
         w.u16(e.port);
@@ -571,7 +562,7 @@ bool decode(const uint8_t* data, size_t size, StartMsg& out) {
     m.roster = r->u8();
     for (auto& n : m.names) {
         n = r->str8();
-        if (!printable_name(n, kMaxNameChars)) return false;
+        if (!valid_wire_name(n)) return false;
     }
     for (auto& e : m.endpoints) {
         e.address = r->str8();
@@ -836,7 +827,8 @@ std::vector<uint8_t> encode(const NameMsg& m) {
     std::vector<uint8_t> out;
     ByteWriter w(out);
     w.u8(static_cast<uint8_t>(MsgType::Name));
-    w.str8(clip(m.name, kMaxNameChars));
+    w.str8(clip_wire_name(m.name));
+    w.str8(valid_pass_shape(m.pass) ? m.pass : std::string());                                  // (protocol 29)
     return out;
 }
 bool decode(const uint8_t* data, size_t size, NameMsg& out) {
@@ -845,7 +837,8 @@ bool decode(const uint8_t* data, size_t size, NameMsg& out) {
     if (!open(data, size, MsgType::Name, r, storage)) return false;
     NameMsg m;
     m.name = r->str8();
-    if (!r->done() || m.name.empty() || !printable_name(m.name, kMaxNameChars) || m.name.front() == ' ' || m.name.back() == ' ' || ai::is_reserved_bot_name(m.name)) return false;       // exactly the type and a name that has one spelling, and none that a computer player has (protocol 20)
+    m.pass = r->str8();
+    if (!r->done() || m.name.empty() || !valid_wire_name(m.name) || m.name.front() == ' ' || m.name.back() == ' ' || (!m.pass.empty() && !valid_pass_shape(m.pass)) || ai::is_reserved_bot_name(m.name)) return false;       // exactly the type and a name that has one spelling, and none that a computer player has (protocol 20)
     out = std::move(m);
     return true;
 }

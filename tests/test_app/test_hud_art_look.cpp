@@ -731,6 +731,10 @@ void test_windows_more(const assets::AssetArchive& arc, const Art& art) {
             const int32_t w = rig.renderer.dialog_text_width("Do you really want to quit?", 200);
             check(rig.renderer.dialog_text_ready() && w > 200 && w < 296, "the shipped face opens; the quit question at 20 pixels is a line of about 270 pixels (" + std::to_string(w) + ")");
             check(rig.renderer.dialog_text_width("Do you really want to quit?", 260) > w && rig.renderer.dialog_text_width("", 200) == 0, "a larger size is wider; no text, no width");
+            // a name in Cyrillic (Libre Baskerville has Latin only): the sentence is measured and drawn in the game's face, whole; a name in Latin letters stays in the windows' face
+            const std::string cyrillic = "[\xD0\xA0\xD0\xA3\xD0\xA1] \xD0\x81\xD0\xB6\xD0\xB8\xD0\xBA wins the match.";
+            check(rig.renderer.dialog_text_width(cyrillic, 200) == rig.renderer.face_text_width(cyrillic, 200) && rig.renderer.dialog_text_width("Zo\xC3\xAB wins the match.", 200) != rig.renderer.face_text_width("Zo\xC3\xAB wins the match.", 200),
+                  "a sentence with a Cyrillic name is measured in the game's face, and one with a name in Latin letters (an e with a diaeresis too) in the windows' face");
             rig.renderer.begin_frame();
             rig.renderer.fill_rect(0, 0, 960, 540, assets::ColorRGBA{219, 75, 19, 255});
             rig.renderer.draw_dialog_text("Do you really want to quit?", 100, 200, window_art::kInk, 200);
@@ -744,6 +748,17 @@ void test_windows_more(const assets::AssetArchive& arc, const Art& art) {
             }
             for (int32_t x = 100; x < 100 + w; ++x) below += px[(static_cast<size_t>(215) * 960u + static_cast<size_t>(x)) * 4u] == 219 ? 0 : 1;
             check(ink > 300 && below == 0, "the real renderer draws the sentence in the dialogs' ink on its baseline (and nothing 15 pixels below it)");
+            {   // the Cyrillic sentence is the game's face's picture, the same pixels as draw_face_text makes (no box in its place)
+                rig.renderer.begin_frame();
+                rig.renderer.fill_rect(0, 0, 960, 540, assets::ColorRGBA{219, 75, 19, 255});
+                rig.renderer.draw_dialog_text(cyrillic, 100, 200, window_art::kInk, 200);
+                const std::vector<uint8_t> dialog_px = rig.read();
+                rig.renderer.begin_frame();
+                rig.renderer.fill_rect(0, 0, 960, 540, assets::ColorRGBA{219, 75, 19, 255});
+                rig.renderer.draw_face_text(cyrillic, 100, 200, window_art::kInk, 200);
+                const std::vector<uint8_t> face_px = rig.read();
+                check(dialog_px == face_px, "a sentence with a Cyrillic name is drawn as the game's face draws it (not as the windows' face, whose box stands for a letter that it lacks)");
+            }
             // the game's own face at any size (the countdown card writes in it at the card's scale)
             check(rig.renderer.face_text_ready(), "the real renderer has the game's face");
             const int32_t fw = rig.renderer.face_text_width("38 ms", 135);

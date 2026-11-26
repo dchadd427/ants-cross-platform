@@ -94,6 +94,10 @@ bool printable(const std::string& text) {
     return true;
 }
 
+/// A name of the head (protocol 29): what a name on the wire is (net::valid_wire_name: UTF-8 of printable ASCII and the letters that the game's font draws, at most 32 characters and 96 bytes), or what a head always
+/// held (printable ASCII of at most kMaxTextBytes: a file of an earlier build or of another maker is still read)
+bool valid_head_name(const std::string& name) { return printable(name) || net::valid_wire_name(name); }
+
 bool valid_teams(const sim::StartTeams& teams, uint8_t roster) {
     if (!teams.set) return true;
     return teams.a < sim::MAX_PLAYERS && teams.b < sim::MAX_PLAYERS && teams.a != teams.b && ((roster >> teams.a) & 1u) != 0 && ((roster >> teams.b) & 1u) != 0;
@@ -125,8 +129,8 @@ bool valid_head(const Header& h, std::string& error) {
         error = "the head names the simulation rules of the original's game but another game mode";
     } else {
         for (const std::string& name : h.names) {
-            if (!printable(name)) {
-                error = "a name in the head is not printable or is too long";
+            if (!valid_head_name(name)) {
+                error = "a name in the head is not a name (printable ASCII and the letters of a name only, at most 32 characters)";
                 return false;
             }
         }
@@ -233,6 +237,11 @@ bool known_text(const uint8_t* bytes, size_t size, std::string& out) {
     return printable(out);
 }
 
+bool known_name(const uint8_t* bytes, size_t size, std::string& out) {
+    out.assign(reinterpret_cast<const char*>(bytes), size);
+    return valid_head_name(out);
+}
+
 bool read_head(const uint8_t* payload, size_t size, Header& h, std::string& error) {
     Cursor c{payload, size};
     uint16_t format = 0;
@@ -330,7 +339,7 @@ bool read_head(const uint8_t* payload, size_t size, Header& h, std::string& erro
                 break;
             default:
                 if (id >= kFieldName0 && id < kFieldName0 + sim::MAX_PLAYERS) {
-                    if (!known_text(bytes, length, h.names[id - kFieldName0])) { error = field + " is not printable text"; return false; }
+                    if (!known_name(bytes, length, h.names[id - kFieldName0])) { error = field + " is not a name (printable ASCII and the letters of a name only)"; return false; }
                 }
                 break;                                                     // an id that this reader does not know is skipped
         }

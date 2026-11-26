@@ -110,7 +110,7 @@ function rig(o) {
     const ChatApi = loadScript(fs.readFileSync(path.join(lobbyDir, 'home', 'chat.js'), 'utf8'), 'AntsHomeChat', clock);
     const html = new El(env, 'html', '');
     html.style.setProperty = (k, v) => { html.style[k] = v; }; html.style.removeProperty = (k) => { delete html.style[k]; };
-    const doc = { hidden: false, listeners: {}, documentElement: html, createElement: (t) => new El(env, t), addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); } };
+    const doc = { hidden: false, listeners: {}, documentElement: html, createElement: (t) => new El(env, t), createTextNode: (t) => ({ isText: true, textContent: String(t), parent: null }), addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); } };
     env.doc = doc;
     const win = { innerWidth: o.size ? o.size[0] : 1280, innerHeight: o.size ? o.size[1] : 800, location: { protocol: 'https:', host: 'play.test' }, listeners: {}, addEventListener(t, fn) { (win.listeners[t] = win.listeners[t] || []).push(fn); }, isSecureContext: o.secure !== false, navigator: { language: o.lang || 'de-DE' } };
     if (o.storage === THROWS) Object.defineProperty(win, 'localStorage', { get() { throw new Error('storage is refused'); } });

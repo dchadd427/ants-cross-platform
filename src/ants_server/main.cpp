@@ -184,6 +184,7 @@
 #include "ants_db/migrations.hpp"
 #include "ants_server/db_schema.hpp"
 #include "ants_server/map_pictures.hpp"
+#include "ants_server/name_pass.hpp"
 #include "ants_server/restart_record.hpp"
 #include "ants_server/room_manager.hpp"
 #include "ants_server/secret.hpp"
@@ -754,6 +755,11 @@ int main(int argc, char** argv) {
         }
     }
     ants::server::RoomManager rooms{std::move(store), limits};
+    // The names of people (name_pass.hpp, protocol 29): with the hub's key (ANTS_ADMIN_GATE_SECRET, the one setting of the hub and this server) a name is taken as it is only with the hub's pass for it, and every other name
+    // is a guest's, "Name (Guest)". Without a good key nothing is signed, and the names are only checked by the wire (a LAN game's rules).
+    const auto name_gate = std::make_shared<ants::server::NameGate>(std::getenv("ANTS_ADMIN_GATE_SECRET") != nullptr ? std::getenv("ANTS_ADMIN_GATE_SECRET") : "");
+    if (name_gate->open()) rooms.set_name_gate([name_gate](const std::string& name, const std::string& pass) { return name_gate->check(name, pass, static_cast<int64_t>(std::time(nullptr))); });
+    log(name_gate->open() ? "names: a person's name needs the hub's pass, any other name is a guest's (Name (Guest))" : "names: no good ANTS_ADMIN_GATE_SECRET, so the names are not signed (every name that the wire takes is taken)");
     if (o.demo_rooms > 0) {
         std::string chooseable;
         for (const std::string& name : o.demo_maps) chooseable += (chooseable.empty() ? "" : ", ") + name;

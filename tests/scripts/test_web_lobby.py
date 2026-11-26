@@ -227,15 +227,15 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("if (!typed.ok) return typed.why;", script)
         self.assertIn("if (client && typed.code === client.code) return ownRoom ? Rules.HINT.own : Rules.HINT.same;", script)
         self.assertIn("title: 'Join the room ' + Rules.codeText(typed.code), button: 'Join',", script)
-        self.assertIn("done: function (name) { probe(typed.code, name, done); },", script)
+        self.assertIn("done: function (name, pass) { probe(typed.code, name, done, pass); },", script)
         self.assertIn("back: function () { done(null); }", script)
-        typed = script[script.index("function joinTyped(text, done, before) {"):script.index("function probe(code, name, done) {")]
+        typed = script[script.index("function joinTyped(text, done, before) {"):script.index("function probe(code, name, done, pass) {")]
         self.assertLess(typed.index("Rules.typedCode(text)"), typed.index("(before || function (go) { go(); })("), "the code is looked at before any question")
         self.assertLess(typed.index("(before || function (go) { go(); })("), typed.index("askName({"), "and the question comes before the name card")
         # the look at the room: a client of its own that must find the room (join: true makes none), and this page's room is let go of only when that room has welcomed it
-        probe = script[script.index("function probe(code, name, done) {"):]
+        probe = script[script.index("function probe(code, name, done, pass) {"):]
         probe = probe[:probe.index("open(p, name);")]
-        self.assertIn("p = lastProbe = makeClient({ code: code, name: name, join: true })", probe)
+        self.assertIn("p = lastProbe = makeClient({ code: code, name: name, pass: pass, join: true })", probe)
         self.assertIn("join: !!p.join", script)
         self.assertLess(probe.index("p.on('welcome'"), probe.index("if (old) old.leave();"))
         self.assertLess(probe.index("client = p;"), probe.index("if (old) old.leave();"))
@@ -277,7 +277,7 @@ class TheFrontPageMarkup(PageCase):
     def test_a_plain_visit_makes_a_room_on_treasure_with_a_new_code_a_reload_takes_the_seat_back_and_a_link_asks_for_a_name_first(self):
         script = self.script
         self.assertIn("var DEFAULT_MAP_KEY = Rules.DEFAULT_MAP_KEY;", script)
-        self.assertIn("url: SERVER, code: p.code, map: Rules.mapByKey(Rules.DEFAULT_MAP_KEY).file, name: p.name, key: p.key || null, join: !!p.join, joinFirst: !!p.joinFirst, platform: platform()", script)      # (the Hello of a new room asks for the default map)
+        self.assertIn("url: SERVER, code: p.code, map: Rules.mapByKey(Rules.DEFAULT_MAP_KEY).file, name: p.name, pass: p.pass || '', key: p.key || null, join: !!p.join, joinFirst: !!p.joinFirst, platform: platform()", script)      # (the Hello of a new room asks for the default map)
         run = script[script.index("function runLobby() {"):script.index("// STATS_BEGIN")]
         self.assertIn("connect({ code: newCode(), name: myName(), own: true });", run)                            # a plain visit: a room of a new code
         self.assertIn("} else if (stored) {", run)
@@ -286,7 +286,7 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("askLink(wantedCode, '');", run)
         card = script[script.index("function askLink("):script.index("function runLobby() {")]      # the name card of a link
         self.assertIn("title: 'Join the room ' + Rules.codeText(wantedCode), button: 'Join', message: message,", card)
-        self.assertIn("done: function (name) { forgetSession(); connect({ code: wantedCode, name: name, own: false, joinFirst: true }); },", card)      # (a link only joins until the room has taken the page: a code with no room is not made)
+        self.assertIn("done: function (name, pass) { forgetSession(); connect({ code: wantedCode, name: name, pass: pass, own: false, joinFirst: true }); },", card)      # (a link only joins until the room has taken the page: a code with no room is not made)
         self.assertIn("offline = 'join';", card)                                                                  # (the page behind the card waits with no names and no map)
         refused = script[script.index("function onRefused(e) {"):script.index("function startOwn(kind) {")]
         self.assertIn("if (e.reason === R.NoSuchRoom && lastParams && lastParams.joinFirst && client && client.joinOnly) askLink(lastParams.code, Rules.TEXT.noroom());", refused)      # (a link to a code with no room says so on the name card and offers a room of one's own; it starts none)
@@ -428,7 +428,7 @@ class TheFrontPageMarkup(PageCase):
         for ref in re.findall(r'(?:\sfor|aria-labelledby|aria-describedby)="([^"]+)"', self.markup):
             for target in ref.split():
                 self.assertIn(target, ids, "an id that a label or a description names is not in the page: " + target)
-        self.assertIn('<script src="front/lobby_rules.js"></script>\n<script src="front/lobby_net.js"></script><script src="front/player_name.js"></script>\n<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script><script src="front/room_fog.js"></script><script src="front/room_sheet.js"></script><script src="front/seat_menu.js"></script>\n<script src="front/map_picker.js"></script>\n<script src="shapes.js"></script><script src="map_files.js"></script><script src="home/home.js"></script>\n<script>', self.page)         # (the page's own script comes last and reads their globals)
+        self.assertIn('<script src="front/lobby_rules.js"></script>\n<script src="front/name_letters.js"></script><script src="front/lobby_net.js"></script><script src="front/player_name.js"></script>\n<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script><script src="front/room_fog.js"></script><script src="front/room_sheet.js"></script><script src="front/seat_menu.js"></script>\n<script src="front/map_picker.js"></script>\n<script src="shapes.js"></script><script src="map_files.js"></script><script src="home/home.js"></script>\n<script>', self.page)         # (the page's own script comes last and reads their globals)
         for name in ("lobby_rules.js", "lobby_net.js", "player_name.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "room_fog.js", "room_sheet.js", "seat_menu.js", "map_picker.js"):
             self.assertTrue(os.path.isfile(os.path.join(REPO, "web", "front", name)), name)
         self.assertIn("root.AntsLobbyRules = api", self.rules)

@@ -18,7 +18,7 @@ import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
-from hub import text  # noqa: E402
+from hub import name_letters, text  # noqa: E402
 
 REMOVED = ("Cc", "Cf", "Cs", "Co", "Cn")
 BIDI = ["\u202a", "\u202b", "\u202c", "\u202d", "\u202e", "\u2066", "\u2067", "\u2068", "\u2069", "\u200e", "\u200f", "\u061c"]
@@ -431,15 +431,14 @@ class TheShownName(unittest.TestCase):
         self.assertIs(text.reserved("system32"), False)
         self.assertEqual(text.squash("a.d_m i-n'"), "admin")
         self.assertEqual(text.squash("\u0410dm\u00edn"), "admin")
-        self.assertEqual(text.squash("maple.leaf"), "mapleleaf")
+        self.assertEqual(text.squash("maple.leaf"), "mapieieaf")                      # (the dot goes, and the l is the i)
         self.assertEqual(text.squash("syst3m"), "system")
         self.assertEqual(text.squash("system32"), "systeme2")                      # (a digit that is not read as a letter stays)
 
     def test_the_lookalike_table_maps_each_letter_to_one_latin_letter_and_no_latin_letter_is_in_it(self):
         seen = {}
         for latin, others in text.LOOKALIKE_LETTERS:
-            self.assertEqual(len(latin), 1)
-            self.assertTrue("a" <= latin <= "z", latin)
+            self.assertTrue(latin.isascii() and latin.isalpha() and latin.islower() and len(latin) <= 2, latin)           # (a letter, or the two that a ligature is: ae, oe, ss)
             for other in others:
                 self.assertGreater(ord(other), 127, hex(ord(other)))
                 self.assertNotIn(other, seen, "%s is in the table twice" % hex(ord(other)))
@@ -449,6 +448,29 @@ class TheShownName(unittest.TestCase):
         self.assertGreater(len(seen), 70)
         for letter in "abdefhimnorstuvy":                                      # (every letter that the reserved words are made of)
             self.assertIn(letter, dict(text.LOOKALIKE_LETTERS), letter)
+
+    def test_the_i_the_l_and_the_one_are_one_letter(self):
+        for look in ("AIice", "Aiice", "A1ice", "Al1ce", "A\u0406ice", "Alice"):
+            self.assertEqual(text.squash(look), text.squash("Alice"), look)
+        self.assertNotEqual(text.squash("Alice"), text.squash("Alex"))
+
+    def test_a_bar_through_letter_is_the_letter_that_it_bars_and_no_other_letter_is_left_without_a_word(self):
+        for other, latin in (("\u0110", "D"), ("\u00d0", "D"), ("\u00d8", "O"), ("\u0141", "L"), ("\u0126", "H"), ("\u0166", "T"), ("\u042c", "b"), ("\u044c", "b"), ("\u0417", "3"), ("\u0437", "3"),
+                             ("\u00c6", "ae"), ("\u0152", "oe"), ("\u00df", "ss"), ("\u013f", "L"), ("\u014a", "N"), ("\u043f", "n"), ("\u0490", "r"), ("\u00de", "p"), ("\u0138", "k")):
+            self.assertEqual(text.squash("x" + other + "y"), text.squash("x" + latin + "y"), hex(ord(other)))
+        # every letter that a name may have (the table of name_letters) is drawn like a Latin letter, and has its place in text.squash, or is one that no Latin letter is drawn like (a person checked this list: a letter
+        # that comes into the table has to be put into one of the two)
+        none = set("\u0402\u0404\u0409\u040a\u040b\u040d\u040f\u0411\u0414\u0416\u0418\u0419\u041b\u041f\u0424\u0426\u0427\u0428\u0429\u042a\u042b\u042d\u042e\u042f"
+                   "\u0431\u0432\u0434\u0436\u0438\u0439\u043b\u0444\u0446\u0447\u0448\u0449\u044a\u044b\u044d\u044e\u044f\u0452\u0454\u0459\u045a\u045b\u045d\u045f")
+        for code in range(0x20, 0x1F00):
+            letter = chr(code)
+            if not name_letters.is_letter(letter):
+                continue
+            squashed = text.squash(letter)
+            if letter in none:
+                self.assertFalse(squashed.isascii(), "%s is listed as a letter with no lookalike but has one" % hex(code))
+            else:
+                self.assertTrue(squashed.isascii() and squashed != "", "%s (%s) is a letter of a name and has no lookalike: put it in text.LOOKALIKE_LETTERS or in this list" % (hex(code), letter))
 
     def test_a_shown_name_is_one_that_the_cleaner_gives_back_as_it_is(self):
         for name in ("Maple", "maple.leaf", "\u0e01\u0e34\u0e49\u0e07", "a1"):

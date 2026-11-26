@@ -119,7 +119,13 @@ void test_room_screen(const assets::AssetArchive& arc) {
         return false;
     };
     check(text_at("Alice", 415) && text_at("Bob", 415), "room: the names are drawn at x = 415");
-    check(text_at("A Very Long Pla", 415) || text_at("A Very Long Play", 415), "room: a long name is cut to fit before the thumb");
+    {   // a long name ends in three dots (a cut shows) and fits the label of 120 px before the thumb (the recorder measures 6 px per character)
+        bool cut = false;
+        for (const auto& tx : rr.texts) {
+            cut = cut || (tx.x == 415 && tx.text.rfind("A Very Long", 0) == 0 && tx.text.size() > 3 && tx.text.compare(tx.text.size() - 3, 3, "...") == 0 && tx.text.size() * 6 <= 120);
+        }
+        check(cut, "room: a long name is cut to fit before the thumb, with dots");
+    }
     {
         // the prompt is the label (36, 447) 293 wide with 14 px lines: it wraps like every label (the recorder measures 6 px per character)
         const auto lines = wrap_label_text(rr, "Press START when all players' thumbs have appeared.", MS::STATUS_W, FontSize::Px14);
@@ -1044,6 +1050,45 @@ void test_label_wrap() {
     // fit_text: characters are dropped from the end until the text fits
     check(fit_text(mono, "abcdefghij", 60, FontSize::Px12) == "abcd" && fit_text(mono, "abc", 60, FontSize::Px12) == "abc" && fit_text(mono, "x", 1, FontSize::Px12) == "x",
           "fit_text: cut to the width, one character stays");
+    // names hold letters of two and three bytes (protocol 29): every cut is at a whole character, never inside a letter
+    check(fit_text(mono, "\xC3\xA4\xC3\xA4\xC3\xA4", 60, FontSize::Px12) == "\xC3\xA4\xC3\xA4" && fit_text(mono, "\xE1\xBA\xA0\xE1\xBA\xA0", 60, FontSize::Px12) == "\xE1\xBA\xA0" && fit_text(mono, "\xE1\xBA\xA0", 1, FontSize::Px12) == "\xE1\xBA\xA0",
+          "fit_text: a letter of two or three bytes goes whole, and the last one stays");
+    check(fit_name(mono, "abcdefghij", 105, FontSize::Px12) == "abcd..." && fit_name(mono, "abc", 105, FontSize::Px12) == "abc" && fit_name(mono, "\xC3\xA4\xC3\xA4\xC3\xA4\xC3\xA4", 105, FontSize::Px12) == "\xC3\xA4\xC3\xA4..." && fit_name(mono, "abc defgh", 105, FontSize::Px12) == "abc...",
+          "fit_name: a name that fits is whole, one that does not ends in three dots after a whole character (no blank before them)");
+    check(fit_name(mono, "Wren (Guest)", 1000, FontSize::Px12) == "Wren (Guest)" && fit_name(mono, "", 10, FontSize::Px12).empty(), "fit_name: nothing to cut, nothing cut");
+    check(fit_name(mono, "\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0", 105, FontSize::Px12) == "\xE1\xBA\xA0..." && fit_name(mono, "\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0", 135, FontSize::Px12) == "\xE1\xBA\xA0\xE1\xBA\xA0...",
+          "fit_name: a name of letters of three bytes is cut at a whole letter, and what is left fits with its dots (one letter for 105 px, two for 135)");
+    {
+        const std::string cut = fit_name(mono, "\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0", 105, FontSize::Px12);
+        check(net::utf8_length(cut) > 0 && static_cast<int32_t>(cut.size()) * 15 <= 105 * 3, "fit_name: what comes out is whole UTF-8 (the letters before the dots are not cut in two)");
+    }
+    {   // the last line of a wrapped label ends in dots at a whole letter too
+        const auto fitted = wrap_label_fitted(mono, "\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0", 120, FontSize::Px12, 2);
+        bool whole = !fitted.empty();
+        for (const std::string& piece : fitted) {
+            std::string shown = piece;
+            if (shown.size() >= 3 && shown.compare(shown.size() - 3, 3, "...") == 0) shown.resize(shown.size() - 3);
+            whole = whole && net::utf8_length(shown) > 0;
+        }
+        check(whole, "wrap: the last line of a label that is cut ends in dots after a whole letter");
+    }
+    {
+        const std::string text = "\xC3\xA4\xC3\xA4\xC3\xA4\xC3\xA4\xC3\xA4\xC3\xA4\xC3\xA4\xC3\xA4 \xC3\xA4\xC3\xA4\xC3\xA4\xC3\xA4 \xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0";
+        for (const int32_t width : {45, 60, 75, 100, 150}) {
+            const auto cut = wrap_label_text(mono, text, width, FontSize::Px12);
+            std::string joined;
+            bool whole = !cut.empty();
+            for (const std::string& line : cut) {
+                whole = whole && !line.empty() && net::utf8_length(line) > 0;
+                for (const char ch : line) joined.push_back(ch);
+            }
+            std::string squeezed;
+            for (const char ch : text) { if (ch != ' ') squeezed.push_back(ch); }
+            std::string joined_squeezed;
+            for (const char ch : joined) { if (ch != ' ') joined_squeezed.push_back(ch); }
+            check(whole && joined_squeezed == squeezed, "wrap: a text of letters of two and three bytes is cut at whole characters, and nothing is lost (" + std::to_string(width) + " px)");
+        }
+    }
     // draw_label: centred lines, one cell height apart, from the top of the box
     mono.drawn.clear();
     const int32_t h = draw_label(mono, "Get ready to play!  You are the Green Ants.", 130, 110, 240, assets::ColorRGBA{}, FontSize::Px35, true);

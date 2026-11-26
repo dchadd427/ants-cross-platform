@@ -324,7 +324,12 @@ class DiscordLogin(session.Sessions):
             who = self.who_of(request.headers)
         except StoreError:
             return self.fail(503, "busy")
-        return http.response(200, {"login": True, "you": self.hub.chat.you_of(who) if who else None})
+        body = {"login": True, "you": None}
+        if who is not None:
+            who = self.hub.chat.nicknames.dress(who)                          # (the nickname and the tag, when the account has them: docs/HUB_NICKNAMES.md)
+            body["you"] = self.hub.chat.you_of(who)
+            body["play"] = self.hub.chat.nicknames.play(who)                  # (the name that the account plays under and its pass for the game server: the page tells both in its Hello)
+        return http.response(200, body)
 
     async def logout(self, request, address):
         refused = self.guard(request, address, "POST")

@@ -875,6 +875,27 @@
    "old": "withEmoji = env.emoji !== false;",
    "new": "withEmoji = true;",
    "test": "python3 -m unittest tests.scripts.test_web_lobby_chat.ThePage tests.scripts.test_web_lobby_chat.TheStylesheet"
+  },
+  {
+   "id": "a_notice_has_the_bytes_of_a_name",
+   "file": "web/front/lobby_net.js",
+   "old": "!NL.isWireName(m.text, MAX_CHAT, MAX_NOTICE_BYTES)",
+   "new": "!NL.isWireName(m.text, MAX_CHAT)",
+   "test": "node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "a_notice_has_no_limit_of_bytes",
+   "file": "web/front/lobby_net.js",
+   "old": "!NL.isWireName(m.text, MAX_CHAT, MAX_NOTICE_BYTES)",
+   "new": "!NL.isWireName(m.text, MAX_CHAT, 100000)",
+   "test": "node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "a_wire_name_ignores_the_limit_of_bytes_it_is_given",
+   "file": "web/front/name_letters.js",
+   "old": "return utf8Of(points).length <= (maxBytes || MAX_NAME_BYTES);",
+   "new": "return utf8Of(points).length <= MAX_NAME_BYTES;",
+   "test": "node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
   }
  ]
 }

@@ -93,9 +93,11 @@ def bare(where):
     return Where(where.at, None, None, None, False, None, where.seq, where.priv)
 
 
-def row_of(ident, name, mod, where, pic=None):
-    """`mod` is False, True, or the role's word (`mod`, `admin`): a moderator's row says `mod` (for both roles, as it always did) and, with the word, `role`."""
+def row_of(ident, name, mod, where, pic=None, tag=""):
+    """`mod` is False, True, or the role's word (`mod`, `admin`): a moderator's row says `mod` (for both roles, as it always did) and, with the word, `role`; `tag` is the person's tag (docs/HUB_NICKNAMES.md), none when it has none."""
     row = {"i": ident, "name": name, "at": where.at if where else "look"}
+    if tag:
+        row["tag"] = tag
     if pic:
         row["pic"] = pic                        # (the public name of the account's picture, 32 hex digits, where the account has one that may be shown)
     if mod:
@@ -158,8 +160,8 @@ class Presence:
         self.limited = (frozenset(), frozenset())       # the accounts that are banned and muted, as the store last said
         self.limited_seq = None                         # ... the store's number of its last change of them when it said so (None: it has not said yet)
         self.limited_until = float("inf")               # ... and when the soonest of those mutes runs out
-        self.away = collections.OrderedDict()   # account id -> [until, name]: the accounts whose last socket closed, oldest first, for `away_seconds` (the row keeps its number; nothing of a room)
-        self.known = {}                 # account id -> the name of the accounts that had a socket open at the last look of the clock (to see which one closed since)
+        self.away = collections.OrderedDict()   # account id -> [until, (name, tag)]: the accounts whose last socket closed, oldest first, for `away_seconds` (the row keeps its number; nothing of a room)
+        self.known = {}                 # account id -> the (name, tag) of the accounts that had a socket open at the last look of the clock (to see which one closed since)
         self.counted = 0                # the number of people, and the version of the sockets that it was counted for
         self.counted_version = None
 
@@ -227,7 +229,7 @@ class Presence:
             where = self.where.get(peer)
             key = (WEIGHT[where.at], where.seq) if where else (0, 0)
             if who.account_id not in best or key > best[who.account_id][0]:
-                best[who.account_id] = (key, who.name, where, who.young)
+                best[who.account_id] = (key, (who.name, who.tag), where, who.young)
         # (the numbers of people who left are dropped once a tick, in flush: a look between a close and the tick must not take the number of a person who is about to be Away)
         for account in banned.intersection(best):
             del best[account]
@@ -242,7 +244,7 @@ class Presence:
         rows = {}
         for account, (_, name, where, young) in order[:self.limits.who_rows_max]:
             ident = self.row_id(account)
-            rows[ident] = row_of(ident, name, mods.get(account, False), bare(where) if where is not None and (young or account in muted) else where, self.picture_of(account))
+            rows[ident] = row_of(ident, name[0], mods.get(account, False), bare(where) if where is not None and (young or account in muted) else where, self.picture_of(account), name[1])
         return {"n": len(best) + guests, "g": guests, "more": max(0, len(people) - self.limits.who_rows_max), "rows": rows}
 
     def picture_of(self, account):
@@ -350,7 +352,7 @@ class Presence:
         self.rooms = {p: r for p, r in self.rooms.items() if p in alive}
         self.asked = {p: t for p, t in self.asked.items() if p in alive}
         self.watchers &= alive
-        here = {p.identity.account_id: p.identity.name for p in alive if p.identity is not None}
+        here = {p.identity.account_id: (p.identity.name, p.identity.tag) for p in alive if p.identity is not None}
         left = [a for a in self.known if a not in here]
         if left:
             banned = self.restricted()[0]

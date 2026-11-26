@@ -121,8 +121,8 @@
   {
    "id": "a_name_in_the_room_carries_the_address",
    "file": "src/ants_net/lobby.cpp",
-   "old": "room_.slots[seat].name = human_name(hello.name, \"Player \" + std::to_string(static_cast<unsigned>(seat) + 1u));",
-   "new": "room_.slots[seat].name = human_name(hello.name + p.address, \"Player \" + std::to_string(static_cast<unsigned>(seat) + 1u));",
+   "old": "room_.slots[seat].name = accepted_name(hello.name, hello.name_pass, \"Player \" + std::to_string(static_cast<unsigned>(seat) + 1u), true);",
+   "new": "room_.slots[seat].name = accepted_name(hello.name + p.address, hello.name_pass, \"Player \" + std::to_string(static_cast<unsigned>(seat) + 1u), true);",
    "build": "test_server",
    "test": "ANTS_TEST_FILTER=S3.99b timeout 900 ./build/tests/test_server/test_server",
    "expect": "S3.99b"

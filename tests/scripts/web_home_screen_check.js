@@ -650,7 +650,7 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
 {   // what Home never does: no network of its own, no storage, no markup, nothing that is the page's room (the client, the model, the session)
     const code = fs.readFileSync(path.join(lobbyDir, 'home', 'home.js'), 'utf8');
     check('home.js makes no request of its own and keeps nothing (no fetch, XMLHttpRequest, WebSocket, localStorage, sessionStorage; the chat dock\'s two files are asked for by a link and a script element) and writes no markup', !/\bfetch\b|XMLHttpRequest|WebSocket|localStorage|sessionStorage|innerHTML|outerHTML|insertAdjacentHTML|document\.write/.test(code.replace(/\/\/.*$/gm, '')));
-    check('... its only calls into the page are info, leave, how, stalled and holds (whether it holds a room: the links to the matches)', [...code.matchAll(/\bpage\.(\w+)/g)].map((m) => m[1]).filter((v, i, a) => a.indexOf(v) === i).sort().join() === 'holds,how,info,leave,stalled');
+    check('... its only calls into the page are info, leave, how, stalled and holds (whether it holds a room: the links to the matches), and the person and nameChanged of the sheet "Your name" (the name that this browser keeps, and the page that is told when it changes)', [...code.matchAll(/\bpage\.(\w+)/g)].map((m) => m[1]).filter((v, i, a) => a.indexOf(v) === i).sort().join() === 'holds,how,info,leave,nameChanged,person,stalled');
 }
 
 console.log('home screens: ' + checks + ' checks, ' + failures + ' failed');

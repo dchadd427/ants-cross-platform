@@ -8,6 +8,7 @@
 //        (the server: --demo-rooms N --demo-map TINY.LVL --demo-lobbies M and the control interface on CTLPORT with that secret)      exit 0: every check holds; the failures are printed
 'use strict';
 const path = require('path');
+globalThis.AntsNameLetters = require(path.resolve(__dirname, '..', '..', 'web', 'front', 'name_letters.js'));       // (the letters of a name: front/name_letters.js, a script tag of the page before the script that is checked)
 const fs = require('fs');
 const http = require('http');
 const { spawn } = require('child_process');

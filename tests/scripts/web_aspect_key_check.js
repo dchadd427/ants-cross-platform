@@ -17,6 +17,7 @@ const nodePath = require('path');
 
 // the pages load web/shapes.js, the one table of the shapes, before their own code: it is the global AntsShapes of the code that is run here (a function made by `new Function` reads the globals)
 globalThis.AntsShapes = require(nodePath.resolve(__dirname, '..', '..', 'web', 'shapes.js'));
+globalThis.AntsNameLetters = require(nodePath.resolve(__dirname, '..', '..', 'web', 'front', 'name_letters.js'));       // (the page's name block reads the letters of a name: front/name_letters.js, a script tag of the page)
 
 const NEW_KEY = 'ants.aspect.v3';
 const V2_KEY = 'ants.aspect.v2';                                                // (the key of the picks that are forgotten once: nothing reads it)

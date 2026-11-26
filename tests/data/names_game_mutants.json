@@ -1,0 +1,165 @@
+{
+ "note": "Mutants of what the game does with long names and with letters of two and three bytes (src/ants_app/scorecard_new.cpp, text_layout.cpp, map_select.cpp, renderer_dialog_text.cpp; docs/HUB_NICKNAMES.md 'In the game') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/test_app/test_scorecard_new_look.cpp (an alliance of long names is two lines in the winners' well and in a row of the others, a short one stays one; the bar and the little numbers follow) and tests/test_app/test_hud_layout_screens.cpp (a name or a label is cut at a whole letter, ends in dots without a blank before them, and the room's seat label cuts a long name that way) and tests/test_app/test_hud_art_look.cpp (a sentence with a name in Cyrillic, which the windows' face lacks, is measured and drawn in the game's face). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/names_game_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "alliance_of_the_winners_on_one_line",
+   "file": "src/ants_app/scorecard_new.cpp",
+   "old": "if (win.has_second()) {                                        // an alliance",
+   "new": "if (false) {                                        // an alliance",
+   "build": "test_scorecard_new",
+   "test": "./build/tests/test_app/test_scorecard_new"
+  },
+  {
+   "id": "alliance_second_line_on_the_first",
+   "file": "src/ants_app/scorecard_new.cpp",
+   "old": "c.Y(p.name_pair_base[1]), kCream, 17.0, 0);",
+   "new": "c.Y(p.name_pair_base[0]), kCream, 17.0, 0);",
+   "build": "test_scorecard_new",
+   "test": "./build/tests/test_app/test_scorecard_new"
+  },
+  {
+   "id": "alliance_first_line_has_no_and",
+   "file": "src/ants_app/scorecard_new.cpp",
+   "old": "fit_pen(c, win.name_first + \" &\", c.W(p.name_w), 17.0)",
+   "new": "fit_pen(c, win.name_first, c.W(p.name_w), 17.0)",
+   "build": "test_scorecard_new",
+   "test": "./build/tests/test_app/test_scorecard_new"
+  },
+  {
+   "id": "alliance_of_others_always_on_two_lines",
+   "file": "src/ants_app/scorecard_new.cpp",
+   "old": "const bool pair = r.has_second() && c.pen.width(name, 14.0) > name_room;",
+   "new": "const bool pair = r.has_second();",
+   "build": "test_scorecard_new",
+   "test": "./build/tests/test_app/test_scorecard_new"
+  },
+  {
+   "id": "alliance_of_others_never_on_two_lines",
+   "file": "src/ants_app/scorecard_new.cpp",
+   "old": "const bool pair = r.has_second() && c.pen.width(name, 14.0) > name_room;",
+   "new": "const bool pair = false;",
+   "build": "test_scorecard_new",
+   "test": "./build/tests/test_app/test_scorecard_new"
+  },
+  {
+   "id": "a_long_single_name_takes_two_lines",
+   "file": "src/ants_app/scorecard_new.cpp",
+   "old": "const bool pair = r.has_second() && c.pen.width(name, 14.0) > name_room;",
+   "new": "const bool pair = c.pen.width(name, 14.0) > name_room;",
+   "build": "test_scorecard_new",
+   "test": "./build/tests/test_app/test_scorecard_new"
+  },
+  {
+   "id": "alliance_of_others_keeps_the_bar_of_one_line",
+   "file": "src/ants_app/scorecard_new.cpp",
+   "old": "draw_bar(c, pair ? o.pair_bar : o.bar,",
+   "new": "draw_bar(c, o.bar,",
+   "build": "test_scorecard_new",
+   "test": "./build/tests/test_app/test_scorecard_new"
+  },
+  {
+   "id": "alliance_of_others_keeps_the_small_numbers_of_one_line",
+   "file": "src/ants_app/scorecard_new.cpp",
+   "old": "c.Y(pair ? o.pair_small_base : o.small_base)",
+   "new": "c.Y(o.small_base)",
+   "build": "test_scorecard_new",
+   "test": "./build/tests/test_app/test_scorecard_new"
+  },
+  {
+   "id": "alliance_of_others_forgets_you_on_the_second_line",
+   "file": "src/ants_app/scorecard_new.cpp",
+   "old": "fit_pen(c, r.name_second + (you ? \" (you)\" : \"\"), name_room, 12.0)",
+   "new": "fit_pen(c, r.name_second, name_room, 12.0)",
+   "build": "test_scorecard_new",
+   "test": "./build/tests/test_app/test_scorecard_new"
+  },
+  {
+   "id": "a_name_is_cut_inside_a_letter",
+   "file": "src/ants_app/text_layout.cpp",
+   "old": "while (!text.empty() && renderer.get_text_width(text + kDots, size) > width) pop_back_char(text);",
+   "new": "while (!text.empty() && renderer.get_text_width(text + kDots, size) > width) text.pop_back();",
+   "build": "test_hud_layout",
+   "test": "./build/tests/test_app/test_hud_layout"
+  },
+  {
+   "id": "a_name_is_cut_with_a_blank_before_the_dots",
+   "file": "src/ants_app/text_layout.cpp",
+   "old": "    while (!text.empty() && text.back() == ' ') text.pop_back();\n    return text + kDots;",
+   "new": "    return text + kDots;",
+   "build": "test_hud_layout",
+   "test": "./build/tests/test_app/test_hud_layout"
+  },
+  {
+   "id": "a_label_is_cut_inside_a_letter",
+   "file": "src/ants_app/text_layout.cpp",
+   "old": "while (utf8_char_bytes(text, 0) < text.size() && renderer.get_text_width(text, size) > width) pop_back_char(text);",
+   "new": "while (text.size() > 1 && renderer.get_text_width(text, size) > width) text.pop_back();",
+   "build": "test_hud_layout",
+   "test": "./build/tests/test_app/test_hud_layout"
+  },
+  {
+   "id": "the_last_line_of_a_label_is_cut_inside_a_letter",
+   "file": "src/ants_app/text_layout.cpp",
+   "old": "while (!last.empty() && renderer.get_text_width(last + kDots, size) > width) pop_back_char(last);",
+   "new": "while (!last.empty() && renderer.get_text_width(last + kDots, size) > width) last.pop_back();",
+   "build": "test_hud_layout",
+   "test": "./build/tests/test_app/test_hud_layout"
+  },
+  {
+   "id": "a_seat_name_is_cut_without_dots",
+   "file": "src/ants_app/map_select.cpp",
+   "old": "renderer.draw_text(fit_name(renderer, name, PLAYER_NAME_W, FontSize::Px18), PLAYER_NAME_X, PLAYER_THUMB_Y + row,",
+   "new": "renderer.draw_text(fit_text(renderer, name, PLAYER_NAME_W, FontSize::Px18), PLAYER_NAME_X, PLAYER_THUMB_Y + row,",
+   "build": "test_hud_layout",
+   "test": "./build/tests/test_app/test_hud_layout"
+  },
+  {
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "id": "dialog_width_of_a_cyrillic_name_in_the_windows_face",
+   "file": "src/ants_app/renderer_dialog_text.cpp",
+   "old": "if (font != nullptr && !face_draws_all(font, text) && face_font(em_tenths) != nullptr) return face_text_width(text, em_tenths);",
+   "new": "if (false) return face_text_width(text, em_tenths);"
+  },
+  {
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "id": "dialog_picture_of_a_cyrillic_name_in_the_windows_face",
+   "file": "src/ants_app/renderer_dialog_text.cpp",
+   "old": "if (!face_draws_all(font, text) && face_font(em_tenths) != nullptr) { draw_face_text(text, x, baseline, color, em_tenths); return; }",
+   "new": "if (false) { draw_face_text(text, x, baseline, color, em_tenths); return; }"
+  },
+  {
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "id": "a_latin_sentence_in_the_game_face",
+   "file": "src/ants_app/renderer_dialog_text.cpp",
+   "old": "if (cp >= 0x20 && TTF_GlyphIsProvided(font, static_cast<Uint16>(cp)) == 0) return false;",
+   "new": "if (cp >= 0x20 && TTF_GlyphIsProvided(font, static_cast<Uint16>(cp)) != 0) return false;"
+  },
+  {
+   "id": "backspace_takes_half_a_letter",
+   "file": "src/ants_app/start_menu.cpp",
+   "old": "                else pop_back_char(*text);",
+   "new": "                else if (!text->empty()) text->pop_back();",
+   "build": "test_start_menu",
+   "test": "./build/tests/test_app/test_start_menu"
+  },
+  {
+   "id": "a_notice_cuts_a_name_in_the_middle_of_a_letter",
+   "file": "src/ants_server/room.cpp",
+   "old": "name = net::clip_wire_name(name, net::kMaxChatChars - fixed);",
+   "new": "name.resize(net::kMaxChatChars - fixed);",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.215 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "a_notice_of_the_room_loses_the_letters_of_a_name",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    const std::string line = clip_wire_name(text, kMaxChatChars, kMaxNoticeBytes);",
+   "new": "    const std::string line = printable(text, kMaxChatChars);",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.215 ./build/tests/test_server/test_server"
+  }
+ ]
+}

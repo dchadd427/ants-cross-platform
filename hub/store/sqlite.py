@@ -13,7 +13,7 @@ import re
 import sqlite3
 import time
 
-from .base import AI_DIGEST, AI_KEY_ID, AI_SCOPES, ALERT_BODY_MAX, ALERT_KINDS, IMAGE_NAME, IMAGE_TYPES, MAX_LINES, NOIMAGES_MAX, PICKS, PICTURE_DAYS, PICTURE_NAME, PROFILE_DAYS, PUBLIC, REFERENCE, REPORT_REASONS, SHOW_BLOCKED, SHOW_OFF, SHOW_ON, Action, AiKey, Alert, Image, ImageGone, Line, Message, Profile, Report, StoreBase, StoreError, Usage, check_note
+from .base import AI_DIGEST, AI_KEY_ID, AI_SCOPES, ALERT_BODY_MAX, ALERT_KINDS, IMAGE_NAME, IMAGE_TYPES, MAX_LINES, NOIMAGES_MAX, PICKS, PICTURE_DAYS, PICTURE_NAME, PROFILE_DAYS, PUBLIC, REFERENCE, REPORT_REASONS, SHOW_BLOCKED, SHOW_OFF, SHOW_ON, Action, AiKey, Alert, Image, ImageGone, Line, Message, Nick, Profile, Report, StoreBase, StoreError, Usage, check_note
 from ..pseudo import reference
 
 SCHEMA = 4
@@ -100,6 +100,8 @@ class Store(StoreBase):
                 CREATE INDEX IF NOT EXISTS modlog_at ON modlog (at);
                 PRAGMA user_version = 4;
                 COMMIT;""")
+        if "tag" not in [r[1] for r in self.db.execute("PRAGMA table_info(lines)")]:
+            self.db.execute("ALTER TABLE lines ADD COLUMN tag TEXT NOT NULL DEFAULT ''")        # (the tag that the author had when it wrote the line, docs/HUB_NICKNAMES.md: additive, an earlier hub never looks at it)
         self.db.execute("INSERT OR IGNORE INTO secrets (k, v) VALUES ('account', ?)", (os.urandom(32),))      # (the key of the pseudonymous references: made once, kept as long as the file)
         # (the profiles are an additive table: no version of the schema came with it, so a hub of an earlier version opens the same file and never looks at it; docs/HUB_LOGIN.md, "Data")
         if self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'profiles'").fetchone() is None:
@@ -139,6 +141,7 @@ class Store(StoreBase):
         self.ignore_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ignores'").fetchone() is not None
         # (the follows, the private messages and the reports of them are additive tables made the same way, by the first follow and the first message; docs/HUB_PEOPLE.md, docs/HUB_MESSAGES.md)
         self.follow_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'follows'").fetchone() is not None
+        self.nick_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'login_claim'").fetchone() is not None       # (the nicknames are additive tables as well, made by the first nickname; docs/HUB_NICKNAMES.md)
         self.dm_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'dms'").fetchone() is not None
         self.report_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'reports'").fetchone() is not None
         # (the keys of a person's AI and the log of their calls are additive tables as well, made when the first key is made, so a hub that never has a key holds nothing of them: an older hub never looks at
@@ -161,7 +164,7 @@ class Store(StoreBase):
 
     # ---- lines ----------------------------------------------------------------------------------------------------------------------------
 
-    def add_line(self, account, name, text, mod, image=None):
+    def add_line(self, account, name, text, mod, image=None, tag=""):
         at = int(self.clock())
         picture = None
         mark = 2 if mod == 2 else 1 if mod else 0       # (the column `mod` holds the author's role: 0 none, 1 moderator, 2 administrator; an earlier hub reads any of them as true, so a rollback shows the line as a moderator's: no schema step)
@@ -171,21 +174,21 @@ class Store(StoreBase):
                 if row is None:
                     raise ImageGone()
                 picture = Image(image, row[0], row[1], row[2], row[3], row[4], bool(row[5]))
-            cur = self.db.execute("INSERT INTO lines (at, account, name, text, mod) VALUES (?, ?, ?, ?, ?)", (at, account, name, text, mark))
+            cur = self.db.execute("INSERT INTO lines (at, account, name, text, mod, tag) VALUES (?, ?, ?, ?, ?, ?)", (at, account, name, text, mark, tag))
             if image is not None:
                 self.db.execute("UPDATE images SET line = ? WHERE name = ?", (cur.lastrowid, image))
             over = self.db.execute("DELETE FROM lines WHERE id IN (SELECT id FROM lines WHERE id <= (SELECT id FROM lines ORDER BY id DESC LIMIT 1 OFFSET ?) ORDER BY id LIMIT ?)",
                                    (self.max_lines, TRIM_ROWS)).rowcount      # (a few rows: a file that holds a long backlog is cut down by the purge, a chunk at a time, never by one chat line)
         if over:
             self.unsettled = True                   # (the lines past the newest max_lines are in the log file until it is cut: the hub's clock cuts it at its next look)
-        return Line(cur.lastrowid, at, account, name, text, mark, picture)
+        return Line(cur.lastrowid, at, account, name, text, mark, picture, tag)
 
     def recent_lines(self, count):
         """The last `count` lines that are not deleted, not past their time and among the newest `max_lines` kept, oldest first."""
-        rows = self.db.execute("SELECT l.id, l.at, l.account, l.name, l.text, l.mod, i.name, i.x, i.w, i.h, i.tw, i.th, i.anim FROM lines l LEFT JOIN images i ON i.line = l.id "
+        rows = self.db.execute("SELECT l.id, l.at, l.account, l.name, l.text, l.mod, i.name, i.x, i.w, i.h, i.tw, i.th, i.anim, l.tag FROM lines l LEFT JOIN images i ON i.line = l.id "
                                "WHERE l.deleted = 0 AND l.at >= ? AND l.id > COALESCE((SELECT id FROM lines ORDER BY id DESC LIMIT 1 OFFSET ?), 0) "
                                "ORDER BY l.id DESC LIMIT ?", (int(self.clock()) - self.retention, self.max_lines, count)).fetchall()
-        return [Line(*r[:6], Image(*r[6:12], bool(r[12])) if r[6] is not None else None) for r in reversed(rows)]
+        return [Line(*r[:6], Image(*r[6:12], bool(r[12])) if r[6] is not None else None, r[13]) for r in reversed(rows)]
 
     def account_of_line(self, line_id):
         row = self.db.execute("SELECT account FROM lines WHERE id = ? AND deleted = 0", (line_id,)).fetchone()
@@ -391,6 +394,10 @@ class Store(StoreBase):
                 self.db.execute("DELETE FROM alerts WHERE ref = ? OR from_ref = ?", (self.ref(account), self.ref(account)))      # (its own list, and every alert of the others that is from it: an invitation or a mention carries its name)
             if self.has_ignores():
                 self.db.execute("DELETE FROM ignores WHERE ref = ? OR other = ?", (self.ref(account), self.ref(account)))        # (the list of the people that it ignores, and its place on the lists of the others)
+            if self.has_nicknames():
+                self.db.execute("DELETE FROM nicknames WHERE account = ?", (account,))                                        # (its nickname and tag, and the names that it held)
+                self.db.execute("DELETE FROM nick_hold WHERE account = ?", (account,))
+                self.db.execute("DELETE FROM login_claim WHERE account = ?", (account,))                                   # (the login name that it was passed for in the game)
             if self.has_follows():
                 self.db.execute("DELETE FROM follows WHERE ref = ? OR other = ?", (self.ref(account), self.ref(account)))        # (the people that it follows, and every follow of it)
             if self.has_dms():
@@ -530,6 +537,85 @@ class Store(StoreBase):
             return False
         with self.transaction():
             return self.db.execute("DELETE FROM ignores WHERE ref = ? AND other = ?", (ref, other)).rowcount > 0
+
+    # ---- nicknames and tags (hub/nicknames.py) --------------------------------------------------------------------------------------------------------------------------------
+
+    def has_nicknames(self):
+        if not self.nick_tables:
+            self.nick_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'login_claim'").fetchone() is not None
+        return self.nick_tables
+
+    def ensure_nicknames(self):
+        if self.has_nicknames():
+            return
+        self.db.executescript("""
+            BEGIN;
+            CREATE TABLE IF NOT EXISTS nicknames (account TEXT PRIMARY KEY, nick TEXT NOT NULL, folded TEXT NOT NULL, key TEXT NOT NULL UNIQUE, nick_at INTEGER NOT NULL, tag TEXT NOT NULL DEFAULT '', tag_at INTEGER NOT NULL DEFAULT 0);
+            CREATE TABLE IF NOT EXISTS nick_hold (key TEXT PRIMARY KEY, folded TEXT NOT NULL, account TEXT NOT NULL, until INTEGER NOT NULL);
+            CREATE INDEX IF NOT EXISTS nick_hold_account ON nick_hold (account);
+            CREATE TABLE IF NOT EXISTS login_claim (account TEXT PRIMARY KEY, key TEXT NOT NULL UNIQUE, until INTEGER NOT NULL);
+            COMMIT;""")
+        self.nick_tables = True
+
+    def nick_row(self, account):
+        if not self.has_nicknames():
+            return None
+        row = self.db.execute("SELECT nick, key, nick_at, tag, tag_at FROM nicknames WHERE account = ?", (account,)).fetchone()
+        return Nick(*row) if row else None
+
+    def nick_owner(self, key):
+        if not self.has_nicknames():
+            return None
+        row = self.db.execute("SELECT account, folded FROM nicknames WHERE key = ?", (key,)).fetchone()
+        if row is None:
+            row = self.db.execute("SELECT account, folded FROM nick_hold WHERE key = ? AND until > ?", (key, int(self.clock()))).fetchone()
+        return (row[0], row[1]) if row else None
+
+    def nick_put(self, account, nick, folded, key, nick_at, tag, tag_at, hold_until):
+        for value in (account, nick, folded, key, tag):
+            if not isinstance(value, str):
+                raise ValueError("not a nickname")
+        self.ensure_nicknames()
+        with self.transaction():
+            now = int(self.clock())
+            self.db.execute("DELETE FROM nick_hold WHERE until <= ?", (now,))
+            other = self.db.execute("SELECT folded FROM nicknames WHERE key = ? AND account != ?", (key, account)).fetchone()
+            if other is None:
+                other = self.db.execute("SELECT folded FROM nick_hold WHERE key = ? AND account != ?", (key, account)).fetchone()
+            if other is not None:
+                return other[0]
+            old = self.db.execute("SELECT key, folded FROM nicknames WHERE account = ?", (account,)).fetchone()
+            if old is not None and old[0] != key and hold_until > now:
+                self.db.execute("INSERT OR REPLACE INTO nick_hold (key, folded, account, until) VALUES (?, ?, ?, ?)", (old[0], old[1], account, int(hold_until)))
+            self.db.execute("DELETE FROM nick_hold WHERE key = ? AND account = ?", (key, account))
+            self.db.execute("INSERT INTO nicknames (account, nick, folded, key, nick_at, tag, tag_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (account) DO UPDATE SET nick = excluded.nick, folded = excluded.folded, "
+                            "key = excluded.key, nick_at = excluded.nick_at, tag = excluded.tag, tag_at = excluded.tag_at", (account, nick, folded, key, int(nick_at), tag, int(tag_at)))
+        return None
+
+    def login_claim(self, account, key, until):
+        if not isinstance(account, str) or not isinstance(key, str):
+            raise ValueError("not a claim")
+        self.ensure_nicknames()
+        row = self.db.execute("SELECT key, until FROM login_claim WHERE account = ?", (account,)).fetchone()
+        if row is not None and row[0] == key and row[1] > int(until) - 3600 and row[1] > int(self.clock()):
+            return True                                                    # (renewed within the hour: nothing to write)
+        with self.transaction():
+            self.db.execute("DELETE FROM login_claim WHERE until <= ?", (int(self.clock()),))
+            if self.db.execute("SELECT 1 FROM login_claim WHERE key = ? AND account != ?", (key, account)).fetchone() is not None:
+                return False
+            self.db.execute("INSERT INTO login_claim (account, key, until) VALUES (?, ?, ?) ON CONFLICT (account) DO UPDATE SET key = excluded.key, until = excluded.until", (account, key, int(until)))
+        return True
+
+    def nick_drop(self, account, note=None):
+        if not self.has_nicknames():
+            return False
+        with self.transaction():
+            gone = self.db.execute("DELETE FROM nicknames WHERE account = ?", (account,)).rowcount
+            gone += self.db.execute("DELETE FROM nick_hold WHERE account = ?", (account,)).rowcount
+            if gone:
+                self.write_note(note)
+        self.unsettled = self.unsettled or gone > 0
+        return gone > 0
 
     # ---- the people that an account follows (hub/follows.py) ------------------------------------------------------------------------------------
 

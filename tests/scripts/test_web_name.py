@@ -62,7 +62,7 @@ class TheMarkup(unittest.TestCase):
                 if "ants.guest" in text:
                     guest.add(rel)
         self.assertEqual(found, {}, "a name that an earlier version remembered is read by nothing and written by nothing: the game on this computer takes the person's own name from the gate")
-        self.assertEqual(guest, {"web/front/player_name.js"}, "the guest name's key is the one script's own")
+        self.assertEqual(guest, {"web/front/player_name.js", "web/home/names.js"}, "the guest name's keys are the person script's own, and the note's key (ants.guestnote) is the sheet's")
 
     def test_the_login_link_of_the_card_is_a_plain_link_in_the_two_cards_and_goes_back_to_a_word_that_the_hub_has(self):
         link = '<div class="name-step-hint" id="name-step-login" hidden><a href="/hub/login?next=home">Log in with Discord</a></div>'
@@ -111,7 +111,7 @@ class TheMarkup(unittest.TestCase):
 class TheDocuments(unittest.TestCase):
     def test_the_browser_page_and_the_network_notes_say_what_the_pages_do(self):
         page = read(os.path.join(REPO, "docs", "PLAY_IN_BROWSER.md"))
-        self.assertIn("Nobody types a name on the web.", page)
+        self.assertIn("`ants.guestname`", page)                                              # (the name that a guest typed: kept in this browser)
         self.assertIn("`ants.guest`", page)                                                  # (the one key of a name that the page keeps)
         self.assertIn("is not used", page)                                                   # (a name that an earlier version remembered, `ants.name`)
         self.assertIn("asks first, every time", page)

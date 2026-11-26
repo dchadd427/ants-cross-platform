@@ -22,8 +22,10 @@ const lobbyMarkup = lobbyText.slice(lobbyText.indexOf('<body'), lobbyText.indexO
 const lobbyScript = lobbyScripts[lobbyScripts.length - 1][2];
 
 // The scripts of front/ are run as they are, in a sandbox that has the fake WebSocket and the fake clock of one page (they are ES5 with no module system: a page gets a global, node gets module.exports)
+const NAME_LETTERS = (() => { const root = {}; new Function('self', fs.readFileSync(path.join(lobbyDir, 'front', 'name_letters.js'), 'utf8'))(root); return root.AntsNameLetters; })();       // (the letters of a name: every page loads front/name_letters.js before the scripts that read it)
+globalThis.AntsNameLetters = NAME_LETTERS;       // (for the scripts that a check loads with require: they read the letters from the global, as a page does)
 function loadFile(rel, scope) {
-    const root = {};
+    const root = rel === 'front/name_letters.js' ? {} : { AntsNameLetters: NAME_LETTERS };
     new Function('self', 'WebSocket', 'setTimeout', 'clearTimeout', 'Date', 'Math', fs.readFileSync(path.join(lobbyDir, rel), 'utf8'))(root, scope.WebSocket, scope.setTimeout, scope.clearTimeout, scope.Date || Date, scope.Math || Math);
     return root;
 }
@@ -55,7 +57,7 @@ function roomMessage(seats, o) {
 }
 // What the page's Hello says: its name, its room, whether it brings a key and a lobby block (a page that makes the room, or one that only joins)
 const helloBytes = (name, room, o) => NET0.encodeHello({ name, room, key: (o && o.key) || null, platform: 0x13, create: o && o.join ? null : { map: 'TREASURE.LVL' } });
-const helloName = (b) => String.fromCharCode(...b.slice(4, 4 + b[3]));
+const helloName = (b) => Buffer.from(b.slice(4, 4 + b[3])).toString('utf8');       // (a name is UTF-8 on the wire: protocol 29)
 const helloRoom = (b) => { const at = 4 + b[3] + 2 + 1; return String.fromCharCode(...b.slice(at + 1, at + 1 + b[at])); };
 const CODE = /^[a-z2-9]{6}$/;
 const grouped = (code) => code.slice(0, 3) + ' ' + code.slice(3);
@@ -308,6 +310,7 @@ function runLobby(search, stored, options) {
     };
     win.AntsRejoinKey = loadFile('rejoin_key.js', scope).AntsRejoinKey;
     win.AntsAlertCore = loadFile('alert_core.js', scope).AntsAlertCore;       // (a script tag of the page: the switches, the tab alert and the sound table of web/alert_core.js)
+    win.AntsNameLetters = loadFront('name_letters.js', scope).AntsNameLetters;
     win.AntsLobbyRules = loadFront('lobby_rules.js', scope).AntsLobbyRules;
     win.AntsPlayerName = loadFront('player_name.js', scope).AntsPlayerName;
     win.AntsLobbyNet = loadFront('lobby_net.js', scope).AntsLobbyNet;

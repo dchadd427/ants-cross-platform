@@ -47,6 +47,7 @@ NATIVE_READS = {
     "web/rejoin_key.js": "test_ants_server.sh: the page harness (web_name_check.js and the lobby checks load it as the page does)",
     LOBBY_NET_JS: "test_ants_server.sh: web_lobby_server_check.js, web_lobby_handoff_check.js, the page harness",
     "web/front/player_name.js": "test_ants_server.sh: the page harness",
+    "web/front/name_letters.js": "test_ants_server.sh: the page harness (the letters of a name, which the codec and the person read)",
     "web/front/lobby_chat.js": "test_ants_server.sh: the page harness",
     "web/front/rematch.js": "test_ants_server.sh: the page harness",
     "web/front/game_modes.js": "test_ants_server.sh: the page harness",

@@ -6,6 +6,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+globalThis.AntsNameLetters = require(path.resolve(__dirname, '..', '..', 'web', 'front', 'name_letters.js'));       // (the letters of a name: front/name_letters.js, a script tag of the page before the script that is checked)
 
 const modulePath = process.argv[2];
 if (!modulePath) { console.log('usage: web_lobby_client_check.js lobby_net.js'); process.exit(2); }
@@ -477,7 +478,7 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
 // ---- a page that joins and never makes: join: true (a code that somebody typed) -----------------------------------------------------------------------------------------------------------------------
 // The Hello of a page that makes a lobby room carries the create block (the map, four seats, no team, the leader starts, a lobby); a page that was only given a code to join sends none, so that a code
 // with no room is answered NoSuchRoom instead of making one. The bytes are held to the lines that the C++ encoder wrote (tests/data/lobby_messages.txt, which web_lobby_net_check.js holds the codec
-// to) and to a Hello written out by hand here: type 1, the protocol's number, the name, 0 and 255, the code, an empty second string, the key (zeros without one), 0, the platform, the client kind 1 (a page).
+// to) and to a Hello written out by hand here: type 1, the protocol's number, the name, 0 and 255, the code, an empty second string, the key (zeros without one), 0, the platform, the client kind 1 (a page), the pass of the name (a length byte: none here).
 
 {
     const golden = {};
@@ -495,7 +496,7 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
         str8(w, code);
         str8(w, '');
         for (const b of (o.key || new Uint8Array(16))) w.push(b);
-        w.push(0, 0, 0, 0, o.platform || 0, 1);
+        w.push(0, 0, 0, 0, o.platform || 0, 1, 0);       // (the platform, the client kind 1 (a page) and the pass of the name: none)
         if (o.map !== undefined) for (const b of block(o.map)) w.push(b);
         return Uint8Array.from(w);
     };
@@ -515,7 +516,7 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
     same('no option is no join: the block is there', hello({ join: undefined }).hex, make.hex);
     same('only true is a join (the library says === true): 1, "true" and {} are not, the block is there', [hello({ join: 1 }).hex, hello({ join: 'true' }).hex, hello({ join: {} }).hex], [make.hex, make.hex, make.hex]);
     same('a join with a map that is none is the same Hello (the map is the block\'s, and there is no block)', hello({ join: true, map: 'tiny' }).hex, join.hex);
-    same('the name goes in a join Hello as in the other (printable ASCII, cut to 32)', hello({ join: true, name: 'José ' + 'x'.repeat(40) }).hex, hex(N.encodeHello({ name: 'Jos ' + 'x'.repeat(28), room: 'k7m2xq' })));
+    same('the name goes in a join Hello as in the other (UTF-8: printable ASCII and the letters of name_letters.js, cut to 32 characters)', hello({ join: true, name: 'José ' + 'x'.repeat(40) }).hex, hex(N.encodeHello({ name: 'José ' + 'x'.repeat(27), room: 'k7m2xq' })));
     // the line of the golden file with the key and the platform of a browser on Linux: the block of an empty map is 00 04 ffff 03
     const keyed = { name: 'Sam', code: 'abc234', key: seq(1), platform: N.PLATFORM_BROWSER | N.OS.Linux, map: '' };
     same('with a key and a platform, without join: the line of the C++ encoder (page-with-key)', hello(keyed).hex, golden['page-with-key']);
@@ -746,14 +747,15 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
     w.last().receive(room(seats || [[C, 'Priya'], [E, ''], [E, ''], [E, '']], Object.assign({ you: 0, leader: 0 }, o || {})));
 };
 
-{   // the Hello says only what a server reads: a name of printable ASCII (the characters that are none are left out, as the game's own client leaves them out), a code, a map, a platform and a key that fit
+{   // the Hello says only what a server reads: a name of printable ASCII and the letters of name_letters.js as UTF-8 (the characters that are none are left out, as the game's own client leaves them out), a code, a map, a platform and a key that fit
     const sent = (extra) => { const w = world(); const c = client(w, extra); c.connect(); if (w.sockets.length > 0) w.last().open(); return { w, c, hello: w.sockets.length > 0 && w.last().sent.length > 0 ? hex(w.last().sent[0]) : '' }; };
     const hello = (o) => hex(N.encodeHello(Object.assign({ name: 'Priya', room: 'k7m2xq', create: { map: 'TREASURE.LVL' } }, o)));
-    for (const [typed, shown] of [['José', 'Jos'], ['Łukasz', 'ukasz'], ['你好', ''], ['a\tb', 'ab'], ['x'.repeat(40), 'x'.repeat(32)], ['é'.repeat(5) + 'y'.repeat(40), 'y'.repeat(32)], ['  Pri  ', '  Pri  ']]) {
+    for (const [typed, shown] of [['José', 'José'], ['Łukasz', 'Łukasz'], ['Ёжик', 'Ёжик'], ['aβc', 'ac'], ['你好', ''], ['a\tb', 'ab'], ['x'.repeat(40), 'x'.repeat(32)], ['é'.repeat(5) + 'y'.repeat(40), 'é'.repeat(5) + 'y'.repeat(27)], ['  Pri  ', '  Pri  ']]) {
         const s = sent({ name: typed });
         same('the Hello of the name ' + JSON.stringify(typed) + ' says ' + JSON.stringify(shown), s.hello, hello({ name: shown }));
         const bytes = s.w.sockets.length > 0 && s.w.last().sent.length > 0 ? s.w.last().sent[0] : new Uint8Array(4);
-        check('... and its bytes are printable ASCII, at most 32 (the C++ decoder refuses anything else)', bytes[3] <= 32 && Array.from(bytes.slice(4, 4 + bytes[3])).every((b) => b >= 0x20 && b <= 0x7e));
+        const decoded = (() => { try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes.slice(4, 4 + bytes[3])); } catch (e) { return null; } })();
+        check('... and its bytes are UTF-8 of at most 32 characters and 96 bytes, the name that was said (the C++ decoder refuses anything else)', bytes[3] <= 96 && decoded === shown && Array.from(decoded).length <= 32);
         check('... and the client goes by that name until the room says another', s.c.name === shown);
     }
     for (const code of ['', 'k7m 2xq', 'a'.repeat(33), 'k7m.2xq', undefined, null, 42, 'ké']) {
@@ -1014,7 +1016,7 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
         N.seatMemory(SERVER, 'k7m2xq', new Uint8Array(16), 'Priya', true, NOW), N.seatMemory(SERVER, 'k7m2xq', Uint8Array.from(seq(1)).slice(0, 15), 'Priya', true, NOW), N.seatMemory(SERVER, 'k7m2xq', null, 'Priya', true, NOW),
         N.seatMemory(SERVER, '', key, 'Priya', true, NOW), N.seatMemory(SERVER, 'k7m 2xq', key, 'Priya', true, NOW), N.seatMemory(SERVER, 'k7m2xq', key, 'Priya', true, NOW + 0.5)
     ].every((t) => t === null));
-    check('a name with a character outside the table is cut to what the server takes', JSON.parse(N.seatMemory(SERVER, 'k7m2xq', key, 'Priéya' + 'x'.repeat(40), true, NOW)).n === ('Priya' + 'x'.repeat(40)).slice(0, 32));
+    check('a name with a character outside the table is cut to what the server takes (a letter of the table stays)', JSON.parse(N.seatMemory(SERVER, 'k7m2xq', key, 'Priéya' + 'x'.repeat(40), true, NOW)).n === ('Priéya' + 'x'.repeat(40)).slice(0, 32) && JSON.parse(N.seatMemory(SERVER, 'k7m2xq', key, 'Priαya', true, NOW)).n === 'Priya');
     const damaged = [
         ['text that is no JSON', 'not json'], ['an empty object', '{}'], ['a list', '[]'], ['null', 'null'],
         ['a member too many', JSON.stringify(Object.assign(JSON.parse(text), { x: 1 }))], ['a member too few', JSON.stringify({ s: SERVER, c: 'k7m2xq', k: hex(key), n: 'Priya', o: 1 })],

@@ -469,8 +469,8 @@
   {
    "id": "line_never_says_mod",
    "file": "hub/chat.py",
-   "old": "entry = self.store.add_line(who.account_id, who.name, line, max(RANK[role], 1 if mod else 0), **({} if img is None else {\"image\": img}))",
-   "new": "entry = self.store.add_line(who.account_id, who.name, line, False, **({} if img is None else {\"image\": img}))",
+   "old": "entry = self.store.add_line(who.account_id, who.name, line, max(RANK[role], 1 if mod else 0), tag=who.tag, **({} if img is None else {\"image\": img}))",
+   "new": "entry = self.store.add_line(who.account_id, who.name, line, False, tag=who.tag, **({} if img is None else {\"image\": img}))",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -1995,8 +1995,8 @@
   {
    "id": "store_a_line_counts_as_a_restriction",
    "file": "hub/store/sqlite.py",
-   "old": "            cur = self.db.execute(\"INSERT INTO lines (at, account, name, text, mod) VALUES (?, ?, ?, ?, ?)\", (at, account, name, text, mark))",
-   "new": "            self.count_restriction()\n            cur = self.db.execute(\"INSERT INTO lines (at, account, name, text, mod) VALUES (?, ?, ?, ?, ?)\", (at, account, name, text, mark))",
+   "old": "            cur = self.db.execute(\"INSERT INTO lines (at, account, name, text, mod, tag) VALUES (?, ?, ?, ?, ?, ?)\", (at, account, name, text, mark, tag))",
+   "new": "            self.count_restriction()\n            cur = self.db.execute(\"INSERT INTO lines (at, account, name, text, mod, tag) VALUES (?, ?, ?, ?, ?, ?)\", (at, account, name, text, mark, tag))",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract"
   },
   {
@@ -2191,15 +2191,15 @@
   {
    "id": "squash_keeps_the_spaces_hyphens_and_apostrophes",
    "file": "hub/text.py",
-   "old": "re.sub(\"[ ._'\\u02bb\\u02bc-]\", \"\", ",
+   "old": "re.sub(\"[ ._'\\u02bb\\u02bc\\u00b7-]\", \"\", ",
    "new": "re.sub(\"[._]\", \"\", ",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
   },
   {
    "id": "squash_keeps_the_apostrophe_letters",
    "file": "hub/text.py",
-   "old": "[ ._'\\u02bb\\u02bc-]",
-   "new": "[ ._'-]",
+   "old": "[ ._'\\u02bb\\u02bc\\u00b7-]",
+   "new": "[ ._'\\u00b7-]",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
   },
   {
@@ -2212,8 +2212,8 @@
   {
    "id": "lookalikes_miss_the_greek_omicron",
    "file": "hub/text.py",
-   "old": "(\"o\", \"\\u043e\\u041e\\u03bf\\u039f\")",
-   "new": "(\"o\", \"\\u043e\\u041e\")",
+   "old": "(\"o\", \"\\u043e\\u041e\\u03bf\\u039f\\u00d8\\u00f8\")",
+   "new": "(\"o\", \"\\u043e\\u041e\\u00d8\\u00f8\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
   },
   {

@@ -576,7 +576,7 @@
         function rowNode(row, onList, best, yours, lock) {
             var li = el(onList ? 'li' : 'div', lock ? 'gitem gpriv' : 'gitem'), seats = seatsOf(row), pic = picOf(row), text = el('span', 'gtxt'), top = el('span', 'gtop'), line = el('span', 'gline'), dots = el('span', 'gdots');
             dots.setAttribute('aria-hidden', 'true');
-            top.appendChild(el('span', 'gname', row.host)); top.appendChild(el('span', 'gmapname', row.mapName));
+            top.appendChild(paintName(el('span', 'gname'), row.host)); top.appendChild(el('span', 'gmapname', row.mapName));
             seats.dots.forEach(function (kind, i) { dots.appendChild(el('i', 'gdot ' + kind + ' c' + i)); });
             line.appendChild(dots); line.appendChild(el('span', 'gcount', seats.count)); line.appendChild(el('span', 'gbots', seats.bots));
             if (lock) {
@@ -655,6 +655,7 @@
         }
         function seatClass(w) { return w.seat < 0 ? 'n' : String(w.seat); }                  // (the color of a seat; a color that the door does not know is the neutral one)
         function sideColors(x) { return 'c' + seatClass(x.who[0]) + (x.who.length > 1 ? ' two d' + seatClass(x.who[1]) : ''); }        // (a team's bar is its two colors)
+        function paintName(node, name) { var L = win.AntsNameLetters; if (L && L.paint) L.paint(doc, node, name); else node.textContent = name; return node; }       // (a name with its tag and "(Guest)" dimmer: front/name_letters.js)
         function sideNames(x) { return x.who.map(function (w) { return plainName(w.name) + (BOT_NAME.test(w.name) ? TEXT.bot : ''); }).join(' + '); }
         function squareOf(w) { var q = el('i', 'gsq'); q.className += ' c' + seatClass(w) + (BOT_NAME.test(w.name) ? ' bot' : ''); return q; }                 // (a computer player is a ring, as its dot is)
         function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }

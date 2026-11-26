@@ -106,7 +106,11 @@ void ScorecardModal::build_rows() {
         row.second = r.second;
         row.score_value = r.score;
         row.name = name_of(r.first);
-        if (r.has_second()) row.name += " & " + name_of(r.second);
+        row.name_first = row.name;
+        if (r.has_second()) {
+            row.name_second = name_of(r.second);
+            row.name += " & " + row.name_second;
+        }
         if (row.name.size() > NAME_MAX_CHARS) {                                         // the label's buffer holds 35 characters (a character of UTF-8 is never cut in two)
             size_t cut = NAME_MAX_CHARS;
             while (cut > 0 && (static_cast<unsigned char>(row.name[cut]) & 0xC0) == 0x80) --cut;

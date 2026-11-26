@@ -161,8 +161,7 @@ void MapSelectScreen::render_wide(IRenderer& renderer, const ants::assets::Asset
             draw_row_light(renderer, r);
             draw_portrait(static_cast<uint8_t>(seat), row);
             std::string name = room_.seats[seat].name.empty() ? std::string("Player") : room_.seats[seat].name;
-            if (name.size() > 16) name.resize(16);
-            renderer.draw_text(fit_text(renderer, name, layout.seat_name_w, FontSize::Px18), layout.seat_name_x, layout.seat_y + row, kLabelCream, FontSize::Px18);
+            renderer.draw_text(fit_name(renderer, name, layout.seat_name_w, FontSize::Px18), layout.seat_name_x, layout.seat_y + row, kLabelCream, FontSize::Px18);
             static const char* const kThumbs[4] = {"thumb1.bmp", "thumb2.bmp", "thumb3.bmp", "thumb4.bmp"};   // netgood, netok, netbad, netunk
             const size_t thumb = seat == room_.my_seat ? 0u : (static_cast<size_t>(room_.seats[seat].thumb) & 3u);
             renderer.draw_named_sprite(kThumbs[thumb], layout.thumb_x, layout.seat_y + row);
@@ -170,7 +169,7 @@ void MapSelectScreen::render_wide(IRenderer& renderer, const ants::assets::Asset
     } else {
         const std::string display_user = player_name_.empty() ? "Player" : player_name_;
         draw_portrait(player_team_, 0);
-        renderer.draw_text(fit_text(renderer, display_user, layout.seat_name_w, FontSize::Px18), layout.seat_name_x, layout.seat_y, kLabelCream, FontSize::Px18);
+        renderer.draw_text(fit_name(renderer, display_user, layout.seat_name_w, FontSize::Px18), layout.seat_name_x, layout.seat_y, kLabelCream, FontSize::Px18);
         renderer.draw_named_sprite("thumb1.bmp", layout.thumb_x, layout.seat_y);
     }
 

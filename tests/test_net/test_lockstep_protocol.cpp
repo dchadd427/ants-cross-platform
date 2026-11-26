@@ -608,11 +608,11 @@ void run_protocol_tests() {
             h.key = key_with(5);
             h.have_turns = 0x01020304;
             const std::vector<uint8_t> bytes = encode(h);
-            ASSERT_EQ(bytes.size(), size_t{1 + 2 + 4 + 2 + 1 + 7 + 4 + 16 + 4 + 1 + 1}); // type, version, "Ann", port, seat, "ROOM-7", "tok", key, turns, platform, client kind
+            ASSERT_EQ(bytes.size(), size_t{1 + 2 + 4 + 2 + 1 + 7 + 4 + 16 + 4 + 1 + 1 + 1}); // type, version, "Ann", port, seat, "ROOM-7", "tok", key, turns, platform, client kind, the pass of the name (none)
             ASSERT_TRUE(bytes[0] == 1 && bytes[1] == (kProtocolVersion & 0xFF) && bytes[2] == (kProtocolVersion >> 8));      // (the version is whatever this protocol is: 10 here until protocol 11)
             const SeatKey key5 = key_with(5);
-            ASSERT_TRUE(std::equal(key5.begin(), key5.end(), bytes.begin() + static_cast<std::ptrdiff_t>(bytes.size() - 22)));       // the key: 16 bytes
-            ASSERT_TRUE(bytes[bytes.size() - 6] == 4 && bytes[bytes.size() - 5] == 3 && bytes[bytes.size() - 4] == 2 && bytes[bytes.size() - 3] == 1 && bytes[bytes.size() - 2] == 0 && bytes[bytes.size() - 1] == 0);   // the turns, little endian, the platform byte (not told) and the client kind (a game)
+            ASSERT_TRUE(std::equal(key5.begin(), key5.end(), bytes.begin() + static_cast<std::ptrdiff_t>(bytes.size() - 23)));       // the key: 16 bytes
+            ASSERT_TRUE(bytes[bytes.size() - 7] == 4 && bytes[bytes.size() - 6] == 3 && bytes[bytes.size() - 5] == 2 && bytes[bytes.size() - 4] == 1 && bytes[bytes.size() - 3] == 0 && bytes[bytes.size() - 2] == 0 && bytes[bytes.size() - 1] == 0);   // the turns, little endian, the platform byte (not told) and the client kind (a game)
             HelloMsg back;
             ASSERT_TRUE(decode(bytes, back) && back.version == kProtocolVersion && back.name == "Ann" && back.listen_port == 0x1234 && back.want_seat == 2 && back.room == "ROOM-7" && back.token == "tok" &&
                         back.key == key_with(5) && back.have_turns == 0x01020304);
