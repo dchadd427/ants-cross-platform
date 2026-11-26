@@ -36,6 +36,7 @@ Work that is not released yet is written in the same template under a heading th
 - **Messages are under the bell.** The bell's list has two tabs, **Alerts** and **Messages** (your conversations, with a count on the tab), and the bell's number counts both, so your messages are one press away from every view and every size. A conversation opens from there: its arrow comes back to the Messages tab and its X closes everything. The Messages button of the chat is gone. The messages and their report card have the site's own look (the dark panels, green frames and steel buttons) instead of indigo.
 
 **Fixes:**
+- On a phone, a live view's "Jump to live" no longer covers the clock beside the play button: the clock keeps its room, the button goes under it when the row is short, and Picture sits beside the camera button. The speed buttons and Picture are 44 px high.
 - Private messages on a phone: the conversation is a sheet that follows what you can see, so with the keyboard open the field sits just above it, the head with the name and the X stays on the screen and the messages fill the room over the field. The X, the arrow, Escape, a pull down on the head and the phone's Back button each close the sheet and leave you on the page where you were, not on the bell's list.
 
 ## v0.21.4 - 2026-11-24 - Special ants on the match page, What's new fits a phone

@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the game page's part of the bar (web/game_bar.js and web/game_bar.css: the links that ask or open a new tab during a match, the keys that are the bar's, the focus after a press, the Menu's own lines, the question that Reload page asks, the Menu through a resize and its refit, the focus after the Menu or the question closes, the room under the bar, the pointer on the bar's blank parts) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: tools/mutate.py tests/data/game_bar_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_game_bar.py runs them on copies.",
+ "note": "Mutants of the game page's part of the bar (web/game_bar.js and web/game_bar.css: the links that ask or open a new tab during a match, the keys that are the bar's, the focus after a press, the Menu's own lines, the question that Reload page asks, the Menu through a resize and its refit, the focus after the Menu or the question closes, the room under the bar, the pointer on the bar's blank parts, the controls row under the picture from 320 to 700 px) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: tools/mutate.py tests/data/game_bar_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_game_bar.py runs them on copies.",
  "mutants": [
   {
    "id": "home_goes_without_asking",
@@ -455,6 +455,27 @@
    "old": "            top.push(action('gb-own gb-dl', 'Download', press('dl')));\n",
    "new": "            top.push(action('gb-own gb-copy', 'Copy link', press('copy-btn')));\n            top.push(action('gb-own gb-dl', 'Download', press('dl')));\n",
    "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "the_live_row_is_one_row_of_four_on_a_narrow_phone",
+   "file": "web/shell.html",
+   "old": "            .rbar.islive:not(.over) { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }\n",
+   "new": "",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "the_live_row_wraps_only_under_400_px",
+   "file": "web/shell.html",
+   "old": "        @media (max-width: 499px) {\n            .rbar.islive:not(.over) { display: flex;",
+   "new": "        @media (max-width: 399px) {\n            .rbar.islive:not(.over) { display: flex;",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "a_button_of_the_bar_is_smaller_than_a_finger",
+   "file": "web/shell.html",
+   "old": ".rbar:not(.over) .speed button, .rbar:not(.over) .picwrap > .btn, .rbar:not(.over) .jtl { min-height: 44px; }",
+   "new": ".rbar:not(.over) .speed button, .rbar:not(.over) .picwrap > .btn, .rbar:not(.over) .jtl { min-height: 36px; }",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
   }
  ]
 }
