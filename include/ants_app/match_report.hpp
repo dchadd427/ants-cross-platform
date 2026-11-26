@@ -48,15 +48,22 @@ struct MatchReport {
     Honor top_thief;                                                       // the seat with the most raids whose loot got home (none when no raid did, the lower seat wins a tie); `value` those raids, their points are loot_home[seat]. Never in 187
     Honor last_stand;                                                      // 187 only: the seat that was out of ants last of those that did not win; `turn` when it ran out. Never in the original's game
 
-    /// The Play of the game: the busiest 10 seconds of the match by the activity curve's weights (death 14, bomb 10, theft 6, fire 5, hit 2), credited to the seat with the largest share of them
-    enum class PlayKind : uint8_t { Bomb, Raid, Fight, Fire };
+    /// The Play of the game: the best moment of one seat, the 10 seconds in which a seat scored the most points for its kills (10 a kill, and bonuses for the kills that mattered: the definitions are in the .cpp and in docs/REPLAYS.md,
+    /// "The match pages"). `bonuses` says which of them the moment has (a bit mask of the four below), `knocked_out` is the seat that the first knockout of the moment took out of the match.
+    static constexpr uint8_t kKnockedOut = 1;                              // the kill that took out the last ant of a seat that is out of the match
+    static constexpr uint8_t kSavedHill = 2;                               // a Thief that raided the seat's own hill was killed near it
+    static constexpr uint8_t kStoppedLoot = 4;                             // a Thief that carried loot was killed
+    static constexpr uint8_t kWipedGroup = 8;                              // every ant of a group of 3 or more was killed in the moment
     struct Play {
-        bool present{false};                                               // false: no 10 seconds had two deaths' worth of action
+        bool present{false};                                               // false: nobody killed an ant of another seat
         uint8_t seat{0};
-        PlayKind kind{PlayKind::Fight};
-        uint32_t count{0};                                                 // ants taken out (Bomb, Fight, Fire) or points stolen (Raid)
-        uint32_t turn{0};                                                  // the moment (the busiest event of the window)
-        int32_t tile_x{0};                                                 // where it was
+        uint32_t kills{0};                                                 // the kills of the moment
+        uint32_t points{0};                                                // its score
+        uint32_t seconds{0};                                               // from its first kill to its last, rounded up to whole seconds (at least 1 for two kills or more, 0 for one)
+        uint8_t bonuses{0};
+        uint8_t knocked_out{0};
+        uint32_t turn{0};                                                  // the moment: its first kill
+        int32_t tile_x{0};                                                 // where that was
         int32_t tile_y{0};
         uint32_t watch_turn() const noexcept { return turn > kWatchLeadTurns ? turn - kWatchLeadTurns : 0; }
     };
@@ -68,7 +75,7 @@ struct MatchReport {
 uint32_t mvp_share(const replay::MatchStats& stats, uint8_t seat);
 
 /// The report of a match from what the stats pass counted. `result` says who won (its rows and alliances: the seats of the first row of result.rows(local_seat)); `mode` is the rules (187 has Last stand instead of Top Thief).
-/// ok is false (and nothing but `turns` is filled) when `stats.ok` is not, or `stats.events_ok` is not: the pass could not count the match, or could not tell the owner of a bomb or the place of a fire for sure.
+/// ok is false (and nothing but `turns` is filled) when `stats.ok` is not: the pass could not count the match.
 /// The definitions of every number and honor are in the .cpp (and in docs/REPLAYS.md, "The match pages"). A pure function of its arguments: no clock, no disk, no floating point.
 MatchReport make_match_report(const replay::MatchStats& stats, const sim::MatchResult& result, sim::GameMode mode, uint8_t local_seat);
 
