@@ -1,0 +1,229 @@
+{
+ "note": "Mutants of the bar's Copy link (the block of web/shell.html between COPY_LINK_BEGIN and COPY_LINK_END; docs/REPLAYS.md 'Watching') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_copy_link_check.js (the page's own code on a page of fakes): the address that a press copies (the page's own address, the live address for a kept recording, no id, the recording's address for a live match, an address that is not encoded), the share sheet (never opened, opened on a wide window, a phone on its side or a phone that is not taken for one, a tablet that is, more than the address in it, a closed sheet that copies as well, a refused or a throwing one that does nothing), the clipboard (never used, one that refuses or throws that does nothing or says Copied!, a copy that is not said or said before the clipboard has answered, a press that does nothing), the old way (a hidden field that stays in the page, is not selected, holds nothing, is editable or shows, the wrong command, a failed command that says Copied! or shows no box, a box that is not asked quietly) and a button that is not wired; every one must be caught (tools/mutate.py tests/data/copy_link_mutants.json --keep-going --jobs 1).",
+ "mutants": [
+  {
+   "id": "copies_the_pages_own_address",
+   "file": "web/shell.html",
+   "old": "window.location.origin + (FILE ?",
+   "new": "window.location.href + (FILE ?",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "a_kept_recording_copies_the_live_address",
+   "file": "web/shell.html",
+   "old": "(FILE ? '/play?replay=' + encodeURIComponent(FILE) :",
+   "new": "(false ? '/play?replay=' + encodeURIComponent(FILE) :",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "a_live_match_copies_an_address_with_no_id",
+   "file": "web/shell.html",
+   "old": "'/play?live=' + encodeURIComponent(LIVE_ID || '')",
+   "new": "'/play?live=' + encodeURIComponent('')",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "a_live_match_copies_the_recordings_address",
+   "file": "web/shell.html",
+   "old": "'/play?live=' + encodeURIComponent(LIVE_ID || '')",
+   "new": "'/play?replay=' + encodeURIComponent(LIVE_ID || '')",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "the_live_id_is_not_encoded",
+   "file": "web/shell.html",
+   "old": "encodeURIComponent(LIVE_ID || '')",
+   "new": "(LIVE_ID || '')",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "the_file_name_is_not_encoded",
+   "file": "web/shell.html",
+   "old": "(FILE ? '/play?replay=' + encodeURIComponent(FILE) :",
+   "new": "(FILE ? '/play?replay=' + FILE :",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "the_share_sheet_never_opens",
+   "file": "web/shell.html",
+   "old": "typeof navigator.share === 'function'",
+   "new": "false",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "a_wide_window_opens_the_share_sheet",
+   "file": "web/shell.html",
+   "old": "copyPhone() && typeof navigator.share",
+   "new": "typeof navigator.share",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "a_phone_on_its_side_copies_instead_of_sharing",
+   "file": "web/shell.html",
+   "old": "(max-width: 700px), (max-height: 500px)",
+   "new": "(max-width: 700px)",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "a_tablet_opens_the_share_sheet",
+   "file": "web/shell.html",
+   "old": "(max-width: 700px), (max-height: 500px)",
+   "new": "(max-width: 900px), (max-height: 500px)",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "a_phone_copies_instead_of_sharing",
+   "file": "web/shell.html",
+   "old": "(max-width: 700px), (max-height: 500px)",
+   "new": "(max-width: 300px), (max-height: 500px)",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "the_sheet_gets_more_than_the_address",
+   "file": "web/shell.html",
+   "old": "navigator.share({ url: url })",
+   "new": "navigator.share({ title: 'Ants', url: url })",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "a_sheet_that_is_closed_copies_too",
+   "file": "web/shell.html",
+   "old": "if (!e || e.name !== 'AbortError') copyIt();",
+   "new": "copyIt();",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "a_sheet_that_cannot_open_does_nothing",
+   "file": "web/shell.html",
+   "old": "if (!e || e.name !== 'AbortError') copyIt();",
+   "new": "",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "a_share_that_throws_does_nothing",
+   "file": "web/shell.html",
+   "old": "catch (e) { /* no share sheet: copy it */ }",
+   "new": "catch (e) { return; }",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "a_refused_clipboard_says_copied",
+   "file": "web/shell.html",
+   "old": ".then(done, oldWay)",
+   "new": ".then(done, done)",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "a_refused_clipboard_does_nothing",
+   "file": "web/shell.html",
+   "old": ".then(done, oldWay)",
+   "new": ".then(done, function () {})",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "a_copy_is_not_said",
+   "file": "web/shell.html",
+   "old": ".then(done, oldWay)",
+   "new": ".then(function () {}, oldWay)",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "copied_is_said_before_the_clipboard_answers",
+   "file": "web/shell.html",
+   "old": "navigator.clipboard.writeText(url).then(done, oldWay); return;",
+   "new": "navigator.clipboard.writeText(url); done(); return;",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "the_clipboard_is_never_used",
+   "file": "web/shell.html",
+   "old": "if (navigator.clipboard && navigator.clipboard.writeText) {",
+   "new": "if (false) {",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "a_clipboard_that_throws_does_nothing",
+   "file": "web/shell.html",
+   "old": "catch (e) { /* the old way */ }\n                    oldWay();",
+   "new": "catch (e) { /* the old way */ return; }\n                    oldWay();",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "a_press_without_a_share_sheet_does_nothing",
+   "file": "web/shell.html",
+   "old": "                copyIt();\n            }\n            $('copy-btn')",
+   "new": "            }\n            $('copy-btn')",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "a_failed_command_says_copied",
+   "file": "web/shell.html",
+   "old": "if (copyField(url)) done(); else copyByHand(url);",
+   "new": "copyField(url); done();",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "a_failed_command_shows_no_box",
+   "file": "web/shell.html",
+   "old": "else copyByHand(url);",
+   "new": "else ;",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "the_box_is_not_asked_quietly",
+   "file": "web/shell.html",
+   "old": "antsQuietly(function () { return window.prompt('Copy the link to this match:', url); });",
+   "new": "window.prompt('Copy the link to this match:', url);",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "the_field_stays_in_the_page",
+   "file": "web/shell.html",
+   "old": "document.body.removeChild(box);",
+   "new": "",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "the_field_is_not_selected",
+   "file": "web/shell.html",
+   "old": "try { box.select(); copied =",
+   "new": "try { copied =",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "the_field_holds_nothing",
+   "file": "web/shell.html",
+   "old": "box.value = url;",
+   "new": "box.value = '';",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "the_field_is_editable",
+   "file": "web/shell.html",
+   "old": "box.setAttribute('readonly', '');",
+   "new": "",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "the_field_shows",
+   "file": "web/shell.html",
+   "old": "box.style.opacity = '0';",
+   "new": "box.style.opacity = '1';",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "the_wrong_command_is_given",
+   "file": "web/shell.html",
+   "old": "document.execCommand('copy') === true",
+   "new": "document.execCommand('cut') === true",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  },
+  {
+   "id": "the_button_does_nothing",
+   "file": "web/shell.html",
+   "old": "$('copy-btn').addEventListener('click', copyLink);",
+   "new": "",
+   "test": "node tests/scripts/web_copy_link_check.js web/shell.html"
+  }
+ ]
+}

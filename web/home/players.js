@@ -405,6 +405,7 @@
             panel.setAttribute('data-state', on ? 'on' : 'off');
             var counted = on && model.n > 1;                             // (just the visitor is no count)
             total.hidden = !counted; dot.hidden = on; total.textContent = countText(model.n); total.setAttribute('aria-label', countText(model.n) + TEXT.here);
+            if (page.hereNow) page.hereNow(on ? model.n : null);         // (the footer's "N online" counts the same people as this list: lobby.html showStats)
             if (shown) paintBody();
         }
 
