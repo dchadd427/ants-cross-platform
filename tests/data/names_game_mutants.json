@@ -136,6 +136,30 @@
    "file": "src/ants_app/renderer_dialog_text.cpp",
    "old": "if (cp >= 0x20 && TTF_GlyphIsProvided(font, static_cast<Uint16>(cp)) == 0) return false;",
    "new": "if (cp >= 0x20 && TTF_GlyphIsProvided(font, static_cast<Uint16>(cp)) != 0) return false;"
+  },
+  {
+   "id": "backspace_takes_half_a_letter",
+   "file": "src/ants_app/start_menu.cpp",
+   "old": "                else pop_back_char(*text);",
+   "new": "                else if (!text->empty()) text->pop_back();",
+   "build": "test_start_menu",
+   "test": "./build/tests/test_app/test_start_menu"
+  },
+  {
+   "id": "a_notice_cuts_a_name_in_the_middle_of_a_letter",
+   "file": "src/ants_server/room.cpp",
+   "old": "name = net::clip_wire_name(name, net::kMaxChatChars - fixed);",
+   "new": "name.resize(net::kMaxChatChars - fixed);",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.215 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "a_notice_of_the_room_loses_the_letters_of_a_name",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    const std::string line = clip_wire_name(text, kMaxChatChars, kMaxNoticeBytes);",
+   "new": "    const std::string line = printable(text, kMaxChatChars);",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.215 ./build/tests/test_server/test_server"
   }
  ]
 }

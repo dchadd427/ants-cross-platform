@@ -14,7 +14,8 @@ changes back has their old name again (and the 30 days start again). A tag may c
 A guest's name may not copy a logged-in person's nickname (or a name that is held), has the same letters, length and word list, is kept in the guest's browser and is not reserved for the guest.
 
 The game server. `play_name` is the name that a person plays under: "[TAG] Nickname", the nickname, or, for a person who has chosen none, the name that the login has (the shown name, then the other names, then the
-username) made to fit the game: letters of the table only, no reserved word, no label of a computer player, no copy of somebody's nickname; none when no name fits (the page plays as a guest). hub/namepass.py signs it
+username) if it passes the rules of a nickname (3 to 16 letters of the table in one alphabet, no reserved word or label of a computer player, nothing rude), is nobody's lookalike and is claimed by
+no other account (`claim`: the first account to be passed for a name has it for 30 days); none when no name fits (the page plays as a guest). hub/namepass.py signs it
 for two minutes with the key that the game server shares (`/hub/me` hands the pass to the page; the page tells it in its Hello and in each rename). A name that has no pass is a guest's on that server.
 """
 import collections
@@ -24,6 +25,7 @@ from . import name_letters, nickrules, session as sessionmod, text
 from .limits import RateByAccount, TokenBucket
 from .store import StoreError
 
+CLAIM_SECONDS = 30 * 86400                        # the login name of a person with no nickname is claimed for the game this long after the last pass
 NICK_WAIT_SECONDS = 30 * 86400                    # a nickname changes once in this long ...
 HOLD_SECONDS = 30 * 86400                         # ... and the old one is held for its person this long
 TAG_WAIT_SECONDS = 86400                          # a tag changes once a day
@@ -77,13 +79,16 @@ class Nicknames:
 
     def dress(self, who):
         """The Identity of a socket with the account's nickname and tag, when it has them: the nickname is the name that is shown (the switch between the display name and the username is not offered then). An account that
-        has none shows what its login says, unless that is a lookalike of somebody's nickname: then it shows its username, which Discord keeps unique (and the other name is not offered)."""
+        has none shows what its login says (the display name, or the username when that is what it picked or when it has no display name), unless the name that would be shown is a lookalike of somebody's nickname:
+        then it shows its username, which Discord keeps unique, and when that looks like a nickname too, "username (Discord)" (and the other name is not offered)."""
         row = self.row(who.account_id)
         if row is not None:
             return who._replace(name=row.nick, pick="", other="", nick=row.nick, tag=row.tag)
-        if who.name != who.username and self.owner_of(who.name, who.account_id) is not None:
-            return who._replace(name=who.username, pick="username", other="")
-        return who._replace(nick="", tag="")
+        if self.owner_of(who.name, who.account_id) is None:
+            return who._replace(nick="", tag="")
+        if who.username != who.name and self.owner_of(who.username, who.account_id) is None:
+            return who._replace(name=who.username, pick="username", other="", nick="", tag="")
+        return who._replace(name=nickrules.login_shown(who.username), pick="username", other="", nick="", tag="")
 
     def state(self, who):
         """What a page is told of the account's own name, for `you`: the nickname and the tag when there are some, when each was set, and the time when each may change again (only while it may not)."""
@@ -244,12 +249,22 @@ class Nicknames:
     # ---- the game's name and its pass -------------------------------------------------------------------------------------------------------------------------------------------
 
     def fits_game(self, name, account):
-        """Whether a login's name may be the name of a game: the letters of the table (and nothing else), 2 to 24 characters, no reserved word (a label of a computer player has a bracket, which is no letter, digit or sign of a name), no lookalike of somebody's nickname."""
-        if not isinstance(name, str) or not 2 <= len(name) <= 24 or not all(name_ok(c) for c in name):
+        """Whether a login's name may be the name of a game: the rules of a nickname (nickrules.check_nickname: 3 to 16 characters of the letters of the table in one alphabet, no reserved word such as owner, host, bot or
+        player, nothing rude, not "Guest" and digits), unchanged by them (the name is not cut, trimmed or made over), and not a lookalike of somebody's nickname or of a nickname that is held."""
+        if not isinstance(name, str):
             return False
-        if name != name.strip(" ") or text.reserved(name) or nickrules.GUEST_PLACEHOLDER.match(name.lower().replace(" ", "")):
+        nick, _ = nickrules.check_nickname(name)
+        return nick == name and self.owner_of(name, account) is None
+
+    def claim(self, account, name):
+        """Whether the account may play under this login name: no other account has been passed for it (or for a lookalike of it: text.squash) in the last 30 days. The first account to ask has the claim and keeps it as long as
+        it asks; an account has one claim, the one that it asked for last. A store that cannot answer is a refusal (the person plays as a guest for now)."""
+        try:
+            return bool(self.chat.store.login_claim(account, text.squash(name), self.wall() + CLAIM_SECONDS))
+        except StoreError as e:
+            if self.chat.on_store_error:
+                self.chat.on_store_error(e)
             return False
-        return self.owner_of(name, account) is None
 
     def play_name(self, who):
         """The name that the account plays under, or None when none fits."""
@@ -257,7 +272,7 @@ class Nicknames:
         if row is not None:
             return nickrules.shown(row.nick, row.tag)
         for name in (who.name, who.other, who.username):
-            if name and self.fits_game(name, who.account_id):
+            if name and self.fits_game(name, who.account_id) and self.claim(who.account_id, name):
                 return name
         return None
 

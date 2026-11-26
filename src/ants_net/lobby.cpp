@@ -262,7 +262,7 @@ bool HostLobby::chat(const std::string& text) {
 
 bool HostLobby::notify(uint8_t seat, const std::string& text) {
     if (seat >= sim::MAX_PLAYERS || guests_[seat].conn == nullptr || !guests_[seat].conn->is_open()) return false;
-    const std::string line = printable(text, kMaxChatChars);
+    const std::string line = clip_wire_name(text, kMaxChatChars, kMaxNoticeBytes);       // (protocol 29: a notice of the room names people, so it may hold the letters of a name)
     if (line.empty()) return false;
     ChatMsg out;
     out.sender = kRoomSender;

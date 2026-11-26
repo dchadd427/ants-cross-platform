@@ -23,6 +23,10 @@ yes.forEach((name) => assert.strictEqual(L.isWireName(name), true, JSON.stringif
 no.forEach((name) => assert.strictEqual(L.isWireName(name), false, JSON.stringify(name)));
 assert.strictEqual(L.isWireName('\u1ea0'.repeat(33), 40), false, 'the bytes are limited too (96), whatever the limit of characters is');
 assert.strictEqual(L.isWireName('x'.repeat(40), 40), true);
+assert.strictEqual(L.isWireName('x'.repeat(100), 100), false, 'a name is at most 96 bytes by default');
+assert.strictEqual(L.isWireName('x'.repeat(100), 100, 240), true, 'a room\'s notice has 240 bytes');
+assert.strictEqual(L.isWireName('\u1ea0'.repeat(80), 100, 240), true);
+assert.strictEqual(L.isWireName('\u1ea0'.repeat(81), 100, 240), false, 'the bytes are limited by the limit that is given');
 assert.strictEqual(L.isWireName(123), false);
 assert.strictEqual(L.isWireName(null), false);
 

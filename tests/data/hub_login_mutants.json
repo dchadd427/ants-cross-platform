@@ -1561,29 +1561,29 @@
   {
    "id": "reserved_squash_keeps_the_dots",
    "file": "hub/text.py",
-   "old": "re.sub(\"[ ._'\\u02bb\\u02bc-]\", \"\", plain.translate(SCRIPT_LOOKALIKE).lower())",
+   "old": "re.sub(\"[ ._'\\u02bb\\u02bc\\u00b7-]\", \"\", plain.translate(SCRIPT_LOOKALIKE).lower())",
    "new": "plain.translate(SCRIPT_LOOKALIKE).lower()",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
   },
   {
    "id": "reserved_squash_strips_the_digits_at_the_end",
    "file": "hub/text.py",
-   "old": "re.sub(\"[ ._'\\u02bb\\u02bc-]\", \"\", plain.translate(SCRIPT_LOOKALIKE).lower()).translate(LOOKALIKE)",
-   "new": "re.sub(\"[ ._'\\u02bb\\u02bc-]\", \"\", plain.translate(SCRIPT_LOOKALIKE).lower()).rstrip(\"0123456789\").translate(LOOKALIKE)",
+   "old": "re.sub(\"[ ._'\\u02bb\\u02bc\\u00b7-]\", \"\", plain.translate(SCRIPT_LOOKALIKE).lower()).translate(LOOKALIKE)",
+   "new": "re.sub(\"[ ._'\\u02bb\\u02bc\\u00b7-]\", \"\", plain.translate(SCRIPT_LOOKALIKE).lower()).rstrip(\"0123456789\").translate(LOOKALIKE)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
   },
   {
    "id": "reserved_digits_are_not_letters",
    "file": "hub/text.py",
-   "old": "re.sub(\"[ ._'\\u02bb\\u02bc-]\", \"\", plain.translate(SCRIPT_LOOKALIKE).lower()).translate(LOOKALIKE)",
-   "new": "re.sub(\"[ ._'\\u02bb\\u02bc-]\", \"\", plain.translate(SCRIPT_LOOKALIKE).lower())",
+   "old": "re.sub(\"[ ._'\\u02bb\\u02bc\\u00b7-]\", \"\", plain.translate(SCRIPT_LOOKALIKE).lower()).translate(LOOKALIKE)",
+   "new": "re.sub(\"[ ._'\\u02bb\\u02bc\\u00b7-]\", \"\", plain.translate(SCRIPT_LOOKALIKE).lower())",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
   },
   {
    "id": "reserved_lookalike_one_is_not_i",
    "file": "hub/text.py",
-   "old": "str.maketrans(\"013457\", \"oieast\")",
-   "new": "str.maketrans(\"013457\", \"oleast\")",
+   "old": "str.maketrans(\"013457l\", \"oieasti\")",
+   "new": "str.maketrans(\"013457l\", \"oleasti\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
   },
   {

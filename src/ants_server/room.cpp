@@ -3,6 +3,7 @@
 #include "ants_ai/bot_names.hpp"
 
 #include "ants_net/clock.hpp"
+#include "ants_net/name_rules.hpp"
 #include "ants_server/secret.hpp"
 
 #include <algorithm>
@@ -334,10 +335,10 @@ std::vector<std::string> Room::take_notes() {
 
 namespace {
 
-// "<before><name><after>" as a line of chat: the name is cut when the line would be longer than kMaxChatChars (a name of 32 characters with the sentence of an old game is 101)
+// "<before><name><after>" as a line of chat: the name is cut, at a whole letter, when the line would be longer than kMaxChatChars characters (a name of 32 characters with the sentence of an old game is 101)
 std::string name_line(std::string name, const std::string& before, const char* after) {
-    const size_t fixed = before.size() + std::char_traits<char>::length(after);
-    if (fixed < net::kMaxChatChars && name.size() > net::kMaxChatChars - fixed) name.resize(net::kMaxChatChars - fixed);
+    const size_t fixed = before.size() + std::char_traits<char>::length(after);       // (ASCII: a byte is a character)
+    if (fixed < net::kMaxChatChars && net::utf8_length(name) > net::kMaxChatChars - fixed) name = net::clip_wire_name(name, net::kMaxChatChars - fixed);       // (at a whole letter: a notice with half a letter is no text that a page takes)
     return before + name + after;
 }
 

@@ -141,7 +141,7 @@ class Store(StoreBase):
         self.ignore_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ignores'").fetchone() is not None
         # (the follows, the private messages and the reports of them are additive tables made the same way, by the first follow and the first message; docs/HUB_PEOPLE.md, docs/HUB_MESSAGES.md)
         self.follow_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'follows'").fetchone() is not None
-        self.nick_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'nicknames'").fetchone() is not None       # (the nicknames are additive tables as well, made by the first nickname; docs/HUB_NICKNAMES.md)
+        self.nick_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'login_claim'").fetchone() is not None       # (the nicknames are additive tables as well, made by the first nickname; docs/HUB_NICKNAMES.md)
         self.dm_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'dms'").fetchone() is not None
         self.report_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'reports'").fetchone() is not None
         # (the keys of a person's AI and the log of their calls are additive tables as well, made when the first key is made, so a hub that never has a key holds nothing of them: an older hub never looks at
@@ -397,6 +397,7 @@ class Store(StoreBase):
             if self.has_nicknames():
                 self.db.execute("DELETE FROM nicknames WHERE account = ?", (account,))                                        # (its nickname and tag, and the names that it held)
                 self.db.execute("DELETE FROM nick_hold WHERE account = ?", (account,))
+                self.db.execute("DELETE FROM login_claim WHERE account = ?", (account,))                                   # (the login name that it was passed for in the game)
             if self.has_follows():
                 self.db.execute("DELETE FROM follows WHERE ref = ? OR other = ?", (self.ref(account), self.ref(account)))        # (the people that it follows, and every follow of it)
             if self.has_dms():
@@ -541,7 +542,7 @@ class Store(StoreBase):
 
     def has_nicknames(self):
         if not self.nick_tables:
-            self.nick_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'nicknames'").fetchone() is not None
+            self.nick_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'login_claim'").fetchone() is not None
         return self.nick_tables
 
     def ensure_nicknames(self):
@@ -552,6 +553,7 @@ class Store(StoreBase):
             CREATE TABLE IF NOT EXISTS nicknames (account TEXT PRIMARY KEY, nick TEXT NOT NULL, folded TEXT NOT NULL, key TEXT NOT NULL UNIQUE, nick_at INTEGER NOT NULL, tag TEXT NOT NULL DEFAULT '', tag_at INTEGER NOT NULL DEFAULT 0);
             CREATE TABLE IF NOT EXISTS nick_hold (key TEXT PRIMARY KEY, folded TEXT NOT NULL, account TEXT NOT NULL, until INTEGER NOT NULL);
             CREATE INDEX IF NOT EXISTS nick_hold_account ON nick_hold (account);
+            CREATE TABLE IF NOT EXISTS login_claim (account TEXT PRIMARY KEY, key TEXT NOT NULL UNIQUE, until INTEGER NOT NULL);
             COMMIT;""")
         self.nick_tables = True
 
@@ -589,6 +591,20 @@ class Store(StoreBase):
             self.db.execute("INSERT INTO nicknames (account, nick, folded, key, nick_at, tag, tag_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (account) DO UPDATE SET nick = excluded.nick, folded = excluded.folded, "
                             "key = excluded.key, nick_at = excluded.nick_at, tag = excluded.tag, tag_at = excluded.tag_at", (account, nick, folded, key, int(nick_at), tag, int(tag_at)))
         return None
+
+    def login_claim(self, account, key, until):
+        if not isinstance(account, str) or not isinstance(key, str):
+            raise ValueError("not a claim")
+        self.ensure_nicknames()
+        row = self.db.execute("SELECT key, until FROM login_claim WHERE account = ?", (account,)).fetchone()
+        if row is not None and row[0] == key and row[1] > int(until) - 3600 and row[1] > int(self.clock()):
+            return True                                                    # (renewed within the hour: nothing to write)
+        with self.transaction():
+            self.db.execute("DELETE FROM login_claim WHERE until <= ?", (int(self.clock()),))
+            if self.db.execute("SELECT 1 FROM login_claim WHERE key = ? AND account != ?", (key, account)).fetchone() is not None:
+                return False
+            self.db.execute("INSERT INTO login_claim (account, key, until) VALUES (?, ?, ?) ON CONFLICT (account) DO UPDATE SET key = excluded.key, until = excluded.until", (account, key, int(until)))
+        return True
 
     def nick_drop(self, account, note=None):
         if not self.has_nicknames():

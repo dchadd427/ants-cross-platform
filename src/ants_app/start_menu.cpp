@@ -6,6 +6,7 @@
 #include <cctype>
 #include <cstring>
 
+#include "ants_app/text_layout.hpp"
 #include "ants_net/address.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_sim/game_strings.hpp"
@@ -1323,7 +1324,7 @@ void StartMenu::on_key(SDL_Keycode key, uint16_t modifiers, bool repeat) {
             if (in_field) {
                 std::string* text = field_text(selected_);
                 if (all_selected_) text->clear();
-                else if (!text->empty()) text->pop_back();
+                else pop_back_char(*text);                                  // (a whole letter: the name of a stored setting or of --name may hold letters of two and three bytes)
                 all_selected_ = false;
                 caret_since_ms_ = elapsed_ms_;
                 message_.clear();

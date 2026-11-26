@@ -26,6 +26,7 @@ SIGNS = frozenset(" ._-'")
 FOLDED = {0x2018: "'", 0x2019: "'", 0x02BC: "'", 0x2010: "-", 0x2011: "-", 0x2012: "-", 0x2013: "-", 0x2014: "-", 0x2015: "-"}
 BLANKS = re.compile(r"[\s\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+")
 GUEST_SUFFIX = " (Guest)"
+LOGIN_SUFFIX = " (Discord)"                        # what a login with no nickname is shown with when its name and its username both look like somebody's nickname
 GUEST_PLACEHOLDER = re.compile(r"guest[0-9]*\Z")
 NICK_RESERVED = ("owner", "developer", "dev", "host", "gm", "guest", "player", "computer", "anonymous", "null", "undefined", "bot", "bots", "everyone", "nobody", "unknown")
 TAG_RESERVED = ("owner", "dev", "devs", "team", "gm", "host", "guest", "everyone", "unknown")
@@ -124,6 +125,11 @@ def check_tag(raw, nickname=""):
 def shown(nickname, tag=""):
     """The name that the others see: "[TAG] Nickname", or the nickname alone."""
     return "[%s] %s" % (tag, nickname) if tag else nickname
+
+
+def login_shown(username):
+    """The name of a login whose display name and username both look like somebody's nickname, as the chat shows it: "alice (Discord)"."""
+    return username + LOGIN_SUFFIX
 
 
 def guest_shown(name):

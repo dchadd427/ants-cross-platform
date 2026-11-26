@@ -262,6 +262,12 @@ class StoreBase:
         that replaces another is held for the account until `hold_until`, so that nobody takes it (a name that the account holds itself is its own again when it takes it back)."""
         raise NotImplementedError
 
+    def login_claim(self, account, key, until):
+        """The login name of an account that has no nickname, for the game server's pass: one claim per account, on a lookalike key (text.squash), until the time `until` (a claim that is renewed keeps its key; an account
+        that claims another key gives up its old one). True when the account has the claim now, False when another account has the key (nothing is changed then). A nickname does not give way to a claim: the claim does
+        (hub/nicknames.py asks the nicknames first). The tables are made by the first nickname or claim."""
+        raise NotImplementedError
+
     def nick_drop(self, account, note=None):
         """Take the nickname and the tag of the account away, and what it holds: True when there was something (and the note, if any, is in the moderators' log). The account may choose again at once."""
         raise NotImplementedError

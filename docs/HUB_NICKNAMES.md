@@ -26,7 +26,7 @@ All in `hub/nickrules.py` (pure functions of text) and `hub/name_letters.py` (th
 * **Reserved** (`reserved`): a name that could pass for the hub's own voice, a role, a placeholder ("guest 123456", "player", "owner", "bot", ...), judged the way [HUB.md](HUB.md#names) judges every shown name (`text.squash`: dots, accents, a digit for the letter that it looks like, a Cyrillic letter drawn like a Latin one).
 * **Rude** (`rude`): a word of `hub/rude_words.txt`, read the way a person reads it (the same squash, so `f.u.c.k` and a lookalike alphabet do not help). The list is small and the maintainers' to extend; it is a net, not a promise.
 * **Bot-like** (`bot`, for tags): a name that the game's rooms would read as the label of a computer player (`Pip (bot, Hard)`, [BOT_NAMES.md](BOT_NAMES.md)); the room refuses such a name too.
-* **Taken** (`taken`): the same name in other letters or case as somebody's nickname; **lookalike** (`lookalike`): a name that reads like somebody's nickname (or one that is held, below). Guests may not copy a logged-in person's nickname either.
+* **Taken** (`taken`): the same name in other letters or case as somebody's nickname; **lookalike** (`lookalike`): a name that reads like somebody's nickname (or one that is held, below): accents, dots, spaces and a digit are ignored or read as the letter, a letter of another alphabet is the Latin letter it is drawn like, the `l`, the capital `I` and the `1` are one letter (`AIice` is `Alice`), and a letter with a bar through it is the letter (`Đ`, `Ø`, `Ł`, `Ħ`, `Ŧ`, the Cyrillic soft sign is a `b`); a test walks every letter of the table and fails for one that has neither a place in `text.squash` nor a place on the short list of letters that no Latin letter is drawn like. Guests may not copy a logged-in person's nickname either.
 * **How often.** The first nickname is free. A nickname changes once in **30 days** (`soon`, with `until`, the time it may change again); the old one is **held** for its person for 30 days so that nobody takes it to pass for them, and a person who changes back has it again. A tag changes once a day (`soon`). `rate`: too many checks or saves in a moment. `busy`: the store could not answer. `nick`: a tag with no nickname behind it.
 
 ## What the hub keeps
@@ -35,9 +35,10 @@ SQLite, additive (an older database gets the tables and the column when the hub 
 
 * `nicknames` (account id, nickname, `folded` (lower-case), `key` (the squash, unique: the lookalike test), the time of the nickname, the tag, the time of the tag);
 * `nick_hold` (the squash of an old nickname, its folded form, the account that holds it, until when);
+* `login_claim` (one row for an account that has no nickname: the squash of the login name that it was passed for in the game, until when: 30 days after the last pass; a nickname does not give way to it, it gives way to a nickname);
 * `lines.tag`: the tag that the author had when it wrote a chat line (so that an old line keeps the tag it was written with).
 
-**Forget me** ([HUB_LOGIN.md](HUB_LOGIN.md#login)) deletes the account's `nicknames` and `nick_hold` rows. The hub never logs a name, a pass or an account id of this feature; a nickname is public by design (it is shown to everybody), a pass is a two-minute signature of one name and holds no account.
+**Forget me** ([HUB_LOGIN.md](HUB_LOGIN.md#login)) deletes the account's `nicknames`, `nick_hold` and `login_claim` rows. The hub never logs a name, a pass or an account id of this feature; a nickname is public by design (it is shown to everybody), a pass is a two-minute signature of one name and holds no account.
 
 ## The frames
 

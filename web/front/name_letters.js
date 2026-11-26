@@ -93,12 +93,13 @@
         }
         return s;
     }
-    // Whether a string is a name that the wire takes: every character printable ASCII or a letter of the table, at most MAX_NAME_CHARS of them (the bytes then are at most 96 as well: a letter is 2 or 3 bytes)
-    function isWireName(text, maxChars) {
+    // Whether a string is a name that the wire takes: every character printable ASCII or a letter of the table, at most `maxChars` characters (MAX_NAME_CHARS by default) and `maxBytes` bytes (MAX_NAME_BYTES, 96, by default;
+    // a room's notice, which names people, has 240: net::valid_wire_name has the same two limits)
+    function isWireName(text, maxChars, maxBytes) {
         var points = codePoints(text), i;
         if (!points || points.length > (maxChars || MAX_NAME_CHARS)) return false;
         for (i = 0; i < points.length; i++) { if (!isWireCodePoint(points[i])) return false; }
-        return utf8Of(points).length <= MAX_NAME_BYTES;
+        return utf8Of(points).length <= (maxBytes || MAX_NAME_BYTES);
     }
     // The characters of a string that a name on the wire may hold, at most `max` of them (the page's own cut, as the game's client makes it: what is not in the table is left out)
     function wireOnly(text, max) {

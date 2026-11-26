@@ -251,7 +251,7 @@
     function decodeChat(r) {
         var sender = r.u8(), team = r.u8();
         var m = { type: 'chat', sender: sender, team: team, text: sender === ROOM_SENDER ? r.strName() : r.str8() };         // (protocol 29: the room's own notices name people, so they may hold the letters of a name)
-        if (!r.done() || m.team > 1 || (sender === ROOM_SENDER ? !NL.isWireName(m.text, MAX_CHAT) || NL.utf8Of(NL.codePoints(m.text)).length > MAX_NOTICE_BYTES : !printable(m.text, MAX_CHAT))) return null;
+        if (!r.done() || m.team > 1 || (sender === ROOM_SENDER ? !NL.isWireName(m.text, MAX_CHAT, MAX_NOTICE_BYTES) : !printable(m.text, MAX_CHAT))) return null;
         m.team = m.team === 1;
         return m;
     }

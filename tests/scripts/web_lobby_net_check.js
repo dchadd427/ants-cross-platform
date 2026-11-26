@@ -167,6 +167,15 @@ same('pong decodes as a pong', N.decode(bytesOf('pong')), { type: 'pong', nonce:
 same('chat notice of the room', N.decode(bytesOf('chat-notice-from-room')), { type: 'chat', sender: 255, team: false, text: 'Priya\'s game did not come in time.' });
 same('chat of a player', N.decode(bytesOf('chat-plain')), { type: 'chat', sender: 0, team: false, text: 'hello there' });
 check('the server sentence of the back-off fits a chat line', (N.decode(bytesOf('chat-notice-fits')) || {}).text === 'The match could not start a few times in a row: try again in a minute.');
+{   // a notice of the room may name people, so it has up to 100 characters and 240 bytes (net::kMaxChatChars, kMaxNoticeBytes), not the 96 bytes of a name
+    const notice = (text) => { const b = Buffer.from(text, 'utf8'); return Uint8Array.from([9, 255, 0, b.length, ...b]); };
+    const got = (text) => { const m = N.decode(notice(text)); return m && m.text; };
+    same('a notice of 100 characters and 100 bytes (more than a name may have) is a notice', got('x'.repeat(100)), 'x'.repeat(100));
+    same('... one of 100 letters of two bytes (200 bytes) is too', got('\u00eb'.repeat(100)), '\u00eb'.repeat(100));
+    same('... one of 80 letters of three bytes (240 bytes) is the longest that there is', got('\u1ea0'.repeat(80)), '\u1ea0'.repeat(80));
+    same('... one of 81 letters of three bytes (243 bytes), one of 101 characters and one with a letter outside the table are no notice', [got('\u1ea0'.repeat(81)), got('x'.repeat(101)), got('hello \u03a3')], [null, null, null]);
+    same('a line of a player is a line of printable ASCII of up to 100 characters and nothing else', [(N.decode(Uint8Array.from([9, 0, 0, 100, ...Buffer.from('y'.repeat(100))])) || {}).text, N.decode(Uint8Array.from([9, 0, 0, 2, ...Buffer.from('\u00eb')]))], ['y'.repeat(100), null]);
+}
 same('begin is a message that a page does not use', N.decode(bytesOf('begin')), { type: 'other', code: 15 });
 same('... with the seconds of the countdown (protocol 21) it is still one', N.decode(bytesOf('begin-countdown')), { type: 'other', code: 15 });
 check('welcome of a game\'s Hello is not in the golden file of a page', golden['game-joins'] !== undefined);

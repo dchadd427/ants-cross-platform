@@ -205,6 +205,38 @@ class TheStore(Base):
         self.assertTrue(s.nick_row(ANNA_ID) is None and s.nick_owner("zoe") is None and s.nick_owner("wren") is None)
         self.assertEqual(s.nick_owner("pip"), (BEN_ID, "pip"))
 
+    def test_a_login_name_is_claimed_by_one_account_on_its_lookalike_key_for_a_time(self):
+        s = self.w.store
+        now = int(s.clock())
+        self.assertTrue(s.login_claim(ANNA_ID, "maple", now + 1000))
+        self.assertFalse(s.login_claim(BEN_ID, "maple", now + 1000))                                  # (the key is Anna's)
+        self.assertTrue(s.login_claim(ANNA_ID, "maple", now + 1000))                                  # (and she keeps it)
+        self.assertTrue(s.login_claim(BEN_ID, "oak", now + 1000))
+        self.assertTrue(s.login_claim(ANNA_ID, "birch", now + 1000))                                  # (one claim for an account: the old key goes)
+        self.assertTrue(s.login_claim(BEN_ID, "maple", now + 1000))
+        self.assertFalse(s.login_claim(ANNA_ID, "oak", now + 1000) and s.login_claim(ANNA_ID, "maple", now + 1000))
+        self.w.wall.now += 1001
+        self.assertTrue(s.login_claim(CLEO_ID, "maple", now + 5000))                                  # (a claim that nobody renewed has ended)
+
+    def test_a_claim_that_is_renewed_within_the_hour_writes_nothing_and_one_that_is_older_is_renewed(self):
+        s = self.w.store
+        now = int(s.clock())
+        self.assertTrue(s.login_claim(ANNA_ID, "maple", now + 10 * 86400))
+        before = s.db.execute("SELECT until FROM login_claim WHERE account = ?", (ANNA_ID,)).fetchone()[0]
+        self.w.wall.now += 60
+        self.assertTrue(s.login_claim(ANNA_ID, "maple", now + 10 * 86400 + 60))
+        self.assertEqual(s.db.execute("SELECT until FROM login_claim WHERE account = ?", (ANNA_ID,)).fetchone()[0], before)
+        self.w.wall.now += 7200
+        self.assertTrue(s.login_claim(ANNA_ID, "maple", now + 10 * 86400 + 7260))
+        self.assertGreater(s.db.execute("SELECT until FROM login_claim WHERE account = ?", (ANNA_ID,)).fetchone()[0], before)
+
+    def test_forget_me_takes_the_claim_of_a_login_name_too(self):
+        s = self.w.store
+        now = int(s.clock())
+        s.login_claim(ANNA_ID, "maple", now + 1000)
+        s.forget(ANNA_ID)
+        self.assertTrue(s.login_claim(BEN_ID, "maple", now + 1000))
+
     def test_a_store_that_never_had_a_nickname_has_no_table_and_answers_for_nothing(self):
         s = self.w.store
         self.assertFalse(s.has_nicknames())
@@ -463,6 +495,31 @@ class TheShownName(Base):
         own = self.w.chat.nicknames.dress(session.Identity(ANNA_ID, "Mary Jane", False, None, 0, "anna", "display", "anna"))
         self.assertEqual((own.name, own.nick, own.other), ("Mary Jane", "Mary Jane", ""))
 
+    def test_the_name_that_is_shown_is_the_one_that_is_checked_the_display_name_or_the_username_and_a_capital_i_is_an_l(self):
+        self.choose(self.anna, "Alice")
+        n = self.w.chat.nicknames
+
+        def who(account, name, username, pick="display"):
+            return session.Identity(account, name, False, None, 0, username, pick, username if pick == "display" else "")
+        shown = n.dress(who("8421000099990011", "AIice", "aiice.q"))
+        self.assertEqual((shown.name, shown.pick, shown.other), ("aiice.q", "username", ""))                       # (a capital I for the l of Alice: the display name is a lookalike)
+        shown = n.dress(who("8421000099990012", "A1ice", "a1ice.q"))
+        self.assertEqual(shown.name, "a1ice.q")
+        # no display name: the shown name is the username, and it is the one that is checked
+        shown = n.dress(who("8421000099990013", "alice.", "alice.", pick=""))
+        self.assertEqual((shown.name, shown.pick), ("alice. (Discord)", "username"))
+        # a username that the person picked, and the display name that it would be switched to: the shown one is checked
+        shown = n.dress(who("8421000099990014", "A.lice", "a.lice", pick="username"))
+        self.assertEqual(shown.name, "a.lice (Discord)")
+        # the display name and the username both look like the nickname: neither is shown as it is
+        shown = n.dress(who("8421000099990015", "AIice", "a.l.i.c.e"))
+        self.assertEqual((shown.name, shown.pick, shown.other), ("a.l.i.c.e (Discord)", "username", ""))
+        # a name that is nobody's lookalike is shown as it is, and the account that holds the nickname is never a lookalike of itself
+        fine = who("8421000099990016", "Alicia", "alicia.q")
+        self.assertEqual(n.dress(fine), fine)
+        own = n.dress(who(ANNA_ID, "AIice", "anna"))
+        self.assertEqual((own.name, own.nick), ("Alice", "Alice"))
+
     def test_an_account_that_has_a_nickname_is_not_offered_the_switch_of_its_two_login_names(self):
         a = self.w.join(session.Identity(ANNA_ID, "Anna Smith", False, None, 0, "anna", "display", "anna"))
         self.assertEqual(self.you(a)["other"], "anna")
@@ -542,6 +599,61 @@ class ThePass(Base):
         self.choose(self.ben, "Zo\u00eb")
         self.assertEqual(n.play_name(who("Zo\u00eb", "maple.leaf")), "maple.leaf")                                    # (a lookalike of somebody's nickname)
         self.assertEqual(n.play_name(who("Zoe", "zo.e", "zo.e")), None)                                              # (and when the username is one too, no name fits: the page plays as a guest)
+
+    def test_a_login_name_is_played_under_only_by_the_rules_of_a_nickname(self):
+        n = self.w.chat.nicknames
+
+        def who(name, account="8421000099990030"):
+            return session.Identity(account, name, False, None, 0, "maple.leaf", "display", "maple.leaf")
+        for name in ("Owner", "Developer", "Host", "Nobody", "Player", "Bot", "Computer", "butt", "A" * 17, "Maple Leaf Maple Leaf", "Alex\u0438s", "Maple ", " Maple", "Ma  ple", "Maple!", "Zo\u00eb\u0301"):
+            self.assertEqual(n.play_name(who(name)), "maple.leaf", repr(name))
+        for name in ("Maple", "Maple Leaf", "Zo\u00eb", "\u0401\u0436\u0438\u043a", "A" * 16, "abc"):
+            self.assertEqual(n.play_name(who(name)), name, repr(name))
+        self.assertIsNone(n.play_name(session.Identity("8421000099990031", "Owner", False, None, 0, "admin", "display", "admin")))      # (no name fits: the page plays as a guest)
+
+    def test_two_accounts_with_one_display_name_are_not_both_passed_for_it(self):
+        n = self.w.chat.nicknames
+        n.pass_maker = namepass.Maker(SECRET)
+
+        def who(account, name, username):
+            return session.Identity(account, name, False, None, 0, username, "display", username)
+        first, second, third = who("8421000099990041", "Maple Leaf", "maple.a"), who("8421000099990042", "Maple Leaf", "maple.b"), who("8421000099990043", "Maple.Leaf", "maple.c")
+        self.assertEqual(n.play(first)["name"], "Maple Leaf")
+        self.assertEqual(n.play(second)["name"], "maple.b")                                              # (the first account has the name)
+        self.assertEqual(n.play(third)["name"], "maple.c")                                               # (and a lookalike of it)
+        self.assertEqual(n.play(first)["name"], "Maple Leaf")                                            # (it keeps it as long as it asks)
+        self.later(86400)
+        self.assertEqual(n.play(first)["name"], "Maple Leaf")
+        self.later(29 * 86400)
+        self.assertEqual(n.play(second)["name"], "maple.b")                                              # (29 days since the first asked: the claim is still hers)
+        self.later(2 * 86400)
+        self.assertEqual(n.play(second)["name"], "Maple Leaf")                                           # (nobody asked for it for 30 days: it is free)
+        self.assertEqual(n.play(first)["name"], "maple.a")
+        # a person who shows another name gives the old one up at once
+        self.assertEqual(n.play(who("8421000099990042", "Oak Leaf", "maple.b"))["name"], "Oak Leaf")
+        self.assertEqual(n.play(first)["name"], "Maple Leaf")
+
+    def test_a_store_that_cannot_claim_leaves_the_person_to_play_as_a_guest_and_the_hub_is_told(self):
+        from hub.store import StoreError
+        told = []
+        self.w.chat.on_store_error = told.append
+
+        def refuse(*args, **kwargs):
+            raise StoreError("locked")
+        self.w.store.login_claim = refuse
+        n = self.w.chat.nicknames
+        self.assertIsNone(n.play_name(session.Identity("8421000099990061", "Maple Leaf", False, None, 0, "maple.a", "display", "maple.a")))
+        self.assertEqual(len(told), 3)                                                                   # (the three names were tried, and each failure was said)
+
+    def test_a_nickname_does_not_give_way_to_a_login_name_that_somebody_is_passed_for(self):
+        n = self.w.chat.nicknames
+
+        def who(account, name, username):
+            return session.Identity(account, name, False, None, 0, username, "display", username)
+        first = who("8421000099990051", "Maple Leaf", "maple.a")
+        self.assertEqual(n.play_name(first), "Maple Leaf")
+        self.choose(self.ben, "Maple Leaf")                                                              # (a nickname is the person's own: the claim does not stand in its way)
+        self.assertEqual(n.play_name(first), "maple.a")                                                  # (and the login name is a lookalike of a nickname now: the username)
 
     def test_play_gives_the_pass_only_where_the_hub_has_the_key(self):
         n = self.w.chat.nicknames

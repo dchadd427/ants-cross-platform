@@ -262,8 +262,8 @@
   {
    "id": "load_failed_without_a_name_cut",
    "file": "src/ants_server/room.cpp",
-   "old": "    if (fixed < net::kMaxChatChars && name.size() > net::kMaxChatChars - fixed) name.resize(net::kMaxChatChars - fixed);\n",
-   "new": "    if (false && fixed < net::kMaxChatChars && name.size() > net::kMaxChatChars - fixed) name.resize(net::kMaxChatChars - fixed);\n",
+   "old": "    if (fixed < net::kMaxChatChars && net::utf8_length(name)",
+   "new": "    if (false && fixed < net::kMaxChatChars && net::utf8_length(name)",
    "build": [
     "test_server"
    ],

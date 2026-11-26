@@ -283,26 +283,14 @@
   {
    "id": "a_login_name_that_looks_like_a_nickname_is_shown",
    "file": "hub/nicknames.py",
-   "old": "if who.name != who.username and self.owner_of(who.name, who.account_id) is not None:",
-   "new": "if False:"
+   "old": "        if self.owner_of(who.name, who.account_id) is None:\n            return who._replace(nick=\"\", tag=\"\")",
+   "new": "        if True:\n            return who._replace(nick=\"\", tag=\"\")"
   },
   {
    "id": "the_game_plays_a_login_name_that_is_a_lookalike",
    "file": "hub/nicknames.py",
-   "old": "return self.owner_of(name, account) is None",
-   "new": "return True"
-  },
-  {
-   "id": "the_game_plays_a_reserved_login_name",
-   "file": "hub/nicknames.py",
-   "old": "if name != name.strip(\" \") or text.reserved(name) or",
-   "new": "if name != name.strip(\" \") or"
-  },
-  {
-   "id": "the_game_plays_a_login_name_of_one_letter",
-   "file": "hub/nicknames.py",
-   "old": "not 2 <= len(name) <= 24",
-   "new": "not 1 <= len(name) <= 24"
+   "old": "        return nick == name and self.owner_of(name, account) is None",
+   "new": "        return nick == name"
   },
   {
    "id": "the_nickname_is_not_what_the_game_plays",
@@ -411,6 +399,178 @@
    "file": "hub/commands.py",
    "old": "Command(\"rename\", 1,",
    "new": "Command(\"rename\", 2,"
+  },
+  {
+   "id": "a_shown_username_is_not_checked",
+   "file": "hub/nicknames.py",
+   "old": "        if self.owner_of(who.name, who.account_id) is None:\n            return who._replace(nick=\"\", tag=\"\")",
+   "new": "        if who.name == who.username or self.owner_of(who.name, who.account_id) is None:\n            return who._replace(nick=\"\", tag=\"\")"
+  },
+  {
+   "id": "a_lookalike_username_is_shown_as_it_is",
+   "file": "hub/nicknames.py",
+   "old": "        return who._replace(name=nickrules.login_shown(who.username), pick=\"username\", other=\"\", nick=\"\", tag=\"\")",
+   "new": "        return who._replace(name=who.username, pick=\"username\", other=\"\", nick=\"\", tag=\"\")"
+  },
+  {
+   "id": "a_username_that_looks_like_a_nickname_replaces_the_name",
+   "file": "hub/nicknames.py",
+   "old": "        if who.username != who.name and self.owner_of(who.username, who.account_id) is None:",
+   "new": "        if who.username != who.name:"
+  },
+  {
+   "id": "a_login_has_no_mark_when_both_names_look_like_a_nickname",
+   "file": "hub/nickrules.py",
+   "old": "LOGIN_SUFFIX = \" (Discord)\"",
+   "new": "LOGIN_SUFFIX = \"\""
+  },
+  {
+   "id": "a_login_name_has_no_rules_of_a_nickname",
+   "file": "hub/nicknames.py",
+   "old": "        nick, _ = nickrules.check_nickname(name)\n        return nick == name and self.owner_of(name, account) is None",
+   "new": "        return 2 <= len(name) <= 24 and self.owner_of(name, account) is None"
+  },
+  {
+   "id": "a_login_name_is_cut_or_made_over_and_played",
+   "file": "hub/nicknames.py",
+   "old": "        nick, _ = nickrules.check_nickname(name)\n        return nick == name and self.owner_of(name, account) is None",
+   "new": "        nick, _ = nickrules.check_nickname(name)\n        return nick is not None and self.owner_of(name, account) is None"
+  },
+  {
+   "id": "a_login_name_is_not_claimed",
+   "file": "hub/nicknames.py",
+   "old": "            if name and self.fits_game(name, who.account_id) and self.claim(who.account_id, name):",
+   "new": "            if name and self.fits_game(name, who.account_id):"
+  },
+  {
+   "id": "a_claim_is_on_the_name_and_not_its_lookalike_key",
+   "file": "hub/nicknames.py",
+   "old": "self.chat.store.login_claim(account, text.squash(name), self.wall() + CLAIM_SECONDS)",
+   "new": "self.chat.store.login_claim(account, name, self.wall() + CLAIM_SECONDS)"
+  },
+  {
+   "id": "a_claim_lasts_40_days",
+   "file": "hub/nicknames.py",
+   "old": "CLAIM_SECONDS = 30 * 86400",
+   "new": "CLAIM_SECONDS = 40 * 86400"
+  },
+  {
+   "id": "a_claim_lasts_29_days",
+   "file": "hub/nicknames.py",
+   "old": "CLAIM_SECONDS = 30 * 86400",
+   "new": "CLAIM_SECONDS = 29 * 86400"
+  },
+  {
+   "id": "a_store_that_fails_gives_the_claim",
+   "file": "hub/nicknames.py",
+   "old": "                self.chat.on_store_error(e)\n            return False\n\n    def play_name",
+   "new": "                self.chat.on_store_error(e)\n            return True\n\n    def play_name"
+  },
+  {
+   "id": "a_claim_of_another_account_is_ignored",
+   "file": "hub/store/sqlite.py",
+   "old": "            if self.db.execute(\"SELECT 1 FROM login_claim WHERE key = ? AND account != ?\", (key, account)).fetchone() is not None:\n                return False",
+   "new": "            if False:\n                return False"
+  },
+  {
+   "id": "a_claim_is_always_written",
+   "file": "hub/store/sqlite.py",
+   "old": "        if row is not None and row[0] == key and row[1] > int(until) - 3600 and row[1] > int(self.clock()):",
+   "new": "        if False:"
+  },
+  {
+   "id": "a_claim_is_never_renewed_in_the_hour",
+   "file": "hub/store/sqlite.py",
+   "old": "        if row is not None and row[0] == key and row[1] > int(until) - 3600 and row[1] > int(self.clock()):",
+   "new": "        if row is not None and row[0] == key and row[1] > int(self.clock()):"
+  },
+  {
+   "id": "a_claim_that_ended_is_kept",
+   "file": "hub/store/sqlite.py",
+   "old": "            self.db.execute(\"DELETE FROM login_claim WHERE until <= ?\", (int(self.clock()),))\n",
+   "new": ""
+  },
+  {
+   "id": "forget_me_leaves_the_claim",
+   "file": "hub/store/sqlite.py",
+   "old": "                self.db.execute(\"DELETE FROM login_claim WHERE account = ?\", (account,))",
+   "new": "                pass"
+  },
+  {
+   "id": "an_account_keeps_two_claims",
+   "file": "hub/store/sqlite.py",
+   "old": "ON CONFLICT (account) DO UPDATE SET key = excluded.key, until = excluded.until\", (account, key, int(until)))\n        return True",
+   "new": "ON CONFLICT (account) DO UPDATE SET until = excluded.until\", (account, key, int(until)))\n        return True"
+  },
+  {
+   "id": "the_l_is_not_the_i",
+   "file": "hub/text.py",
+   "old": "LOOKALIKE = str.maketrans(\"013457l\", \"oieasti\")",
+   "new": "LOOKALIKE = str.maketrans(\"013457\", \"oieast\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "a_one_is_not_the_i",
+   "file": "hub/text.py",
+   "old": "LOOKALIKE = str.maketrans(\"013457l\", \"oieasti\")",
+   "new": "LOOKALIKE = str.maketrans(\"03457l\", \"oeasti\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "a_barred_d_is_not_a_d",
+   "file": "hub/text.py",
+   "old": "(\"d\", \"\\u0501\\u0500\\u00d0\\u00f0\\u0110\\u0111\")",
+   "new": "(\"d\", \"\\u0501\\u0500\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "a_slashed_o_is_not_an_o",
+   "file": "hub/text.py",
+   "old": "\\u043e\\u041e\\u03bf\\u039f\\u00d8\\u00f8\")",
+   "new": "\\u043e\\u041e\\u03bf\\u039f\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "a_barred_l_is_not_an_l",
+   "file": "hub/text.py",
+   "old": "(\"l\", \"\\u0141\\u0142\"), ",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "a_barred_h_is_not_an_h",
+   "file": "hub/text.py",
+   "old": "\\u04bb\\u04ba\\u0397\\u0126\\u0127\")",
+   "new": "\\u04bb\\u04ba\\u0397\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "a_barred_t_is_not_a_t",
+   "file": "hub/text.py",
+   "old": "\\u03c4\\u03a4\\u0166\\u0167\")",
+   "new": "\\u03c4\\u03a4\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "a_soft_sign_is_not_a_b",
+   "file": "hub/text.py",
+   "old": "(\"b\", \"\\u0412\\u0392\\u042c\\u044c\")",
+   "new": "(\"b\", \"\\u0412\\u0392\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "a_cyrillic_ze_is_not_a_three",
+   "file": "hub/text.py",
+   "old": "\\u03b5\\u0395\\u0417\\u0437\")",
+   "new": "\\u03b5\\u0395\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "a_middle_dot_is_a_letter_of_the_name",
+   "file": "hub/text.py",
+   "old": "re.sub(\"[ ._'\\u02bb\\u02bc\\u00b7-]\", \"\"",
+   "new": "re.sub(\"[ ._'\\u02bb\\u02bc-]\", \"\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest -f tests.scripts.test_hub_text"
   }
  ]
 }

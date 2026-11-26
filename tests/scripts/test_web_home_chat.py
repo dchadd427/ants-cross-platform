@@ -554,7 +554,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     copy with nothing changed must pass"""
     FILES = (["tools/size_limits.py", "web/lobby.html", "web/front/name_letters.js", "web/home/names.js", "web/home/names.css", "web/rejoin_key.js", "web/alert_core.js", "web/hub_here.js", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/talk.css", "web/home/players.css", "web/home/players.js", "web/home/cmds.js", "web/home/cmds.css", "web/home/pics.js", "web/home/pics.css", "web/home/post.js", "web/home/post.css", "tests/scripts/test_web_home_chat.py", "tests/scripts/test_hub_text.py", "tests/scripts/web_home_chat_check.js",
               "tests/scripts/web_home_chat_hub_check.js", "tests/scripts/web_page_harness.js", "tests/scripts/fake_hub.js", "tests/scripts/mini_websocket.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
-              "docs/HOME_SCREEN.md", "docs/HOME_CHAT.md", "hub/__init__.py", "hub/text.py", "web/matches.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html", "web/admin_page.js"]
+              "docs/HOME_SCREEN.md", "docs/HOME_CHAT.md", "hub/__init__.py", "hub/text.py", "hub/name_letters.py", "web/matches.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html", "web/admin_page.js"]
              + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "room_fog.js", "room_sheet.js", "seat_menu.js", "map_picker.js", "map_maker_link.js", "mapmaker_ai.js")])
 
     @classmethod

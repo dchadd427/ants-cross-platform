@@ -36,12 +36,12 @@ FOLDED = str.maketrans({"\u2018": "'", "\u2019": "'", "\u2010": "-", "\u2012": "
 INVISIBLE_MARKS = frozenset([chr(c) for c in (*range(0x180b, 0x180e), 0x180f, *range(0xfe00, 0xfe10), *range(0xe0100, 0xe01f0), 0x16fe4)])      # (the variation selectors and the Khitan filler: marks that show nothing)
 
 RESERVED = frozenset(("mod", "admin", "moderator", "administrator", "system", "server", "staff", "ants", "ants.bot", "hub", "everyone", "here"))      # (names that could pass for the hub's own voice)
-LOOKALIKE = str.maketrans("013457", "oieast")           # (0 o, 1 i, 3 e, 4 a, 5 s, 7 t: a digit for the letter that it looks like)
+LOOKALIKE = str.maketrans("013457l", "oieasti")           # (a digit for the letter that it looks like: 0 o, 1 i, 3 e, 4 a, 5 s, 7 t; and the l is the i, which a capital I and a 1 are drawn like in this face: "AIice" is "Alice")
 LOOKALIKE_LETTERS = (                                   # the Latin letter, and the letters of other scripts (Cyrillic, Greek, the dotless i) that are drawn like it, in both cases
-    ("a", "\u0430\u0410\u03b1\u0391"), ("b", "\u0412\u0392"), ("c", "\u0441\u0421\u03f2\u03f9"), ("d", "\u0501\u0500"), ("e", "\u0435\u0415\u03b5\u0395"), ("f", "\u03dc\u03dd"), ("h", "\u043d\u041d\u04bb\u04ba\u0397"),
-    ("i", "\u0456\u0406\u04cf\u04c0\u03b9\u0399\u0131"), ("j", "\u0458\u0408"), ("k", "\u043a\u041a\u03ba\u039a"), ("m", "\u043c\u041c\u039c"), ("n", "\u03b7\u039d"), ("o", "\u043e\u041e\u03bf\u039f"),
-    ("p", "\u0440\u0420\u03c1\u03a1"), ("q", "\u051b"), ("r", "\u0433\u0413"), ("s", "\u0455\u0405"), ("t", "\u0442\u0422\u03c4\u03a4"), ("u", "\u03bc\u03c5"), ("v", "\u0475\u0474\u03bd"),
-    ("w", "\u051d\u03c9"), ("x", "\u0445\u0425\u03c7\u03a7"), ("y", "\u0443\u0423\u03a5\u03b3"), ("z", "\u0396"))
+    ("a", "\u0430\u0410\u03b1\u0391"), ("b", "\u0412\u0392\u042c\u044c"), ("c", "\u0441\u0421\u03f2\u03f9"), ("d", "\u0501\u0500\u00d0\u00f0\u0110\u0111"), ("e", "\u0435\u0415\u03b5\u0395\u0417\u0437"), ("f", "\u03dc\u03dd"), ("h", "\u043d\u041d\u04bb\u04ba\u0397\u0126\u0127"),
+    ("i", "\u0456\u0406\u04cf\u04c0\u03b9\u0399\u0131"), ("j", "\u0458\u0408"), ("k", "\u043a\u041a\u03ba\u039a\u0138"), ("m", "\u043c\u041c\u039c"), ("n", "\u03b7\u039d\u043f\u014a\u014b"), ("o", "\u043e\u041e\u03bf\u039f\u00d8\u00f8"),
+    ("p", "\u0440\u0420\u03c1\u03a1\u00de\u00fe"), ("q", "\u051b"), ("r", "\u0433\u0413\u0490\u0491"), ("s", "\u0455\u0405"), ("t", "\u0442\u0422\u03c4\u03a4\u0166\u0167"), ("u", "\u03bc\u03c5"), ("v", "\u0475\u0474\u03bd"),
+    ("w", "\u051d\u03c9"), ("x", "\u0445\u0425\u03c7\u03a7"), ("y", "\u0443\u0423\u03a5\u03b3"), ("z", "\u0396"), ("l", "\u0141\u0142"), ("ae", "\u00c6\u00e6"), ("oe", "\u0152\u0153"), ("ss", "\u00df"))
 SCRIPT_LOOKALIKE = {ord(other): latin for latin, others in LOOKALIKE_LETTERS for other in others}
 
 
@@ -86,10 +86,10 @@ def valid_name(name):
 def squash(name):
     """What a name looks like at a glance: no dots, underscores, hyphens, apostrophes (the letters that are drawn as one too) or spaces, no accents, a letter of another script for the Latin letter that it is drawn like (see
     LOOKALIKE_LETTERS), a digit for the letter that it looks like read as that letter ("adm1n", "admin.", "a.d.m.i.n", "system_", "\u0410dmin" with a Cyrillic A are all "admin" and "system" to a
-    reader). Digits at the end are not dropped: "system32", "hub99" and "ants1998" are names of real people, and a lookalike gains nothing (a moderator is the hub's `mod` flag, by Discord id,
+    reader); the l, the capital I and the 1 are one letter here ("AIice" is "Alice"), as the bar-through letters (\u0141, \u00d8, \u0110) are the letters that they bar. Digits at the end are not dropped: "system32", "hub99" and "ants1998" are names of real people, and a lookalike gains nothing (a moderator is the hub's `mod` flag, by Discord id,
     never a name)."""
     plain = "".join(c for c in unicodedata.normalize("NFKD", name) if not unicodedata.category(c).startswith("M"))
-    return re.sub("[ ._'\u02bb\u02bc-]", "", plain.translate(SCRIPT_LOOKALIKE).lower()).translate(LOOKALIKE)
+    return re.sub("[ ._'\u02bb\u02bc\u00b7-]", "", plain.translate(SCRIPT_LOOKALIKE).lower()).translate(LOOKALIKE)
 
 
 RESERVED_SQUASHED = frozenset(squash(n) for n in RESERVED)
