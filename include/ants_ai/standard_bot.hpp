@@ -59,6 +59,7 @@
 #include "ants_ai/refusal_memory.hpp"
 #include "ants_ai/thief_guard.hpp"
 #include "ants_ai/standard_tasks.hpp"
+#include "ants_ai/strip_task.hpp"
 #include "ants_ai/tactics.hpp"
 #include "ants_ai/tasks.hpp"
 
@@ -112,7 +113,8 @@ private:
           contact_(kContact, tactics_),
           idle_jobs_(kIdleJobs, tactics_),
           power_stand_(kPowerStand, tactics_),
-          fight_plan_(kFightPlan, tactics_) {
+          fight_plan_(kFightPlan, tactics_),
+          strip_(kStrip, tactics_) {
         thief_guard_.attach(&walls_);
         island_.attach(&harvest_);
         expedition_.attach(&island_);
@@ -171,6 +173,7 @@ public:
     const IdleJobsTask& idle_jobs() const noexcept { return idle_jobs_; }
     const PowerStandTask& power_stand() const noexcept { return power_stand_; }
     const FightPlanTask& fight_plan() const noexcept { return fight_plan_; }
+    const StripTask& strip() const noexcept { return strip_; }
     FreeThiefTask& free_thief_for_labs() noexcept { return free_thief_; }
     /// Whether the bot plays the gate goals on this map (Medium and Hard, a walled map that the island play does not own; known after the first look)
     bool gate_map() const noexcept { return tactics_.gate_map; }
@@ -229,6 +232,7 @@ public:
     static constexpr TaskId kIdleJobs = 32;
     static constexpr TaskId kPowerStand = 33;
     static constexpr TaskId kFightPlan = 34;
+    static constexpr TaskId kStrip = 35;
     static constexpr TaskId kHeal = kHealTaskId;                  // (23: tasks.hpp names it for the tasks that leave a carrier to it)
 
 private:
@@ -393,6 +397,7 @@ private:
     IdleJobsTask idle_jobs_;
     PowerStandTask power_stand_;
     FightPlanTask fight_plan_;
+    StripTask strip_;
     RefusalMemory refusals_;
     void note_repeat(const sim::Command& command, uint64_t tick);
     void update_progress(const BotView& view);

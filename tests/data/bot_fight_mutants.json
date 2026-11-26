@@ -216,6 +216,42 @@
    "build": "test_ai",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI60.1 ' ./build/tests/test_ai/test_ai",
    "expect": "AI60.1"
+  },
+  {
+   "id": "strip_strikes_without_an_edge",
+   "file": "src/ants_ai/strip_task.cpp",
+   "old": "const bool edge = ours.n > 0 && ours.value() * 100u >= theirs.value() * plan.strip_edge_percent;",
+   "new": "const bool edge = ours.n > 0;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI61.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI61.2"
+  },
+  {
+   "id": "strip_never_leaves",
+   "file": "src/ants_ai/strip_task.cpp",
+   "old": "} else if (losing && hill.present) {",
+   "new": "} else if (losing && false) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI61.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI61.2"
+  },
+  {
+   "id": "strip_no_help_from_the_posts_near",
+   "file": "src/ants_ai/strip_task.cpp",
+   "old": "m.tile.chebyshev_dist(drop) > plan.strip_help_reach) continue;",
+   "new": "m.tile.chebyshev_dist(drop) > plan.strip_radius) continue;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI61.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI61.3"
+  },
+  {
+   "id": "strip_master_switch_ignored",
+   "file": "src/ants_ai/strip_task.cpp",
+   "old": "if (!plan.strip_fight || !v.has_grid() || v.game_mode() != sim::GameMode::HighestScore) {",
+   "new": "if (false || !v.has_grid() || v.game_mode() != sim::GameMode::HighestScore) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI61.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI61.1"
   }
  ]
 }

@@ -170,6 +170,7 @@ void SwarmTask::step(TaskContext& c) {
             size_t best_link = 0;
             for (size_t i = 0; i < links; ++i) {
                 if (at_link[i] >= plan.island_swarm_stage) continue;
+                if (plan.strip_fight && tactics_.strip_closed(tactics_.flower_links[i].drop, now)) continue;                   // (the strip that the bot left because it was losing the fight there: plan.strip_fight)
                 const std::vector<int32_t>& f = field_for(c, i);
                 const int32_t cost = f.empty() ? -1 : f[static_cast<size_t>(index_of(grid, a.tile))];
                 if (cost < 0 || static_cast<uint32_t>(MapInfo::walking_ticks(cost)) > params_.max_walk_ticks) continue;

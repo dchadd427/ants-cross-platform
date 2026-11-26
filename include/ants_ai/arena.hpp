@@ -320,12 +320,18 @@ struct FightBatchResult {
     uint32_t plan_skipped{0};
     uint32_t plan_pulls{0};
     uint32_t plan_attacks{0};
+    uint32_t strip_contests{0};                // rule 3 (StripTask): the looks at which an own and an enemy ant waited at a flower, those at which the own side struck, those at which it left (each ant), the ants from beyond the strip
+    uint32_t strip_strikes{0};                 // ... that joined a strike, and the attack orders given
+    uint32_t strip_leaves{0};
+    uint32_t strip_helped{0};
+    uint32_t strip_attacks{0};
 };
 
 inline bool operator==(const FightBatchResult& a, const FightBatchResult& b) noexcept {
     bool same = a.foot_plugs == b.foot_plugs && a.loads_released == b.loads_released && a.return_tiles == b.return_tiles;
     same = same && a.stand_chains == b.stand_chains && a.stand_held == b.stand_held && a.stand_missed == b.stand_missed && a.stand_taken == b.stand_taken && a.stand_refuge == b.stand_refuge && a.stand_deny == b.stand_deny;
     same = same && a.plan_engagements == b.plan_engagements && a.plan_fights == b.plan_fights && a.plan_skipped == b.plan_skipped && a.plan_pulls == b.plan_pulls && a.plan_attacks == b.plan_attacks;
+    same = same && a.strip_contests == b.strip_contests && a.strip_strikes == b.strip_strikes && a.strip_leaves == b.strip_leaves && a.strip_helped == b.strip_helped && a.strip_attacks == b.strip_attacks;
     return same;
 }
 

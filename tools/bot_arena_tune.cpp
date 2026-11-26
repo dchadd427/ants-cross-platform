@@ -160,6 +160,13 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "fpbridge") return flag(p.fp_bridge_hold);
     if (key == "fpguard") return flag(p.fp_guard);
     if (key == "fpspare") return flag(p.fp_spare_only);
+    if (key == "sfight") return flag(p.strip_fight);                                // the contest at a flower strip (docs/BOT_CONTEST.md): the master switch, on in the plan of Hard (0: the bot as it was)
+    if (key == "sradius") { p.strip_radius = static_cast<int32_t>(v); return true; }
+    if (key == "sreach") { p.strip_help_reach = static_cast<int32_t>(v); return true; }
+    if (key == "sforce") { p.strip_max_force = static_cast<uint32_t>(v); return true; }
+    if (key == "sedge") { p.strip_edge_percent = static_cast<uint32_t>(v); return true; }
+    if (key == "sleave") { p.strip_leave_percent = static_cast<uint32_t>(v); return true; }
+    if (key == "sclose") { p.strip_close_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "bloaded") return flag(p.bridge_loaded);                             // an ant that holds a load gets a bridge home, with one Swimmer (0: the bot as it was; docs/BOT_UNSTUCK.md)
     if (key == "bholdrel") { p.bridge_hold_release = static_cast<uint32_t>(v); return true; }
     if (key == "foot") return flag(p.bridge_foot);                                  // an ant with a load or in the can't-go clip steps back off the foot of a bridge (0: the bot as it was; docs/BOT_UNSTUCK.md)

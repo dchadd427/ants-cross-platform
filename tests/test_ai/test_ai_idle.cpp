@@ -705,7 +705,10 @@ void run_idle_tests() {
                     spec.bots.push_back(b);
                 }
                 spec.factory = [rule](const BotSpec& b) {
-                    return std::unique_ptr<Bot>(std::make_unique<StandardBot>(b.level, Style::Random, [rule](LevelPlan& plan) { plan.bridge_loaded = rule == 1; }));
+                    return std::unique_ptr<Bot>(std::make_unique<StandardBot>(b.level, Style::Random, [rule](LevelPlan& plan) {
+                        plan.bridge_loaded = rule == 1;
+                        plan.strip_fight = false;                                                    // (the fight at a strip is another rule: the two matches whose guard held a load are those of the plan before it)
+                    }));
                 };
                 const ArenaResult r = play_match(spec);
                 ASSERT_TRUE(r.error.empty());
