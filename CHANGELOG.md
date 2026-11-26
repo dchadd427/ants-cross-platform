@@ -31,6 +31,9 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - **Copy link on a phone.** A live view and a replay have the button in the top bar on a phone now (a share symbol, 44 px; on a computer it says Copy link as before). It opens the phone's share sheet where there is one, otherwise copies the match's address and says Copied!. The bar shows Matches and Full instead of All matches and Fullscreen on a narrow phone, so that all five buttons fit in one row.
 
+**Fixes:**
+- On a phone, a live view's "Jump to live" no longer covers the clock beside the play button: the clock keeps its room, the button goes under it when the row is short, and Picture sits beside the camera button. The speed buttons and Picture are 44 px high.
+
 ## v0.21.5 - 2026-11-24 - The Podium results, messages on phones and smarter bots
 
 **For players:**
@@ -40,7 +43,6 @@ Work that is not released yet is written in the same template under a heading th
 - **Messages are under the bell.** The bell's list has two tabs, **Alerts** and **Messages** (your conversations, with a count on the tab), and the bell's number counts both, so your messages are one press away from every view and every size. A conversation opens from there: its arrow comes back to the Messages tab and its X closes everything. The Messages button of the chat is gone. The messages and their report card have the site's own look (the dark panels, green frames and steel buttons) instead of indigo.
 
 **Fixes:**
-- On a phone, a live view's "Jump to live" no longer covers the clock beside the play button: the clock keeps its room, the button goes under it when the row is short, and Picture sits beside the camera button. The speed buttons and Picture are 44 px high.
 - Private messages on a phone: the conversation is a sheet that follows what you can see, so with the keyboard open the field sits just above it, the head with the name and the X stays on the screen and the messages fill the room over the field. The X, the arrow, Escape, a pull down on the head and the phone's Back button each close the sheet and leave you on the page where you were, not on the bell's list.
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/df4b4255...36deb771)
