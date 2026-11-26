@@ -876,6 +876,12 @@
     });
     $("btn-play").setAttribute("aria-pressed", String(state.playing));
     $("btn-grid").setAttribute("aria-pressed", String(state.showGrid));
+    const lightBtn = $("btn-light-cycle");
+    if (lightBtn) {
+      const sc = LIGHT_SCENARIOS[state.lighting] || LIGHT_SCENARIOS.daylight;
+      lightBtn.textContent = sc.label;
+      lightBtn.setAttribute("aria-pressed", String(state.lighting !== "daylight"));
+    }
     $("btn-shadows").setAttribute("aria-pressed", String(state.castShadows));
     $("btn-hires-tiles").setAttribute("aria-pressed", String(state.hiResTiles));
     $("btn-patrols").setAttribute("aria-pressed", String(state.patrols));
@@ -931,6 +937,11 @@
     state.showGrid = !state.showGrid;
     syncUi();
     setStatus(state.showGrid ? "32px tile grid overlay on" : "Tile grid overlay hidden");
+  });
+
+  $("btn-light-cycle").addEventListener("click", () => {
+    const idx = Math.max(0, LIGHT_SCENARIO_ORDER.indexOf(state.lighting));
+    applyLightingScenario(LIGHT_SCENARIO_ORDER[(idx + 1) % LIGHT_SCENARIO_ORDER.length]);
   });
 
   $("btn-reset").addEventListener("click", () => {

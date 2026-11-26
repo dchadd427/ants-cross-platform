@@ -141,8 +141,8 @@ def _build_aviator_cup(
     z_rim_front = lens_z + 0.016
 
     r_in = bore_r
-    r_can_out = bore_r + 0.0095
-    r_rim_out = bore_r + 0.0105
+    r_can_out = bore_r + 0.0145
+    r_rim_out = bore_r + 0.0165
 
     # 1. Snug dark rubber face cushion tucking neatly onto the orbital rim.
     cushion_prof = [
@@ -256,8 +256,8 @@ def _build_goggles(
     ez = 0.5 * (eye_left[2] + eye_right[2])
 
     pitch = -0.10
-    yaw_mag = 0.11
-    mount_dx = 0.0
+    yaw_mag = 0.13
+    mount_dx = 0.004
     mount_dz = 0.001
 
     max_lid_r, max_lid_z = _measure_eyelid_sweep_in_goggle_frame(
@@ -267,9 +267,9 @@ def _build_goggles(
         goggle_yaw=yaw_mag,
         mount_offset=(mount_dx, 0.0, mount_dz),
     )
-    # Compact sleek circular diameter scaled to Bomber's narrow sleek head + long metallic cans!
-    bore_r = max(0.045, max_lid_r + 0.0042)
-    lens_z = max(0.124, max_lid_z + 0.056)
+    # Chunky wide aviator goggle barrels matching 1998 abst301/abst201/abst901 front width & projection!
+    bore_r = max(0.056, max_lid_r + 0.0060)
+    lens_z = max(0.130, max_lid_z + 0.054)
 
     for side_sign, eye_pos in ((+1.0, eye_left), (-1.0, eye_right)):
         mount = (eye_pos[0] + side_sign * mount_dx, eye_pos[1], eye_pos[2] + mount_dz)
@@ -547,13 +547,13 @@ def _build_dynamite_pack(
     pack_z = bz - 0.022
     pack_rx = -0.36
 
-    pack_body = rounded_box(0.188, 0.184, 0.138, bevel=0.028, segs=4, name="pack_rucksack_body", material="prop_brown").rotate_xyz(rx=pack_rx).translate(bx, pack_y + 0.010, pack_z - 0.046)
-    pack_base = rounded_box(0.174, 0.048, 0.126, bevel=0.015, segs=3, name="pack_base_boot", material="gear_dark").rotate_xyz(rx=pack_rx).translate(bx, pack_y - 0.072, pack_z - 0.018)
-    rear_pouch = rounded_box(0.136, 0.100, 0.042, bevel=0.015, segs=3, name="pack_rear_pouch", material="prop_brown").rotate_xyz(rx=pack_rx).translate(bx, pack_y - 0.010, pack_z - 0.112)
+    pack_body = rounded_box(0.214, 0.184, 0.140, bevel=0.028, segs=4, name="pack_rucksack_body", material="prop_brown").rotate_xyz(rx=pack_rx).translate(bx, pack_y + 0.010, pack_z - 0.046)
+    pack_base = rounded_box(0.198, 0.048, 0.128, bevel=0.015, segs=3, name="pack_base_boot", material="gear_dark").rotate_xyz(rx=pack_rx).translate(bx, pack_y - 0.072, pack_z - 0.018)
+    rear_pouch = rounded_box(0.150, 0.100, 0.042, bevel=0.015, segs=3, name="pack_rear_pouch", material="prop_brown").rotate_xyz(rx=pack_rx).translate(bx, pack_y - 0.010, pack_z - 0.112)
     scene.add("dynamite_pack", [pack_body, pack_base, rear_pouch])
 
     for side_sign, tag in ((+1.0, "left"), (-1.0, "right")):
-        side_pouch = rounded_box(0.062, 0.112, 0.084, bevel=0.016, segs=3, name=f"pack_side_pouch_{tag}", material="prop_brown").rotate_xyz(rx=pack_rx, rz=-side_sign * 0.24).translate(bx + side_sign * 0.092, pack_y + 0.022, pack_z - 0.056)
+        side_pouch = rounded_box(0.066, 0.112, 0.086, bevel=0.016, segs=3, name=f"pack_side_pouch_{tag}", material="prop_brown").rotate_xyz(rx=pack_rx, rz=-side_sign * 0.24).translate(bx + side_sign * 0.104, pack_y + 0.022, pack_z - 0.056)
         scene.add("dynamite_pack", side_pouch)
 
     # Thorax-hugging shoulder straps & lower waist side straps anchored directly into the rucksack.
@@ -604,9 +604,9 @@ def _build_dynamite_pack(
 
     # Seat 3 cup-bombs into rucksack pockets (`pack_bomb_center` node lets `PlantBomb` draw center bomb!).
     pack_specs = (
-        (+22.0, -24.0, -0.092, 0.048, -0.070, 0.086, -0.036, "dynamite_pack"),
-        (0.0, -27.0, 0.000, 0.080, -0.090, 0.089, 0.000, "pack_bomb_center"),
-        (-22.0, -24.0, +0.092, 0.048, -0.070, 0.086, +0.036, "dynamite_pack"),
+        (+25.0, -24.0, -0.106, 0.042, -0.070, 0.088, -0.036, "dynamite_pack"),
+        (0.0, -27.0, 0.000, 0.068, -0.090, 0.090, 0.000, "pack_bomb_center"),
+        (-25.0, -24.0, +0.106, 0.042, -0.070, 0.088, +0.036, "dynamite_pack"),
     )
     for idx, (rz_deg, rx_deg, ox, oy, oz, cup_h, fuse_dx, target_node) in enumerate(pack_specs):
         scene.add("dynamite_pack", cylinder(0.50 * cup_h, 0.46 * cup_h, 0.046, radial_segs=16, bevel=0.006, axis="y", name=f"pack_holster_{idx}", material="gear_dark").rotate_xyz(rx=rx_deg, rz=rz_deg, degrees=True).translate(bx + ox, pack_y + oy, pack_z + oz))
@@ -932,10 +932,10 @@ def _scale_bomber_head_and_tall_antennae(
     scene: SceneBuilder,
     anchors: dict,
     *,
-    head_scale_x: float = 0.64,
-    head_scale_y: float = 0.77,
-    head_scale_z: float = 0.79,
-    eye_inward_dx: float = 0.002,
+    head_scale_x: float = 0.88,
+    head_scale_y: float = 0.82,
+    head_scale_z: float = 0.84,
+    eye_inward_dx: float = -0.006,
 ) -> Tuple[
     Tuple[float, float, float],
     Tuple[float, float, float],
@@ -943,10 +943,10 @@ def _scale_bomber_head_and_tall_antennae(
     Tuple[float, float, float],
     float,
 ]:
-    """Sculpt Bomber's sleek narrow vertical-oval cranium (`sx=0.64, sy=0.77, sz=0.79`) with flush antennae.
+    """Sculpt Bomber's chunky broad 1998 cranium (`sx=0.88, sy=0.82, sz=0.84`) with compact flush antennae.
 
-    Matches `abst301`/`abst901`/`abst701`: sleek narrow head fitting snugly above the two closely-set
-    yellow goggles (NOT wide horizontally), softly-domed top crown, spherical eyes & tucked eyelids
+    Matches `abst301`/`abst201`/`abst901`/`abst701`: broad rounded head matching the wide yellow aviator
+    goggles from the front (not pinched skinny), softly-domed top crown, spherical eyes & tucked eyelids
     (zero blink=0 forehead/temple protrusion), and compact antennae seated flush on the crown.
     """
     hc = anchors["head_center"]
@@ -957,13 +957,13 @@ def _scale_bomber_head_and_tall_antennae(
         if head_xf is not None
         else anchors["neck_center"]
     )
-    # Anchor scaling near the neck base so Bomber's sleek narrow head stays seated flush on neck_joint.
+    # Anchor scaling near the neck base so Bomber's head stays seated flush on neck_joint.
     piv = (hc[0], hc[1] - 0.125, hc[2])
     p_hg = (piv[0] - neck_pivot[0], piv[1] - neck_pivot[1], piv[2] - neck_pivot[2])
     sx = float(head_scale_x)
     sy = float(head_scale_y)
     sz = float(head_scale_z)
-    s_uni = float(head_scale_x)
+    s_uni = float(min(head_scale_x, head_scale_y))
 
     def _scale_pt_aniso(pt: Tuple[float, float, float]) -> Tuple[float, float, float]:
         return (
@@ -1077,17 +1077,17 @@ def _scale_bomber_head_and_tall_antennae(
         )
         by = surf_y - 0.002
         base_p = (bx, by, bz)
-        # Slightly shorter (~-16%) small-to-thick flared antennae matching ORIG abst301/201/901/701.
-        h_boost = 0.012 if side > 0 else -0.008
-        z_extra = -0.007 if side > 0 else +0.005
+        # Compact small-to-thick flared antennae matching 1998 abst301/201/901/701 proportions (not overly tall!).
+        h_boost = 0.010 if side > 0 else -0.006
+        z_extra = -0.006 if side > 0 else +0.004
         pts = [
             (bx - side * 0.003, by - 0.018, bz + 0.003),
             base_p,
-            (bx + side * 0.012, by + 0.078 + 0.35 * h_boost, bz - 0.014 + 0.3 * z_extra),
-            (bx + side * 0.024, by + 0.144 + 0.70 * h_boost, bz - 0.040 + 0.6 * z_extra),
-            (bx + side * 0.034, by + 0.190 + 0.90 * h_boost, bz - 0.075 + 0.85 * z_extra),
-            (bx + side * 0.041, by + 0.210 + h_boost, bz - 0.107 + z_extra),
-            (bx + side * 0.044, by + 0.207 + 0.95 * h_boost, bz - 0.130 + 1.05 * z_extra),
+            (bx + side * 0.014, by + 0.062 + 0.35 * h_boost, bz - 0.012 + 0.3 * z_extra),
+            (bx + side * 0.026, by + 0.114 + 0.70 * h_boost, bz - 0.036 + 0.6 * z_extra),
+            (bx + side * 0.036, by + 0.148 + 0.90 * h_boost, bz - 0.066 + 0.85 * z_extra),
+            (bx + side * 0.042, by + 0.164 + h_boost, bz - 0.094 + z_extra),
+            (bx + side * 0.045, by + 0.160 + 0.95 * h_boost, bz - 0.116 + 1.05 * z_extra),
         ]
         stalk = swept_tube(
             pts,
@@ -1116,15 +1116,15 @@ def _scale_bomber_head_and_tall_antennae(
 
 
 def _bomber_arm_pose(side: int, crouch: float) -> List[Tuple[float, float, float]]:
-    """Build lifted, forward-reaching athletic Bomber arm curve clearing every leg cleanly (abst901)."""
+    """Build broader, forward-reaching athletic Bomber arm curve clearing every leg cleanly (abst301/abst901)."""
     s = 1.0 if side >= 0 else -1.0
     dy_s = 0.010 if side >= 0 else -0.008
     dz_s = 0.010 if side >= 0 else -0.008
     return [
-        (s * 0.074, 0.456 - crouch, 0.014),
-        (s * 0.138, 0.422 - crouch + 0.5 * dy_s, 0.038 + 0.4 * dz_s),
-        (s * 0.110, 0.404 - crouch + 0.8 * dy_s, 0.144 + 0.8 * dz_s),
-        (s * 0.088, 0.400 - crouch + dy_s, 0.190 + dz_s),
+        (s * 0.086, 0.456 - crouch, 0.014),
+        (s * 0.158, 0.422 - crouch + 0.5 * dy_s, 0.038 + 0.4 * dz_s),
+        (s * 0.130, 0.404 - crouch + 0.8 * dy_s, 0.144 + 0.8 * dz_s),
+        (s * 0.106, 0.400 - crouch + dy_s, 0.190 + dz_s),
     ]
 
 
@@ -1153,10 +1153,10 @@ def _rebuild_bomber_legs(scene: SceneBuilder, crouch: float) -> None:
     ]
     lift = np.array([0.0, 1.0, 0.0], dtype=np.float64)
     specs = (
-        ("mid_left", +1, 0.062, 0.320 - c, +0.042, (0.122, 0.252, +0.128), (0.118, 0.138, +0.056), (0.114, 0.0, +0.114), +0.15, +0.036),
-        ("mid_right", -1, 0.062, 0.320 - c, +0.042, (0.118, 0.256, +0.122), (0.114, 0.140, +0.052), (0.110, 0.0, +0.108), -0.14, +0.036),
-        ("rear_left", +1, 0.060, 0.298 - c, -0.062, (0.132, 0.244, -0.044), (0.128, 0.128, -0.132), (0.122, 0.0, -0.058), +0.20, -0.058),
-        ("rear_right", -1, 0.060, 0.298 - c, -0.062, (0.128, 0.248, -0.050), (0.124, 0.130, -0.138), (0.118, 0.0, -0.064), -0.18, -0.058),
+        ("mid_left", +1, 0.072, 0.320 - c, +0.042, (0.146, 0.252, +0.128), (0.138, 0.138, +0.056), (0.132, 0.0, +0.114), +0.15, +0.036),
+        ("mid_right", -1, 0.072, 0.320 - c, +0.042, (0.142, 0.256, +0.122), (0.134, 0.140, +0.052), (0.128, 0.0, +0.108), -0.14, +0.036),
+        ("rear_left", +1, 0.070, 0.298 - c, -0.062, (0.156, 0.244, -0.044), (0.148, 0.128, -0.132), (0.140, 0.0, -0.058), +0.20, -0.058),
+        ("rear_right", -1, 0.070, 0.298 - c, -0.062, (0.152, 0.248, -0.050), (0.144, 0.130, -0.138), (0.136, 0.0, -0.064), -0.18, -0.058),
     )
     for label, side, hx, hy, hz, knee, ankle, foot, foot_yaw, root_z in specs:
         s = 1.0 if side >= 0 else -1.0
@@ -1231,12 +1231,19 @@ def build_bomber(blink: float = 0.0) -> SceneBuilder:
         blink=blink,
     )
     _rebuild_bomber_legs(scene, bomber_crouch)
+    # Broaden Bomber's thorax slightly in X (`1.16x`) so his chest & waist match 1998 abst301 sturdiness!
+    if "body" in scene.nodes:
+        tcx, tcy, tcz = anchors["thorax_center"]
+        scene.nodes["body"] = [
+            p.translate(-tcx, -tcy, -tcz).scale(1.16, 1.0, 1.04).translate(tcx, tcy, tcz)
+            for p in scene.nodes["body"]
+        ]
     head_c, head_r, eye_l, eye_r, head_back_z = _scale_bomber_head_and_tall_antennae(
         scene,
         anchors,
-        head_scale_x=0.64,
-        head_scale_y=0.77,
-        head_scale_z=0.79,
+        head_scale_x=0.88,
+        head_scale_y=0.82,
+        head_scale_z=0.84,
     )
     _build_goggles(
         scene,
