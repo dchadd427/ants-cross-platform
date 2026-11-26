@@ -278,7 +278,14 @@ def build_botcap1() -> SceneBuilder:
     return _finalize_item(sc, target_span=0.80)
 
 
-def _build_hex_nut(name: str, *, rot_deg: Tuple[float, float, float]) -> SceneBuilder:
+def _build_hex_nut(
+    name: str,
+    *,
+    spin_deg: float = 0.0,
+    tilt_rx_deg: float = 0.0,
+    yaw_ry_deg: float = 0.0,
+    h_half: float = 0.122,
+) -> SceneBuilder:
     """Machined forged blue-steel 6-sided hex nut with brushed faces, crisp specular chamfers & dark threaded bore (`317:bolt1`, `318:bolt2`)."""
     register_item_materials()
     sc = SceneBuilder(name=name)
@@ -286,8 +293,7 @@ def _build_hex_nut(name: str, *, rot_deg: Tuple[float, float, float]) -> SceneBu
 
     n_ang = 48  # 8 segments per hex flat for crisp corners + silky-smooth circular bore
     r_out_flat = 0.252
-    r_in = 0.102
-    h_half = 0.122
+    r_in = 0.100
     cham = 0.032
 
     def _hex_r(theta: float) -> float:
@@ -376,22 +382,29 @@ def _build_hex_nut(name: str, *, rot_deg: Tuple[float, float, float]) -> SceneBu
 
     # Crisp dark machined internal screw thread ridges inside the central bore!
     for k in range(5):
-        ty = -0.078 + k * 0.039
+        ty = (-0.64 + k * 0.32) * h_half
         parts.append(torus_arc(r_in - 0.004, 0.0085, u_segs=36, v_segs=8, plane="xz", name=f"{name}_thread_{k}", material="item_steel_dark").translate(0.0, ty, 0.0))
 
-    rx, ry, rz = rot_deg
-    sc.add("nut", [p.rotate_xyz(rx=rx, ry=ry, rz=rz, degrees=True) for p in parts])
+    sc.add(
+        "nut",
+        [
+            p.rotate_xyz(ry=spin_deg, degrees=True)
+             .rotate_xyz(rx=tilt_rx_deg, degrees=True)
+             .rotate_xyz(ry=yaw_ry_deg, degrees=True)
+            for p in parts
+        ],
+    )
     return _finalize_item(sc, target_span=0.76)
 
 
 def build_bolt1() -> SceneBuilder:
-    """Flat hexagonal steel nut lying on the ground (`317:bolt1`)."""
-    return _build_hex_nut("item_bolt1", rot_deg=(0.0, 12.0, 0.0))
+    """Flat hexagonal steel nut lying on the ground with horizontal top/bottom flats (`317:bolt1`)."""
+    return _build_hex_nut("item_bolt1", spin_deg=30.0, tilt_rx_deg=0.0, yaw_ry_deg=0.0, h_half=0.096)
 
 
 def build_bolt2() -> SceneBuilder:
-    """Tilted upright hexagonal steel nut resting on one hex flat (`318:bolt2`)."""
-    return _build_hex_nut("item_bolt2", rot_deg=(60.0, -34.0, 16.0))
+    """Tilted hexagonal steel nut facing front-left with ONLY upper-right & right extruded walls (`318:bolt2`)."""
+    return _build_hex_nut("item_bolt2", spin_deg=4.0, tilt_rx_deg=54.0, yaw_ry_deg=-26.0, h_half=0.148)
 
 
 def build_screw1() -> SceneBuilder:
