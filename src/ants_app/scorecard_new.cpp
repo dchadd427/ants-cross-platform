@@ -348,24 +348,15 @@ void draw_honors(const Ctx& c, const Podium& p) {
     }
 }
 
-/// What the Play of the game says, in two lines (match_report.hpp, Play): the seat, its kills and the seconds they took ("Gory: 3 kills in 8 seconds"), then the big moments that the kills had ("saved the hill, wiped out a group").
+/// What the Play of the game says, in two lines (match_report.hpp, Play): the seat, its kills and the seconds they took ("Gory: 3 kills in 8 seconds,"), then the big moments that the kills had ("saved the hill, wiped out a group").
 /// Nothing that has a number in it is ever cut: a line that is too long for the card takes its shorter wording ("8 s"), and the name of the seat is the last thing to give way, cut at its end. The bonuses are named as many as fit,
-/// the most points first (a knockout, the saved hill, the wiped out group, the thief that had loot), each in its shorter wording before one is left out.
+/// the most points first (a knockout, the saved hill, the wiped out group, the thief that had loot), each in its shorter wording before one is left out. The first line ends in a comma when a second follows it.
 struct PlayWords {
-    std::string who, rest;                                          // the line of the kills: the seat's name, and what follows it (": 3 kills in 8 seconds")
-    std::string moments;                                            // the line of the bonuses ("" when the moment has none)
+    std::string kills;                                              // the first line
+    std::string moments;                                            // the second line ("" when the moment has none)
 };
 PlayWords play_words(const Ctx& c, const MatchReport::Play& play, int32_t room) {
     PlayWords words;
-    words.who = c.m.seat_name(play.seat);
-    const std::string kills = std::to_string(play.kills) + (play.kills == 1 ? " kill" : " kills");
-    const std::string seconds = std::to_string(play.seconds);
-    const std::string wordings[2] = {": " + kills + " in " + seconds + (play.seconds == 1 ? " second" : " seconds"), ": " + kills + " in " + seconds + " s"};
-    words.rest = play.seconds == 0 ? ": " + kills : wordings[0];
-    if (play.seconds != 0 && c.pen.width(words.who + words.rest, 12.0) > room) words.rest = wordings[1];
-    const int32_t name_room = std::max(0, room - c.pen.width(words.rest, 12.0));
-    if (c.pen.width(words.who, 12.0) > name_room && words.who.find(' ') != std::string::npos && c.pen.width(words.who.substr(0, words.who.find(' ')), 12.0) <= name_room) words.who = words.who.substr(0, words.who.find(' '));     // ("Bartholomew: ...", not "Bartholomew the Third of Antw...: ...")
-
     struct Moment {
         std::string full, shorter;
     };
@@ -388,6 +379,27 @@ PlayWords play_words(const Ctx& c, const MatchReport::Play& play, int32_t room) 
         }
     }
     if (words.moments.empty() && !moments.empty()) words.moments = moments[0].shorter;      // (even the shortest wording of the first is longer than the card: the line cuts it at its end)
+
+    std::string who = c.m.seat_name(play.seat);
+    const std::string kills = std::to_string(play.kills) + (play.kills == 1 ? " kill" : " kills");
+    const std::string seconds = std::to_string(play.seconds);
+    const std::string tail = words.moments.empty() ? std::string() : ",";
+    std::vector<std::string> wordings;
+    if (play.seconds == 0) {
+        wordings.push_back(": " + kills + tail);
+    } else {
+        wordings.push_back(": " + kills + " in " + seconds + (play.seconds == 1 ? " second" : " seconds") + tail);
+        wordings.push_back(": " + kills + " in " + seconds + " s" + tail);
+    }
+    for (const std::string& wording : wordings) {
+        if (c.pen.width(who + wording, 12.0) <= room) {
+            words.kills = who + wording;
+            return words;
+        }
+    }
+    const int32_t name_room = std::max(0, room - c.pen.width(wordings.back(), 12.0));
+    if (c.pen.width(who, 12.0) > name_room && who.find(' ') != std::string::npos && c.pen.width(who.substr(0, who.find(' ')), 12.0) <= name_room) who = who.substr(0, who.find(' '));     // ("Bartholomew: ...", not "Bartholomew the Third of Antw...: ...")
+    words.kills = fit_pen(c, who, name_room, 12.0) + wordings.back();
     return words;
 }
 
@@ -404,16 +416,19 @@ void draw_play(const Ctx& c, const Podium& p) {
     const int32_t room = c.W(p.play.right() - 8 - p.play_text_x);
     const std::string when = "at " + clock_of(play.turn);
     const PlayWords words = play_words(c, play, room);
-    const int32_t name_room = std::max(0, room - c.pen.width(words.rest, 12.0));
-    std::vector<std::string> lines = {fit_pen(c, words.who, name_room, 12.0) + words.rest};
+    std::vector<std::string> lines = {words.kills};
     if (!words.moments.empty()) lines.push_back(words.moments);
-    if (p.narrow) lines.back() += "  " + when;
+    bool when_on_a_line = true;                                     // the time has a line of its own, under the words, when it does not fit at the end of the last one
+    if (p.narrow && c.pen.width(lines.back() + "  " + when, 12.0) <= room) {
+        lines.back() += "  " + when;
+        when_on_a_line = false;
+    }
     int32_t base = p.play_line_base;
     for (const std::string& line : lines) {
         c.pen.draw(fit_pen(c, line, room, 12.0), c.X(p.play_text_x), c.Y(base), kCream, 12.0, 0);
         base += p.play_pitch;
     }
-    if (!p.narrow) c.pen.draw(when, c.X(p.play_text_x), c.Y(base), kDim, 10.0, 0);
+    if (when_on_a_line) c.pen.draw(when, c.X(p.play_text_x), c.Y(base), kDim, 10.0, 0);
     if (c.m.watch_available()) c.sheet.put(std::string("sc_watch_") + state_of(c.m.watch_look()), p.watch.x, p.watch.y);
 }
 
