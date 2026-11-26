@@ -1005,12 +1005,12 @@ int main() {
         shell.head.roster = 0x03;
         {   // the hills: the top left tile of each mound, -1 for a seat without one
             Bench b(shell);
-            b.engine.set_anthill(0, {40, 40});
-            b.engine.set_anthill(1, {10, 10});
+            b.engine.set_anthill(0, {40, 34});
+            b.engine.set_anthill(1, {10, 22});
             b.engine.spawn_unit(0, sim::AntType::Worker, {45, 45});
             b.step(3);
             const MatchStats st = b.collector.take(b.turns);
-            ASSERT_TRUE(st.ok && st.hill_x[0] == 40 && st.hill_y[0] == 40 && st.hill_x[1] == 10 && st.hill_y[1] == 10 && st.hill_x[2] == -1 && st.hill_y[3] == -1);
+            ASSERT_TRUE(st.ok && st.hill_x[0] == 40 && st.hill_y[0] == 34 && st.hill_x[1] == 10 && st.hill_y[1] == 22 && st.hill_x[2] == -1 && st.hill_y[3] == -1);
         }
         {   // a Thief killed during its raid, before it has taken the loot, was raiding the hill of the robbed seat; one killed with the loot in its hands is not raiding any more and carries it
             struct Fall {
@@ -1052,26 +1052,28 @@ int main() {
             for (const MatchStats::Kill& kill : st.kills) ASSERT_TRUE(kill.raid_on == MatchStats::kNoKiller && !kill.carried_loot);
         }
         {   // the ants of the victim's own seat that are left within 4 tiles of the lost ant (the larger of the two tile differences, 4 included) at the look that finds it gone: not those that are lost in the same tick, not the other
-            // seat's, not those further away
+            // seat's, not those further away on either side
             Bench b(shell);
             const uint32_t first = b.engine.spawn_unit(1, sim::AntType::Worker, {20, 20});
             const uint32_t second = b.engine.spawn_unit(1, sim::AntType::Worker, {22, 21});
             const uint32_t third = b.engine.spawn_unit(1, sim::AntType::Worker, {24, 20});
             const uint32_t fourth = b.engine.spawn_unit(1, sim::AntType::Worker, {29, 20});
+            b.engine.spawn_unit(1, sim::AntType::Worker, {21, 24});                // (4 tiles below the first, across the other axis)
+            b.engine.spawn_unit(1, sim::AntType::Worker, {20, 26});                // (6 tiles below it, in the same column)
             b.engine.spawn_unit(0, sim::AntType::Worker, {21, 20});
             b.step(3);
-            b.engine.kill_unit(first);                                             // the second (2 tiles away) and the third (4) are near; the fourth (9) and the other seat's ant are not
+            b.engine.kill_unit(first);                                             // the second (2 tiles away), the third (4) and the one below (4) are near; the fourth (9), the one in the column (6) and the other seat's ant are not
             b.step(3);
-            b.engine.kill_unit(second);                                            // lost in the same tick: the third is 2 tiles from the second and is lost too, the fourth is 7 away
+            b.engine.kill_unit(second);                                            // lost in the same tick: the third is 2 tiles from the second and is lost too; the one below is near both
             b.engine.kill_unit(third);
             b.step(3);
             b.engine.kill_unit(fourth);
             b.step(3);
             const MatchStats st = b.collector.take(b.turns);
             ASSERT_EQ(st.kills.size(), size_t{4});
-            ASSERT_TRUE(st.kills[0].tile_x == 20 && st.kills[0].mates_near == 2);
-            ASSERT_TRUE(st.kills[1].turn == st.kills[2].turn && st.kills[1].tile_x == 22 && st.kills[1].mates_near == 0);
-            ASSERT_TRUE(st.kills[2].tile_x == 24 && st.kills[2].mates_near == 0);  // (the fourth is 5 tiles from the third)
+            ASSERT_TRUE(st.kills[0].tile_x == 20 && st.kills[0].mates_near == 3);
+            ASSERT_TRUE(st.kills[1].turn == st.kills[2].turn && st.kills[1].tile_x == 22 && st.kills[1].mates_near == 1);
+            ASSERT_TRUE(st.kills[2].tile_x == 24 && st.kills[2].mates_near == 1);
             ASSERT_TRUE(st.kills[3].tile_x == 29 && st.kills[3].mates_near == 0);
         }
     } TEST_END();

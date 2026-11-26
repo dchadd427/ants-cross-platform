@@ -635,7 +635,7 @@
    "id": "the_knockout_named_is_the_last_of_the_moment",
    "file": "src/ants_app/match_report.cpp",
    "old": "!= 0 && !knocked) {",
-   "new": "!= 0) {",
+   "new": "!= 0 && (!knocked || true)) {",
    "expect": "MR1.7",
    "build": "test_match_report",
    "test": "timeout 600 ./build/tests/test_app/test_match_report"
@@ -707,7 +707,7 @@
    "id": "a_hill_is_saved_wherever_the_thief_was",
    "file": "src/ants_app/match_report.cpp",
    "old": "if (kill.raid_on == kill.killer && near_hill(st, kill.killer, kill.tile_x, kill.tile_y)) {",
-   "new": "if (kill.raid_on == kill.killer) {",
+   "new": "if (kill.raid_on == kill.killer && (near_hill(st, kill.killer, kill.tile_x, kill.tile_y) || true)) {",
    "expect": "MR1.8",
    "build": "test_match_report",
    "test": "timeout 600 ./build/tests/test_app/test_match_report"
@@ -941,7 +941,7 @@
    "id": "the_ants_left_near_are_not_counted",
    "file": "src/ants_replay/match_stats.cpp",
    "old": "kill.mates_near = static_cast<uint8_t>(std::min<uint32_t>(mates, 255u));",
-   "new": "kill.mates_near = 0;",
+   "new": "kill.mates_near = static_cast<uint8_t>(std::min<uint32_t>(mates, 255u) * 0u);",
    "expect": "HD1.8",
    "build": "test_history_details",
    "test": "timeout 300 env ANTS_TEST_FILTER=HD1.8 ./build/tests/test_server/test_history_details"
