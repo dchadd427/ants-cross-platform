@@ -304,6 +304,36 @@ inline bool operator==(const IdleBatchResult& a, const IdleBatchResult& b) noexc
            a.home_tiles == b.home_tiles;
 }
 
+/// What the rules of the fight batch did (part 2 of G9, docs/BOT_CONTEST.md; format 10); everything is 0 for a seat that has no standard bot or no work for the rule
+struct FightBatchResult {
+    uint32_t foot_plugs{0};                    // own ants that stood at the foot of a bridge in the way of another and stepped off it (BridgeHeadOnTask::plugs), with a load or in the can't-go clip or not
+    uint32_t loads_released{0};                // ants that held a load and were given back by the island guard after a long hold (IslandTask::loads_released)
+    uint32_t return_tiles{0};                  // water tiles that Swimmers were told to dig for an ant that stands away from the hill (BridgePlanner::tiles_ordered(Return))
+    uint32_t stand_chains{0};                  // rule 1 (PowerStandTask): the chains given, the stands that held, those that missed (too early or too late), the power-ups that the ant took (a click on its own tile, or a chain that came too late),
+    uint32_t stand_held{0};                    // ... and the stands by reason: a hurt ant's refuge, a deny
+    uint32_t stand_missed{0};
+    uint32_t stand_taken{0};
+    uint32_t stand_refuge{0};
+    uint32_t stand_deny{0};
+    uint32_t plan_engagements{0};              // rule 2 (FightPlanTask): the places where an own and an enemy ant were in contact, those where the own side had the edge and struck, those where it had none, the hurt ants pulled back
+    uint32_t plan_fights{0};                   // ... and the attack orders given
+    uint32_t plan_skipped{0};
+    uint32_t plan_pulls{0};
+    uint32_t plan_attacks{0};
+    uint32_t strip_contests{0};                // rule 3 (StripTask): the looks at which an own and an enemy ant waited at a flower, those at which the own side struck,
+    uint32_t strip_strikes{0};                 // ... the ants from beyond the strip that joined a strike, and the attack orders given
+    uint32_t strip_helped{0};
+    uint32_t strip_attacks{0};
+};
+
+inline bool operator==(const FightBatchResult& a, const FightBatchResult& b) noexcept {
+    bool same = a.foot_plugs == b.foot_plugs && a.loads_released == b.loads_released && a.return_tiles == b.return_tiles;
+    same = same && a.stand_chains == b.stand_chains && a.stand_held == b.stand_held && a.stand_missed == b.stand_missed && a.stand_taken == b.stand_taken && a.stand_refuge == b.stand_refuge && a.stand_deny == b.stand_deny;
+    same = same && a.plan_engagements == b.plan_engagements && a.plan_fights == b.plan_fights && a.plan_skipped == b.plan_skipped && a.plan_pulls == b.plan_pulls && a.plan_attacks == b.plan_attacks;
+    same = same && a.strip_contests == b.strip_contests && a.strip_strikes == b.strip_strikes && a.strip_helped == b.strip_helped && a.strip_attacks == b.strip_attacks;
+    return same;
+}
+
 /// What a standard bot's Bomber flight to the island of the ring pile did (MinerFlightTask); the ticks are 0 for what never happened
 struct MinerFlightResult {
     uint32_t started{0};
@@ -378,6 +408,7 @@ struct ArenaSeatResult {
     ExpeditionResult expedition;
     MinerFlightResult miner_flight;
     IdleBatchResult idle_batch;
+    FightBatchResult fight_batch;
     BotController::SeatStats stats;
     /// commands released per second of game time, in thousandths
     uint32_t milli_commands_per_second(uint64_t ticks) const noexcept {

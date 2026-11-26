@@ -105,6 +105,10 @@ public:
     void count_with(CantGoTally* tally) { tally_ = tally; }
     void tick() {
         sim_.tick();
+        follow();
+    }
+    /// What the rig does after the simulation's tick: the hook, the commands that are due, the look. A test with two bots on one engine ticks the engine with one rig and calls follow() of the other
+    void follow() {
         if (after_sim_tick) after_sim_tick();
         if (tally_ == nullptr) sim_.clear_news_events();
         sim_.clear_audio_events();

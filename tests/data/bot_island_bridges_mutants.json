@@ -43,7 +43,7 @@
   {
    "id": "return_for_whole_ants",
    "file": "src/ants_ai/island_bridge.cpp",
-   "old": "if (return_on && (a->hp <= params_.return_hp || more)) {",
+   "old": "if (return_on && (a->hp <= params_.return_hp || more || (plan.bridge_loaded && a->holding))) {",
    "new": "if (return_on) {",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI54.5 ' ./build/tests/test_ai/test_ai",
    "expect": "AI54.5"
@@ -67,16 +67,16 @@
   {
    "id": "bridge_with_few_swimmers",
    "file": "src/ants_ai/island_bridge.cpp",
-   "old": "if (swimmers < (more ? 1u : params_.min_swimmers) || v.ticks_left() < (more ? std::min<uint32_t>(params_.min_ticks_left, 1800u) : params_.min_ticks_left)) return nullptr;",
-   "new": "if (swimmers + 100u < (more ? 1u : params_.min_swimmers) || v.ticks_left() < (more ? std::min<uint32_t>(params_.min_ticks_left, 1800u) : params_.min_ticks_left)) return nullptr;",
+   "old": "const bool few_swimmers = swimmers < (more ? 1u : params_.min_swimmers);",
+   "new": "const bool few_swimmers = swimmers + 100u < (more ? 1u : params_.min_swimmers);",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI54.7 ' ./build/tests/test_ai/test_ai",
    "expect": "AI54.7"
   },
   {
    "id": "bridge_late_in_match",
    "file": "src/ants_ai/island_bridge.cpp",
-   "old": "if (swimmers < (more ? 1u : params_.min_swimmers) || v.ticks_left() < (more ? std::min<uint32_t>(params_.min_ticks_left, 1800u) : params_.min_ticks_left)) return nullptr;",
-   "new": "if (swimmers < (more ? 1u : params_.min_swimmers) || v.ticks_left() + 100000u < (more ? std::min<uint32_t>(params_.min_ticks_left, 1800u) : params_.min_ticks_left)) return nullptr;",
+   "old": "v.ticks_left() < (more ? std::min<uint32_t>(params_.min_ticks_left, 1800u) : params_.min_ticks_left)) return nullptr;",
+   "new": "v.ticks_left() + 100000u < (more ? std::min<uint32_t>(params_.min_ticks_left, 1800u) : params_.min_ticks_left)) return nullptr;",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI54.8 ' ./build/tests/test_ai/test_ai",
    "expect": "AI54.8"
   },
