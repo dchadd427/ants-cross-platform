@@ -297,6 +297,19 @@ struct LevelPlan {
     uint32_t bridge_hold_release{600};   // ... the island guard gives back an ant that holds a load and has been held on land this many ticks with no bridge that gets it home (`bholdrel`)
     bool bridge_foot{true};              // part 2 of the fight batch (docs/BOT_UNSTUCK.md, "The foot of a bridge"): an own ant that holds food or loot, or shows the can't-go clip, at the foot of a bridge with an ant of another team on the
                                          // bridge tile in front of it steps back off the foot and lets the other pass, as an ant without a load did (BridgeHeadOnTask::clear_feet; `foot=0`: the bot as it was)
+    // part 2 of the fight batch, rule 1 (docs/BOT_CONTEST.md): an ant stands on a power-up (the original's can't-go cancel) where it is immune. OFF at every level (the arena shows no win: `pstand=1` plays it). EXPIRES with v0.21.8
+    // (AGENTS.md rule 9): the rule is removed with its task, tests and mutants, or turned on where a measurement shows a win
+    bool power_stand{false};             // the task runs (PowerStandTask)
+    bool stand_refuge{true};             // a hurt ant with an enemy near steps onto a power-up it reaches first and stands there while the enemy is near (`prefuge`)
+    bool stand_deny{false};              // an ant that the economy has no work for stands on a power-up of a kind the bot does not want, with an enemy near it (`pdeny`)
+    bool stand_take{true};               // a power-up that the plan wants is taken by the ant that stands on it, with a click on its own tile (`ptake`)
+    uint32_t stand_refuge_hp{5};         // ... a hurt ant has at most this many hit points (`prefhp`)
+    int32_t stand_threat{3};             // ... an enemy ant within this many tiles threatens it (`pthreat`)
+    int32_t stand_calm_radius{8};        // ... a refuge is left when no enemy has been within this many tiles for params.calm_ticks (`pcalmr`)
+    int32_t stand_deny_radius{5};        // ... an enemy within this many tiles of a power-up makes it worth standing on (`pdenyr`)
+    uint32_t stand_deny_calm{600};       // ... a deny is left after this many ticks without an enemy near (`pdenycalm`)
+    uint8_t stand_deny_kinds{0x1E};      // ... the kinds that are denied, a bit for every sim::AntType: Bomber 2, Fire 4, Thief 8, Combat 16 (`pdenykinds`)
+    uint32_t stand_max{2};               // ... ants that stand or walk to stand at a time (`pmax`)
     bool island_endraid{true};           // (Hard's island play) once the food is nearly gone an own Thief is wanted: an idle Swimmer or a spare at a flower strip takes the Thief that falls, a Swimmer digs the chain from its island to the
                                          // own hill's and to the richest enemy hill's, and the raid task raids over it (`endraid=0`: the bot as it was)
     uint32_t endraid_from{1200};         // ... the Thief is wanted from this tick even while food is left (the first drop of a Thief falls after the first minute; measured: the sooner the better, docs/BOT_IDLE.md)
@@ -804,6 +817,8 @@ struct Tactics {
     /// The power-up tiles that the plug task has an ant on its way to (set by PlugTask at every look) and those that the trip task has (set by PowerUpTask): neither sends a second ant to the other's tile
     std::vector<sim::TileCoord> plug_tiles;
     std::vector<sim::TileCoord> trip_tiles;
+    /// The power-ups that the stand task has an ant on or on its way to (set by PowerStandTask at every look; docs/BOT_CONTEST.md): no trip is made to one
+    std::vector<sim::TileCoord> stand_tiles;
     /// The raid tiles on which an own Thief with loot has shown the can't-go clip for LevelPlan::rescue_after ticks (set by note_shut_in_thieves at every look; docs/BOT_UNSTUCK.md): the plan wants a Fire Ant for the walls in front of them
     std::vector<sim::TileCoord> shut_in;
     std::map<uint32_t, std::pair<uint64_t, uint64_t>> shut_seen;       // Thief -> the first and the latest look of its streak in the clip on a raid tile

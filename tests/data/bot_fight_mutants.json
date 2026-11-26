@@ -72,6 +72,87 @@
    "build": "test_ai",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI58.17 ' ./build/tests/test_ai/test_ai",
    "expect": "AI58.17"
+  },
+  {
+   "id": "stand_window_table_wrong",
+   "file": "src/ants_ai/power_stand.cpp",
+   "old": "{{9, 12, 10, 12}, {9, 18, 10, 17}, {9, 14, 10, 14}, {9, 12, 10, 13}},",
+   "new": "{{9, 11, 10, 12}, {9, 18, 10, 17}, {9, 14, 10, 14}, {9, 12, 10, 13}},",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI59.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI59.1"
+  },
+  {
+   "id": "stand_cancel_comes_early",
+   "file": "src/ants_ai/power_stand.cpp",
+   "old": "steps[1].gap_lo = w.hi > w.lo ? static_cast<uint32_t>(w.hi) - 1u : w.hi;",
+   "new": "steps[1].gap_lo = 1u;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI59.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI59.2"
+  },
+  {
+   "id": "stand_cancel_is_a_plain_click",
+   "file": "src/ants_ai/power_stand.cpp",
+   "old": "steps[1].cancel = true;",
+   "new": "steps[1].cancel = false;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI59.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI59.2"
+  },
+  {
+   "id": "stand_refuge_left_at_once",
+   "file": "src/ants_ai/power_stand.cpp",
+   "old": "const int32_t radius = refuge ? plan.stand_calm_radius : plan.stand_deny_radius + 2;",
+   "new": "const int32_t radius = refuge ? 1 : plan.stand_deny_radius + 2;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI59.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI59.2"
+  },
+  {
+   "id": "stand_take_while_the_enemy_is_near",
+   "file": "src/ants_ai/power_stand.cpp",
+   "old": "const bool wanted = safe && plan.stand_take",
+   "new": "const bool wanted = (safe || true) && plan.stand_take",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI59.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI59.4"
+  },
+  {
+   "id": "stand_deny_ignores_its_switch",
+   "file": "src/ants_ai/power_stand.cpp",
+   "old": "if (plan.stand_deny && tactics_.surplus > 0) {",
+   "new": "if (tactics_.surplus > 0) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI59.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI59.5"
+  },
+  {
+   "id": "stand_master_switch_ignored",
+   "file": "src/ants_ai/power_stand.cpp",
+   "old": "if (!plan.power_stand || !v.has_grid() || v.game_mode() != sim::GameMode::HighestScore) {",
+   "new": "if (false || !v.has_grid() || v.game_mode() != sim::GameMode::HighestScore) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI59.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI59.2"
+  },
+  {
+   "id": "stand_pocket_not_looked_for",
+   "file": "src/ants_ai/power_stand.cpp",
+   "old": "if (mask[i] == 0 || part[i] != 0 || !usable(x, y)) continue;",
+   "new": "if (true || mask[i] == 0 || part[i] != 0 || !usable(x, y)) continue;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI59.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI59.6"
+  },
+  {
+   "id": "stand_cancel_cut_by_the_reach_guard",
+   "file": "src/ants_ai/reach_guard.cpp",
+   "old": "in.command.ants.empty() || in.cancel) {",
+   "new": "in.command.ants.empty()) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI59.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI59.2"
   }
  ]
 }

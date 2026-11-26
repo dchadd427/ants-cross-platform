@@ -1119,6 +1119,12 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
             j.field("foot_plugs", uint64_t{s.fight_batch.foot_plugs});
             j.field("loads_released", uint64_t{s.fight_batch.loads_released});
             j.field("return_tiles", uint64_t{s.fight_batch.return_tiles});
+            j.field("stand_chains", uint64_t{s.fight_batch.stand_chains});
+            j.field("stand_held", uint64_t{s.fight_batch.stand_held});
+            j.field("stand_missed", uint64_t{s.fight_batch.stand_missed});
+            j.field("stand_taken", uint64_t{s.fight_batch.stand_taken});
+            j.field("stand_refuge", uint64_t{s.fight_batch.stand_refuge});
+            j.field("stand_deny", uint64_t{s.fight_batch.stand_deny});
             j.end_object();
             j.key("expedition");                                            // the flights over water of a standard bot (all 0 where it made none); the ticks are 0 for what never happened
             j.begin_object();

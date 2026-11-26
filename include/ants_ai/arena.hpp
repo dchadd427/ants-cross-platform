@@ -309,10 +309,18 @@ struct FightBatchResult {
     uint32_t foot_plugs{0};                    // own ants that stood at the foot of a bridge in the way of another and stepped off it (BridgeHeadOnTask::plugs), with a load or in the can't-go clip or not
     uint32_t loads_released{0};                // ants that held a load and were given back by the island guard after a long hold (IslandTask::loads_released)
     uint32_t return_tiles{0};                  // water tiles that Swimmers were told to dig for an ant that stands away from the hill (BridgePlanner::tiles_ordered(Return))
+    uint32_t stand_chains{0};                  // rule 1 (PowerStandTask): the chains given, the stands that held, those that missed (too early or too late), the power-ups that the ant took (a click on its own tile, or a chain that came too late),
+    uint32_t stand_held{0};                    // ... and the stands by reason: a hurt ant's refuge, a deny
+    uint32_t stand_missed{0};
+    uint32_t stand_taken{0};
+    uint32_t stand_refuge{0};
+    uint32_t stand_deny{0};
 };
 
 inline bool operator==(const FightBatchResult& a, const FightBatchResult& b) noexcept {
-    return a.foot_plugs == b.foot_plugs && a.loads_released == b.loads_released && a.return_tiles == b.return_tiles;
+    bool same = a.foot_plugs == b.foot_plugs && a.loads_released == b.loads_released && a.return_tiles == b.return_tiles;
+    same = same && a.stand_chains == b.stand_chains && a.stand_held == b.stand_held && a.stand_missed == b.stand_missed && a.stand_taken == b.stand_taken && a.stand_refuge == b.stand_refuge && a.stand_deny == b.stand_deny;
+    return same;
 }
 
 /// What a standard bot's Bomber flight to the island of the ring pile did (MinerFlightTask); the ticks are 0 for what never happened
