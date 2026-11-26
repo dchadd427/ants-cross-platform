@@ -564,11 +564,24 @@ int main(int argc, char* argv[]) {
         for (const std::string& text : {std::string("Zo\xC3\xA9"), std::string("\xFF"), std::string("bidi \xE2\x80\xAE text"), std::string("delete\x7F"), std::string("tab\there"), std::string("esc\x1B[31m"), std::string("nul\0x", 5)}) {
             bad = r;
             bad.head.names[0] = text;
-            ASSERT_TRUE(refused(bad));                                             // a letter outside ASCII, a lone byte of 0x80 and up, a bidirectional mark, a control character, a NUL
+            if (text == "Zo\xC3\xA9") ASSERT_FALSE(refused(bad));                  // a letter of a name is fine in a name (protocol 29: UTF-8 of the table of net::valid_wire_name) ...
+            else ASSERT_TRUE(refused(bad));                                        // ... a lone byte of 0x80 and up, a bidirectional mark, a control character, a NUL are not
             bad = r;
             bad.head.venue = text;
-            ASSERT_TRUE(refused(bad));                                             // (every text of the head is held to it)
+            ASSERT_TRUE(refused(bad));                                             // (every other text of the head is printable ASCII: a letter is not)
         }
+        bad = r;
+        bad.head.names[0] = "\xCE\x91\xCE\xBB";                                     // Greek: the game's font draws none of it, so no name holds it
+        ASSERT_TRUE(refused(bad));
+        bad = r;
+        bad.head.names[0] = std::string(64, 'x');
+        ASSERT_FALSE(refused(bad));                                                // (printable ASCII of up to 64 bytes is what a head always held: a file of another maker is still read)
+        bad.head.names[0] = "[\xC3\x84NT] Zo\xC3\xAB";
+        ASSERT_FALSE(refused(bad));
+        bad.head.names[1] = "\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0\xE1\xBA\xA0";
+        ASSERT_FALSE(refused(bad));                                                // (32 letters of three bytes: 96 bytes, the longest name there is)
+        bad.head.names[1] += "a";
+        ASSERT_TRUE(refused(bad));
         bad = r;
         bad.head.names[3] = " ~";
         ASSERT_FALSE(refused(bad));                                                // (the first and the last printable characters are fine)
@@ -704,12 +717,15 @@ int main(int argc, char* argv[]) {
             control.insert(control.end(), tail.begin(), tail.end());
             ASSERT_TRUE(refused_with(head_of(control), "printable"));
             // a name that is not ASCII (UTF-8 and bytes that are no text at all), the venue, the game's version: a reader that showed them could be made to print a line that is not there
-            for (const std::vector<uint8_t>& field : {std::vector<uint8_t>{8, 3, 'Z', 'o', 0xE9}, std::vector<uint8_t>{9, 2, 0xC3, 0xA9}, std::vector<uint8_t>{10, 3, 0xE2, 0x80, 0xAE}, std::vector<uint8_t>{14, 2, 'o', 0xFF},
-                                                      std::vector<uint8_t>{1, 2, 'v', 0x80}, std::vector<uint8_t>{2, 2, 0x7F, 'x'}}) {
+            for (const std::vector<uint8_t>& field : {std::vector<uint8_t>{8, 3, 'Z', 'o', 0xE9}, std::vector<uint8_t>{9, 2, 0xCE, 0x91}, std::vector<uint8_t>{10, 3, 0xE2, 0x80, 0xAE}, std::vector<uint8_t>{14, 2, 'o', 0xFF},
+                                                      std::vector<uint8_t>{1, 2, 'v', 0x80}, std::vector<uint8_t>{2, 2, 0x7F, 'x'}, std::vector<uint8_t>{1, 2, 0xC3, 0xA9}}) {
                 std::vector<uint8_t> hostile = field;
                 hostile.insert(hostile.end(), good.begin(), good.end());
                 ASSERT_TRUE(refused_with(head_of(hostile), "printable"));
             }
+            std::vector<uint8_t> letter_name = {9, 2, 0xC3, 0xA9};                   // a name with a letter of the table is a name since protocol 29 (a version or a venue with one is not text)
+            letter_name.insert(letter_name.end(), good.begin(), good.end());
+            ASSERT_TRUE(decoded(file_of(head_of(letter_name))).ok);
             std::vector<uint8_t> plain_name = {8, 4, 'Z', 'o', 'e', '~'};            // (the same field in ASCII reads)
             plain_name.insert(plain_name.end(), good.begin(), good.end());
             ASSERT_TRUE(decoded(file_of(head_of(plain_name))).ok);

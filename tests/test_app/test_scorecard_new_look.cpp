@@ -233,7 +233,15 @@ void test_podium(const assets::AssetArchive& arc, const hud_art::Art& art) {
     const std::string win = card.rows()[0].name;
     check(win.find(" & ") != std::string::npos, "the first row is the alliance (" + win + ")");
     check(has_ink(*spy, win + " win the match."), "the sentence names the winners (an alliance win), with no time while nothing was counted");
-    check(has_line(*spy, card.rows()[0].numbers[0]) && has_line(*spy, win), "the winner's name and score are drawn");
+    check(has_line(*spy, card.rows()[0].numbers[0]), "the winner's score is drawn");
+    {   // an alliance is two lines, "A &" over "B" (protocol 29: names of up to 24 characters each: two long names never fit one line)
+        const ScorecardModal::Row& alliance = card.rows()[0];
+        const ArtSpy::Face* first = spy->face(alliance.name_first + " &");
+        const ArtSpy::Face* second = spy->face(alliance.name_second);
+        check(first != nullptr && second != nullptr && !has_line(*spy, win), "the winners' names are two lines, the first ends in \" &\", and not one line (" + win + ")");
+        check(first != nullptr && second != nullptr && first->x == second->x && first->baseline < second->baseline && first->baseline == card.scale().y(card.podium().name_pair_base[0]) && second->baseline == card.scale().y(card.podium().name_pair_base[1]),
+              "...one under the other at the left edge of the name's room, at the places that the layout gives them");
+    }
     check(has_line(*spy, "Lost") && has_line(*spy, "Killed") && has_line(*spy, "Hatched") && !has_line(*spy, "Damage"), "...with a tile for each of the others' numbers, and no damage: nothing was counted");
     const ArtSpy::Face* killed_tile = spy->face("Killed");
     const ArtSpy::Face* lost_tile = spy->face("Lost");
@@ -280,6 +288,108 @@ void test_podium(const assets::AssetArchive& arc, const hud_art::Art& art) {
     for (const ArtSpy::Line& line : spyl->lines) {
         if (line.text.find("Bartholomew") != 0) continue;
         check(line.x + spyl->dialog_text_width(line.text, line.em_tenths) <= longname.scale().x(longname.podium().sentence_x + longname.podium().sentence_w), "...and the sentence that names it ends before its room does");
+    }
+    // two long names of an alliance (a tag and a nickname each): each line ends in three dots when it is long and stays in the winner's room, and the others' alliance of long names takes two lines
+    {
+        const std::string long_a = "[ANTS1] Wolfgang Amadeus", long_b = "[WWWWW] MMMMMMMMMMMMMMMM";
+        ScorecardModal pair;
+        pair.set_player_names({long_a, long_b, "[FERN] Fern", "Wren (Guest)"});
+        open(pair, &art, kWide720, sample(true));
+        const auto spyp = draw(arc, pair, kWide720);
+        const ScorecardModal::Row& w = pair.rows()[0];
+        check(w.name_first == long_a && w.name_second == long_b && w.has_second(), "an alliance row keeps its two names apart (" + w.name + ")");
+        const int32_t room = pair.scale().x(pair.podium().name_x + pair.podium().name_w);
+        int32_t lines = 0;
+        for (const ArtSpy::Face& f : spyp->face_lines) {
+            if (f.text.find("[ANTS1]") != 0 && f.text.find("[WWWWW]") != 0) continue;
+            lines += 1;
+            check(f.x + spyp->face_text_width(f.text, f.em_tenths) <= room, "a winner's name stays in the room of the name: " + f.text);
+        }
+        check(lines >= 2, "both long names are drawn (" + std::to_string(lines) + " lines)");
+        // the others: an alliance of the third and the fourth team, names that do not fit one line
+        sim::MatchResult others = sample(true);
+        others.ally = {sim::ALLIANCE_NONE, sim::ALLIANCE_NONE, 3, 2};
+        others.decide_winners();
+        ScorecardModal dup;
+        dup.set_player_names({"Ann", "Bea", "[ANTS1] Wolfgang Amadeus", "[WWWWW] MMMMMMMMMMMMMMMM"});
+        open(dup, &art, kWide720, others);
+        const auto spyd = draw(arc, dup, kWide720);
+        size_t pair_row = 99;
+        for (size_t i = 1; i < dup.rows().size(); ++i) { if (dup.rows()[i].has_second()) pair_row = i; }
+        check(pair_row != 99, "the others have an alliance row");
+        if (pair_row != 99) {
+            const ScorecardModal::Row& r = dup.rows()[pair_row];
+            const sl::OtherRow& o = dup.podium().other[pair_row - 1];
+            const ArtSpy::Face* top = nullptr;
+            const ArtSpy::Face* bottom = nullptr;
+            for (const ArtSpy::Face& f : spyd->face_lines) {
+                if (f.text.find("[ANTS1]") == 0) top = &f;
+                if (f.text.find("[WWWWW]") == 0) bottom = &f;
+            }
+            check(top != nullptr && bottom != nullptr && top->baseline == dup.scale().y(o.pair_base[0]) && bottom->baseline == dup.scale().y(o.pair_base[1]) && top->x == bottom->x, "an alliance of long names takes two lines in its row, one under the other (" + r.name + ")");
+            check(top != nullptr && ((top->text.size() >= 2 && top->text.compare(top->text.size() - 2, 2, " &") == 0) || top->text.find("...") != std::string::npos), "...the first ends in \" &\" (or in dots when it was cut)");
+            check(o.pair_bar.y > o.pair_base[1] && o.pair_small_base > o.pair_bar.y, "...and the bar and the little numbers are below them");
+            {   // ...and they are drawn there: the bar's track is a fill at the lower place, the little numbers' line has its baseline at the lower place
+                const auto fills = spyd->of(Spy::Kind::Fill);
+                bool bar_low = false, bar_one_line = false;
+                for (const auto& f : fills) {
+                    bar_low = bar_low || f.y == dup.scale().rect(o.pair_bar).y;
+                    bar_one_line = bar_one_line || f.y == dup.scale().rect(o.bar).y;
+                }
+                check(bar_low && !bar_one_line, "...the bar of an alliance on two lines is drawn at its lower place, not at the place of one line");
+                bool small_low = false, small_one_line = false;
+                for (const ArtSpy::Face& f : spyd->face_lines) {
+                    if (f.text.rfind("Killed ", 0) == 0 && f.x == dup.scale().x(o.name_x)) {
+                        small_low = small_low || f.baseline == dup.scale().y(o.pair_small_base);
+                        small_one_line = small_one_line || f.baseline == dup.scale().y(o.small_base);
+                    }
+                }
+                check(small_low && !small_one_line, "...and so are the little numbers");
+                check(has_line(*spyd, r.name_second + " (you)") == false && has_line(*spyd, r.name_second) == true, "...the second line is the second name (no \"(you)\" for a team that is not the person's)");
+            }
+        }
+        // the person's own alliance: "(you)" is at the end of the second line, and only there
+        {
+            ScorecardModal mine;
+            mine.set_player_names({"Ann", "Bea", "[ANTS1] Wolfgang Amadeus", "[FERN] Fern"});
+            open(mine, &art, kWide720, others, sim::GameMode::HighestScore, true, nullptr, 3);
+            const auto spy_mine = draw(arc, mine, kWide720);
+            int with_you = 0;
+            bool at_the_end = false, on_the_second_line = false;
+            for (const ArtSpy::Face& f : spy_mine->face_lines) {
+                if (f.text.find("(you)") == std::string::npos) continue;
+                with_you += 1;
+                at_the_end = f.text.size() > 6 && f.text.compare(f.text.size() - 6, 6, " (you)") == 0;
+                for (size_t k = 1; k < mine.rows().size(); ++k) {
+                    if (mine.rows()[k].has_second() && f.baseline == mine.scale().y(mine.podium().other[k - 1].pair_base[1])) on_the_second_line = true;
+                }
+            }
+            check(with_you == 1 && at_the_end && on_the_second_line, "the person's own alliance on two lines has (you) at the end of the second line and nowhere else (" + std::to_string(with_you) + ")");
+        }
+        // a long name of one team is one line, cut with dots: only an alliance takes two
+        {
+            sim::MatchResult one = sample(true);
+            one.ally = {sim::ALLIANCE_NONE, sim::ALLIANCE_NONE, sim::ALLIANCE_NONE, sim::ALLIANCE_NONE};
+            one.decide_winners();
+            ScorecardModal lone;
+            lone.set_player_names({"Ann", "Bea", "[ANTS1] Wolfgang Amadeus Mozart", "Dot"});
+            open(lone, &art, kWide720, one);
+            const auto spy_lone = draw(arc, lone, kWide720);
+            bool halved = false, drawn = false;
+            for (const ArtSpy::Face& f : spy_lone->face_lines) {
+                if (f.text.find("[ANTS1]") == 0) {
+                    drawn = true;
+                    if (f.text.size() >= 2 && f.text.compare(f.text.size() - 2, 2, " &") == 0) halved = true;
+                }
+            }
+            check(drawn && !halved, "a long name of one team is one line, never the first half of an alliance");
+        }
+        // an alliance whose two short names fit one line stays on one line
+        ScorecardModal brief;
+        brief.set_player_names({"Ann", "Bea", "Cy", "Dot"});
+        open(brief, &art, kWide720, others);
+        const auto spyb = draw(arc, brief, kWide720);
+        check(has_line(*spyb, "Cy & Dot"), "an alliance of short names stays one line in the others' well");
     }
     // a number of ten digits is set smaller and stays in its place
     sim::MatchResult big = sample(false);

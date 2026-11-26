@@ -11,6 +11,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+globalThis.AntsNameLetters = require(path.resolve(__dirname, '..', '..', 'web', 'front', 'name_letters.js'));       // (the letters of a name: front/name_letters.js, a script tag of the page before the script that is checked)
 
 const rulesPath = process.argv[2];
 const lobbyPath = process.argv[3];
@@ -95,7 +96,7 @@ const NAME_TABLE = [
     ['x'.repeat(100), false],
     ['Bot (Medium)', false], ['bot (x)', false], ['BOT(HARD)', false], ['  Bot (', false], ['B o t (', false], ['b  o  t  (', false], ['bot(x', false],
     ['Bot', true, 'Bot'], ['Botany', true, 'Botany'], ['Bot Bob', true, 'Bot Bob'], ['Robot (x)', true, 'Robot (x)'], ['bot )', true, 'bot )'], ['The Bot (x)', true, 'The Bot (x)'],
-    ['Zo\u00eb', false], ['\u540d\u524d', false], ['caf\u00e9', false], ['\ud83d\udc1c', false], ['\u00a0Bob', false], ['Bob\u200b', false],        // (written as escapes: a no-break space, a zero-width space)
+    ['Zo\u00eb', true, 'Zo\u00eb'], ['\u0401\u0436\u0438\u043a', true, '\u0401\u0436\u0438\u043a'], ['\u540d\u524d', false], ['caf\u00e9', true, 'caf\u00e9'], ['a\u03b2c', false], ['\ud83d\udc1c', false], ['\u00a0Bob', false], ['Bob\u200b', false],        // (written as escapes: a no-break space, a zero-width space)
     ['a\tb', true, 'ab'], ['a\nb', true, 'ab'], ['a\r\nb', true, 'ab'], ['\u0001x', false], ['x\u007f', false], ['x\u0000', false],
     ['<script>alert(1)</script>', true, '<script>alert(1)</script>'], ['a&b', true, 'a&b'], ['"q" \'q\' <b>', true, '"q" \'q\' <b>'], ['100%', true, '100%'], ['..\\/', true, '..\\/'],
     [null, true, ''], [undefined, true, ''], [42, true, ''], [{}, true, ''],
@@ -113,12 +114,12 @@ NAME_TABLE.forEach(([text, ok, name]) => {
     same('nameCheck(' + shown + ') answers exactly what the NAME block of web/lobby.html answers', got, page);
     same('... and what the NAME block of web/shell.html answers', got, pageShell.nameCheck(text));
 });
-same('the three refusals say what they are about, in the game page\'s words', [R.nameCheck('Zo\u00eb').why, R.nameCheck('a'.repeat(33)).why, R.nameCheck('Bot (x)').why], [
-    'A name can hold printable ASCII characters only: letters, digits and signs without accents.',
+same('the three refusals say what they are about, in the game page\'s words', [R.nameCheck('\u540d\u524d').why, R.nameCheck('a'.repeat(33)).why, R.nameCheck('Bot (x)').why], [
+    'A name can hold Latin and Cyrillic letters, digits and signs: the game cannot draw other letters yet.',
     'A name has at most 32 characters.',
     'A name like "Bot (...)" or "Pip (bot)" is for computer players. Please choose another name.'
 ]);
-check('a name that is too long and not ASCII is refused for the characters first; too long and "Bot (" for the length', /ASCII/.test(R.nameCheck('é' + 'a'.repeat(40)).why) && /32/.test(R.nameCheck('Bot (' + 'x'.repeat(40)).why));
+check('a name that is too long and has a letter that the game cannot draw is refused for the letters first; too long and "Bot (" for the length', /Latin and Cyrillic/.test(R.nameCheck('\u540d' + 'a'.repeat(40)).why) && /32/.test(R.nameCheck('Bot (' + 'x'.repeat(40)).why));
 check('the blanks that were cut are the only change: a name never comes back longer, changed or in another case', ['  Sam  ', 'sAm', 'Sam Lee'].every((t) => R.nameCheck(t).name === t.trim()));
 
 // The twelve plant names of earlier versions are gone: nobody types a name and nobody is given a made-up one (the person's login name or a guest name: front/player_name.js, tests/scripts/web_player_name_check.js)

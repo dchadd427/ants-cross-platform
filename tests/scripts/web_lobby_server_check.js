@@ -8,6 +8,7 @@
 //        exit 0: every check holds; the failures are printed
 'use strict';
 const path = require('path');
+globalThis.AntsNameLetters = require(path.resolve(__dirname, '..', '..', 'web', 'front', 'name_letters.js'));       // (the letters of a name: front/name_letters.js, a script tag of the page before the script that is checked)
 
 const [modulePath, wsUrl, httpBase, listBase] = process.argv.slice(2);
 if (!modulePath || !wsUrl) { console.log('usage: web_lobby_server_check.js lobby_net.js ws://host:port/ws [http://host:port]'); process.exit(2); }
@@ -403,18 +404,18 @@ const pressReady = (env) => { const button = env.$('start'), can = !button.disab
         await step('a code with a capital letter makes no room (the server says NoSuchRoom)', () => () => A.status === 'refused' && A.of('refused')[0].reason === N.REJECT.NoSuchRoom);
     });
 
-    // ---- 9. a name with characters outside the table is cut to what the server takes ---------------------------------------------------------------------------------------------------------------
-    await scenario('9. a name with characters outside the table is cut to what the server takes', async () => {
-        const A = page('José', code('i'));
-        const B = page('ÀÉ', code('i'));
+    // ---- 9. a name with letters of the table is kept (UTF-8, protocol 29), a name with characters outside the table is cut to what the server takes -----------------------------------------------------
+    await scenario('9. a name with characters outside the table is cut to what the server takes, the letters of the table are kept', async () => {
+        const A = page('Jos\u00e9\u6f22', code('i'));
+        const B = page('\u6f22\u5b57', code('i'));
         A.connect();
-        await step('a page named "José" is seated (the Hello did not break the decoder)', () => online(A));
-        check('(the room and the page say "Jos": the accent is left out, not the person)', A.room.slots[0].name === 'Jos' && A.name === 'Jos', JSON.stringify(A.room.slots[0].name));
+        await step('a page named "Jos\u00e9" with one character outside the table is seated (the Hello did not break the decoder)', () => online(A));
+        check('(the room and the page say "Jos\u00e9": the letter stays, the character outside the table is left out, not the person)', A.room.slots[0].name === 'Jos\u00e9' && A.name === 'Jos\u00e9', JSON.stringify(A.room.slots[0].name));
         B.connect();
-        await step('a page whose name is nothing but accents is seated too', () => online(B));
+        await step('a page whose name is nothing but characters outside the table is seated too', () => online(B));
         check('(it has no name yet: the room shows an empty one)', B.room.slots[1].name === '' && B.name === '', JSON.stringify(B.room.slots[1].name));
         check('(and it can give itself a name)', B.rename('Bea') === true);
-        await step('both pages see "Bea"', () => () => B.name === 'Bea' && names(A) === 'Jos|Bea|-|-' && names(B) === 'Jos|Bea|-|-');
+        await step('both pages see "Bea"', () => () => B.name === 'Bea' && names(A) === 'Jos\u00e9|Bea|-|-' && names(B) === 'Jos\u00e9|Bea|-|-');
         A.leave();
         B.leave();
     });

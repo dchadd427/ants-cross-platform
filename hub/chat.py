@@ -37,7 +37,7 @@ import json
 import os
 import re
 
-from . import PROTOCOL, admin as adminmod, commands as commandsmod, follows as followsmod, images as imagesmod, messages as messagesmod, people as peoplemod, presence as presencemod, pseudo, session as sessionmod, text as textrules
+from . import PROTOCOL, admin as adminmod, commands as commandsmod, follows as followsmod, images as imagesmod, messages as messagesmod, nicknames as nicknamesmod, people as peoplemod, presence as presencemod, pseudo, session as sessionmod, text as textrules
 from .commands import NEEDS, RANK
 from .limits import AccountLimits, RateByAccount, TokenBucket
 from .store import PICKS, StoreError
@@ -97,6 +97,7 @@ class Chat:
         self.presence = presencemod.Presence(self, limits, clock, dumps)       # (who is here: the list of the front page)
         self.people = peoplemod.People(self, limits, clock, dumps)              # (the alerts of an account's bell, invitations to a room, mentions: hub/people.py)
         self.follows = followsmod.Follows(self, limits, clock, dumps)           # (the people that an account follows, and the alert when one of them opens a room: hub/follows.py)
+        self.nicknames = nicknamesmod.Nicknames(self, limits, clock, dumps)     # (nicknames, tags, guests' names and the pass for the game server: hub/nicknames.py)
         self.messages = messagesmod.Messages(self, limits, clock, dumps)        # (private messages and the reports of them: hub/messages.py)
         self.ref_cache = {}                         # account -> its reference (a keyed hash that never changes while the hub's secret does not: made once)
         self.on_store_error = None                  # called with the error when the database cannot be used for a message (the hub logs it, not more than once in a while)
@@ -168,7 +169,7 @@ class Chat:
             who = peer.identity
             if who is None or who.account_id != account or getattr(peer, "closed", False):
                 continue
-            now = sessionmod.renamed(who, profile.username, display, profile.pick)
+            now = self.nicknames.dress(sessionmod.renamed(who, profile.username, display, profile.pick))
             if now != who:
                 peer.identity = now
                 peer.send_text(dumps({"t": "you", "you": self.you_of(now)}))
@@ -222,6 +223,8 @@ class Chat:
         or "username") and `other` (the name that it is not shown by). Nothing else."""
         role = self.roles.role_of(who.account_id)
         you = {"name": who.name, "mod": role != "none", "role": role, "k": self.key_of(who.account_id)}
+        if who.nick:
+            you.update(self.nicknames.state(who))                 # (the nickname and the tag, when each was set and when it may change again: hub/nicknames.py)
         if who.other:
             you["pick"], you["other"] = who.pick, who.other
             entry = getattr(self.roles, "entries", {}).get(who.account_id)
@@ -272,6 +275,8 @@ class Chat:
         """A line as it goes to a page: `k` is its author's key (the page tells its own lines by it, since names are not unique). `names` (account -> username) is given only for a moderator's
         copy: it adds `u`, the author's username, where that is not the name that the line shows."""
         out = {"id": line.id, "at": line.at, "who": line.name, "text": line.text, "mod": bool(line.mod), "k": self.key_of(line.account) if line.account else ""}
+        if line.tag:
+            out["tag"] = line.tag                      # (the tag that the author had when it wrote the line: docs/HUB_NICKNAMES.md)
         if line.mod:
             out["role"] = "admin" if line.mod >= RANK["admin"] else "mod"      # (what the author was when it wrote the line: a mark for the pages and never a reason to allow anything)
         if not line.account:
@@ -320,6 +325,8 @@ class Chat:
             self.presence.on_here(peer, msg)
         elif kind == "pick":
             self.on_pick(peer, msg)
+        elif kind == "name":
+            self.nicknames.on_frame(peer, msg)
         elif kind == "seen":
             self.people.on_seen(peer, msg)
         elif kind == "clearalerts":
@@ -430,7 +437,7 @@ class Chat:
             return self.mistake(peer, "rate")
         self.global_limit.take(now)
         try:
-            entry = self.store.add_line(who.account_id, who.name, line, max(RANK[role], 1 if mod else 0), **({} if img is None else {"image": img}))       # (the role that the author has now: what the line will say of it)
+            entry = self.store.add_line(who.account_id, who.name, line, max(RANK[role], 1 if mod else 0), tag=who.tag, **({} if img is None else {"image": img}))       # (the role that the author has now: what the line will say of it)
         except ImageGone:
             self.account_limits.refund(who.account_id, counted)
             self.global_limit.give_back()
@@ -532,7 +539,7 @@ class Chat:
             return name, words[1], int(words[2])
         if name == "ban" and len(words) == 3 and words[2] == "purge":
             return name, words[1], PURGE_MINUTES                    # (a ban that also takes the person's lines of the last hour off every screen: the same power as /ban)
-        if name in ("unmute", "kick", "ban", "unban", "nopic", "pic", "noimages", "images") and len(words) == 2:
+        if name in ("unmute", "kick", "ban", "unban", "nopic", "pic", "noimages", "images", "rename") and len(words) == 2:
             return name, words[1], 0
         if name == "del" and len(words) == 2 and NUMBER.match(words[1]):
             return name, int(words[1]), 0
@@ -667,6 +674,9 @@ class Chat:
             if adminmod.change_picture(self.store, name, whom, self.store.picture_state(target), setter, io.StringIO(), io.StringIO()):          # (the admin page's own change: its picture block and its lift)
                 return self.mistake(peer, "bad")
             self.sync_pictures()
+        elif name == "rename":
+            if not self.nicknames.reset(target, note=(by, "rename", whom, "")):
+                return self.mistake(peer, "bad")                     # (nothing to reset: the person has no nickname and no tag)
         elif name in ("noimages", "images"):
             if not self.store.set_noimages(target, name == "noimages", by, note=(by, name, whom, "")):
                 return self.mistake(peer, "bad")                     # (already taken away, or not taken away: nothing to do)

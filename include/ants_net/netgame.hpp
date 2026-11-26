@@ -149,6 +149,8 @@ public:
     // ---- set-up (non-blocking) -------------------------------------------------------------------------------------------------------------------
     /// Opens a room on `port` (0 = any free port, see listen_port()); `loopback_only` accepts only this machine (tests). False when the port cannot be
     /// used or there is no transport.
+    /// Protocol 29: the hub's pass for the name of the next join (valid_pass_shape; "" for none): told in the Hello of the first link and of every way back. Set it before join() / join_url().
+    void set_name_pass(const std::string& pass) { name_pass_ = valid_pass_shape(pass) ? pass : std::string(); }
     bool host(uint16_t port, const std::string& name, bool loopback_only = false);
     /// Starts joining the room at address:port. False when the address cannot be used or there is no transport; the outcome arrives as events.
     /// `want_seat` (0 .. 3) asks the host for that seat (the color: 0 green, 1 red, 2 blue, 3 black); a seat that is taken gives the first free one; 255 = any.
@@ -577,6 +579,7 @@ private:
     FillPlan fill_;                         // the bots that this machine's START asks for: a level for each seat (protocol 11, 13)
     sim::StartTeams teams_;                 // the teams that this machine's START asks for (protocol 13)
     JoinTarget target_;                     // client: how the first link was made (join, join_url)
+    std::string name_pass_;                 // client: the hub's pass for the name (set_name_pass), told in every Hello
     uint8_t platform_{native_platform()};   // client: what the Hello says this machine is (set_platform)
     std::optional<CreateBlock> create_;     // client: the room that the Hello would make when the server has none of this code (set_create)
     bool way_back_{false};                  // client: the session was built to come back by itself (a dedicated server's room that gave this machine a key)

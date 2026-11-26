@@ -266,8 +266,8 @@
   {
    "id": "a_name_in_a_span_not_a_bdi",
    "file": "web/home/players.js",
-   "old": "var nm = el('bdi', 'pl-nm', row.name),",
-   "new": "var nm = el('span', 'pl-nm', row.name),",
+   "old": "var nm = el('bdi', 'pl-nm', row.tag ? '' : row.name),",
+   "new": "var nm = el('span', 'pl-nm', row.tag ? '' : row.name),",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -672,8 +672,8 @@
   {
    "id": "the_own_row_is_not_made_again_for_a_role",
    "file": "web/home/players.js",
-   "old": "mine = you ? { name: you.name, mod: you.mod, role: you.role, pic: you.pic, doing: doing, elsewhere",
-   "new": "mine = you ? { name: you.name, mod: you.mod, pic: you.pic, doing: doing, elsewhere",
+   "old": "mine = you ? { name: you.name, tag: you.tag, mod: you.mod, role: you.role, pic: you.pic, doing: doing, elsewhere",
+   "new": "mine = you ? { name: you.name, tag: you.tag, mod: you.mod, pic: you.pic, doing: doing, elsewhere",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -686,8 +686,8 @@
   {
    "id": "the_welcomes_role_is_not_read",
    "file": "web/home/players.js",
-   "old": "you = yo ? { name: yo.name, mod: yo.mod, role: yo.role, pic: yo.pic } : null;",
-   "new": "you = yo ? { name: yo.name, mod: yo.mod, role: yo.mod ? 'mod' : 'none', pic: yo.pic } : null;",
+   "old": "you = yo ? { name: yo.name, tag: yo.tag, mod: yo.mod, role: yo.role, pic: yo.pic } : null;",
+   "new": "you = yo ? { name: yo.name, tag: yo.tag, mod: yo.mod, role: yo.mod ? 'mod' : 'none', pic: yo.pic } : null;",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -1129,6 +1129,27 @@
    "file": "web/home/players.js",
    "old": "if (!follows.length) put(list,",
    "new": "if (false) put(list,",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_own_row_has_no_tag",
+   "file": "web/home/players.js",
+   "old": "} : { i: 0, name: you.name, tag: you.tag, at: doing ? doing.at : 'look'",
+   "new": "} : { i: 0, name: you.name, at: doing ? doing.at : 'look'",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_row_has_no_tag",
+   "file": "web/home/players.js",
+   "old": "tag: Chat.tagOf(raw.tag), at: raw.at,",
+   "new": "tag: '', at: raw.at,",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_tag_is_drawn_inside_the_name_as_text",
+   "file": "web/home/players.js",
+   "old": "nm.appendChild(el('span', 'nm-tag', '[' + row.tag + ']'));",
+   "new": "nm.appendChild(doc.createTextNode('[' + row.tag + ']'));",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]

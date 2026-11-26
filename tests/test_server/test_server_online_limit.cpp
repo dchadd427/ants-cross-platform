@@ -506,6 +506,32 @@ void run_online_limit_tests() {
         fs::remove_all(dir);
     } TEST_END();
 
+    TEST_CASE("S3.215b The Same Cut Is Made At A Whole Letter: A Name Of 32 Letters Of Two Bytes Is Cut To 31 Letters, Never To Half A Letter (A Notice Of Half A Letter Is No Text That A Page Takes)") {
+        const fs::path dir = fresh_dir("s215b");
+        World w(limits_with(8));
+        w.mgr.mutable_store().set_approved({approved_map(dir, "Small Ext.lvl", 100, 100, true)});
+        std::string longest;
+        for (int i = 0; i < 32; ++i) longest += "\xc3\xa9";
+        std::string cut;
+        for (int i = 0; i < 31; ++i) cut += "\xc3\xa9";
+        Client& pia = w.connect_page("Pia", "stal0005", lobby_block_of());
+        Client& bob = w.connect_page(longest, "stal0005", lobby_block_of());
+        const net::SeatKey pia_key = pia.lobby->key();
+        const net::SeatKey bob_key = bob.lobby->key();
+        ASSERT_TRUE(pia.lobby->request_plan(plan_for("Small Ext.lvl")));
+        w.run(300);
+        Client& pia_game = w.connect_game("Pia", "stal0005", pia_key, false, dir.string());
+        w.connect_game(longest, "stal0005", bob_key);
+        ASSERT_TRUE(pia_game.lobby->request_start());
+        w.run(600);
+        const std::vector<std::string> lines = said(pia_game.room_chat);
+        ASSERT_TRUE(lines.size() == 2);
+        ASSERT_EQ(lines[0], "255||" + cut + "'s game is too old for this map: refresh the page or update the game.");
+        ASSERT_EQ(lines[1], "255||To start without " + longest + ", press Remove on their color.");
+        ASSERT_TRUE(net::utf8_length(lines[0].substr(5)) == net::kMaxChatChars);
+        fs::remove_all(dir);
+    } TEST_END();
+
     TEST_CASE("S3.213 A Game Of A Classic Map That Cannot Load It Is Named Too (\"could not load this map\"), the person who is the leader gets no instruction to remove themselves, and the notice is the room's, one line for each cancelled START") {
         World w(limits_with(8));
         Client& pia = w.connect_page("Pia", "stal0002", lobby_block_of());

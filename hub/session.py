@@ -17,18 +17,21 @@ import collections
 from . import config, text
 
 
-class Identity(collections.namedtuple("Identity", "account_id name young session expires username pick other")):
+class Identity(collections.namedtuple("Identity", "account_id name young session expires username pick other nick tag")):
     __slots__ = ()
 
-    def __new__(cls, account_id, name, young, session=None, expires=0, username=None, pick="", other=""):
-        return super().__new__(cls, account_id, name, young, session, expires, name if username is None else username, pick, other)
+    def __new__(cls, account_id, name, young, session=None, expires=0, username=None, pick="", other="", nick="", tag=""):
+        return super().__new__(cls, account_id, name, young, session, expires, name if username is None else username, pick, other, nick, tag)
 
     def __repr__(self):
         return "<Identity>"             # (the default shows the account id and the session's key: the id is like a password, and is in no representation)
 
 
 def renamed(who, username, display, pick):
-    """The Identity `who` with the names of an account as they are now (its username, its display name or '' for none, and the pick): what a socket that stays open is shown by."""
+    """The Identity `who` with the names of an account as they are now (its username, its display name or '' for none, and the pick): what a socket that stays open is shown by. An account that has a nickname
+    (docs/HUB_NICKNAMES.md) is shown by it whatever its login says: only its username can change."""
+    if who.nick:
+        return who._replace(username=username)
     if not display:
         return who._replace(name=username, username=username, pick="", other="")
     if pick == "display":

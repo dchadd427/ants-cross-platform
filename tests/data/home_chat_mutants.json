@@ -11,8 +11,8 @@
   {
    "id": "name_in_a_span_not_a_bdi",
    "file": "web/home/chat.js",
-   "old": "el('bdi', 'gc-who', e.who)",
-   "new": "el('span', 'gc-who', e.who)",
+   "old": "el('bdi', 'gc-who', e.tag ? '' : e.who)",
+   "new": "el('span', 'gc-who', e.tag ? '' : e.who)",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -1327,8 +1327,8 @@
   {
    "id": "dock_mounted_free_while_going",
    "file": "web/home/home.js",
-   "old": "inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); wantMessages(); } } catch (e) { dock = null; }",
-   "new": "dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); wantMessages(); } } catch (e) { dock = null; }",
+   "old": "inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); wantMessages(); wantNames(); } } catch (e) { dock = null; }",
+   "new": "dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); wantMessages(); wantNames(); } } catch (e) { dock = null; }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -1425,8 +1425,8 @@
   {
    "id": "dock_mount_error_reaches_the_page",
    "file": "web/home/home.js",
-   "old": "try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; }, load: lazy }); inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); wantMessages(); } } catch (e) { dock = null; }",
-   "new": "if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; }, load: lazy }); inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); wantMessages(); }",
+   "old": "try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; }, load: lazy }); inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); wantMessages(); wantNames(); } } catch (e) { dock = null; }",
+   "new": "if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; }, load: lazy }); inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); wantMessages(); wantNames(); }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -3954,6 +3954,34 @@
    "file": "web/home/chat.js",
    "old": "hello = null; lastAlerts = null; lastFollows = null; lastMsgs = null;\n            if (!stopped)",
    "new": "hello = null; lastAlerts = null;\n            if (!stopped)",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_dock_hides_the_nickname_from_the_sheet",
+   "file": "web/home/chat.js",
+   "old": "you: function () { return you ? { name: you.name, role: you.role, nick: you.nick, tag: you.tag, nickat: you.nickat, nickfree: you.nickfree, tagfree: you.tagfree } : null; }, line: lineById, by: byAuthor,",
+   "new": "you: function () { return you ? { name: you.name, role: you.role } : null; }, line: lineById, by: byAuthor,",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_new_nickname_does_not_reach_the_menu",
+   "file": "web/home/chat.js",
+   "old": "you.name = next.name; you.nick = next.nick; you.tag = next.tag; you.nickat = next.nickat; you.nickfree = next.nickfree; you.tagfree = next.tagfree; you.pick = next.pick; you.other = next.other;",
+   "new": "you.pick = next.pick; you.other = next.other;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_line_has_its_tag_in_the_name",
+   "file": "web/home/chat.js",
+   "old": "var name = el('bdi', 'gc-who', e.tag ? '' : e.who);",
+   "new": "var name = el('bdi', 'gc-who', e.who);",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_menu_button_does_not_open_the_sheet",
+   "file": "web/home/chat.js",
+   "old": "nameBtn.addEventListener('click', guard(function () { setMenu(false); tapped('names'); }));",
+   "new": "nameBtn.addEventListener('click', guard(function () { setMenu(false); }));",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]

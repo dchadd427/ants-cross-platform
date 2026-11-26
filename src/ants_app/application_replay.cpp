@@ -89,13 +89,15 @@ bool continues(const replay::Replay& now, const replay::Replay& later) {
     return std::equal(now.hashes.begin(), now.hashes.end(), later.hashes.begin());
 }
 
-/// A text for the page's JSON: printable ASCII, with the backslash and the quote escaped (the names of a file are printable ASCII already: the reader refuses any other)
+/// A text for the page's JSON: printable ASCII and, when the whole text is a valid name (protocol 29: UTF-8 of the letters that a name may hold), those letters, with the backslash and the quote escaped
+/// (the texts of a file are of that table already: the reader refuses any other); a byte that is none of it becomes a '?'
 std::string json_text(const std::string& raw) {
     std::string out = "\"";
+    const bool utf8 = net::valid_wire_name(raw, raw.size(), raw.size());
     for (const char c : raw) {
         const unsigned char u = static_cast<unsigned char>(c);
         if (c == '"' || c == '\\') out.push_back('\\');
-        out.push_back(u >= 0x20 && u <= 0x7E ? c : '?');
+        out.push_back((u >= 0x20 && u <= 0x7E) || (utf8 && u >= 0x80) ? c : '?');
     }
     out.push_back('"');
     return out;
@@ -123,7 +125,7 @@ void Application::begin_recording(replay::Header head) {
     withdraw_replay();
     head.game_version = head_text(std::string(VERSION_STRING), replay::kMaxTextBytes);
     head.build_id = head_text(std::string(BUILD_ID), replay::kMaxTextBytes);
-    for (std::string& name : head.names) name = head_text(name, replay::kMaxTextBytes / 2);               // (a typed name is at most 32 characters)
+    for (std::string& name : head.names) name = net::clip_wire_name(name);                                // (a name is at most 32 characters of the table: protocol 29)
 #if defined(__EMSCRIPTEN__)
     recorder_.reset();
 #else

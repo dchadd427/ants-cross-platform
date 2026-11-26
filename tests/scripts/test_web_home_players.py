@@ -82,7 +82,7 @@ class TheLoaderInHome(unittest.TestCase):
     def test_it_asks_for_the_two_files_by_their_base_name_through_the_part_loader_and_only_after_the_dock(self):
         self.assertIn("lazy('home/players', function () {", self.js)
         self.assertEqual(self.js.count("wantPlayers();"), 1, "one call, where the dock has been mounted")
-        self.assertIn("inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); wantMessages(); } } catch (e) { dock = null; } }", self.js)
+        self.assertIn("inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); wantMessages(); wantNames(); } } catch (e) { dock = null; } }", self.js)
         self.assertIn("if (askedPlayers || !dock) return;\n            askedPlayers = true;", self.js, "once, and not before there is a dock to speak through")
         self.assertEqual(sorted(set(re.findall(r"home/players\w*", code_of(self.js)))), ["home/players"])
 
@@ -236,7 +236,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_players_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
-    FILES = (["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/alert_core.js", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/games.css", "web/hub_here.js", "web/home/players.js", "web/home/players.css",
+    FILES = (["tools/size_limits.py", "web/lobby.html", "web/front/name_letters.js", "web/home/names.js", "web/home/names.css", "web/rejoin_key.js", "web/alert_core.js", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/games.css", "web/hub_here.js", "web/home/players.js", "web/home/players.css",
               "tests/scripts/test_web_home_players.py", "tests/scripts/web_home_players_check.js", "tests/scripts/web_home_chat_check.js", "tests/scripts/web_page_harness.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
               "web/matches.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html", "docs/HOME_SCREEN.md"]
              + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "room_fog.js", "room_sheet.js", "seat_menu.js", "map_picker.js", "map_maker_link.js")])

@@ -67,6 +67,7 @@ add_executable(test_lobby
     test_lobby_rematch.cpp
     test_lobby_public.cpp
     test_lobby_ready.cpp
+    test_lobby_names.cpp
     test_lobby_fog.cpp
 )
 

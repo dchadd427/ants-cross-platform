@@ -1610,7 +1610,7 @@ class TheIdIsLikeAPassword(unittest.IsolatedAsyncioTestCase):
     def test_the_default_representation_of_an_identity_and_a_line_never_shows_the_id(self):
         who = session.Identity(ID, "actor.a", False, "sessionkey" + ID, 0, "actor.a", "display", "x.y")
         line = storemod.base.Line(1, 2, ID, "actor.a", "text", 0)
-        for text in (repr(who), str(who), "%r" % (who,), repr([who]), repr({"k": who}), repr(line), str(line), repr([line]), repr(storemod.base.Line._make([1, 2, TARGET_ID, "x", "y", 0, None]))):
+        for text in (repr(who), str(who), "%r" % (who,), repr([who]), repr({"k": who}), repr(line), str(line), repr([line]), repr(storemod.base.Line._make([1, 2, TARGET_ID, "x", "y", 0, None, ""]))):
             assert_no_id(self, text, "a representation")
             self.assertNotIn("sessionkey", text)
         self.assertEqual((who.account_id, line.account), (ID, ID))

@@ -1,0 +1,3 @@
+/* A tag before a name ("[ANT] Zoe") and "(Guest)" after one are dimmer than the name: every page that shows a name draws them with front/name_letters.js `paint` (the class nm-tag, the class nm-guest) and has this file
+   (docs/HUB_NICKNAMES.md, "Where a name shows"). The game itself draws one plain string. */
+.nm-tag, .nm-guest { opacity: .66; font-weight: 400; }

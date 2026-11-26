@@ -185,6 +185,8 @@ public:
 
     /// The bytes that the codes of the rooms of the control interface are drawn from (draw_room_code): the operating system's generator unless a test says otherwise (secret.hpp random_bytes)
     void set_code_source(RandomBytes source) { code_source_ = std::move(source); }
+    /// Protocol 29: the check of the hub's pass for a name (ants_server/name_pass.hpp), given to the lobby of every room that is made from now on (RoomSpec::name_gate). Unset: names are only checked by the wire.
+    void set_name_gate(std::function<bool(const std::string& name, const std::string& pass)> gate) { name_gate_ = std::move(gate); }
 
     /// Starts to keep restart records (restart_record.hpp): every room that holds seats keeps one from the start of its match to its end, and restore_rooms() can bring the rooms of the records of the
     /// folder back. Call it before any room is made. False, with the reason, when the folder cannot be used (the server then keeps none). An empty `config.dir` keeps none and is true.
@@ -490,6 +492,7 @@ private:
     uint64_t created_{0};
     uint64_t refused_{0};
     RandomBytes code_source_;                    // (set in the constructor)
+    std::function<bool(const std::string&, const std::string&)> name_gate_;      // (set_name_gate)
     std::mt19937 bot_rng_;
     bool bot_rng_seeded_{false};                 // (seeded from the system's entropy at the first match unless seed_bot_matches said otherwise)
     bool bot_gap_pending_{false};                // the matches of computer players are started kBotStartGapMs apart: until here (a flag and a time, not a time alone: a time that is older than 24.8 days reads as one to come)

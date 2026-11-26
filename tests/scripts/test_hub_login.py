@@ -918,7 +918,7 @@ class TheDisplayName(LoginTest):
         c = self.socket(v)
         self.assertEqual(you_without_the_key(c.welcome["you"]), {"name": "Maple Leaf", "mod": False, "role": "none", "pick": "display", "other": "maple.leaf"})
         me = v.call("GET", "/hub/me").json()
-        self.assertEqual(me, {"login": True, "you": c.welcome["you"]})
+        self.assertEqual(me, {"login": True, "you": c.welcome["you"], "play": {"name": "Maple Leaf"}})        # (`play`: the name that the games show and, on a hub that has the game server's key, its pass: docs/HUB_NICKNAMES.md)
         reader = self.socket()
         reader.drain(0.2)
         c.say("hello from a display name")

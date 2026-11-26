@@ -1,5 +1,6 @@
 add_library(ants_net STATIC
     protocol.cpp
+    name_rules.cpp
     sequencer.cpp
     lockstep.cpp
     prediction.cpp

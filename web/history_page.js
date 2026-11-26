@@ -85,6 +85,21 @@
     // The sides that were in the ranking: the ones that did not drop out (their scores are the verdict and the share of the score)
     function rankedOf(sides) { return sides.filter(function (s) { return !s.left; }); }
     function sideName(side) { return side.seats.map(seatLabel).join(' & '); }
+    // A seat's label drawn into a node as text, with the tag of its name and "(Guest)" dimmer than the name (front/name_letters.js paint; a page that does not have it shows the plain text)
+    function paintLabel(doc, node, label) {
+        var L = root && root.AntsNameLetters;
+        if (L && typeof L.paint === 'function') L.paint(doc, node, label); else node.textContent = label;
+        return node;
+    }
+    // A side drawn into a node: each seat's label as paintLabel makes it, " & " between them
+    function paintSide(doc, node, side) {
+        node.textContent = '';
+        side.seats.forEach(function (seat, i) {
+            if (i) node.appendChild(doc.createTextNode(' & '));
+            node.appendChild(paintLabel(doc, doc.createElement('span'), seatLabel(seat)));
+        });
+        return node;
+    }
     // Mode 187 has no food and no score: the engine's score there is the kills, so the pages show kills and never call it a score
     function scoreText(rec, side) { return rec && rec.mode === '187' ? numberText(side.row.killed) + ' kills' : numberText(side.row.score); }
     function winnerSide(rec, sides) {
@@ -327,7 +342,7 @@
         function mk(tag, className, content) { var n = doc.createElement(tag); if (className) n.className = className; if (content !== undefined) n.textContent = content; return n; }
         function num(seat, key) { return whole(seat[key]); }
         function seatName(seat, side, rec) {
-            var d = mk('div', 'nm'), sq = mk('i'); sq.setAttribute('data-c', colorOf(seat)); d.appendChild(sq); d.appendChild(mk('span', '', seatLabel(seat)));
+            var d = mk('div', 'nm'), sq = mk('i'); sq.setAttribute('data-c', colorOf(seat)); d.appendChild(sq); d.appendChild(paintLabel(doc, mk('span', ''), seatLabel(seat)));
             if (side.winner && rec.draw !== true) d.appendChild(mk('span', 'won', 'Won'));
             if (seat.left === true) d.appendChild(mk('span', 'left', 'Left early'));
             return d;
@@ -350,7 +365,7 @@
                     td.appendChild(mk('span', 'sub', 'Bombs set ' + num(seat, 'bombs_planted') + ', defused ' + num(seat, 'bombs_defused') + ', fires lit ' + num(seat, 'fires_lit'))); tr.appendChild(td);
                     all.forEach(function (c) { var n = num(seat, c.key); tr.appendChild(mk('td', n ? '' : 'zero', numberText(n))); });
                     tb.appendChild(tr);
-                    sq.setAttribute('data-c', colorOf(seat)); top.appendChild(sq); top.appendChild(mk('span', 'nmt', seatLabel(seat))); if (won) top.appendChild(mk('span', 'won', 'Won')); if (seat.left === true) top.appendChild(mk('span', 'left', 'Left early')); card.appendChild(top);
+                    sq.setAttribute('data-c', colorOf(seat)); top.appendChild(sq); top.appendChild(paintLabel(doc, mk('span', 'nmt'), seatLabel(seat))); if (won) top.appendChild(mk('span', 'won', 'Won')); if (seat.left === true) top.appendChild(mk('span', 'left', 'Left early')); card.appendChild(top);
                     [[all, 'g'], [extra, 'g two']].forEach(function (grp) { var g = mk('div', grp[1]); grp[0].forEach(function (c) { cell(c, num(seat, c.key), g); }); card.appendChild(g); });
                     cards.appendChild(card);
                 });
@@ -403,7 +418,7 @@
     return {
         PAGE: PAGE, ID_RE: ID_RE, FILE_RE: FILE_RE, COLORS: COLORS, WHO: WHO, FILTERS: FILTERS, SORTS: SORTS, Q_MAX: Q_MAX,
         idOf: idOf, fileOfId: fileOfId, idOfFile: idOfFile, numberText: numberText, formatText: formatText, modeText: modeText,
-        seatLabel: seatLabel, colorOf: colorOf, seatsOf: seatsOf, sidesOf: sidesOf, sideName: sideName, scoreText: scoreText, winnerSide: winnerSide, noWinnerText: noWinnerText, playersText: playersText, howEnded: howEnded, bestOf: bestOf, shareOf: shareOf,
+        paintLabel: paintLabel, paintSide: paintSide, seatLabel: seatLabel, colorOf: colorOf, seatsOf: seatsOf, sidesOf: sidesOf, sideName: sideName, scoreText: scoreText, winnerSide: winnerSide, noWinnerText: noWinnerText, playersText: playersText, howEnded: howEnded, bestOf: bestOf, shareOf: shareOf,
         columnsOf: columnsOf, recState: recState, detailsOf: detailsOf, rankedOf: rankedOf,
         defaults: defaults, cleanQuery: cleanQuery, stateOf: stateOf, urlOf: urlOf, encodeQuery: encodeQuery, planOf: planOf, activeOf: activeOf, sortLabel: sortLabel, sortKeyOf: sortKeyOf,
         rangeText: rangeText, pagerOf: pagerOf, problemOf: problemOf, pictures: pictures, mapFact: mapFact, replayStats: replayStats

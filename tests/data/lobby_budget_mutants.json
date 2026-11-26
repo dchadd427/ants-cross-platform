@@ -186,8 +186,8 @@
   {
    "id": "net_rename_outside_the_budget",
    "file": "web/front/lobby_net.js",
-   "old": "return this.send('rename', encodeName(name));",
-   "new": "return this.sendBytes(encodeName(name));",
+   "old": "return this.send('rename', encodeName(name, shown));",
+   "new": "return this.sendBytes(encodeName(name, shown));",
    "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
   },
   {
@@ -207,8 +207,8 @@
   {
    "id": "net_rename_uses_the_removals_budget",
    "file": "web/front/lobby_net.js",
-   "old": "return this.send('rename', encodeName(name));",
-   "new": "return this.send('remove', encodeName(name));",
+   "old": "return this.send('rename', encodeName(name, shown));",
+   "new": "return this.send('remove', encodeName(name, shown));",
    "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
   },
   {

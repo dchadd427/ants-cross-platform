@@ -76,8 +76,9 @@ class TheScript(unittest.TestCase):
     def test_it_keeps_one_key_in_the_browser_and_nothing_in_the_tab(self):
         self.assertNotRegex(self.code, r"sessionStorage|indexedDB|document\.cookie")
         self.assertEqual(re.findall(r"\bwin\.(\w+)", self.code), ["fetch", "fetch", "localStorage", "AbortController"], "the page's window gives the script its fetch, its localStorage and its AbortController, and nothing else")
-        self.assertEqual(re.findall(r"""setItem\((\w+),""", self.code), ["GUEST_KEY"])
+        self.assertEqual(re.findall(r"""setItem\((\w+),""", self.code), ["GUEST_KEY", "NAME_KEY"])
         self.assertIn("var GUEST_KEY = 'ants.guest';", self.js)
+        self.assertIn("var NAME_KEY = 'ants.guestname';", self.js)
 
     def test_it_writes_no_markup_and_touches_no_element(self):
         self.assertNotRegex(self.code, r"innerHTML|outerHTML|insertAdjacentHTML|document\.|\bwindow\.|createElement|textContent|\beval\b|new Function|setTimeout\(\s*['\"]")
@@ -89,7 +90,7 @@ class TheScript(unittest.TestCase):
 
     def test_a_name_that_the_hub_says_is_cut_before_any_work(self):
         self.assertIn("var s = text.slice(0, CUT);", self.js)
-        self.assertLess(self.js.index("var s = text.slice(0, CUT);"), self.js.index(".normalize('NFKD')"))
+        self.assertLess(self.js.index("var s = text.slice(0, CUT);"), self.js.index(".normalize('NFC')"))
 
 
 @unittest.skipUnless(NODE, "node is not installed: the name that a person plays under was NOT run (tests/scripts/web_player_name_check.js)")
@@ -105,9 +106,9 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/player_name_mutants.json on a COPY of the files, one at a time: each must make its command fail (a command that exits non-zero), and the copy with nothing changed must
     pass, so that a failure is the change's. The whole list runs with tools/mutate.py; the quick tier runs the ones of QUICK (every rule has one) and keeps the list well made."""
 
-    FILES = ("tools/size_limits.py", "web/front/player_name.js", "web/lobby.html", "web/rejoin_key.js", "web/alert_core.js", "web/shell.html", "web/front/lobby_rules.js", "web/front/lobby_net.js", "web/front/lobby_chat.js", "web/front/rematch.js", "web/front/game_modes.js", "web/front/game_type.js", "web/front/room_fog.js", "web/front/room_sheet.js", "web/front/seat_menu.js",
+    FILES = ("tools/size_limits.py", "web/front/name_letters.js", "web/front/player_name.js", "web/lobby.html", "web/rejoin_key.js", "web/alert_core.js", "web/shell.html", "web/front/lobby_rules.js", "web/front/lobby_net.js", "web/front/lobby_chat.js", "web/front/rematch.js", "web/front/game_modes.js", "web/front/game_type.js", "web/front/room_fog.js", "web/front/room_sheet.js", "web/front/seat_menu.js",
              "web/shapes.js", "web/home/home.js", "web/home/games.js", "web/home/alerts.js", "web/home/alerts.css", "tests/scripts/web_player_name_check.js", "tests/scripts/web_name_check.js", "tests/scripts/web_page_harness.js")
-    QUICK = ("fit_without_nfkd", "fit_keeps_non_ascii", "fit_cuts_a_long_name", "fit_ignores_the_checker", "me_prefers_the_other_name", "me_guest_is_failed", "guest_five_digits", "guest_not_kept_in_storage",
+    QUICK = ("fit_without_nfc", "fit_keeps_what_the_wire_refuses", "fit_cuts_a_long_name", "fit_ignores_the_checker", "me_prefers_the_other_name", "me_guest_is_failed", "guest_five_digits", "guest_not_kept_in_storage",
              "login_not_asked_again", "guest_answer_cached_again", "take_back_keeps_the_guest_name", "question_not_shared", "known_for_a_login", "no_limit_on_the_wait", "late_answer_is_heard", "not_found_is_a_failure", "request_without_the_cookie", "clock_called_as_a_method",
              "page_seat_connects_without_the_name", "page_name_of_a_new_seat_is_the_rooms", "page_connect_skips_open", "page_rejoin_with_a_name", "page_card_not_read_only", "name_block_lobby_goes_on_without_the_button",
              "name_block_lobby_hands_on_what_was_typed", "shell_gate_gives_no_name_to_the_game")

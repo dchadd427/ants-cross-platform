@@ -31,10 +31,17 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - **A better Play of the game.** It is now one player's best 10 seconds: 10 points a kill, more for knocking a player out, saving your hill from a Thief, stopping a Thief with loot and wiping out a whole group. The card says it ("Gory: triple kill in 8 seconds", "saved the hill").
 - **Fill a box in the Map Maker.** A switch under the Objects, Food and Ants tools: drag a box and it fills with every cell, every other cell, every Nth row or column or a random pattern, as one Undo step. Water, rock and things in the way are skipped and counted; one fill puts at most 250 ants. An AI that you connect has it too (`fill_area`).
+- **Nicknames, tags and guest names.** Log in and choose a nickname (3 to 16 letters and digits, yours alone) and, if you like, a tag ("[ANTS] Zoe") on one sheet, Your name, from the name in the chat menu. The chat, the Players list, the rooms, the results and the match history show it; finished matches keep the names they were played with. A guest can type a name too: it shows as "Wren (Guest)" and stays in this browser, and a note on the top bar asks for it once. Latin (with Vietnamese) and Cyrillic letters work.
+- **Long names fit.** The results show an alliance on two lines when its names are long, and a long name ends in dots in a room and on the countdown card.
 - **The Games list fills itself with Open lobby cards.** As many as the window has room for with nothing to scroll (more on a tall window, none when real games fill the list), and the dashed plus on a card hosts a game, the same as Host here.
+
+**Rules / network:** network protocol 29 (a name is UTF-8, and a name that is not a guest's carries the hub's signature, [`docs/HUB_NICKNAMES.md`](docs/HUB_NICKNAMES.md)): an older page or game cannot join a room of this version, so reload the page. The rules and the recordings are unchanged.
 
 **Fixes:**
 - A connected AI's `put_ants` puts the ant type that it names, and `get_region` names the types right (they were mixed up: asking for a combat ant gave a bomber, and a swimmer gave a combat ant).
+
+**For operators:**
+- Moderators have `/rename NAME`, which takes a nickname and a tag away. The key `ANTS_ADMIN_GATE_SECRET` also signs the pass of a name: with it the game server keeps a nickname only when the hub signed it (without it names are checked as before). The hub adds its tables `nicknames` and `nick_hold` and the column `lines.tag` by itself.
 
 ## v0.21.6 - 2026-11-26 - Live scores, open lobbies, Top Thief and bots that fight for the flower
 
@@ -546,29 +553,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/fb6cf52c...13968e10)
 
-## v0.16.4 - 2026-11-13 - The phone chat box, Settings rows in the game, a new icon, no logo and faster site updates
+## Older versions (v0.16.4 and before)
 
-**For players:**
-- **A roomier chat box on a phone held upright.** The text field is on top and a row of buttons (emoji, voice and the rest) sits under it. The field grows as you type, Enter sends, and a small bubble shows while the voice button is listening.
-- **No logo at the top of the pages.** The top bars give the room to their buttons instead. A recording, a live view and the Map maker's list of maps now have a Home button.
-- **A new icon: the ant's head.** It is the icon of the installed app and of the browser tab. An installed copy picks it up when the browser next refreshes the app's details; an iPhone home screen icon changes only when the app is removed and added again.
-- **Picture shape and Fullscreen mouse are rows of the game's Settings.** There is one Settings gear in the game page's top bar; the strip under the game and the room's Picture row are gone (a recording's bar keeps its Picture button). For now these two rows can be changed during a match only: outside a match the menu shows "Not now". A later release will make them work everywhere.
-- **No footer on the pages that have the top bar** (Matches, Live now, the map maker and the others). The version and build line is now the last line of the bar's Menu.
-
-**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.3 page or game still joins. Under the hood: the site's images are built in layers that are reused when only pages or the version change, so later site updates are faster (the first one is slow, since nothing is reused yet), and several tests are steadier.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4eb281f8...870b4439)
-
-## v0.16.3 - 2026-11-12 - The installed app's front page fits the window
-
-**For players:**
-- **The front page fits the window in the installed app on a phone.** The bottom tabs (Games, Players, Chat) are no longer cut off by the phone's bars: the page takes the smallest height that the window reports. The game page and the map list use the same care in the installed app.
-- **Screen numbers for a bug report.** Add ?vp to the end of the front page's address, or press and hold the app's icon and choose Screen numbers, to see a small box with the window's sizes for a screenshot. It sends and saves nothing.
-
-**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.2 page or game still joins.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4e6c7c0c...f436bd12)
-
-## Older versions (v0.16.2 and before)
-
-Every release before v0.16.3, and the long notes of v0.16.2, v0.16.1, v0.16.0, v0.15.1, v0.15.0, v0.14.1, v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.16.5, and the long notes of v0.16.4, v0.16.3, v0.16.2, v0.16.1, v0.16.0, v0.15.1, v0.15.0, v0.14.1, v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

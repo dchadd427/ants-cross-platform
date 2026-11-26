@@ -567,6 +567,22 @@ void run_start_menu_panels_tests() {
         ASSERT_FALSE(r.element(MenuId::Name).all_selected);
         r.type("!");
         ASSERT_EQ(r.menu.name(), std::string("Dave" + std::string(27, 'y') + "!"));        // appended at the end (31 characters were there)
+        {   // a name that holds letters (a stored one, or --name): Backspace takes a whole letter off, never half of one
+            Rig u(0, "caf\xc3\xa9");
+            u.to_panel(MenuId::JoinWithCode);
+            u.menu.show_main();
+            u.click(MenuId::JoinWithCode);
+            u.click(MenuId::Name);
+            u.key(SDLK_BACKSPACE);
+            ASSERT_EQ(u.menu.name(), std::string("caf"));
+            Rig v(0, "a\xe1\xba\xa0");
+            v.to_panel(MenuId::JoinWithCode);
+            v.menu.show_main();
+            v.click(MenuId::JoinWithCode);
+            v.click(MenuId::Name);
+            v.key(SDLK_BACKSPACE);
+            ASSERT_EQ(v.menu.name(), std::string("a"));
+        }
     } TEST_END();
 
     TEST_CASE("M3.2 Join: Ctrl+V and Cmd+V paste the clipboard into the field that has the focus (line ends dropped, the code trimmed, cut to the field's length, never case-changed); Ctrl+A selects, Ctrl+Backspace clears; pasting where there is no field does nothing") {

@@ -1,0 +1,117 @@
+{
+ "note": "Mutants of the pass of a name (src/ants_server/name_pass.cpp and .hpp; docs/HUB_NICKNAMES.md 'The pass'; the hub's twin is hub/namepass.py, held to the same golden passes) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against ADM1.8 of tests/test_server/test_admin_pass.cpp: the label of its key, the words of its message, 32 hex digits, good for exactly one name, until it ends and not for longer than the hub makes them, no key no pass. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/name_pass_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught.",
+ "defaults": {
+  "build": "test_admin_pass",
+  "test": "ANTS_TEST_FILTER=ADM1.8 timeout 900 ./build/tests/test_server/test_admin_pass"
+ },
+ "mutants": [
+  {
+   "id": "pass_label_is_the_admins",
+   "file": "src/ants_server/name_pass.cpp",
+   "old": "constexpr const char* kPassLabel = \"ants-name-pass-v1\";",
+   "new": "constexpr const char* kPassLabel = \"ants-admin-pass-v1\";"
+  },
+  {
+   "id": "pass_message_has_no_word",
+   "file": "src/ants_server/name_pass.cpp",
+   "old": "std::string message = std::string(\"name1\\0\", 6);",
+   "new": "std::string message = std::string(\"\\0\", 1);"
+  },
+  {
+   "id": "pass_mac_of_31_digits",
+   "file": "src/ants_server/name_pass.cpp",
+   "old": "constexpr size_t kMacChars = 32;",
+   "new": "constexpr size_t kMacChars = 31;"
+  },
+  {
+   "id": "pass_without_the_separator_before_the_name",
+   "file": "src/ants_server/name_pass.cpp",
+   "old": "    message.append(exp_text);\n    message.push_back('\\0');\n    message.append(name);",
+   "new": "    message.append(exp_text);\n    message.append(name);"
+  },
+  {
+   "id": "pass_good_for_every_name",
+   "file": "src/ants_server/name_pass.cpp",
+   "old": "mac_of(key_, exp_text, name)))",
+   "new": "mac_of(key_, exp_text, std::string_view())))"
+  },
+  {
+   "id": "pass_good_for_nobody_to_name",
+   "file": "src/ants_server/name_pass.cpp",
+   "old": "if (!open_ || name.empty() || !net::valid_pass_shape(pass)) return false;",
+   "new": "if (!open_ || !net::valid_pass_shape(pass)) return false;"
+  },
+  {
+   "id": "pass_good_without_a_key",
+   "file": "src/ants_server/name_pass.cpp",
+   "old": "if (!open_ || name.empty() || !net::valid_pass_shape(pass)) return false;",
+   "new": "if (name.empty() || !net::valid_pass_shape(pass)) return false;"
+  },
+  {
+   "id": "pass_good_until_it_ends_and_after",
+   "file": "src/ants_server/name_pass.cpp",
+   "old": "return exp > now && exp <= now + kNamePassSeconds + kNamePassSlackSeconds;",
+   "new": "return exp <= now + kNamePassSeconds + kNamePassSlackSeconds;"
+  },
+  {
+   "id": "pass_good_at_the_moment_it_ends",
+   "file": "src/ants_server/name_pass.cpp",
+   "old": "return exp > now && exp <= now + kNamePassSeconds + kNamePassSlackSeconds;",
+   "new": "return exp >= now && exp <= now + kNamePassSeconds + kNamePassSlackSeconds;"
+  },
+  {
+   "id": "pass_good_for_a_year",
+   "file": "src/ants_server/name_pass.cpp",
+   "old": "return exp > now && exp <= now + kNamePassSeconds + kNamePassSlackSeconds;",
+   "new": "return exp > now;"
+  },
+  {
+   "id": "pass_lasts_longer_than_the_slack",
+   "file": "src/ants_server/name_pass.cpp",
+   "old": "return exp > now && exp <= now + kNamePassSeconds + kNamePassSlackSeconds;",
+   "new": "return exp > now && exp <= now + kNamePassSeconds + 10 * kNamePassSlackSeconds;"
+  },
+  {
+   "id": "pass_slack_of_a_minute",
+   "file": "include/ants_server/name_pass.hpp",
+   "old": "inline constexpr int64_t kNamePassSlackSeconds = 30;",
+   "new": "inline constexpr int64_t kNamePassSlackSeconds = 60;"
+  },
+  {
+   "id": "pass_made_for_two_minutes_and_a_bit",
+   "file": "include/ants_server/name_pass.hpp",
+   "old": "inline constexpr int64_t kNamePassSeconds = 120;",
+   "new": "inline constexpr int64_t kNamePassSeconds = 150;"
+  },
+  {
+   "id": "pass_made_with_no_key",
+   "file": "src/ants_server/name_pass.cpp",
+   "old": "if (!open_ || name.empty() || exp <= 0) return std::string();",
+   "new": "if (name.empty() || exp <= 0) return std::string();"
+  },
+  {
+   "id": "pass_made_for_nobody",
+   "file": "src/ants_server/name_pass.cpp",
+   "old": "if (!open_ || name.empty() || exp <= 0) return std::string();",
+   "new": "if (!open_ || exp <= 0) return std::string();"
+  },
+  {
+   "id": "pass_key_without_the_label",
+   "file": "src/ants_server/name_pass.cpp",
+   "old": "key_ = hmac_sha256(secret, kPassLabel);",
+   "new": "key_ = hmac_sha256(secret, std::string(kPassLabel).substr(0, 0));"
+  },
+  {
+   "id": "pass_blanks_of_the_setting_kept",
+   "file": "src/ants_server/name_pass.cpp",
+   "old": "    return std::string(text.substr(a, b - a));",
+   "new": "    return std::string(text);"
+  },
+  {
+   "id": "pass_with_a_weak_key",
+   "file": "src/ants_server/name_pass.cpp",
+   "old": "if (!gate_secret_is_good(secret)) return;",
+   "new": ""
+  }
+ ]
+}

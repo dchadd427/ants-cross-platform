@@ -66,11 +66,11 @@ class ThePage(unittest.TestCase):
 
     def test_the_page_hands_home_the_bridge_that_the_list_reads(self):
         self.assertIn("client: function () { return client; }, join: probe, typed: joinTyped, name: myName,", self.page)
-        self.assertIn("function probe(code, name, done) {", self.page)
+        self.assertIn("function probe(code, name, done, pass) {", self.page)
         self.assertIn("function joinTyped(text, done, before) {", self.page)
 
     def test_the_old_room_is_let_go_of_only_when_the_new_one_welcomes_the_page(self):
-        probe = self.page[self.page.index("function probe(code, name, done) {"):]
+        probe = self.page[self.page.index("function probe(code, name, done, pass) {"):]
         probe = probe[:probe.index("open(p, name);")]
         self.assertLess(probe.index("p.on('welcome'"), probe.index("if (old) old.leave();"))
         self.assertLess(probe.index("client = p;"), probe.index("if (old) old.leave();"))
@@ -83,7 +83,7 @@ class ThePage(unittest.TestCase):
         self.assertNotIn("page.leave()", join, "a Join from the list never leaves a room itself")
 
     def test_a_question_comes_before_the_name_card_and_before_anything_is_left(self):
-        typed = self.page[self.page.index("function joinTyped(text, done, before) {"):self.page.index("function probe(code, name, done) {")]
+        typed = self.page[self.page.index("function joinTyped(text, done, before) {"):self.page.index("function probe(code, name, done, pass) {")]
         self.assertLess(typed.index("Rules.typedCode(text)"), typed.index("(before || function (go) { go(); })("))
         self.assertLess(typed.index("(before || function (go) { go(); })("), typed.index("askName({"))
 
@@ -371,7 +371,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_games_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the copy with
     nothing changed must pass"""
-    FILES = ["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/alert_core.js", "web/front/player_name.js", "web/home/home.js", "web/home/home.css", "web/home/chat.css", "web/home/games.js", "web/home/alerts.js", "web/home/alerts.css", "web/home/games.css", "web/shapes.js", "tests/scripts/test_web_home_games.py", "tests/scripts/web_home_games_check.js",
+    FILES = ["tools/size_limits.py", "web/lobby.html", "web/front/name_letters.js", "web/home/names.js", "web/home/names.css", "web/rejoin_key.js", "web/alert_core.js", "web/front/player_name.js", "web/home/home.js", "web/home/home.css", "web/home/chat.css", "web/home/games.js", "web/home/alerts.js", "web/home/alerts.css", "web/home/games.css", "web/shapes.js", "tests/scripts/test_web_home_games.py", "tests/scripts/web_home_games_check.js",
              "tests/data/home_games_thumbs.json", "Community-Maps/previews.json",
              "tests/scripts/web_home_games_room_check.js", "tests/scripts/web_home_games_quickjoin_check.js", "tests/scripts/web_home_games_rig.js", "tests/scripts/web_page_harness.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml"] \
         + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "room_fog.js", "room_sheet.js", "seat_menu.js", "map_picker.js", "map_maker_link.js")]

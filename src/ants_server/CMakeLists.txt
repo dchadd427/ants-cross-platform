@@ -38,6 +38,7 @@ add_library(ants_server_core STATIC
     admin_audit.cpp
     admin_pass.cpp
     like_pass.cpp
+    name_pass.cpp
     replay_counts_api.cpp
     private_files.cpp
 )

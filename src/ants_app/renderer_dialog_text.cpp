@@ -1,5 +1,6 @@
 // The sentences of the new windows (renderer.hpp, dialog_text_ready): the HUD art's face, Libre Baskerville, drawn like the rest of the text (opened at twice the size, halved into the canvas by
-// the linear filter) with a pale edge one pixel below and right of the letters, as if they were pressed into the clay.
+// the linear filter) with a pale edge one pixel below and right of the letters, as if they were pressed into the clay. A text with a letter that this face lacks (a nickname in Cyrillic: the face has Latin only)
+// is drawn in the game's own face (face_font), whole, with no pale edge, and measured in it.
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -13,6 +14,26 @@ namespace ants::app {
 
 namespace {
 constexpr int kMaxDialogLines = 96;          // the pictures of lines kept (a window shows a handful; the sentences with names change now and then)
+
+// Whether a face draws every letter of a text (UTF-8). The windows' face has Latin only, and a nickname may be Cyrillic: a letter that a face lacks is drawn as its box, which is no letter.
+// A letter beyond the first 65,536 or a text that is no UTF-8 counts as lacking.
+bool face_draws_all(TTF_Font* font, const std::string& text) {
+    size_t i = 0;
+    while (i < text.size()) {
+        const unsigned char lead = static_cast<unsigned char>(text[i]);
+        uint32_t cp = 0;
+        size_t n = 0;
+        if (lead < 0x80) { cp = lead; n = 1; }
+        else if ((lead & 0xE0) == 0xC0) { cp = lead & 0x1Fu; n = 2; }
+        else if ((lead & 0xF0) == 0xE0) { cp = lead & 0x0Fu; n = 3; }
+        else return false;
+        if (i + n > text.size()) return false;
+        for (size_t k = 1; k < n; ++k) cp = (cp << 6) | (static_cast<unsigned char>(text[i + k]) & 0x3Fu);
+        if (cp >= 0x20 && TTF_GlyphIsProvided(font, static_cast<Uint16>(cp)) == 0) return false;
+        i += n;
+    }
+    return true;
+}
 }
 
 void Renderer::set_dialog_font_path(const std::string& path) {
@@ -65,6 +86,7 @@ bool Renderer::dialog_text_ready() const {
 int32_t Renderer::dialog_text_width(const std::string& text, int32_t em_tenths) const {
     if (text.empty()) return 0;
     TTF_Font* font = dialog_font(em_tenths);
+    if (font != nullptr && !face_draws_all(font, text) && face_font(em_tenths) != nullptr) return face_text_width(text, em_tenths);       // (a name in letters that the windows' face lacks: the game's face, which has them)
     int w = 0, h = 0;
     if (font == nullptr || TTF_SizeUTF8(font, text.c_str(), &w, &h) != 0) return 0;
     return (w + 1) / 2;
@@ -74,6 +96,7 @@ void Renderer::draw_dialog_text(const std::string& text, int32_t x, int32_t base
     if (!renderer_ || text.empty()) return;
     TTF_Font* font = dialog_font(em_tenths);
     if (font == nullptr) return;
+    if (!face_draws_all(font, text) && face_font(em_tenths) != nullptr) { draw_face_text(text, x, baseline, color, em_tenths); return; }       // (as dialog_text_width)
     const int32_t top = baseline - (TTF_FontAscent(font) + 1) / 2;
     // the ink is drawn three times, a third of a pixel apart, which thickens the thin strokes of the face by about that much (the drawn lettering has a stroke of 0.03 em round it)
     const auto draw = [&](ants::assets::ColorRGBA c, float dx, float dy) {

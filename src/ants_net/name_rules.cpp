@@ -1,0 +1,168 @@
+#include "ants_net/name_rules.hpp"
+
+#include <algorithm>
+
+namespace ants::net {
+
+namespace {
+
+struct LetterRange {
+    uint32_t first;
+    uint32_t last;
+    int alphabet;
+};
+
+// (sorted; generated from hub/name_letters.py by tools/gen_name_letters.py)
+constexpr LetterRange kNameLetters[] = {
+#include "name_letters_data.inc"
+};
+constexpr size_t kNameLetterRanges = sizeof(kNameLetters) / sizeof(kNameLetters[0]);
+
+bool is_digit(uint32_t c) { return c >= '0' && c <= '9'; }
+
+// The signs that a guest's name may hold besides its letters and digits
+bool is_guest_sign(uint32_t c) { return c == ' ' || c == '.' || c == '_' || c == '-' || c == '\''; }
+
+}  // namespace
+
+int name_alphabet(uint32_t code_point) noexcept {
+    size_t lo = 0, hi = kNameLetterRanges;
+    while (lo < hi) {
+        const size_t mid = (lo + hi) / 2;
+        if (code_point < kNameLetters[mid].first) hi = mid;
+        else if (code_point > kNameLetters[mid].last) lo = mid + 1;
+        else return kNameLetters[mid].alphabet;
+    }
+    return -1;
+}
+
+bool is_name_code_point(uint32_t code_point) noexcept { return (code_point >= 0x20 && code_point <= 0x7E) || name_alphabet(code_point) >= 0; }
+
+bool decode_utf8(std::string_view text, std::vector<uint32_t>& out) {
+    out.clear();
+    size_t i = 0;
+    const size_t n = text.size();
+    while (i < n) {
+        const uint8_t b = static_cast<uint8_t>(text[i++]);
+        if (b < 0x80) {
+            out.push_back(b);
+            continue;
+        }
+        size_t need = 0;
+        uint32_t c = 0, minimum = 0;
+        if (b >= 0xC2 && b <= 0xDF) { need = 1; c = b & 0x1Fu; minimum = 0x80; }
+        else if (b >= 0xE0 && b <= 0xEF) { need = 2; c = b & 0x0Fu; minimum = 0x800; }
+        else if (b >= 0xF0 && b <= 0xF4) { need = 3; c = b & 0x07u; minimum = 0x10000; }
+        else { out.clear(); return false; }
+        if (i + need > n) { out.clear(); return false; }
+        for (size_t k = 0; k < need; ++k) {
+            const uint8_t next = static_cast<uint8_t>(text[i++]);
+            if ((next & 0xC0u) != 0x80u) { out.clear(); return false; }
+            c = (c << 6) | (next & 0x3Fu);
+        }
+        if (c < minimum || c > 0x10FFFF || (c >= 0xD800 && c <= 0xDFFF)) { out.clear(); return false; }
+        out.push_back(c);
+    }
+    return true;
+}
+
+void append_utf8(std::string& out, uint32_t c) {
+    if (c < 0x80) {
+        out.push_back(static_cast<char>(c));
+    } else if (c < 0x800) {
+        out.push_back(static_cast<char>(0xC0 | (c >> 6)));
+        out.push_back(static_cast<char>(0x80 | (c & 0x3F)));
+    } else if (c < 0x10000) {
+        out.push_back(static_cast<char>(0xE0 | (c >> 12)));
+        out.push_back(static_cast<char>(0x80 | ((c >> 6) & 0x3F)));
+        out.push_back(static_cast<char>(0x80 | (c & 0x3F)));
+    } else {
+        out.push_back(static_cast<char>(0xF0 | (c >> 18)));
+        out.push_back(static_cast<char>(0x80 | ((c >> 12) & 0x3F)));
+        out.push_back(static_cast<char>(0x80 | ((c >> 6) & 0x3F)));
+        out.push_back(static_cast<char>(0x80 | (c & 0x3F)));
+    }
+}
+
+size_t utf8_length(std::string_view text) {
+    std::vector<uint32_t> points;
+    return decode_utf8(text, points) ? points.size() : 0;
+}
+
+bool valid_wire_name(std::string_view text, size_t max_chars, size_t max_bytes) {
+    if (text.size() > max_bytes) return false;
+    std::vector<uint32_t> points;
+    if (!decode_utf8(text, points) || points.size() > max_chars) return false;
+    return std::all_of(points.begin(), points.end(), [](uint32_t c) { return is_name_code_point(c); });
+}
+
+std::string clip_wire_name(std::string_view text, size_t max_chars, size_t max_bytes) {
+    std::string out;
+    size_t chars = 0;
+    size_t i = 0;
+    while (i < text.size() && chars < max_chars) {
+        const uint8_t b = static_cast<uint8_t>(text[i]);
+        size_t len = 1;
+        if (b >= 0xC2 && b <= 0xDF) len = 2;
+        else if (b >= 0xE0 && b <= 0xEF) len = 3;
+        else if (b >= 0xF0 && b <= 0xF4) len = 4;
+        else if (b >= 0x80) { ++i; continue; }                                         // (a byte that starts nothing, or one that is left of a cut sequence)
+        std::vector<uint32_t> one;
+        if (i + len <= text.size() && decode_utf8(text.substr(i, len), one) && one.size() == 1 && is_name_code_point(one[0])) {
+            if (out.size() + len > max_bytes) break;
+            out.append(text.substr(i, len));
+            ++chars;
+            i += len;
+        } else {
+            ++i;                                                                       // (one byte at a time: the continuation bytes of a letter that is out then fail to start anything above)
+        }
+    }
+    return out;
+}
+
+bool is_guest_number(std::string_view text) {
+    if (text.size() != 12 || text.substr(0, 6) != "Guest ") return false;
+    if (text[6] < '1' || text[6] > '9') return false;
+    for (size_t i = 7; i < 12; ++i) {
+        if (!is_digit(static_cast<uint8_t>(text[i]))) return false;
+    }
+    return true;
+}
+
+std::string guest_name(std::string_view raw, std::string_view fallback) {
+    const std::string suffix = kGuestSuffix;
+    std::string clipped = clip_wire_name(raw, kMaxNameChars);
+    if (is_guest_number(clipped)) return clipped;
+    if (clipped.size() >= suffix.size() && clipped.compare(clipped.size() - suffix.size(), suffix.size(), suffix) == 0) clipped.resize(clipped.size() - suffix.size());
+    std::vector<uint32_t> points;
+    decode_utf8(clipped, points);
+    std::vector<uint32_t> kept;
+    for (const uint32_t c : points) {
+        if (name_alphabet(c) < 0 && !is_digit(c) && !is_guest_sign(c)) continue;
+        if (c == ' ' && (kept.empty() || kept.back() == ' ')) continue;                 // (no space first, never two in a row)
+        kept.push_back(c);
+    }
+    while (!kept.empty() && kept.back() == ' ') kept.pop_back();
+    if (kept.size() > kMaxNicknameChars) kept.resize(kMaxNicknameChars);
+    while (!kept.empty() && kept.back() == ' ') kept.pop_back();
+    std::string core;
+    for (const uint32_t c : kept) append_utf8(core, c);
+    if (core.empty()) core = std::string(fallback);
+    return core + suffix;
+}
+
+bool valid_pass_shape(std::string_view pass) {
+    if (pass.empty() || pass.size() > kMaxPassChars) return false;
+    const size_t dot = pass.find('.');
+    if (dot == std::string_view::npos || dot == 0 || dot > 12 || pass.size() - dot - 1 != 32) return false;
+    for (size_t i = 0; i < dot; ++i) {
+        if (!is_digit(static_cast<uint8_t>(pass[i]))) return false;
+    }
+    for (size_t i = dot + 1; i < pass.size(); ++i) {
+        const char c = pass[i];
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
+    }
+    return true;
+}
+
+}  // namespace ants::net

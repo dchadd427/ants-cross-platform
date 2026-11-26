@@ -91,8 +91,8 @@
   {
    "id": "the_page_does_not_try_the_display_name_before_the_username",
    "file": "web/front/player_name.js",
-   "old": "name = shown || fit(you.next, check) || fit(you.other, check);",
-   "new": "name = shown || fit(you.other, check);",
+   "old": "shown || fit(you.next, check) || fit(you.other, check);",
+   "new": "shown || fit(you.other, check);",
    "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
   },
   {

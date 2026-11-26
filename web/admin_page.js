@@ -64,7 +64,7 @@
     var REFERENCE = /^[0-9a-f]{16}$/;                      // the hub's short name for an account (never a Discord id)
     var ID_SHAPED = /^[0-9]{15,20}$/;                      // as long as a Discord id: never typed into this page's boxes, never sent
     var HUB_API = '/hub/admin/api/';
-    var CHAT_ACTIONS = { mute: 'Muted', unmute: 'Unmuted', ban: 'Banned', unban: 'Unbanned', kick: 'Kicked', nopic: 'Hid the picture of', pic: 'Showed the picture of', noimages: 'Took away image posting from', images: 'Gave back image posting to', bots_start: 'Started bot matches from the chat', bots_stop: 'Stopped bot matches from the chat' };
+    var CHAT_ACTIONS = { mute: 'Muted', unmute: 'Unmuted', ban: 'Banned', unban: 'Unbanned', kick: 'Kicked', nopic: 'Hid the picture of', pic: 'Showed the picture of', noimages: 'Took away image posting from', images: 'Gave back image posting to', rename: 'Reset the nickname and tag of', bots_start: 'Started bot matches from the chat', bots_stop: 'Stopped bot matches from the chat' };
     var MAP_ACTIONS = { map_approved: 'Approved ', map_declined: 'Declined ', map_taken_down: 'Took down ', map_put_back: 'Put back ' };
     var PICTURE_KINDS = {
         ok: ['active', 'Saved'], none: ['active', 'Discord has no picture to keep'], down: ['warn', 'Discord did not answer'], type: ['warn', 'Not a picture that the hub accepts'],
