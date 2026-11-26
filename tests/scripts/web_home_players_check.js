@@ -523,6 +523,20 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     r.live(); r.who(FULL([row(1, 'maple'), row(2, 'pat', 'wait'), row(3, 'quinn', 'play'), row(4, 'rae', 'wait', { pub: true, code: 'c0mm00' })], { n: 4 }));
     same('in the lines under the names of others: "In a room" and "In a game", and no word "Private"', [r.metaOf('pat'), r.metaOf('quinn'), r.metaOf('rae'), JSON.stringify(texts(r.panel(), 'pl-card')).indexOf('Private')], ['In a room', 'In a game', 'Public room', -1]);
 }
+{   // the tag of a name (docs/HUB_NICKNAMES.md): a row carries the person's tag, drawn before the name in its own dimmer node, and the visitor's own row too
+    const r = rig();
+    r.live(W({ you: { name: 'Zo\u00eb', tag: '\u00c4NT', mod: false, role: 'none', nick: 'Zo\u00eb' }, me: 1 }));
+    r.who(FULL([row(1, 'Zo\u00eb'), Object.assign(row(2, 'Wren (Guest)'), { tag: undefined }), Object.assign(row(3, 'Fern'), { tag: 'FERN' }), Object.assign(row(4, 'Eve'), { tag: '<b>' })], { n: 5 }));
+    const names = byClass(r.panel(), 'pl-nm');
+    same('every row has its name as text; a tag is its own node with its brackets, before the name; a tag that is no tag is none', names.map((n) => n.textContent), ['[\u00c4NT] Zo\u00eb', 'Eve', '[FERN] Fern', 'Wren (Guest)']);       // (the visitor first, then the people by name)
+    same('...in a node of the class nm-tag, not in the name', names.map((n) => byClass(n, 'nm-tag').map((t) => t.textContent)), [['[\u00c4NT]'], [], ['[FERN]'], []]);
+    const mine = byClass(r.panel(), 'pl-card')[0];
+    check('the visitor\'s own row is the first and has the tag of the visitor (the page\'s word, not the hub\'s last)', !!mine && byClass(mine, 'pl-nm')[0].textContent === '[\u00c4NT] Zo\u00eb' && byClass(mine, 'pl-tag')[0].textContent === 'you');
+    const plain = rig();
+    plain.live(W({ you: { name: 'maple', mod: false, role: 'none' }, me: 1 }));
+    plain.who(FULL([row(1, 'maple')], { n: 1 }));
+    check('a visitor who has no tag has a row of the name alone', byClass(plain.panel(), 'pl-nm')[0].textContent === 'maple' && byClass(plain.panel(), 'nm-tag').length === 0);
+}
 {   // the visitor's own row is the one that the hub's welcome names, not a row with the visitor's name
     const youAnd = (r) => r.names().filter((n) => n === 'maple').length;
     const twins = [row(1, 'maple'), row(2, 'maple', 'wait'), row(3, 'sage')];

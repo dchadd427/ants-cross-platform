@@ -255,7 +255,7 @@ function rig(o) {
     n.dock.say('/mutes'); n.dock.command('/del 148', (c) => typed.push(c));
     same('a command that was typed and waits is a command that waits: `rate`', typed, ['rate']);
     const u = rig({ noMod: true });
-    same('you(): the name and the role (nothing else)', u.dock.you(), { name: 'Me', role: 'admin' });
+    same('you(): the name and the role, and the nickname side of the person (none for a person who has not set one: nothing else)', u.dock.you(), { name: 'Me', role: 'admin', nick: '', tag: '', nickat: 0, nickfree: 0, tagfree: 0 });
     same('line(id): a copy of a person\'s line, with the role it says and whether it is one\'s own (no account key)', [u.dock.line(148), u.dock.line(150).own, u.dock.line(147).sys, u.dock.line(999), u.dock.line(null)],
         [{ id: 148, who: 'Clover', text: 'FREE ant gold!!! see my page', role: 'none', sys: false, u: 'clover.4782', img: false, own: false, k: 'k-clover' }, true, true, null, null]);
     check('line(id) is a copy: changing it changes nothing', (() => { const l = u.dock.line(148); l.text = 'x'; return u.dock.line(148).text === 'FREE ant gold!!! see my page'; })());

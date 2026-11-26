@@ -915,7 +915,7 @@
         go();
         return {
             root: box, slot: slot, field: field, log: log, grow: grow, say: sendLine, state: function () { return state; },
-            you: function () { return you ? { name: you.name, role: you.role } : null; }, line: lineById, by: byAuthor, when: clockOf, arrived: function (fn) { arrivalFns.push(fn); }, command: guard(command), mutes: guard(function (done) { command('/mutes', done, true); }), note: guard(function (text) { answer([String(text)]); }), rows: function (fn) { rowFns.push(fn); },
+            you: function () { return you ? { name: you.name, role: you.role, nick: you.nick, tag: you.tag, nickat: you.nickat, nickfree: you.nickfree, tagfree: you.tagfree } : null; }, line: lineById, by: byAuthor, when: clockOf, arrived: function (fn) { arrivalFns.push(fn); }, command: guard(command), mutes: guard(function (done) { command('/mutes', done, true); }), note: guard(function (text) { answer([String(text)]); }), rows: function (fn) { rowFns.push(fn); },
             tap: function (fn) { taps.push(fn); if (hello) { tell1(fn, 'live', hello); if (lastAlerts) tell1(fn, 'alerts', lastAlerts); if (lastFollows) tell1(fn, 'follows', lastFollows); if (lastMsgs) tell1(fn, 'msgs', lastMsgs); } else if (state === 'offline') tell1(fn, 'lost'); },
             send: out,
             block: guard(function (draw, cls) { var e = answer([], draw, cls); return { redraw: function () { redraw(e); } }; }), call: guard(function (text, done) { command(text, done, false, true); }), onScreen: function () { return seen() && !stale; },

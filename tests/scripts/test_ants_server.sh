@@ -764,7 +764,7 @@ def frame(p): return struct.pack('<I', len(p)) + p
 def str8(t):
     b = t.encode()
     return bytes([len(b)]) + b
-hello = bytes([1]) + struct.pack('<H', protocol) + str8('Evil') + struct.pack('<H', 0) + bytes([255]) + str8(room) + str8('') + bytes(16) + struct.pack('<I', 0) + bytes([0, 0])     # (protocol 10: no key, no turns; protocol 15: the platform byte, 0 = not told; protocol 16: the client kind, 0 = a game; and no create block)
+hello = bytes([1]) + struct.pack('<H', protocol) + str8('Evil') + struct.pack('<H', 0) + bytes([255]) + str8(room) + str8('') + bytes(16) + struct.pack('<I', 0) + bytes([0, 0]) + str8('')     # (protocol 10: no key, no turns; protocol 15: the platform byte, 0 = not told; protocol 16: the client kind, 0 = a game; protocol 29: no pass of the name; and no create block)
 message = bytes([24, 0, 0, 0, 0, 255, 255]) if kind == 'startreq' else bytes([10]) + struct.pack('<II', 1, 0)       # (protocol 13: a StartRequest is the type, a fill level for each of the four seats, 0 = none, and the two team bytes, 255 = none)
 sock = socket.create_connection(('127.0.0.1', port), timeout=5)
 began = time.time()          # (before the first byte, so that the server's bucket, which is filled by the first message, has had no more time than this to refill)
@@ -1117,7 +1117,7 @@ def str8(t):
     return bytes([len(b)]) + b
 LOBBY, PLAIN = ('', 4, 255, 255, 3), ('', 4, 255, 255, 1)       # (map, seats, team_a, team_b, flags: bit 0 the leader starts, bit 1 a lobby room)
 def hello(name, room, kind, block, key):
-    m = bytes([1]) + struct.pack('<H', protocol) + str8(name) + struct.pack('<H', 0) + bytes([255]) + str8(room) + str8('') + key + struct.pack('<I', 0) + bytes([0, kind])
+    m = bytes([1]) + struct.pack('<H', protocol) + str8(name) + struct.pack('<H', 0) + bytes([255]) + str8(room) + str8('') + key + struct.pack('<I', 0) + bytes([0, kind]) + str8('')
     return m + (str8(block[0]) + bytes(block[1:]) if block else b'')
 class Peer:
     def __init__(self, name, room, kind, block, key=bytes(16)):
@@ -1798,7 +1798,7 @@ def str8(t):
     b = t.encode()
     return bytes([len(b)]) + b
 # a Hello (HelloMsg, include/ants_net/protocol.hpp): type 1, protocol, name, listen port 0, any seat (255), the room's code, no token, no key, no turns, the platform byte (protocol 15: 0 = not told), the client kind (protocol 16: 0 = a game); no create block
-hello = bytes([1]) + struct.pack('<H', protocol) + str8('Newcomer') + struct.pack('<H', 0) + bytes([255]) + str8(room) + str8('') + bytes(16) + struct.pack('<I', 0) + bytes([0, 0])
+hello = bytes([1]) + struct.pack('<H', protocol) + str8('Newcomer') + struct.pack('<H', 0) + bytes([255]) + str8(room) + str8('') + bytes(16) + struct.pack('<I', 0) + bytes([0, 0]) + str8('')
 hello_seconds, welcome_seconds, welcome = 99.0, 99.0, False
 if made:
     asked = time.time()

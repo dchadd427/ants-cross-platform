@@ -21,14 +21,14 @@
   {
    "id": "chip_for_a_person_who_is_logged_in",
    "file": "web/home/names.js",
-   "old": "function guestHere() { return live() && !you() && !!login && !login.hidden; }",
-   "new": "function guestHere() { return live() && !!login && !login.hidden; }",
+   "old": "function guestHere() { return live() && !you() && loginOn && !!login; }",
+   "new": "function guestHere() { return live() && loginOn && !!login; }",
    "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
   },
   {
    "id": "chip_for_a_site_with_no_login",
    "file": "web/home/names.js",
-   "old": "function guestHere() { return live() && !you() && !!login && !login.hidden; }",
+   "old": "function guestHere() { return live() && !you() && loginOn && !!login; }",
    "new": "function guestHere() { return live() && !you(); }",
    "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
   },
@@ -119,8 +119,8 @@
   {
    "id": "the_preview_has_no_tag",
    "file": "web/home/names.js",
-   "old": "name = shown || (me && me.nick ? (me.tag ? '[' + me.tag + '] ' : '') + me.nick : me ? me.name : '');",
-   "new": "name = shown || (me && me.nick ? me.nick : me ? me.name : '');",
+   "old": "var current = me && me.nick ? (me.tag ? '[' + me.tag + '] ' : '') + me.nick : '';",
+   "new": "var current = me && me.nick ? me.nick : '';",
    "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
   },
   {
@@ -163,6 +163,20 @@
    "file": "web/home/names.js",
    "old": "if (!dock || !dock.send || dock.send(f) === false) { pending = 0; paintMessages({ offline: true }); }",
    "new": "if (!dock || !dock.send) { pending = 0; paintMessages({ offline: true }); }",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "chip_waits_for_the_log_in_button",
+   "file": "web/home/names.js",
+   "old": "if (kind === 'live') loginOn = !!m && m.login === true; paintChip();",
+   "new": "if (kind === 'live') loginOn = !!m && m.login === true && !login.hidden; paintChip();",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "the_note_of_a_nickname_is_lost_when_the_hub_answers",
+   "file": "web/home/names.js",
+   "old": "note = !current || (shown && shown !== current) ? TEXT.firstNote",
+   "new": "note = !current || shown ? TEXT.firstNote",
    "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
   }
  ]

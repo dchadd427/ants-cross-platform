@@ -82,7 +82,7 @@
     function mount(env) {
         var doc = env.doc, win = env.win, dock = env.dock, bar = env.bar, login = env.login, person = env.person, letters = env.letters || win.AntsNameLetters;
         var later = env.later || function (fn, ms) { return win.setTimeout(fn, ms); }, cancel = env.cancel || function (h) { win.clearTimeout(h); };
-        var seq = 0, pending = 0, timer = null, sheet = null, chip = null, chipAv = null, chipName = null, pop = null, shownNote = false;
+        var seq = 0, pending = 0, timer = null, sheet = null, chip = null, chipAv = null, chipName = null, pop = null, shownNote = false, loginOn = false;
         function el(tag, cls, text) { var e = doc.createElement(tag); if (cls) e.className = cls; if (text !== undefined && text !== null) e.textContent = text; return e; }
         function put(node, kids) { kids.forEach(function (k) { if (k) node.appendChild(k); }); return node; }
         function storage() { try { return win.localStorage; } catch (e) { return null; } }
@@ -96,7 +96,7 @@
 
         // ---- the chip of a guest ----
         function live() { return !!dock && dock.state && dock.state() === 'live'; }
-        function guestHere() { return live() && !you() && !!login && !login.hidden; }
+        function guestHere() { return live() && !you() && loginOn && !!login; }       // (the hub's welcome says that it has a login: the Log in button may not be shown yet when the welcome comes)
         function shownName() { return person.guestShown(); }
         function paintChip() {
             if (!guestHere()) { if (chip) chip.hidden = true; if (pop) closePopFor(); return; }
@@ -207,8 +207,9 @@
                 name = shown || (typed ? typed + ' (Guest)' : shownName());
                 note = shown || typed ? TEXT.guestNote : TEXT.popOthers(shownName());
             } else {
-                name = shown || (me && me.nick ? (me.tag ? '[' + me.tag + '] ' : '') + me.nick : me ? me.name : '');
-                note = shown || !me || !me.nick ? TEXT.firstNote : me.nickfree ? TEXT.sinceLater(time.date(me.nickat), time.date(me.nickfree)) : TEXT.sinceNow(time.date(me.nickat));
+                var current = me && me.nick ? (me.tag ? '[' + me.tag + '] ' : '') + me.nick : '';       // (how the person shows now, when they have a nickname)
+                name = shown || current || (me ? me.name : '');
+                note = !current || (shown && shown !== current) ? TEXT.firstNote : me.nickfree ? TEXT.sinceLater(time.date(me.nickat), time.date(me.nickfree)) : TEXT.sinceNow(time.date(me.nickat));
             }
             draw(s.pn, name); s.av.textContent = initial(name); s.ps.textContent = note;
         }
@@ -281,7 +282,7 @@
         if (dock && dock.tap) dock.tap(function (kind, m) {
             if (kind === 'names') open();
             else if (kind === 'name') heard(m);
-            else if (kind === 'live' || kind === 'you' || kind === 'lost') { paintChip(); if (sheet && sheet.mode === 'login' && !you()) close(); }
+            else if (kind === 'live' || kind === 'you' || kind === 'lost') { if (kind === 'live') loginOn = !!m && m.login === true; paintChip(); if (sheet && sheet.mode === 'login' && !you()) close(); }
             else if (kind === 'shown') paintChip();
         });
         if (win.addEventListener) win.addEventListener('resize', function () { placePop(); });

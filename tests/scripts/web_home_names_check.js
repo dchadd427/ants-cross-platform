@@ -77,7 +77,6 @@ function rig(o) {
     const login = new El(env, 'button', 'login');
     bar.appendChild(login);
     doc.body.appendChild(bar);
-    login.hidden = !!o.loginHidden;
     const sent = [];
     let taps = [];
     const state = { live: o.live !== false, you: o.you === undefined ? null : o.you, sendFails: !!o.sendFails };
@@ -98,6 +97,7 @@ function rig(o) {
     const api = Names.mount({ doc, win, dock, bar, login, person, letters: Letters, changed: () => changes.push(1) });
     const r = { env, doc, win, bar, login, dock, api, sent, typed, person, store, changes, state, advance, now: () => now, clicks: () => clicks };
     r.tell = (kind, m) => taps.forEach((fn) => fn(kind, m));
+    if (state.live) r.tell('live', { login: !o.noLogin });       // (the welcome of a hub: it says whether the hub has a login)
     r.chip = () => one(bar, 'nm-gchip');
     r.pop = () => one(doc.body, 'nm-pop');
     r.sheet = () => one(doc.body, 'nm-sheet');
@@ -108,7 +108,7 @@ function rig(o) {
     r.msgs = () => byClass(doc.body, 'nm-msg').filter((m) => !m.hidden).map((m) => m.textContent);
     r.preview = () => { const p = one(doc.body, 'nm-pn'); return p ? p.textContent : null; };
     r.last = () => sent[sent.length - 1];
-    r.live = () => { state.live = true; r.tell('live', {}); };
+    r.live = () => { state.live = true; r.tell('live', { login: !o.noLogin }); };
     return r;
 }
 const ME = (o) => Object.assign({ name: 'maple.leaf', nick: '', tag: '', nickat: 0, nickfree: 0, tagfree: 0 }, o);
@@ -170,9 +170,13 @@ const OK = { ok: true };
     check('chip: no chip while the dock is not live (the page does not know yet who this is)', r.chip() === null && r.pop() === null);
     r.live();
     check('chip: it comes with the dock', !!r.chip() && !r.chip().hidden);
+    r = rig({ live: false });
+    r.login.hidden = true;
+    r.live();
+    check('chip: the welcome says that the hub has a login while the Log in button is not shown yet (the dock shows it a moment later): the chip is there all the same', !!r.chip() && !r.chip().hidden);
     r = rig({ you: ME({}) });
     check('chip: a person who is logged in has none', r.chip() === null && r.pop() === null);
-    r = rig({ loginHidden: true });
+    r = rig({ noLogin: true });
     check('chip: a site with no login has none (nothing to log in to: a guest name is only for a site that has accounts)', r.chip() === null);
     r = rig({});
     r.state.you = ME({}); r.tell('you', {});
@@ -275,6 +279,7 @@ const OK = { ok: true };
     r.advance(10);
     r.tell('name', { t: 'name', r: r.last().r, ok: true, nick: OK, tag: OK, shown: '[\u00c4NT] Zo\u00eb', saved: false });
     same('sheet: the person\'s own name is "your name now" and cannot be saved again', [r.msgs()[0], r.save().disabled], ['That is your name now.', true]);
+    check('... and the note under the preview is still the one of the nickname that the person has (since when, when it can change), not the first-time one', /^Your nickname since \d+ \w+\. You can change it again on \d+ \w+\.$/.test(one(r.sheet(), 'nm-ps').textContent), one(r.sheet(), 'nm-ps').textContent);
     r.type(r.tag(), 'ZZ');
     r.advance(400);
     r.tell('name', { t: 'name', r: r.last().r, ok: false, nick: OK, tag: { ok: false, why: 'soon', until: T0 / 1000 + 3600 }, shown: '', saved: false });
@@ -297,7 +302,7 @@ const OK = { ok: true };
     r.tell('name', { t: 'name', r: r.last().r, why: 'rate', ok: false });
     check('sheet: "rate" says to wait a moment', r.msgs().length >= 1 && /Not so fast/.test(r.msgs()[0]) && r.save().disabled === true, r.msgs().join(' | '));
     {
-        const nobody = rig({ loginHidden: true });
+        const nobody = rig({ noLogin: true });
         nobody.tell('names');
         check('sheet: a guest sheet opens only where a guest is (a site with no login has no such page: a tap that comes there opens nothing)', nobody.sheet() === null);
     }
