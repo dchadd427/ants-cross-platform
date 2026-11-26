@@ -647,7 +647,6 @@ ArenaResult play_match(const ArenaSpec& spec) {
             r.fight_batch.plan_attacks = sb->fight_plan().attacks();
             r.fight_batch.strip_contests = sb->strip().contests();
             r.fight_batch.strip_strikes = sb->strip().strikes();
-            r.fight_batch.strip_leaves = sb->strip().leaves();
             r.fight_batch.strip_helped = sb->strip().helped();
             r.fight_batch.strip_attacks = sb->strip().attacks();
             r.miner_flight = read_miner_flight(sb->miner_flight());

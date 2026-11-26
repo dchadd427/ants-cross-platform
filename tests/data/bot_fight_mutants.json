@@ -227,15 +227,6 @@
    "expect": "AI61.2"
   },
   {
-   "id": "strip_never_leaves",
-   "file": "src/ants_ai/strip_task.cpp",
-   "old": "} else if (losing && hill.present) {",
-   "new": "} else if (losing && false) {",
-   "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI61.2 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI61.2"
-  },
-  {
    "id": "strip_no_help_from_the_posts_near",
    "file": "src/ants_ai/strip_task.cpp",
    "old": "m.tile.chebyshev_dist(drop) > plan.strip_help_reach) continue;",
@@ -252,6 +243,42 @@
    "build": "test_ai",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI61.1 ' ./build/tests/test_ai/test_ai",
    "expect": "AI61.1"
+  },
+  {
+   "id": "strip_nearest_not_weakest",
+   "file": "src/ants_ai/strip_task.cpp",
+   "old": "if (target == nullptr || e->hp < target->hp || (e->hp == target->hp && e->tile.chebyshev_dist(drop) < target->tile.chebyshev_dist(drop))) target = e;",
+   "new": "if (target == nullptr || e->tile.chebyshev_dist(drop) < target->tile.chebyshev_dist(drop)) target = e;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI61.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI61.6"
+  },
+  {
+   "id": "strip_immune_rival_is_struck",
+   "file": "src/ants_ai/strip_task.cpp",
+   "old": "if (v.powerup_at(e.tile) != nullptr && v.standing(e)) continue;",
+   "new": "if (false) continue;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI61.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI61.7"
+  },
+  {
+   "id": "strip_swimmers_fight",
+   "file": "src/ants_ai/strip_task.cpp",
+   "old": "if (m.type == sim::AntType::Swimmer || m.hp < params_.fit_hp || m.tile.chebyshev_dist(drop) > plan.strip_help_reach) continue;",
+   "new": "if (m.hp < params_.fit_hp || m.tile.chebyshev_dist(drop) > plan.strip_help_reach) continue;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI61.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI61.8"
+  },
+  {
+   "id": "strip_unfit_ants_fight",
+   "file": "src/ants_ai/strip_task.cpp",
+   "old": "if (m.type == sim::AntType::Swimmer || m.hp < params_.fit_hp || m.tile.chebyshev_dist(drop) > plan.strip_help_reach) continue;",
+   "new": "if (m.type == sim::AntType::Swimmer || m.tile.chebyshev_dist(drop) > plan.strip_help_reach) continue;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI61.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI61.8"
   }
  ]
 }

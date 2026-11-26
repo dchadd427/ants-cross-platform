@@ -38,18 +38,16 @@ void StripTask::step(TaskContext& c) {
     for (auto it = held_.begin(); it != held_.end();) {
         const AntView* a = find_ant(v.mine(), it->first);
         const bool owned = a != nullptr && c.ledger.owner(it->first) == id();
-        if (!owned || now >= it->second.until) {
+        if (!owned || now >= it->second) {
             if (owned) c.ledger.release(it->first, id());
             it = held_.erase(it);
         } else {
             ++it;
         }
     }
-    for (auto it = tactics_.strip_shut.begin(); it != tactics_.strip_shut.end();) it = it->second <= now ? tactics_.strip_shut.erase(it) : std::next(it);
     if (now < last_look_ + params_.look_every || v.ticks_left() < 300 || v.flowers().empty()) return;
     last_look_ = now;
     const sim::Grid& grid = v.grid();
-    const HillInfo& hill = c.map.hill(c.seat);
 
     for (const FlowerView& flower : v.flowers()) {
         const sim::TileCoord drop = flower.drop;
@@ -100,7 +98,6 @@ void StripTask::step(TaskContext& c) {
         for (const AntView* m : force) ours.add(m->hp, blow_damage(m->type));
 
         const bool edge = ours.n > 0 && ours.value() * 100u >= theirs.value() * plan.strip_edge_percent;
-        const bool losing = !edge && ours.value() * 100u < theirs.value() * plan.strip_leave_percent;
         if (edge) {
             const AntView* target = nullptr;                                                      // the rival with the fewest hit points (the nearest to the drop tile among equals)
             for (const AntView* e : rivals) {
@@ -113,32 +110,18 @@ void StripTask::step(TaskContext& c) {
                 if (!m->takes_orders() && m->state != sim::UnitState::Flinch) continue;
                 if (!ours_already && !c.ledger.take(m->id, id())) continue;
                 if (!ours_already && std::find(helpers.begin(), helpers.end(), m) != helpers.end()) ++helped_;
-                held_[m->id] = Hold{Mode::Strike, now + params_.linger_ticks};
+                held_[m->id] = now + params_.linger_ticks;
                 strikers.push_back(m->id);
             }
             for (const AntView* m : force) {
                 auto it = held_.find(m->id);
-                if (it != held_.end() && it->second.mode == Mode::Strike) it->second.until = std::max<uint64_t>(it->second.until, now + params_.linger_ticks);
+                if (it != held_.end()) it->second = std::max<uint64_t>(it->second, now + params_.linger_ticks);
             }
             if (!strikers.empty()) {
                 c.orders.attack(strikers, target->tile, Priority::Urgent, true);
                 ++attacks_;
             }
             ++strikes_;
-        } else if (losing && hill.present) {
-            std::vector<uint32_t> go;
-            for (const AntView* m : posts) {                                                       // the posts leave: they walk home, and the swarm leaves the strip alone for a while
-                if (held_.count(m->id) != 0 || !m->takes_orders()) continue;
-                const TaskId owner = c.ledger.owner(m->id);
-                if ((owner != kNoTask && c.ledger.rank(owner) >= c.ledger.rank(id())) || !c.ledger.take(m->id, id())) continue;
-                held_[m->id] = Hold{Mode::Leave, now + params_.leave_ticks};
-                go.push_back(m->id);
-                ++leaves_;
-            }
-            if (!go.empty()) {
-                c.orders.move(go, hill.tile42.x >= 0 ? hill.tile42 : hill.entrance, Priority::Urgent);
-                tactics_.strip_shut[drop.y * 4096 + drop.x] = now + plan.strip_close_ticks;
-            }
         }
     }
 }

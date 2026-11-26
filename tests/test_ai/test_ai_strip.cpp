@@ -2,10 +2,13 @@
 // engine and the bot controller, and in whole matches on ISLANDS.
 //
 //   AI61.1  an edge: three own ants wait at the flower and one enemy ant waits there: they strike it (every blow throws it a tile away: it is driven off the strip, hurt); with the rule off nobody strikes
-//   AI61.2  no edge: one own ant waits at the flower, three enemy ants wait there: the own ant leaves (walks home) and the strip is shut to the bot's swarm for plan.strip_close_ticks; with the rule off it stays
-//   AI61.3  help from the posts near: one own ant waits at the flower, two enemy ants wait there, two own ants stand eight tiles away: with strip_help_reach 12 they join (an edge, three against two) and strike; with it 3 the post is alone and leaves
+//   AI61.2  no edge: one own ant waits at the flower, three enemy ants wait there: nobody strikes and the own ant stays where it waits (the rule never leaves a strip)
+//   AI61.3  help from the posts near: one own ant waits at the flower, two enemy ants wait there, two own ants stand eight tiles away: with strip_help_reach 12 they join (an edge, three against two) and strike; with 3 they do not
 //   AI61.4  holding: with no enemy ant at the strip the own ants stay where they wait and no order is given
-//   AI61.5  the plans that ship have the rule off, and whole matches on ISLANDS with it on replay from their commands alone
+//   AI61.5  the plan of Hard has the rule on, the plans of Easy and Medium and a plan made by hand have it off; whole matches on ISLANDS with it on replay from their commands alone
+//   AI61.6  the weakest first: two enemy ants wait at the flower, the one nearer to the drop tile whole and the other with 3 hit points: the first blow lands on the weak one
+//   AI61.7  an enemy ant that stands on a power-up is immune and is left alone (with the same enemy ant beside the power-up the own ants strike it)
+//   AI61.8  who counts on the own side: Swimmers and ants with fewer than 5 hit points do not fight and do not add to the strength (three of them beside one whole ant make no edge against a whole enemy ant; three whole ants do)
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -28,7 +31,6 @@ using namespace contest_world;
 LevelPlan plan_strip(const std::function<void(LevelPlan&)>& tweak = {}) {
     LevelPlan p = peace_plan(Level::Hard);
     p.strip_fight = true;
-    p.strip_leave_percent = 80;                                                                  // (the plan that ships never leaves; the tests of the leave play it)
     p.islands = false;                                                                           // (SMALL has water: the island play of the level has nothing to do in these worlds)
     p.island_flower_link = false;
     p.flower_watch = false;
@@ -67,29 +69,26 @@ void run_strip_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI61.2 No Edge: One Own Ant Waits At The Flower, Three Enemy Ants Wait There: The Own Ant Leaves (It Walks Home) And The Strip Is Shut To The Bot's Swarm For plan.strip_close_ticks; With The Rule Off It Stays") {
-        for (const bool rule : {true, false}) {
-            MapWorld w(plan_strip([rule](LevelPlan& p) { p.strip_fight = rule; }), "SMALL");
-            const TileCoord drop = w.drop_near(37);
-            const uint32_t ant = post(w, TileCoord{drop.x - 2, drop.y});
-            for (int i = 0; i < 3; ++i) w.sim.spawn_unit(1, sim::AntType::Worker, TileCoord{drop.x + 1, drop.y - 1 + i});
-            w.run(400);
-            const sim::AntSnapshot* a = snapshot_of(w.sim, ant);
-            ASSERT_TRUE(a != nullptr);
-            const int32_t away = std::max(std::abs(a->tile_x - drop.x), std::abs(a->tile_y - drop.y));
-            if (rule) {
-                ASSERT_TRUE(away > 6);
-                ASSERT_TRUE(w.bot().strip().leaves() >= 1u);
-                ASSERT_TRUE(w.bot().tactics().strip_closed(drop, w.sim.current_tick()));                   // (shut for 600 ticks from the leave)
-                ASSERT_FALSE(w.bot().tactics().strip_closed(drop, w.sim.current_tick() + 700));
-            } else {
-                ASSERT_TRUE(away <= 3);
-                ASSERT_EQ(w.bot().strip().leaves(), 0u);
-            }
-        }
+    TEST_CASE("AI61.2 No Edge: One Own Ant Waits At The Flower, Three Enemy Ants Wait There: Nobody Strikes (The Own Ant Alone Would Lose), No Enemy Ant Is Touched And The Own Ant Stays Where It Waits: The Rule Never Leaves A Strip") {
+        MapWorld w(plan_strip(), "SMALL");
+        const TileCoord drop = w.drop_near(37);
+        const uint32_t ant = post(w, TileCoord{drop.x - 2, drop.y});
+        std::vector<uint32_t> enemies;
+        for (int i = 0; i < 3; ++i) enemies.push_back(w.sim.spawn_unit(1, sim::AntType::Worker, TileCoord{drop.x + 1, drop.y - 1 + i}));
+        uint16_t lowest = 10;
+        w.run(400, [&]() {
+            for (const uint32_t e : enemies) lowest = std::min(lowest, hp_of(w.sim, e));
+        });
+        const sim::AntSnapshot* a = snapshot_of(w.sim, ant);
+        ASSERT_TRUE(a != nullptr);
+        ASSERT_TRUE(std::max(std::abs(a->tile_x - drop.x), std::abs(a->tile_y - drop.y)) <= 3);
+        ASSERT_TRUE(w.bot().strip().contests() >= 1u);                                           // (the contest was looked at ...)
+        ASSERT_EQ(w.bot().strip().strikes(), 0u);                                                // (... and no blow was given)
+        ASSERT_EQ(w.bot().strip().attacks(), 0u);
+        ASSERT_EQ(lowest, 10u);
     } TEST_END();
 
-    TEST_CASE("AI61.3 Help From The Posts Near: One Own Ant Waits At The Flower, Two Enemy Ants Wait There, Two Own Ants Stand Eight Tiles Away: With A Reach Of 12 They Join (Three Against Two) And Strike; With A Reach Of 3 The Post Is Alone And Leaves") {
+    TEST_CASE("AI61.3 Help From The Posts Near: One Own Ant Waits At The Flower, Two Enemy Ants Wait There, Two Own Ants Stand Eight Tiles Away: With A Reach Of 12 They Join (Three Against Two) And Strike; With A Reach Of 3 The Post Is Alone And Nobody Strikes") {
         for (const int reach : {12, 3}) {
             MapWorld w(plan_strip([reach](LevelPlan& p) { p.strip_help_reach = reach; }), "SMALL");
             const TileCoord drop = w.drop_near(37);
@@ -106,7 +105,7 @@ void run_strip_tests() {
             } else {
                 ASSERT_EQ(w.bot().strip().helped(), 0u);
                 ASSERT_EQ(lowest, 20u);
-                ASSERT_TRUE(w.bot().strip().leaves() >= 1u);
+                ASSERT_EQ(w.bot().strip().strikes(), 0u);
             }
         }
     } TEST_END();
@@ -125,9 +124,8 @@ void run_strip_tests() {
         ASSERT_EQ(w.bot().strip().contests(), 0u);
     } TEST_END();
 
-    TEST_CASE("AI61.5 The Plan Of Hard Has The Rule On (And Never Leaves), The Plans Of Easy And Medium And A Plan Made By Hand Have It Off, `idlebatch=0` Takes It Out; Whole Matches On ISLANDS Replay From Their Commands Alone, And A Hard Bot Of The Plan That Ships Strikes At A Strip") {
+    TEST_CASE("AI61.5 The Plan Of Hard Has The Rule On, The Plans Of Easy And Medium And A Plan Made By Hand Have It Off, `idlebatch=0` Takes It Out; Whole Matches On ISLANDS Replay From Their Commands Alone, And A Hard Bot Of The Plan That Ships Strikes At A Strip") {
         ASSERT_TRUE(plan_for(Level::Hard).strip_fight);
-        ASSERT_EQ(plan_for(Level::Hard).strip_leave_percent, 0u);
         ASSERT_FALSE(plan_for(Level::Easy).strip_fight || plan_for(Level::Medium).strip_fight);
         LevelPlan before = plan_for(Level::Hard);
         without_idle_batch(before);
@@ -174,5 +172,74 @@ void run_strip_tests() {
             for (const ArenaSeatResult& seat : r.seats) strikes += seat.fight_batch.strip_strikes;
         }
         ASSERT_TRUE(strikes >= 1u);
+    } TEST_END();
+
+    TEST_CASE("AI61.6 The Weakest First: Two Enemy Ants Wait At The Flower, The One Nearer To The Drop Tile Whole And The One Farther Away With 3 Hit Points, Three Own Ants Wait There: The First Blow Lands On The Weak One") {
+        MapWorld w(plan_strip(), "SMALL");
+        const TileCoord drop = w.drop_near(37);
+        for (int i = 0; i < 3; ++i) post(w, TileCoord{drop.x - 2, drop.y - 1 + i});
+        const uint32_t whole = w.sim.spawn_unit(1, sim::AntType::Worker, TileCoord{drop.x, drop.y - 1});
+        const uint32_t weak = w.sim.spawn_unit(1, sim::AntType::Worker, TileCoord{drop.x, drop.y - 3});
+        w.sim.get_unit(weak).hp = 3;
+        bool weak_first = false;
+        bool whole_first = false;
+        w.run(300, [&]() {
+            if (weak_first || whole_first) return;
+            if (hp_of(w.sim, weak) < 3u) weak_first = true;                                      // (the same tick counts for the weak one)
+            else if (hp_of(w.sim, whole) < 10u) whole_first = true;
+        });
+        ASSERT_TRUE(weak_first);
+        ASSERT_FALSE(whole_first);
+    } TEST_END();
+
+    TEST_CASE("AI61.7 An Enemy Ant That Stands On A Power-Up Is Immune And Is Left Alone: Three Own Ants Wait At The Flower And One Enemy Ant Stands On A Power-Up Beside It, No Order Is Given And It Is Not Touched; With The Power-Up Two Tiles Away From The Same Enemy Ant The Own Ants Strike It") {
+        for (const bool on_powerup : {true, false}) {
+            MapWorld w(plan_strip(), "SMALL");
+            const TileCoord drop = w.drop_near(37);
+            for (int i = 0; i < 3; ++i) post(w, TileCoord{drop.x - 2, drop.y - 1 + i});
+            const TileCoord spot{drop.x + 1, drop.y};
+            w.sim.grid_mut().place_powerup(on_powerup ? spot.x : spot.x + 1, on_powerup ? spot.y : spot.y + 2, 5);          // (a Swimmer power-up: nothing that the plan wants)
+            const uint32_t enemy = w.sim.spawn_unit(1, sim::AntType::Worker, spot);
+            uint16_t lowest = 10;
+            w.run(300, [&]() { lowest = std::min(lowest, hp_of(w.sim, enemy)); });
+            if (on_powerup) {
+                ASSERT_EQ(w.bot().strip().contests(), 0u);
+                ASSERT_EQ(w.bot().strip().attacks(), 0u);
+                ASSERT_EQ(lowest, 10u);
+            } else {
+                ASSERT_TRUE(w.bot().strip().attacks() >= 1u);
+                ASSERT_TRUE(lowest < 10u);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI61.8 Who Counts On The Own Side: One Whole Own Ant Waits At The Flower Beside Three Swimmers, Or Beside Three Ants With 4 Hit Points, And One Whole Enemy Ant Waits There: No Edge, No Blow; Beside Three Whole Ants It Is An Edge And They Strike") {
+        for (const int kind : {0, 1, 2}) {                                                       // 0 three Swimmers, 1 three ants with 4 hit points, 2 three whole ants
+            MapWorld w(plan_strip(), "SMALL");
+            const TileCoord drop = w.drop_near(37);
+            post(w, TileCoord{drop.x - 2, drop.y});
+            for (int i = 0; i < 3; ++i) {
+                const TileCoord at{drop.x - 2, drop.y - 2 + 2 * i + (i == 1 ? 1 : 0)};
+                if (kind == 0) {
+                    w.sim.spawn_unit(0, sim::AntType::Swimmer, at);
+                } else if (kind == 1) {
+                    w.sim.get_unit(w.sim.spawn_unit(0, sim::AntType::Worker, at)).hp = 4;
+                } else {
+                    post(w, at);
+                }
+            }
+            const uint32_t enemy = w.sim.spawn_unit(1, sim::AntType::Worker, TileCoord{drop.x + 1, drop.y});
+            uint16_t lowest = 10;
+            w.run(200, [&]() { lowest = std::min(lowest, hp_of(w.sim, enemy)); });                // (a Worker hatches at tick 240 and walks to the strip: one more whole ant is an edge)
+            ASSERT_TRUE(w.bot().strip().contests() >= 1u);
+            if (kind == 2) {
+                ASSERT_TRUE(w.bot().strip().strikes() >= 1u);
+                ASSERT_TRUE(lowest < 10u);
+            } else {
+                ASSERT_EQ(w.bot().strip().strikes(), 0u);
+                ASSERT_EQ(w.bot().strip().attacks(), 0u);
+                ASSERT_EQ(lowest, 10u);
+            }
+        }
     } TEST_END();
 }

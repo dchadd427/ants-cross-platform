@@ -329,8 +329,6 @@ struct LevelPlan {
     int32_t strip_help_reach{12};        // ... the own ants that can strike within this many tiles of the drop tile join (`sreach`)
     uint32_t strip_max_force{6};         // ... at most this many ants strike (`sforce`)
     uint32_t strip_edge_percent{150};    // ... they strike with this many percent of the enemy's strength (`sedge`)
-    uint32_t strip_leave_percent{0};     // ... with less than this many percent the posts leave and the swarm leaves the strip alone for `strip_close_ticks`: 0 never (leaving cost the flower power-ups: `sleave=80` plays it)
-    uint32_t strip_close_ticks{600};     // ... how long the swarm posts no ant at a strip that the posts left (`sclose`)
     bool island_endraid{true};           // (Hard's island play) once the food is nearly gone an own Thief is wanted: an idle Swimmer or a spare at a flower strip takes the Thief that falls, a Swimmer digs the chain from its island to the
                                          // own hill's and to the richest enemy hill's, and the raid task raids over it (`endraid=0`: the bot as it was)
     uint32_t endraid_from{1200};         // ... the Thief is wanted from this tick even while food is left (the first drop of a Thief falls after the first minute; measured: the sooner the better, docs/BOT_IDLE.md)
@@ -838,9 +836,6 @@ struct Tactics {
     /// The power-up tiles that the plug task has an ant on its way to (set by PlugTask at every look) and those that the trip task has (set by PowerUpTask): neither sends a second ant to the other's tile
     std::vector<sim::TileCoord> plug_tiles;
     std::vector<sim::TileCoord> trip_tiles;
-    /// The flower strips that the bot left because it was losing the fight there (the key is y * 4096 + x of the drop tile, the value the tick until which the swarm posts no ant there; StripTask)
-    std::map<int32_t, uint64_t> strip_shut;
-    bool strip_closed(sim::TileCoord drop, uint64_t now) const noexcept { return strip_shut.count(drop.y * 4096 + drop.x) != 0 && strip_shut.at(drop.y * 4096 + drop.x) > now; }
     /// The power-ups that the stand task has an ant on or on its way to (set by PowerStandTask at every look; docs/BOT_CONTEST.md): no trip is made to one
     std::vector<sim::TileCoord> stand_tiles;
     /// The raid tiles on which an own Thief with loot has shown the can't-go clip for LevelPlan::rescue_after ticks (set by note_shut_in_thieves at every look; docs/BOT_UNSTUCK.md): the plan wants a Fire Ant for the walls in front of them

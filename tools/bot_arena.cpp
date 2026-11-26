@@ -1132,7 +1132,6 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
             j.field("plan_attacks", uint64_t{s.fight_batch.plan_attacks});
             j.field("strip_contests", uint64_t{s.fight_batch.strip_contests});
             j.field("strip_strikes", uint64_t{s.fight_batch.strip_strikes});
-            j.field("strip_leaves", uint64_t{s.fight_batch.strip_leaves});
             j.field("strip_helped", uint64_t{s.fight_batch.strip_helped});
             j.field("strip_attacks", uint64_t{s.fight_batch.strip_attacks});
             j.end_object();
