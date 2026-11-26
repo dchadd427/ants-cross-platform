@@ -413,10 +413,12 @@ void draw_podium(const Ctx& c) {
     c.pen.draw(win.numbers[0], c.X(p.name_x), c.Y(p.score_base), kGold, score_em, 0);
     c.pen.draw(is_187 ? "kills" : "score", c.X(p.name_x) + c.pen.width(win.numbers[0], score_em) + c.W(6), c.Y(p.score_base), kDim, 10.0, 0);
     std::vector<std::pair<std::string, std::string>> tiles;        // (value, label)
-    tiles.push_back({win.numbers[1], "Lost"});
-    if (is_187) tiles.push_back({win.numbers[2], "Left"});
-    else {
+    if (is_187) {                                                  // (187: the score is the kills)
+        tiles.push_back({win.numbers[1], "Lost"});
+        tiles.push_back({win.numbers[2], "Left"});
+    } else {                                                       // kills first, then deaths (the owner's order, as the history page has it)
         tiles.push_back({win.numbers[2], "Killed"});
+        tiles.push_back({win.numbers[1], "Lost"});
         tiles.push_back({win.numbers[3], "Hatched"});
     }
     if (counted) tiles.push_back({grouped(static_cast<int64_t>(damage_of(rep, win))), "Damage"});
@@ -448,9 +450,9 @@ void draw_podium(const Ctx& c) {
             c.pen.draw(r.numbers[0], c.X(o.score_right), c.Y(o.score_base), kCream, 16.0, 2);
             c.pen.draw(fit_pen(c, name, c.X(o.name_right) - c.X(o.name_x) - score_w, 14.0), c.X(o.name_x), c.Y(o.name_base), kCream, 14.0, 0);
             draw_bar(c, o.bar, top > 0 ? static_cast<double>(std::max(0, r.score_value)) / static_cast<double>(top) : 0.0, r);
-            std::string small = "Lost " + r.numbers[1];
-            if (is_187) small += "   Left " + r.numbers[2];
-            else small += "   Killed " + r.numbers[2] + "   Hatched " + r.numbers[3];
+            const std::string small_numbers = is_187 ? "Lost " + r.numbers[1] + "   Left " + r.numbers[2]
+                                                     : "Killed " + r.numbers[2] + "   Lost " + r.numbers[1] + "   Hatched " + r.numbers[3];
+            std::string small = small_numbers;
             if (counted) small += "   Damage " + grouped(static_cast<int64_t>(damage_of(rep, r)));
             c.pen.draw(fit_pen(c, small, c.X(o.score_right) - c.X(o.name_x), 8.6), c.X(o.name_x), c.Y(o.small_base), kDim, 8.6, 0);
         }

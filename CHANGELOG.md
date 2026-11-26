@@ -29,13 +29,14 @@ Work that is not released yet is written in the same template under a heading th
 ## Next
 
 **For players:**
-- **Top Thief** replaces Biggest raid on the results screen: the player with the most raids whose loot got home. 187 keeps Last stand.
-- **Games list.** Dashed Open lobby cards fill the empty places (Host here), and a live match shows its scores in a strip that opens a scoreboard.
-- **Copy link on a phone.** A live view and a replay have the button in the top bar (a share symbol, 44 px; a computer still says Copy link). It opens the phone's share sheet, or copies the match's address and says Copied!. A narrow phone's bar says Matches and Full (not All matches and Fullscreen), so all five buttons fit.
+- **Top Thief** replaces Biggest raid on the results screen: the most raids with loot home. 187 keeps Last stand.
+- **Games list.** Dashed Open lobby cards fill empty places (Host here); a live match shows its scores in a strip that opens a scoreboard.
+- **Copy link on a phone.** Live views and replays have the button in the top bar (a share symbol, 44 px; a computer says Copy link). It opens the share sheet, or copies the match's address (Copied!). A narrow phone's bar says Matches and Full so five buttons fit.
+- **Kills first on the Podium.** The results show Killed before Lost, then Hatched, for every player.
 
 **Fixes:**
-- On a phone, a live view's "Jump to live" no longer covers the clock: the button goes under it when the row is short, and Picture sits beside the camera button. Speed buttons and Picture are 44 px high.
-- The menu's "players online" counts the same people as the Players list, not only those in a room or a match.
+- On a phone, a live view's "Jump to live" no longer covers the clock (it goes under it when the row is short); Picture sits beside the camera button, and it and the speed buttons are 44 px high.
+- The menu's "players online" counts everyone in the Players list, not only those in a room or a match.
 
 ## v0.21.5 - 2026-11-24 - The Podium results, messages on phones and smarter bots
 
