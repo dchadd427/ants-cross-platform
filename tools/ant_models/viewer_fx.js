@@ -632,7 +632,7 @@
     float vis = 0.0;
     for (int dy = -1; dy <= 1; dy++) {
       for (int dx = -1; dx <= 1; dx++) {
-        float d = texture(u_shadowMap, proj.xy + vec2(float(dx), float(dy)) * texel * 1.35).r;
+        float d = texture(u_shadowMap, proj.xy + vec2(float(dx), float(dy)) * texel * 2.25).r;
         vis += (proj.z - bias <= d) ? 1.0 : 0.0;
       }
     }
@@ -828,7 +828,7 @@
     float NoF = max(dot(N, u_fillDir), 0.0);
     float keyNorm = max(u_keyDir.y, 0.28);
     float sunFactor = (NoL / keyNorm) * mix(1.0 - u_shadowStrength, 1.0, sh);
-    vec3 shadowCool = mix(vec3(0.68, 0.78, 1.08), vec3(1.0), sh);
+    vec3 shadowCool = mix(vec3(0.88, 0.91, 1.03), vec3(1.0), sh);
     vec3 lit = albedo * (u_keyColor * sunFactor * 0.27 + u_skyColor * 0.23 * u_lightMix.x * shadowCool + u_fillColor * NoF * 0.16);
 
     // Real GGX microfacet specular reaction to sunlight, moonlight, sunset & neon (wet mud, banks, sand glints, slate!)

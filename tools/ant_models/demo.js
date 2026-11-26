@@ -22,15 +22,15 @@
     top:   { label: "Top-Down",  yaw:   0, pitch: 80, zoom: 0.92, proj: "ortho" },
   };
 
-  // Distinct Lighting Scenarios with tailored sun angle, shadow intensity, grid tint, and dynamic atmosphere glow!
+  // Distinct Lighting Scenarios with natural 1998-matched sun elevation, soft shadows, grid tint, and atmosphere glow!
   const LIGHT_SCENARIOS = {
-    daylight:  { label: "Daylight",  elev: 32, azim: -42, shadowStr: 0.68, gridAlpha: 0.13, gridCol: [0.05, 0.07, 0.06], glowMode: "none" },
-    golden:    { label: "Sunset",    elev: 19, azim: -68, shadowStr: 0.74, gridAlpha: 0.13, gridCol: [0.16, 0.08, 0.05], glowMode: "warm" },
-    night:     { label: "Night",     elev: 26, azim:  36, shadowStr: 0.72, gridAlpha: 0.16, gridCol: [0.22, 0.34, 0.58], glowMode: "night" },
-    moonlight: { label: "Moonlight", elev: 30, azim: -32, shadowStr: 0.72, gridAlpha: 0.16, gridCol: [0.30, 0.46, 0.74], glowMode: "moon" },
-    neon:      { label: "Neon",      elev: 28, azim: -50, shadowStr: 0.70, gridAlpha: 0.38, gridCol: [0.10, 0.92, 0.98], glowMode: "neon" },
-    overcast:  { label: "Overcast",  elev: 54, azim: -25, shadowStr: 0.44, gridAlpha: 0.12, gridCol: [0.08, 0.10, 0.12], glowMode: "none" },
-    flat:      { label: "1998 Flat", elev: 36, azim: -42, shadowStr: 0.42, gridAlpha: 0.14, gridCol: [0.05, 0.07, 0.06], glowMode: "none" },
+    daylight:  { label: "Daylight",  elev: 58, azim: -36, shadowStr: 0.36, gridAlpha: 0.13, gridCol: [0.05, 0.07, 0.06], glowMode: "none" },
+    golden:    { label: "Sunset",    elev: 28, azim: -64, shadowStr: 0.48, gridAlpha: 0.13, gridCol: [0.16, 0.08, 0.05], glowMode: "warm" },
+    night:     { label: "Night",     elev: 44, azim:  34, shadowStr: 0.46, gridAlpha: 0.16, gridCol: [0.22, 0.34, 0.58], glowMode: "night" },
+    moonlight: { label: "Moonlight", elev: 48, azim: -32, shadowStr: 0.44, gridAlpha: 0.16, gridCol: [0.30, 0.46, 0.74], glowMode: "moon" },
+    neon:      { label: "Neon",      elev: 46, azim: -48, shadowStr: 0.42, gridAlpha: 0.38, gridCol: [0.10, 0.92, 0.98], glowMode: "neon" },
+    overcast:  { label: "Overcast",  elev: 64, azim: -25, shadowStr: 0.22, gridAlpha: 0.12, gridCol: [0.08, 0.10, 0.12], glowMode: "none" },
+    flat:      { label: "1998 Flat", elev: 58, azim: -36, shadowStr: 0.26, gridAlpha: 0.14, gridCol: [0.05, 0.07, 0.06], glowMode: "none" },
   };
   const LIGHT_SCENARIO_ORDER = ["daylight", "golden", "night", "moonlight", "neon", "overcast", "flat"];
 
@@ -211,7 +211,7 @@
     camPreset: initCamKey,
     focusId: "center",
     lighting: initLight,
-    sunElev: clamp(Number(params.get("elev") || initLs.elev), 16, 72),
+    sunElev: clamp(Number(params.get("elev") || initLs.elev), 16, 78),
     sunAzim: clamp(Number(params.get("azim") ?? initLs.azim), -180, 180),
     playing: params.get("play") !== "0",
     dragMode: params.get("drag") === "orbit" ? "orbit" : "pan",

@@ -457,7 +457,7 @@
     float keyDot = max(dot(N, u_keyDir), 0.0);
     float spotFocus = mix(u_spotParams.x, u_spotParams.y, pow(keyDot, u_spotParams.z));
     float shadowVis = (u_useShadowMap != 0 && keyDot > 0.0) ? samplePbrShadow(v_worldPos, N, u_keyDir) : 1.0;
-    float keyShadowMul = mix(0.24, 1.0, shadowVis);
+    float keyShadowMul = mix(0.56, 1.0, shadowVis);
     vec3 F0 = mix(vec3(0.045), albedo, met), specAcc = vec3(0.0);
     vec3 Lo = evalLight(u_keyDir, u_keyColor * spotFocus * keyShadowMul, N, V, albedo, met, rough, F0, keyCoat, coatR, coatTint, specAcc)
             + evalLight(u_fillDir, u_fillColor, N, V, albedo, met, rough, F0, coatW * 0.22, coatR, coatTint, specAcc)
