@@ -321,7 +321,7 @@ void test_counted(const assets::AssetArchive& arc, const hud_art::Art& art) {
     check(count(*spy, art, "sc_k_mvp") == 1 && count(*spy, art, "sc_k_blood") == 1 && count(*spy, art, "sc_k_thief") == 1 && count(*spy, art, "sc_k_stand") == 0 && count(*spy, art, "sc_k_play") == 1, "the labels of the three honors and of the Play of the game");
     check(has_line(*spy, "62% of the play") && has_line(*spy, "at 0:42") && fitted_thief_line(*spy, "3 raids", "100"), "the honors' numbers: the MVP's share of the play, First blood's time, the Top Thief's raids home and their points (the wording that fits the card)");
     check(has_line(*spy, card.seat_name(0)) && has_line(*spy, card.seat_name(2)), "...and who earned them");
-    check(has_line_with(*spy, {card.seat_name(1), "3 kills in 8 s"}) && has_line_with(*spy, {"saved the hill"}) && has_line(*spy, "at 7:41"), "the Play of the game says who, how many kills in how many seconds, the big moment and when");
+    check(has_line_with(*spy, {card.seat_name(1), "triple kill in 8 s"}) && has_line_with(*spy, {"saved the hill"}) && has_line(*spy, "at 7:41"), "the Play of the game says who, how many kills in how many seconds, the big moment and when");
     check(count(*spy, art, "sc_watch_up") == 1, "Watch is there");
     // no still of the moment: the picture is the ants of the seat that made it, on a dark ground
     check(card.podium().play_picture.w > 0, "...with the picture's place");
@@ -340,7 +340,7 @@ void test_counted(const assets::AssetArchive& arc, const hud_art::Art& art) {
     blind.set_on_watch([&](uint32_t, int32_t, int32_t) { ++blind_watched; });
     const auto spyw = draw(arc, blind, kWide720);
     click(blind, blind.scale().rect(blind.podium().watch));
-    check(count(*spyw, art, "sc_watch_up") == 0 && blind.watch_rect().w == 0 && blind_watched == 0 && count(*spyw, art, "sc_k_play") == 1 && has_line_with(*spyw, {"3 kills"}), "no recording to open: the play is there, Watch is not, and a click where it would be does nothing");
+    check(count(*spyw, art, "sc_watch_up") == 0 && blind.watch_rect().w == 0 && blind_watched == 0 && count(*spyw, art, "sc_k_play") == 1 && has_line_with(*spyw, {"triple kill"}), "no recording to open: the play is there, Watch is not, and a click where it would be does nothing");
     ScorecardModal sighted;
     open(sighted, &art, kWide720, sample(), sim::GameMode::HighestScore, true, &rep);
     sighted.set_watch_available(false);
@@ -443,7 +443,7 @@ PlayCard play_card_of(const assets::AssetArchive& arc, const hud_art::Art& art, 
     const auto spy = draw(arc, card, screen);
     PlayCard out;
     for (const ArtSpy::Face& f : spy->face_lines) {
-        if (f.text.find(" kill") == std::string::npos && f.text.find("knock") == std::string::npos && f.text.find("hill") == std::string::npos && f.text.find("group") == std::string::npos && f.text.find("Thief") == std::string::npos &&
+        if (f.text.find("kill") == std::string::npos && f.text.find("knock") == std::string::npos && f.text.find("hill") == std::string::npos && f.text.find("group") == std::string::npos && f.text.find("Thief") == std::string::npos &&
             f.text.find("a knockout") == std::string::npos) {
             continue;
         }
@@ -466,10 +466,18 @@ void test_play_card(const assets::AssetArchive& arc, const hud_art::Art& art) {
         const PlayCard all = play_card_of(arc, art, screen, everything);
         bool kills_line = false, moments_line = false;
         for (const std::string& line : all.lines) {
-            kills_line = kills_line || line.find("6 kills in 9 s") != std::string::npos;                  // ("9 seconds" begins the same way)
+            kills_line = kills_line || line.find("6-kill streak in 9 s") != std::string::npos;                  // ("9 seconds" begins the same way)
             moments_line = moments_line || line.find("knock") != std::string::npos || line.find("saved the hill") != std::string::npos;
         }
         check(kills_line && moments_line && !all.cut_number, "six kills in nine seconds with every bonus: both numbers, and the big moments that fit" + at);
+        // a streak is called by its name from two kills on, and by its number from five: "double kill", "triple kill", "quad kill", "5-kill streak"
+        const struct { uint32_t kills; const char* called; } streaks[] = {{2, "double kill in 4 s"}, {3, "triple kill in 4 s"}, {4, "quad kill in 4 s"}, {5, "5-kill streak in 4 s"}, {12, "12-kill streak in 4 s"}};
+        for (const auto& streak : streaks) {
+            const PlayCard named_streak = play_card_of(arc, art, screen, Play{true, 1, streak.kills, 10 * streak.kills, 4, 0, 0, 3000, 5, 5});
+            bool called = false;
+            for (const std::string& line : named_streak.lines) called = called || line.find(streak.called) != std::string::npos;
+            check(called && !named_streak.cut_number, std::string("the kills of a moment are called \"") + streak.called + "\"" + at);
+        }
         const PlayCard each = play_card_of(arc, art, screen, Play{true, 1, 2, 45, 4, MatchReport::kWipedGroup, 0, 3000, 5, 5});
         bool named = false;
         for (const std::string& line : each.lines) named = named || line.find("group") != std::string::npos;
