@@ -802,40 +802,99 @@ def build_dino() -> SceneBuilder:
     return _finalize_item(sc, target_span=0.96)
 
 
+def build_soda_can_lid_parts(
+    prefix: str,
+    *,
+    lid_dx: float = 0.0,
+    lid_dy: float = 0.0,
+    lid_z: float = 0.305,
+    tab_angle_deg: float = -22.0,
+) -> List[MeshPart]:
+    """High-detail open aluminum soda can lid: stamped score ring, big dark teardrop drink hole & figure-8 pull-tab."""
+    rad = math.radians(tab_angle_deg)
+    parts: List[MeshPart] = []
+    # Recessed inner countersink score ring + subtle stamped outer chime groove.
+    score_ring = torus_arc(0.114, 0.0038, u_segs=42, v_segs=6, plane="xy", name=f"{prefix}_score_ring", material="item_steel_dark")
+    inner_bevel = torus_arc(0.124, 0.0055, u_segs=44, v_segs=8, plane="xy", name=f"{prefix}_inner_bevel", material="item_aluminum")
+    # Large authentic punched teardrop/rounded-D drink opening (~1/3 of lid diameter!) with raised lip & dark recess.
+    hole_dark = superellipsoid(0.056, 0.044, 0.011, e1=0.62, e2=0.72, u_segs=24, v_segs=10, name=f"{prefix}_hole", material="item_soil_hole").translate(-0.054, 0.000, -0.002)
+    # Pushed-in aluminum lid flap glinting deep inside the punched mouth.
+    flap_in = rounded_box(0.046, 0.042, 0.005, bevel=0.002, segs=2, name=f"{prefix}_flap", material="item_steel_dark").rotate_xyz(ry=0.45).translate(-0.058, 0.000, -0.009)
+    # Gleaming raised rolled rim framing the punched drink mouth (built as sculpted closed tube for oval teardrop fit).
+    lip_pts = [
+        (-0.054 + 0.058 * math.cos(2.0 * math.pi * i / 24), 0.046 * math.sin(2.0 * math.pi * i / 24), +0.003)
+        for i in range(25)
+    ]
+    hole_rim = curved_tube(lip_pts, [0.0052] * len(lip_pts), samples_per_seg=1, radial_segs=8, cap_start=False, cap_end=False, name=f"{prefix}_hole_rim", material="item_aluminum")
+
+    # Contoured stay-on figure-8 aluminum pull-tab: central rivet + stamped twin rails + wide D-shaped finger loop!
+    rivet_base = cylinder(0.022, 0.024, 0.008, radial_segs=18, bevel=0.002, axis="z", name=f"{prefix}_rivet_base", material="item_aluminum").translate(+0.004, 0.0, +0.006)
+    rivet_pin = cylinder(0.012, 0.013, 0.013, radial_segs=16, bevel=0.002, axis="z", name=f"{prefix}_rivet_pin", material="item_chrome_spring").translate(+0.004, 0.0, +0.009)
+    # Front arched nose of the pull-tab pressing over the edge of the punched drink hole.
+    nose_pts = [
+        (+0.006, +0.026, +0.009),
+        (-0.018, +0.022, +0.010),
+        (-0.028, 0.000, +0.010),
+        (-0.018, -0.022, +0.010),
+        (+0.006, -0.026, +0.009),
+    ]
+    tab_nose = curved_tube(nose_pts, [0.0075] * len(nose_pts), samples_per_seg=3, radial_segs=8, cap_rings=1, name=f"{prefix}_tab_nose", material="item_aluminum")
+    # Central stamped twin bridge rails framing the rivet cutout.
+    bridge_top = rounded_box(0.064, 0.013, 0.007, bevel=0.002, segs=2, name=f"{prefix}_tab_rail_t", material="item_aluminum").translate(+0.030, +0.025, +0.010)
+    bridge_bot = rounded_box(0.064, 0.013, 0.007, bevel=0.002, segs=2, name=f"{prefix}_tab_rail_b", material="item_aluminum").translate(+0.030, -0.025, +0.010)
+    bridge_mid = rounded_box(0.022, 0.056, 0.0065, bevel=0.002, segs=2, name=f"{prefix}_tab_mid", material="item_aluminum").translate(+0.046, 0.0, +0.010)
+    # Wide rounded-D rear finger-pull loop with crisp open center window!
+    loop_pts = [
+        (+0.048, +0.028, +0.011),
+        (+0.078, +0.036, +0.013),
+        (+0.104, +0.022, +0.015),
+        (+0.110, 0.000, +0.016),
+        (+0.104, -0.022, +0.015),
+        (+0.078, -0.036, +0.013),
+        (+0.048, -0.028, +0.011),
+    ]
+    tab_loop = curved_tube(loop_pts, [0.0082] * len(loop_pts), samples_per_seg=3, radial_segs=8, cap_rings=1, name=f"{prefix}_pull_loop", material="item_aluminum")
+    # Dark shadow disks directly under the rivet & finger-pull cutouts so the openings read razor-sharp!
+    cut_riv = cylinder(0.016, 0.016, 0.004, radial_segs=16, axis="z", name=f"{prefix}_cut_riv", material="item_steel_dark").translate(+0.024, 0.0, +0.002)
+    cut_finger = superellipsoid(0.024, 0.022, 0.004, e1=0.75, e2=0.75, u_segs=18, v_segs=6, name=f"{prefix}_cut_finger", material="item_steel_dark").translate(+0.076, 0.0, +0.002)
+
+    local_parts = [score_ring, inner_bevel, hole_dark, flap_in, hole_rim, rivet_base, rivet_pin, tab_nose, bridge_top, bridge_bot, bridge_mid, tab_loop, cut_riv, cut_finger]
+    for p in local_parts:
+        parts.append(p.rotate_xyz(rz=rad).translate(lid_dx, lid_dy, lid_z))
+    return parts
+
+
 def build_can1() -> SceneBuilder:
-    """Authentically crushed Critter Cola aluminum can with crisp 256px printed label & figure-8 pull-tab (`238:can1`)."""
+    """Authentically crushed Critter Cola aluminum can with 512px printed label & figure-8 pull-tab (`238:can1`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_can1")
 
     def _crush_can(pos: np.ndarray) -> np.ndarray:
-        """Stepped-on crushed aluminum soda can: deeply pinched & bent middle waist + sharp metallic buckle creases!"""
+        """Curved C-arch stepped-on soda can: smooth outward-bowed front belly + sharp upper-back dent (`238:can1`)."""
         p = pos.copy()
         z = p[:, 2]
-        # Asymmetric waist crush envelope peaked near middle-rear (`z ~ -0.02`) leaving top & bottom aluminum rims intact!
-        mid_w = np.exp(-(((z + 0.015) / 0.155) ** 2))
-        end_guard = np.clip((0.285 - np.abs(z)) / 0.055, 0.0, 1.0)
+        mid_w = np.exp(-(((z + 0.005) / 0.165) ** 2))
+        end_guard = np.clip((0.292 - np.abs(z)) / 0.055, 0.0, 1.0)
         crush = mid_w * end_guard
 
-        # Deep top-down foot stomp flattening the upper half ~54% inward with crisp metallic buckle creases!
-        top_w = np.clip((p[:, 1] + 0.07) / 0.22, 0.0, 1.0)
-        # Sharp metallic diagonal fold V-creases across the caved-in roof of the barrel!
-        crease_a = 1.0 - np.abs(np.sin(p[:, 0] * 12.5 + z * 11.5))
-        crease_b = 1.0 - np.abs(np.sin(p[:, 0] * 17.0 - z * 15.0 + 0.8))
-        sharp_dent = 0.118 * crush * top_w * (0.68 + 0.22 * crease_a + 0.16 * crease_b)
-        p[:, 1] -= sharp_dent
+        # Localized sharp stomp collapse along the upper-back right edge right behind 'Critter' (`x > 0, y > 0`),
+        # leaving the lower-front belly smoothly curved outward like a subtle arched can (`sprite_0372.png`)!
+        back_top = np.clip((p[:, 1] + 0.05) / 0.20, 0.0, 1.0) * np.clip((p[:, 0] + 0.08) / 0.22, 0.0, 1.0)
+        crease_a = 1.0 - np.abs(np.sin(p[:, 0] * 13.5 + z * 12.0))
+        crease_b = 1.0 - np.abs(np.sin(p[:, 0] * 18.0 - z * 14.0 + 0.7))
+        dent = 0.068 * crush * back_top * (0.70 + 0.18 * crease_a + 0.12 * crease_b)
+        p[:, 1] -= dent
+        p[:, 0] -= 0.024 * crush * back_top * (0.72 + 0.28 * crease_a)
 
-        # Subtle bottom flattening where the crushed can rests on the ground + lateral bulge out to the sides!
-        bot_flat = np.clip((-p[:, 1] - 0.08) / 0.10, 0.0, 1.0)
-        p[:, 1] += 0.026 * crush * bot_flat
-        p[:, 0] *= 1.0 + 0.28 * crush * (0.55 + 0.45 * top_w)
-        # Authentic stepped-on banana bow: rear & front rims cock slightly upward while waist kinks down!
-        p[:, 1] += 0.062 * ((z / 0.28) ** 2) - 0.022 * crush
-        p[:, 0] -= 0.048 * ((z / 0.28) ** 2)
+        # Gentle realistic C-bow (NOT extreme macaroni bend!) keeping both aluminum rims crisp & round (`sprite_0372.png`)!
+        p[:, 0] *= 1.0 + 0.09 * crush
+        p[:, 1] += 0.022 * ((z / 0.285) ** 2) - 0.008 * crush
+        p[:, 0] += 0.026 * ((z / 0.285) ** 2) - 0.018 * crush
         return p
 
-    # Build explicit seam-free cylindrical barrel with clean (u, v) mapping directly to 256x256 `cola_label` texture!
-    n_rings = 28
-    n_rad = 56
+    # High-resolution seam-free cylindrical barrel mapped cleanly to 512x512 `cola_label` texture!
+    n_rings = 40
+    n_rad = 72
     z_lo, z_hi = -0.285, +0.295
     verts: List[Tuple[float, float, float]] = []
     uvs: List[Tuple[float, float]] = []
@@ -843,7 +902,6 @@ def build_can1() -> SceneBuilder:
     for ir in range(n_rings + 1):
         vf = ir / float(n_rings)
         z = z_lo + (z_hi - z_lo) * vf
-        # Taper cleanly at the upper neck & bottom heel like a real 12 oz aluminum soda can!
         if vf < 0.08:
             rad = 0.156 + 0.012 * (vf / 0.08)
         elif vf > 0.90:
@@ -851,16 +909,12 @@ def build_can1() -> SceneBuilder:
             rad = 0.168 - 0.024 * (t_neck ** 1.35)
         else:
             rad = 0.168
-        # v = 0 near the open lid (+Z) and v = 1 near bottom (-Z) so 'Critter' sits near the lid & 'Cola' reads cleanly!
-        tex_v = 1.0 - vf
+        tex_v = 1.0 - vf  # v = 0 near open pull-tab lid (+Z), v = 1 near silver bottom rim (-Z)
         for j in range(n_rad + 1):
             uf = j / float(n_rad)
-            # Wrap smoothly from underneath (-Y) over back-top -> front-left so 'Critter Cola' sits dead-center
-            # on the top-front flank, non-mirrored & oriented 1:1 with `238:can1`!
-            ang = -math.pi * 0.5 + uf * 2.0 * math.pi + 0.42
-            vx = rad * math.cos(ang)
-            vy = rad * math.sin(ang)
-            verts.append((vx, vy, z))
+            # Align 'Critter Cola' diagonally across top-front flank, bugs & white barcode on left (`sprite_0372.png`)!
+            ang = -math.pi * 0.5 + uf * 2.0 * math.pi + 0.56
+            verts.append((rad * math.cos(ang), rad * math.sin(ang), z))
             uvs.append((uf, tex_v))
     stride = n_rad + 1
     for ir in range(n_rings):
@@ -881,14 +935,14 @@ def build_can1() -> SceneBuilder:
     top_end = lathe(
         [
             (0.144, +0.295),
-            (0.150, +0.312),
-            (0.145, +0.326),
-            (0.132, +0.328),
-            (0.125, +0.306),
-            (0.110, +0.304),
-            (0.000, +0.303),
+            (0.151, +0.312),
+            (0.146, +0.327),
+            (0.132, +0.329),
+            (0.125, +0.307),
+            (0.110, +0.305),
+            (0.000, +0.304),
         ],
-        radial_segs=44,
+        radial_segs=48,
         cap_bottom=False,
         cap_top=False,
         axis="z",
@@ -897,29 +951,18 @@ def build_can1() -> SceneBuilder:
     ).deform(_crush_can)
     bot_end = lathe(
         [(0.000, -0.308), (0.098, -0.306), (0.128, -0.324), (0.146, -0.318), (0.156, -0.285)],
-        radial_segs=40,
+        radial_segs=44,
         cap_bottom=False,
         cap_top=False,
         axis="z",
         name="can_bottom",
         material="item_aluminum",
     ).deform(_crush_can)
-    # Recessed lid score groove ring + dark D-shaped punched drink mouth + detailed figure-8 aluminum pull-tab (`238:can1`)!
-    lid_dy = 0.062 * ((0.305 / 0.28) ** 2)
-    lid_dx = -0.048 * ((0.305 / 0.28) ** 2)
-    score_ring = torus_arc(0.112, 0.004, u_segs=36, v_segs=6, plane="xy", name="can_score_ring", material="item_steel_dark").translate(lid_dx, lid_dy, +0.307)
-    drink_hole = (
-        superellipsoid(0.046, 0.052, 0.010, e1=0.72, e2=0.80, u_segs=20, v_segs=8, name="can_hole", material="item_soil_hole")
-        .translate(lid_dx - 0.050, lid_dy + 0.012, +0.306)
-    )
-    hole_rim = torus_arc(0.048, 0.005, u_segs=22, v_segs=6, plane="xy", name="can_hole_rim", material="item_aluminum").translate(lid_dx - 0.050, lid_dy + 0.012, +0.309)
-    # Stay-on figure-8 aluminum pull-tab lying across center-right of the lid!
-    tab_rivet = cylinder(0.015, 0.015, 0.014, radial_segs=14, axis="z", name="can_rivet", material="item_aluminum").translate(lid_dx + 0.006, lid_dy - 0.004, +0.312)
-    tab_plate = rounded_box(0.068, 0.046, 0.009, bevel=0.003, segs=2, name="can_tab_bridge", material="item_aluminum").rotate_xyz(rz=-0.28).translate(lid_dx + 0.036, lid_dy - 0.014, +0.314)
-    tab_loop = torus_arc(0.028, 0.008, u_segs=22, v_segs=8, plane="xy", name="can_pull_loop", material="item_aluminum").rotate_xyz(ry=-0.16, rz=-0.28).translate(lid_dx + 0.074, lid_dy - 0.026, +0.318)
-    tab_hole_dark = cylinder(0.018, 0.018, 0.006, radial_segs=16, axis="z", name="can_tab_hole", material="item_steel_dark").translate(lid_dx + 0.074, lid_dy - 0.026, +0.310)
-    sc.add("can", [top_end, bot_end, score_ring, drink_hole, hole_rim, tab_rivet, tab_plate, tab_loop, tab_hole_dark])
+    lid_dy = 0.022 * ((0.305 / 0.285) ** 2)
+    lid_dx = 0.026 * ((0.305 / 0.285) ** 2)
+    lid_parts = build_soda_can_lid_parts("can", lid_dx=lid_dx, lid_dy=lid_dy, lid_z=+0.306, tab_angle_deg=-16.0)
+    sc.add("can", [top_end, bot_end, *lid_parts])
 
-    # Lay crushed can diagonally with the gleaming open pull-tab lid facing forward-right just like `238:can1`!
-    sc.nodes["can"] = [p.rotate_xyz(rx=-6.0, ry=48.0, rz=-12.0, degrees=True) for p in sc.nodes["can"]]
+    # Angle crushed can diagonally with the open pull-tab lid facing prominently forward-right like `sprite_0372.png`!
+    sc.nodes["can"] = [p.rotate_xyz(rx=-8.0, ry=40.0, rz=-14.0, degrees=True) for p in sc.nodes["can"]]
     return _finalize_item(sc, target_span=0.96)

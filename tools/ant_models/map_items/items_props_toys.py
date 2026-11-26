@@ -44,11 +44,11 @@ if np is not None:
         )
         from .item_materials import gradient_y_tint, register_item_materials, tint_part
         from .items_foliage import _sculpt_bark_branch
-        from .items_toys import _finalize_item
+        from .items_toys import _finalize_item, build_soda_can_lid_parts
     except ImportError:
         from map_items.item_materials import gradient_y_tint, register_item_materials, tint_part  # type: ignore
         from map_items.items_foliage import _sculpt_bark_branch  # type: ignore
-        from map_items.items_toys import _finalize_item  # type: ignore
+        from map_items.items_toys import _finalize_item, build_soda_can_lid_parts  # type: ignore
         from mesh_core import (  # type: ignore
             MeshPart,
             SceneBuilder,
@@ -71,66 +71,166 @@ def _const_tint(rgb: Tuple[float, float, float]):
 
 
 def _cat_eye_rim(name: str, side: float, *, mat: str = "item_glasses_teal") -> List[MeshPart]:
-    """Sculpt one upswept cat-eye eyeglass rim loop + curved clear glass lens (`236:glasses`)."""
+    """Sculpt one sharp upswept cat-eye rim with emerald/navy checkered brow & curved clear lens (`236:glasses`)."""
     pts: List[Tuple[float, float, float]] = []
-    n = 28
+    rads: List[float] = []
+    n = 36
     for i in range(n + 1):
         a = 2.0 * math.pi * (i % n) / n
-        # Sharp upswept retro cat-eye outer wing corners matching `236:glasses`!
-        out_up = max(0.0, math.sin(a)) * max(0.0, side * math.cos(a))
-        lx = 0.142 * math.cos(a) + side * 0.042 * (out_up ** 1.3)
-        ly = 0.082 * math.sin(a) + 0.046 * (out_up ** 1.2)
-        lz = -0.020 * (lx * lx * 16.0)
+        ca, sa = math.cos(a), math.sin(a)
+        # Sharp upswept retro cat-eye outer wing horn & sleek tapered almond lower loop matching `sprite_0370.png`!
+        out_up = max(0.0, sa + 0.15) * max(0.0, side * ca + 0.10)
+        lx = 0.138 * ca + side * 0.068 * (out_up ** 1.35)
+        ly = 0.072 * sa + 0.062 * (out_up ** 1.15) - 0.010 * max(0.0, -sa)
+        lz = -0.024 * (lx * lx * 14.0)
         pts.append((side * 0.168 + lx, ly, lz))
-    rim = curved_tube(pts, [0.0155] * len(pts), samples_per_seg=2, radial_segs=10, cap_start=False, cap_end=False, name=f"{name}_rim", material=mat)
-    # Deep emerald-teal & navy speckled tortoiseshell matching `236:glasses`!
-    rim = tint_part(
-        rim,
-        lambda pos, _n: np.clip(
-            np.column_stack([
-                0.28 + 0.34 * (np.sin(pos[:, 0] * 48.0 + pos[:, 1] * 34.0) > 0.25),
-                0.46 + 0.50 * (np.cos(pos[:, 0] * 42.0 - pos[:, 1] * 38.0) > 0.10),
-                0.68 + 0.28 * np.sin(pos[:, 0] * 30.0),
-            ]),
-            0.16,
-            1.0,
-        ),
-    )
-    lens = ellipsoid(0.130, 0.078, 0.008, u_segs=20, v_segs=10, name=f"{name}_lens", material="item_lens_clear").translate(side * 0.168, 0.010, -0.004)
+        # Thicker sculpted top brow & wing tips, slimmer dark lower eye-wire!
+        rads.append(0.0175 if sa > 0.08 else 0.0115)
+    rim = curved_tube(pts, rads, samples_per_seg=2, radial_segs=10, cap_start=False, cap_end=False, name=f"{name}_rim", material=mat)
+
+    def _brow_check_tint(pos: np.ndarray, _n: np.ndarray) -> np.ndarray:
+        # Authentic crisp emerald-green & deep midnight-navy checkered mosaic on top brow/wings,
+        # transitioning to glossy solid midnight-navy on the lower rims (`sprite_0370.png`)!
+        is_brow = np.clip((pos[:, 1] + 0.008) / 0.032, 0.0, 1.0)
+        cx = np.floor(pos[:, 0] * 34.0)
+        cy = np.floor((pos[:, 1] + pos[:, 2] * 0.4) * 34.0)
+        checker = ((cx + cy) % 2.0 > 0.5).astype(np.float64)
+        green = np.array([0.14, 0.88, 0.28], dtype=np.float64)
+        navy = np.array([0.10, 0.16, 0.56], dtype=np.float64)
+        brow_col = navy[None, :] * (1.0 - checker[:, None]) + green[None, :] * checker[:, None]
+        return np.clip(navy[None, :] * (1.0 - is_brow[:, None]) + brow_col * is_brow[:, None], 0.08, 1.0)
+
+    rim = tint_part(rim, _brow_check_tint)
+    # Curved cat-eye lens shaped to match the upswept aperture!
+    lens = ellipsoid(0.132, 0.068, 0.007, u_segs=22, v_segs=10, name=f"{name}_lens", material="item_lens_clear").deform(
+        lambda p: np.column_stack([
+            p[:, 0] + side * 0.045 * np.clip(p[:, 1] / 0.07, 0.0, 1.0) * np.clip(side * p[:, 0] / 0.13, 0.0, 1.0),
+            p[:, 1] + 0.035 * np.clip(p[:, 1] / 0.07, 0.0, 1.0) * np.clip(side * p[:, 0] / 0.13, 0.0, 1.0),
+            p[:, 2] - 0.020 * ((p[:, 0] / 0.13) ** 2),
+        ])
+    ).translate(side * 0.168, 0.006, -0.005)
     return [rim, lens]
 
 
+def _temple_arm_ribbon(name: str, pts: List[Tuple[float, float, float]], heights: List[float], thick: float = 0.0065) -> MeshPart:
+    """Sculpt a sleek flat vertical-ribbon acetate temple arm with flared curved paddle ear-tip (`sprite_0370.png`)."""
+    # Build smooth spine via Catmull-Rom-like dense interpolation and sweep an elliptical flat ribbon cross-section.
+    arr = np.asarray(pts, dtype=np.float64)
+    hs = np.asarray(heights, dtype=np.float64)
+    dense_p: List[np.ndarray] = []
+    dense_h: List[float] = []
+    subs = 6
+    for i in range(len(arr) - 1):
+        p0 = arr[max(0, i - 1)]
+        p1 = arr[i]
+        p2 = arr[i + 1]
+        p3 = arr[min(len(arr) - 1, i + 2)]
+        h1, h2 = hs[i], hs[i + 1]
+        for s in range(subs if i < len(arr) - 2 else subs + 1):
+            t = s / float(subs)
+            t2, t3 = t * t, t * t * t
+            pos = 0.5 * ((2.0 * p1) + (-p0 + p2) * t + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2 + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3)
+            dense_p.append(pos)
+            dense_h.append(float(h1 + (h2 - h1) * t))
+
+    n_rings = len(dense_p)
+    n_seg = 10
+    verts: List[Tuple[float, float, float]] = []
+    tris: List[Tuple[int, int, int]] = []
+    up_ref = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+    for ir in range(n_rings):
+        p = dense_p[ir]
+        tan = dense_p[min(n_rings - 1, ir + 1)] - dense_p[max(0, ir - 1)]
+        tan /= max(1e-8, float(np.linalg.norm(tan)))
+        side_v = np.cross(tan, up_ref)
+        sn = float(np.linalg.norm(side_v))
+        if sn < 1e-6:
+            side_v = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+        else:
+            side_v /= sn
+        up_v = np.cross(side_v, tan)
+        up_v /= max(1e-8, float(np.linalg.norm(up_v)))
+        hh = dense_h[ir]
+        for j in range(n_seg):
+            ang = 2.0 * math.pi * j / n_seg
+            vtx = p + side_v * (thick * math.cos(ang)) + up_v * (hh * math.sin(ang))
+            verts.append((float(vtx[0]), float(vtx[1]), float(vtx[2])))
+    for ir in range(n_rings - 1):
+        for j in range(n_seg):
+            jn = (j + 1) % n_seg
+            a, b = ir * n_seg + j, (ir + 1) * n_seg + j
+            c, d = (ir + 1) * n_seg + jn, ir * n_seg + jn
+            tris.extend(((a, c, b), (a, d, c)))
+    # Cap both ends cleanly so the temple arm is completely watertight.
+    c0_idx = len(verts)
+    verts.append((float(dense_p[0][0]), float(dense_p[0][1]), float(dense_p[0][2])))
+    c1_idx = len(verts)
+    verts.append((float(dense_p[-1][0]), float(dense_p[-1][1]), float(dense_p[-1][2])))
+    for j in range(n_seg):
+        jn = (j + 1) % n_seg
+        tris.append((c0_idx, jn, j))
+        base = (n_rings - 1) * n_seg
+        tris.append((c1_idx, base + j, base + jn))
+    pos_a = np.asarray(verts, dtype=np.float32)
+    idx_a = np.asarray(tris, dtype=np.uint32).reshape(-1)
+    arm_mesh = MeshPart(name, "item_rubber_blue", pos_a, recompute_smooth_normals(pos_a, idx_a), idx_a)
+    return tint_part(arm_mesh, _const_tint((0.14, 0.20, 0.56)))
+
+
 def build_glasses() -> SceneBuilder:
-    """Teal-and-navy cat-eye eyeglasses with clear lenses & folded temple arms (`236:glasses`)."""
+    """Emerald-checkered & navy cat-eye eyeglasses with folded left temple arm (`236:glasses`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_glasses")
     parts: List[MeshPart] = []
+    navy_tint = _const_tint((0.14, 0.20, 0.56))
     for side, tag in ((-1.0, "l"), (+1.0, "r")):
         parts.extend(_cat_eye_rim(f"glasses_{tag}", side))
-        hinge = rounded_box(0.036, 0.022, 0.022, bevel=0.004, segs=2, name=f"glasses_hinge_{tag}", material="item_glasses_teal").translate(side * 0.320, 0.046, -0.024)
-        # Left temple folded slightly inward toward center-right, right temple angled open (`236:glasses`)!
-        inward = +0.16 if side < 0 else -0.02
-        arm = curved_tube(
-            [
-                (side * 0.326, 0.046, -0.024),
-                (side * 0.318 + inward * 0.35, 0.040, -0.22),
-                (side * 0.295 + inward * 0.85, 0.028, -0.44),
-                (side * 0.275 + inward * 1.10, -0.014, -0.53),
-                (side * 0.262 + inward * 1.18, -0.058, -0.56),
-            ],
-            [0.011, 0.010, 0.009, 0.0085, 0.007],
-            samples_per_seg=4,
-            radial_segs=10,
-            cap_rings=2,
-            name=f"glasses_arm_{tag}",
-            material="item_rubber_blue",
+        hinge = tint_part(
+            rounded_box(0.036, 0.026, 0.020, bevel=0.004, segs=2, name=f"glasses_hinge_{tag}", material="item_rubber_blue").translate(side * 0.344, 0.068, -0.028),
+            navy_tint,
         )
-        pad = ellipsoid(0.012, 0.022, 0.008, u_segs=10, v_segs=8, name=f"glasses_pad_{tag}", material="item_candy_white").translate(side * 0.044, -0.010, -0.024)
+        if side < 0:
+            # LEFT temple arm folded sharply inward (~52°!) across behind the lenses with flattened paddle ear-hook (`sprite_0370.png`)!
+            arm = _temple_arm_ribbon(
+                f"glasses_arm_{tag}",
+                [
+                    (-0.346, 0.068, -0.032),
+                    (-0.185, 0.062, -0.155),
+                    (-0.005, 0.052, -0.268),
+                    (+0.135, 0.042, -0.340),
+                    (+0.205, 0.014, -0.365),
+                    (+0.225, -0.042, -0.372),
+                ],
+                [0.017, 0.0135, 0.0115, 0.0125, 0.0185, 0.020],
+                thick=0.0062,
+            )
+        else:
+            # RIGHT temple arm swung wide open (~96°), running sleekly straight back-right (`sprite_0370.png`)!
+            arm = _temple_arm_ribbon(
+                f"glasses_arm_{tag}",
+                [
+                    (+0.346, 0.068, -0.032),
+                    (+0.362, 0.062, -0.220),
+                    (+0.378, 0.052, -0.430),
+                    (+0.388, 0.024, -0.560),
+                    (+0.392, -0.032, -0.605),
+                ],
+                [0.016, 0.0125, 0.0105, 0.0135, 0.016],
+                thick=0.0062,
+            )
+        pad = ellipsoid(0.011, 0.020, 0.007, u_segs=10, v_segs=8, name=f"glasses_pad_{tag}", material="item_candy_white").translate(side * 0.042, -0.012, -0.022)
         parts.extend([hinge, arm, pad])
 
-    bridge = curved_tube([(-0.042, 0.024, -0.002), (0.0, 0.036, +0.008), (+0.042, 0.024, -0.002)], [0.013, 0.012, 0.013], samples_per_seg=3, radial_segs=10, name="glasses_bridge", material="item_glasses_teal")
+    bridge = tint_part(
+        curved_tube([(-0.044, 0.028, -0.002), (0.0, 0.042, +0.008), (+0.044, 0.028, -0.002)], [0.0145, 0.0135, 0.0145], samples_per_seg=3, radial_segs=10, name="glasses_bridge", material="item_glasses_teal"),
+        lambda pos, _n: np.where(
+            (((np.floor(pos[:, 0] * 34.0) + np.floor(pos[:, 1] * 34.0)) % 2.0) > 0.5)[:, None],
+            np.array([[0.14, 0.88, 0.28]]),
+            np.array([[0.10, 0.16, 0.56]]),
+        ),
+    )
     parts.append(bridge)
-    sc.add("glasses", [p.rotate_xyz(rx=8.0, ry=-32.0, degrees=True) for p in parts])
+    sc.add("glasses", [p.rotate_xyz(rx=10.0, ry=-36.0, rz=-4.0, degrees=True) for p in parts])
     return _finalize_item(sc, target_span=0.96)
 
 
@@ -157,26 +257,40 @@ def build_bobber() -> SceneBuilder:
 
 
 def build_can2() -> SceneBuilder:
-    """Horizontal crushed Critter Cola soda can: silver pull-tab lid on LEFT, upside-down logo in front (`239:can2`)."""
+    """Heavily flat-crushed Critter Cola can: round silver pull-tab lid on LEFT, flattened oval base on RIGHT (`239:can2`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_can2")
 
-    def _crush_horiz(pos: np.ndarray) -> np.ndarray:
-        """Horizontal stepped-on saddle crush: keeps left lid & right base intact, subtle dent across mid-belly (`239:can2`)."""
+    def _crush_flat(pos: np.ndarray) -> np.ndarray:
+        """Heavy pancake stomp crush from right behind the round left lid all the way through the right bottom rim (`sprite_0373.png`)."""
         p = pos.copy()
         z = p[:, 2]
-        mid_w = np.exp(-(((z - 0.01) / 0.16) ** 2))
-        end_guard = np.clip((0.285 - np.abs(z)) / 0.06, 0.0, 1.0)
-        crush = mid_w * end_guard
-        top_w = np.clip((p[:, 1] + 0.06) / 0.20, 0.0, 1.0)
-        crease = 1.0 - np.abs(np.sin(p[:, 0] * 13.0 + z * 10.0))
-        p[:, 1] -= 0.088 * crush * top_w * (0.72 + 0.28 * crease)
-        p[:, 0] *= 1.0 + 0.16 * crush
-        # Very slight realistic settle — NO dramatic banana bow!
-        p[:, 1] += 0.014 * ((z / 0.28) ** 2) - 0.012 * crush
+        # Keep the open silver top lid (+Z > +0.23) round and intact, then rapidly stomp-flatten the entire barrel & base!
+        s = np.clip((0.235 - z) / 0.28, 0.0, 1.0)
+        t_flat = s * s * (3.0 - 2.0 * s)
+        # Deep collapsed neck pinch right behind the round lid shoulder (`z ~ +0.08`)!
+        neck_pinch = np.exp(-(((z - 0.075) / 0.115) ** 2))
+        end_flare = np.clip((0.08 - z) / 0.38, 0.0, 1.0)
+
+        # Compress front-to-back (local X) ~68% flat across mid-barrel & right bottom rim!
+        x_scale = 1.0 - 0.68 * t_flat
+        # Flare vertical height (local Y) up to ~1.22x at the stomped right rim while pinching tightly at the neck waist!
+        y_scale = 1.0 + 0.20 * end_flare - 0.16 * neck_pinch
+        p[:, 0] *= x_scale
+        p[:, 1] *= y_scale
+
+        # Sharp metallic angular diagonal fold creases across the crushed front & rear aluminum sheets!
+        crease_a = 1.0 - np.abs(np.sin(p[:, 1] * 14.5 + z * 11.5 - 0.4))
+        crease_b = 1.0 - np.abs(np.sin(p[:, 1] * 19.0 - z * 16.0 + 1.1))
+        body_mid = np.clip((0.21 - z) / 0.10, 0.0, 1.0) * np.clip((z + 0.26) / 0.09, 0.0, 1.0)
+        front_sign = np.where(p[:, 0] >= 0.0, 1.0, -1.0)
+        p[:, 0] -= front_sign * 0.022 * body_mid * (0.45 + 0.35 * crease_a + 0.20 * crease_b)
+        # Level horizontal body silhouette rising only slightly toward the tall squashed right rim (`sprite_0373.png`)!
+        p[:, 1] += 0.014 * (end_flare ** 1.15) - 0.016 * neck_pinch
+        p[:, 0] -= 0.020 * neck_pinch
         return p
 
-    n_rings, n_rad = 26, 52
+    n_rings, n_rad = 44, 72
     z_lo, z_hi = -0.285, +0.295
     verts, uvs, tris = [], [], []
     for ir in range(n_rings + 1):
@@ -188,11 +302,12 @@ def build_can2() -> SceneBuilder:
             rad = 0.168 - 0.024 * (((vf - 0.90) / 0.10) ** 1.35)
         else:
             rad = 0.168
-        tex_v = 1.0 - vf  # v=0 near lid (+Z), v=1 near base (-Z)
+        tex_v = 1.0 - vf  # v=0 near open lid (+Z), v=1 near crushed bottom rim (-Z)
         for j in range(n_rad + 1):
             uf = j / float(n_rad)
-            # Rotate label roll so upside-down 'Critter Cola' sits front-center when lid points left-front!
-            ang = -math.pi * 0.5 + uf * 2.0 * math.pi + 4.45
+            # Align upside-down diagonal 'Critter Cola' squarely across the flat front crushed sheet (`+X` faces camera!)
+            # with spiral 'a' upper-left near lid, 'C' lower-right, 'Critter' near bottom red shoulder (`sprite_0373.png`)!
+            ang = -math.pi * 0.5 + uf * 2.0 * math.pi - 0.96
             verts.append((rad * math.cos(ang), rad * math.sin(ang), z))
             uvs.append((uf, tex_v))
     stride = n_rad + 1
@@ -200,56 +315,114 @@ def build_can2() -> SceneBuilder:
         for j in range(n_rad):
             a, b, c, d = ir * stride + j, (ir + 1) * stride + j, (ir + 1) * stride + (j + 1), ir * stride + (j + 1)
             tris.extend(((a, c, b), (a, d, c)))
-    pos_b = _crush_horiz(np.asarray(verts, dtype=np.float32))
+    pos_b = _crush_flat(np.asarray(verts, dtype=np.float32))
     idx_b = np.asarray(tris, dtype=np.uint32).reshape(-1)
     body_shell = MeshPart("can2_label_wall", "item_cola_label", pos_b, recompute_smooth_normals(pos_b, idx_b), idx_b, uvs=np.asarray(uvs, dtype=np.float32))
 
-    top_end = lathe([(0.144, +0.295), (0.150, +0.312), (0.145, +0.326), (0.132, +0.328), (0.125, +0.306), (0.110, +0.304), (0.000, +0.303)], radial_segs=42, cap_bottom=False, cap_top=False, axis="z", name="can2_top_lid", material="item_aluminum").deform(_crush_horiz)
-    bot_end = lathe([(0.000, -0.308), (0.098, -0.306), (0.128, -0.324), (0.146, -0.318), (0.156, -0.285)], radial_segs=38, cap_bottom=False, cap_top=False, axis="z", name="can2_bottom", material="item_aluminum").deform(_crush_horiz)
-    dy_l = 0.014 * ((0.305 / 0.28) ** 2)
-    score = torus_arc(0.112, 0.004, u_segs=34, v_segs=6, plane="xy", name="can2_score", material="item_steel_dark").translate(0.0, dy_l, +0.307)
-    hole = superellipsoid(0.048, 0.056, 0.010, e1=0.72, e2=0.80, u_segs=20, v_segs=8, name="can2_hole", material="item_soil_hole").translate(+0.018, dy_l + 0.044, +0.306)
-    hole_rim = torus_arc(0.050, 0.005, u_segs=22, v_segs=6, plane="xy", name="can2_hole_rim", material="item_aluminum").translate(+0.018, dy_l + 0.044, +0.309)
-    rivet = cylinder(0.015, 0.015, 0.014, radial_segs=14, axis="z", name="can2_rivet", material="item_aluminum").translate(-0.008, dy_l - 0.006, +0.312)
-    tab_p = rounded_box(0.052, 0.072, 0.009, bevel=0.003, segs=2, name="can2_tab_bridge", material="item_aluminum").rotate_xyz(rz=0.25).translate(-0.022, dy_l - 0.036, +0.314)
-    tab_l = torus_arc(0.030, 0.0085, u_segs=22, v_segs=8, plane="xy", name="can2_pull_loop", material="item_aluminum").rotate_xyz(rz=0.25).translate(-0.034, dy_l - 0.072, +0.318)
-    tab_h = cylinder(0.018, 0.018, 0.006, radial_segs=16, axis="z", name="can2_tab_hole", material="item_steel_dark").translate(-0.034, dy_l - 0.072, +0.310)
-    parts = [body_shell, top_end, bot_end, score, hole, hole_rim, rivet, tab_p, tab_l, tab_h]
-    # Orient horizontally: gleaming pull-tab lid on LEFT facing front-left, crushed belly gently rising right (`239:can2`)!
-    sc.add("can", [p.rotate_xyz(rx=-6.0, ry=-58.0, rz=8.0, degrees=True) for p in parts])
+    top_end = lathe([(0.144, +0.295), (0.151, +0.312), (0.146, +0.327), (0.132, +0.329), (0.125, +0.307), (0.110, +0.305), (0.000, +0.304)], radial_segs=48, cap_bottom=False, cap_top=False, axis="z", name="can2_top_lid", material="item_aluminum").deform(_crush_flat)
+    bot_end = lathe([(0.000, -0.308), (0.098, -0.306), (0.128, -0.324), (0.146, -0.318), (0.156, -0.285)], radial_segs=44, cap_bottom=False, cap_top=False, axis="z", name="can2_bottom", material="item_aluminum").deform(_crush_flat)
+    # Orient dark punched drink mouth at upper-right of the left lid & figure-8 pull-tab sweeping down-left (`sprite_0373.png`)!
+    lid_parts = build_soda_can_lid_parts("can2", lid_dx=0.0, lid_dy=0.0, lid_z=+0.306, tab_angle_deg=-116.0)
+    parts = [body_shell, top_end, bot_end, *lid_parts]
+    # Lay horizontally: round pull-tab lid on LEFT facing front-left, tall stomped silver rim level on RIGHT (`sprite_0373.png`)!
+    sc.add("can", [p.rotate_xyz(rx=-10.0, ry=-52.0, rz=-11.0, degrees=True) for p in parts])
     return _finalize_item(sc, target_span=0.96)
 
 
+def _yoyo_sunburst_emblem(name: str, y_pole: float, dome_r: float = 0.248, dome_h: float = 0.226) -> List[MeshPart]:
+    """Flush curved 8-ray alternating cherry-red & smooth golden-yellow sunburst cheek decal hugging the plump yo-yo dome (`sprite_0374.png`)."""
+    out: List[MeshPart] = []
+    n_rays = 8
+    r_max = 0.118
+    gold_tint = _const_tint((0.98, 0.80, 0.12))
+    for i in range(n_rays):
+        a0 = 2.0 * math.pi * i / n_rays
+        a1 = 2.0 * math.pi * (i + 1) / n_rays
+        mat = "item_candy_red" if (i % 2 == 0) else "item_candy_white"
+        verts: List[Tuple[float, float, float]] = []
+        tris: List[Tuple[int, int, int]] = []
+        n_rad, n_ang = 5, 4
+        for ir in range(n_rad + 1):
+            rr = r_max * (ir / float(n_rad))
+            # Match plump elliptical dome height `(rr/dome_r)^2 + (yy/dome_h)^2 = 1` + tiny 0.0022 proud offset!
+            yy = dome_h * math.sqrt(max(0.0, 1.0 - (rr / dome_r) ** 2)) + 0.0022
+            for ia in range(n_ang + 1):
+                ang = a0 + (a1 - a0) * (ia / float(n_ang))
+                verts.append((rr * math.cos(ang), math.copysign(yy, y_pole), rr * math.sin(ang)))
+        st = n_ang + 1
+        for ir in range(n_rad):
+            for ia in range(n_ang):
+                v0, v1, v2, v3 = ir * st + ia, (ir + 1) * st + ia, (ir + 1) * st + ia + 1, ir * st + ia + 1
+                if y_pole > 0:
+                    tris.extend(((v0, v2, v1), (v0, v3, v2)))
+                else:
+                    tris.extend(((v0, v1, v2), (v0, v2, v3)))
+        pos_e = np.asarray(verts, dtype=np.float32)
+        idx_e = np.asarray(tris, dtype=np.uint32).reshape(-1)
+        ray = MeshPart(f"{name}_ray{i}", mat, pos_e, recompute_smooth_normals(pos_e, idx_e), idx_e)
+        out.append(ray if (i % 2 == 0) else tint_part(ray, gold_tint))
+    return out
+
+
 def build_yoyo() -> SceneBuilder:
-    """Classic smooth glossy ivory-cream vintage yo-yo with twin crimson pin-stripes & looped string (`240:yoyo`)."""
+    """Plump glossy pearl-ivory imperial yo-yo with narrow string groove, twin crimson pin-stripes & sunburst emblem (`240:yoyo`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_yoyo")
     parts: List[MeshPart] = []
 
-    shell_prof = [(0.000, 0.145), (0.095, 0.142), (0.175, 0.122), (0.228, 0.082), (0.236, 0.045), (0.210, 0.020), (0.052, 0.018)]
-    ivory = _const_tint((0.93, 0.90, 0.84))
-    top_half = tint_part(lathe(shell_prof, radial_segs=42, cap_bottom=True, cap_top=True, axis="y", name="yoyo_half_top", material="item_candy_white"), ivory)
+    # Generous almost-spherical classic imperial hemispheres (`half_thick = 0.226`, `max_r = 0.248` -> plump ~0.91 ratio!)
+    # with a tight, crisp narrow center V-groove string channel (`gap ~ 0.016`) matching `sprite_0374.png`!
+    dome_r, dome_h = 0.248, 0.226
+    shell_prof: List[Tuple[float, float]] = []
+    n_arc = 14
+    for i in range(n_arc + 1):
+        th = (math.pi * 0.445) * (i / float(n_arc))
+        rr = dome_r * math.sin(th)
+        yy = dome_h * math.cos(th)
+        shell_prof.append((rr, yy))
+    # Crisp rounded lip turning sharply into the tight narrow center string groove!
+    shell_prof.extend([(0.246, 0.028), (0.236, 0.018), (0.195, 0.011), (0.048, 0.008)])
+
+    ivory = _const_tint((0.86, 0.83, 0.78))
+    top_half = tint_part(lathe(shell_prof, radial_segs=52, cap_bottom=True, cap_top=True, axis="y", name="yoyo_half_top", material="item_candy_white"), ivory)
     bot_prof = [(r, -y) for r, y in reversed(shell_prof)]
-    bot_half = tint_part(lathe(bot_prof, radial_segs=42, cap_bottom=True, cap_top=True, axis="y", name="yoyo_half_bot", material="item_candy_white"), ivory)
-    axle = cylinder(0.055, 0.055, 0.044, radial_segs=20, axis="y", name="yoyo_axle", material="item_wood_stick")
-    # Crisp thin crimson racing pin-stripes inset along each glossy dome shoulder + flush red/gold starburst emblem!
-    ring_t = torus_arc(0.214, 0.0055, u_segs=42, v_segs=8, plane="xz", name="yoyo_stripe_top", material="item_candy_red").translate(0.0, +0.090, 0.0)
-    ring_b = torus_arc(0.214, 0.0055, u_segs=42, v_segs=8, plane="xz", name="yoyo_stripe_bot", material="item_candy_red").translate(0.0, -0.090, 0.0)
-    emblem_r = cylinder(0.072, 0.072, 0.004, radial_segs=26, bevel=0.001, axis="y", name="yoyo_emblem_red", material="item_candy_red").translate(0.0, +0.144, 0.0)
-    emblem_g = cylinder(0.048, 0.048, 0.005, radial_segs=22, bevel=0.001, axis="y", name="yoyo_emblem_gold", material="item_pollen_gold").translate(0.0, +0.145, 0.0)
-    parts.extend([top_half, bot_half, axle, ring_t, ring_b, emblem_r, emblem_g])
+    bot_half = tint_part(lathe(bot_prof, radial_segs=52, cap_bottom=True, cap_top=True, axis="y", name="yoyo_half_bot", material="item_candy_white"), ivory)
+    axle = cylinder(0.050, 0.050, 0.022, radial_segs=20, axis="y", name="yoyo_axle", material="item_wood_stick")
+    # Crisp dark shadowed inner string groove channel right between the plump ivory halves (`sprite_0374.png`)!
+    groove_slot = torus_arc(0.224, 0.0085, u_segs=52, v_segs=8, plane="xz", name="yoyo_groove", material="item_steel_dark")
 
-    parts = [p.rotate_xyz(rx=48.0, ry=-32.0, rz=52.0, degrees=True).translate(-0.08, 0.18, -0.02) for p in parts]
+    # Twin crisp thin crimson racing pin-stripes positioned closely beside the center string groove (`sprite_0374.png`)!
+    stripe_y = 0.052
+    stripe_r = dome_r * math.sqrt(max(0.0, 1.0 - (stripe_y / dome_h) ** 2)) + 0.0012
+    ring_t = torus_arc(stripe_r, 0.0046, u_segs=52, v_segs=8, plane="xz", name="yoyo_stripe_top", material="item_candy_red").translate(0.0, +stripe_y, 0.0)
+    ring_b = torus_arc(stripe_r, 0.0046, u_segs=52, v_segs=8, plane="xz", name="yoyo_stripe_bot", material="item_candy_red").translate(0.0, -stripe_y, 0.0)
+    emblems = _yoyo_sunburst_emblem("yoyo_emblem_t", +1.0, dome_r=dome_r, dome_h=dome_h) + _yoyo_sunburst_emblem("yoyo_emblem_b", -1.0, dome_r=dome_r, dome_h=dome_h)
+    parts.extend([top_half, bot_half, axle, groove_slot, ring_t, ring_b, *emblems])
 
-    # Looped white cotton yo-yo string trailing right-bottom + wrapping lightly under left belly (`240:yoyo`)!
+    parts = [p.rotate_xyz(rx=40.0, ry=-20.0, rz=42.0, degrees=True).translate(-0.09, 0.22, -0.02) for p in parts]
+
+    # Braided warm grey-white cotton string exiting smoothly from the narrow center groove into the upper-right arc,
+    # lower-right figure-8 slip knot, and peeking neatly beneath the lower-left cheek (`sprite_0374.png`)!
     str_a = curved_tube(
         [
-            (+0.02, 0.15, +0.02), (+0.16, 0.06, -0.10), (+0.30, 0.02, -0.08), (+0.36, 0.018, +0.04),
-            (+0.31, 0.020, +0.17), (+0.20, 0.020, +0.20), (+0.14, 0.020, +0.12), (+0.24, 0.024, +0.06),
-            (+0.38, 0.020, +0.10), (+0.40, 0.018, +0.22), (+0.27, 0.018, +0.28), (+0.10, 0.018, +0.22),
-            (-0.08, 0.022, +0.20), (-0.23, 0.030, +0.14), (-0.28, 0.055, +0.05),
+            (+0.03, 0.14, +0.04),
+            (+0.16, 0.06, -0.14),
+            (+0.30, 0.022, -0.14),
+            (+0.37, 0.018, -0.01),
+            (+0.34, 0.018, +0.13),
+            (+0.22, 0.020, +0.18),
+            (+0.16, 0.022, +0.09),
+            (+0.27, 0.026, +0.04),
+            (+0.39, 0.020, +0.11),
+            (+0.37, 0.018, +0.23),
+            (+0.24, 0.018, +0.28),
+            (+0.11, 0.018, +0.21),
+            (-0.08, 0.020, +0.19),
+            (-0.24, 0.028, +0.13),
+            (-0.31, 0.062, +0.02),
+            (-0.26, 0.110, -0.04),
         ],
-        [0.010] * 15,
+        [0.011] * 16,
         samples_per_seg=4,
         radial_segs=10,
         cap_rings=2,

@@ -6,6 +6,7 @@ every 1998 Ants food package ('PIZZA! IN A TUBE', 'steak whiz', 'CHOCO-FISHY SNA
 """
 from __future__ import annotations
 
+import math
 from typing import Dict, Optional, Sequence, Tuple
 
 import numpy as np
@@ -41,6 +42,7 @@ _FONT_5X7: Dict[str, Tuple[int, ...]] = {
 }
 
 FOOD_TEXTURE_SIZES: Dict[str, int] = {
+    "cola_label": 512,
     "pizza_tube": 128,
     "steak_whiz": 128,
     "choco_fishy": 128,
@@ -233,8 +235,267 @@ def _build_skittle_pack(family: str, letter: str, bg_rgb: Sequence[float], size:
     return _pack_from_rgb(family, size, rgb, 0.50 + 0.08 * m, np.full((size, size), 0.12, np.float32))
 
 
+def _draw_polyline_sdf(d: np.ndarray, px: np.ndarray, py: np.ndarray, pts: Sequence[Tuple[float, float]], seg_fn) -> np.ndarray:
+    """Fold minimum Euclidean distance to an open polyline into `d`."""
+    for (x0, y0), (x1, y1) in zip(pts[:-1], pts[1:]):
+        d = np.minimum(d, seg_fn(px, py, x0, y0, x1, y1))
+    return d
+
+
+def _build_cola_label_pack(size: int):
+    """512px authentic 1998 Critter Cola aluminum can label (`238:can1`, `239:can2`).
+
+    Matches `sprite_0372.png` & `sprite_0373.png` 1:1: brushed royal-indigo aluminum, jagged
+    electric-blue & hot-magenta 90s splatters, top-only navy/silver/crimson shoulder stripe,
+    diagonal stacked 'Critter Cola' with giant spiral 'a', cyan micro-tagline, 4 winged/crawling
+    cartoon bugs, sparkling 4-point glints, white UPC barcode, peach seal & nutrition/ingredients strips.
+    """
+    try:
+        from .. import textures as tx
+    except ImportError:
+        import textures as tx  # type: ignore
+
+    lin = np.linspace(0.0, 1.0, size, endpoint=False, dtype=np.float32)
+    u, v = np.meshgrid(lin, lin)
+
+    def _wrap_du(u0: float) -> np.ndarray:
+        return ((u - u0 + 0.5) % 1.0) - 0.5
+
+    # 1. Brushed metallic royal-indigo base + jagged 90s electric-blue & hot-magenta splatters.
+    brush = tx._tile_noise(size, 6, 48, seed=991)
+    splat_a = tx._tile_noise(size, 6, 6, seed=992)
+    splat_b = tx._tile_noise(size, 11, 9, seed=993)
+    splat_c = tx._tile_noise(size, 22, 18, seed=994)
+    warp_field = 0.52 * splat_a + 0.30 * splat_b + 0.18 * splat_c
+
+    indigo = np.array([0.15, 0.13, 0.49], dtype=np.float32)
+    royal = np.array([0.23, 0.21, 0.66], dtype=np.float32)
+    elec_blue = np.array([0.24, 0.42, 0.98], dtype=np.float32)
+    hot_pink = np.array([0.88, 0.11, 0.58], dtype=np.float32)
+    navy_rim = np.array([0.10, 0.12, 0.42], dtype=np.float32)
+    crimson = np.array([0.84, 0.07, 0.14], dtype=np.float32)
+    silver = np.array([0.88, 0.90, 0.95], dtype=np.float32)
+    cream = np.array([0.99, 0.98, 0.95], dtype=np.float32)
+    orange_out = np.array([0.92, 0.29, 0.08], dtype=np.float32)
+    shadow_ink = np.array([0.09, 0.07, 0.28], dtype=np.float32)
+
+    rgb = (indigo[None, None, :] * (0.82 + 0.28 * brush[:, :, None]) + 0.16 * royal[None, None, :] * splat_a[:, :, None])
+    # Organic jagged 90s electric-blue & hot-magenta paint clouds over deep royal-indigo metallic base (`sprite_0372.png`).
+    front_splat = np.exp(-((_wrap_du(0.54) / 0.30) ** 2)) * tx._smoothstep(0.14, 0.28, v)
+    back_splat = np.exp(-((_wrap_du(0.06) / 0.22) ** 2)) * tx._smoothstep(0.16, 0.30, v)
+    blue_mask = tx._smoothstep(0.60, 0.67, warp_field + 0.14 * front_splat + 0.06 * back_splat) * (v > 0.12)
+    pink_edge = tx._smoothstep(0.52, 0.59, warp_field + 0.16 * front_splat + 0.08 * back_splat) * (1.0 - 0.78 * blue_mask)
+    pink_blobs = tx._smoothstep(0.58, 0.65, (1.0 - splat_a) * 0.56 + splat_b * 0.44 + 0.15 * front_splat) * (v > 0.14)
+    pink_mask = np.clip(np.maximum(pink_edge * 0.94, pink_blobs), 0.0, 1.0) * (v > 0.12)
+    rgb = rgb * (1.0 - pink_mask[:, :, None]) + hot_pink[None, None, :] * pink_mask[:, :, None]
+    rgb = rgb * (1.0 - blue_mask[:, :, None]) + elec_blue[None, None, :] * blue_mask[:, :, None]
+
+    # 2. Tight top-only navy / silver-pinstripe / crimson-swoosh shoulder band (NO bottom red stripe!).
+    wave = 0.008 * np.sin(u * 2.0 * math.pi * 2.0 - 0.5)
+    logo_swell = 0.044 * np.exp(-((_wrap_du(0.46) / 0.17) ** 2))
+    v_navy = 0.046 + wave
+    v_silver = 0.064 + wave
+    v_red = 0.114 + wave + logo_swell
+    m_navy = 1.0 - tx._smoothstep(-0.006, +0.006, v - v_navy)
+    m_silver = tx._smoothstep(-0.004, +0.004, v - v_navy) * (1.0 - tx._smoothstep(-0.005, +0.005, v - v_silver))
+    m_red = tx._smoothstep(-0.004, +0.004, v - v_silver) * (1.0 - tx._smoothstep(-0.007, +0.007, v - v_red))
+    rgb = rgb * (1.0 - m_red[:, :, None]) + crimson[None, None, :] * m_red[:, :, None]
+    rgb = rgb * (1.0 - m_silver[:, :, None]) + silver[None, None, :] * m_silver[:, :, None]
+    rgb = rgb * (1.0 - m_navy[:, :, None]) + navy_rim[None, None, :] * m_navy[:, :, None]
+
+    # 3. Long vertical white ingredients/legal micro-text strip (`u ~ 0.85..0.93`, visible on BOTH cans!).
+    du_ing = _wrap_du(0.89)
+    ing_box = (np.abs(du_ing) < 0.036) & (v > 0.19) & (v < 0.91)
+    ing_frame = (np.abs(du_ing) < 0.040) & (v > 0.182) & (v < 0.918)
+    ing_lines = ((np.sin(v * 2.0 * math.pi * 42.0) > 0.15) & (np.abs(du_ing) < 0.028)).astype(np.float32)
+    ing_breaks = (tx._tile_noise(size, 18, 56, seed=995) > 0.34).astype(np.float32)
+    ing_ink = ing_lines * ing_breaks * ing_box.astype(np.float32)
+    rgb = np.where(ing_frame[:, :, None], np.array([0.82, 0.85, 0.94], dtype=np.float32)[None, None, :], rgb)
+    rgb = np.where(ing_box[:, :, None], np.array([0.93, 0.94, 0.98], dtype=np.float32)[None, None, :], rgb)
+    rgb = rgb * (1.0 - 0.65 * ing_ink[:, :, None]) + navy_rim[None, None, :] * (0.65 * ing_ink[:, :, None])
+
+    # 4. Crisp white vertical UPC Barcode block (`u ~ 0.64..0.75, v ~ 0.83..0.96`, visible on `can1` left!).
+    du_bc = _wrap_du(0.695)
+    bc_box = (np.abs(du_bc) < 0.056) & (v > 0.825) & (v < 0.965)
+    bc_inner = (np.abs(du_bc) < 0.046) & (v > 0.842) & (v < 0.952)
+    # Deterministic varied-width UPC bars running along cylinder axis (parallel to `v`).
+    bar_idx = np.clip(((du_bc + 0.046) / 0.092 * 28.0).astype(np.int32), 0, 27)
+    upc_bits = np.array([1, 0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0], dtype=np.float32)
+    bc_bars = upc_bits[bar_idx] * bc_inner.astype(np.float32)
+    rgb = np.where(bc_box[:, :, None], np.array([0.96, 0.96, 0.97], dtype=np.float32)[None, None, :], rgb)
+    rgb = rgb * (1.0 - 0.88 * bc_bars[:, :, None]) + np.array([0.08, 0.08, 0.14], dtype=np.float32)[None, None, :] * (0.88 * bc_bars[:, :, None])
+
+    # 5. Nutrition Facts grey/white micro-table + warm coral-peach circular emblem (visible on BOTH cans!).
+    peach_seal = np.array([0.94, 0.56, 0.44], dtype=np.float32)
+    seal_red = np.array([0.82, 0.20, 0.24], dtype=np.float32)
+    for (nu_c, nv_c, su_off, sv_off) in ((0.47, 0.845, +0.048, -0.020), (0.785, 0.815, -0.042, -0.015)):
+        dnu, dnv = _wrap_du(nu_c), v - nv_c
+        nbox = (np.abs(dnu) < 0.042) & (np.abs(dnv) < 0.056)
+        nlines = ((np.sin((dnv + 0.056) * 2.0 * math.pi * 62.0) > 0.10) & (np.abs(dnu) < 0.036)).astype(np.float32)
+        n_alpha = nbox.astype(np.float32) * 0.78
+        rgb = rgb * (1.0 - n_alpha[:, :, None]) + np.array([0.78, 0.82, 0.92], dtype=np.float32)[None, None, :] * n_alpha[:, :, None]
+        rgb = rgb * (1.0 - 0.58 * (nlines * nbox)[:, :, None]) + navy_rim[None, None, :] * (0.58 * (nlines * nbox)[:, :, None])
+        # Circular coral-peach & red seal badge next to the table!
+        sr = np.hypot(_wrap_du(nu_c + su_off) * 1.82, v - (nv_c + sv_off))
+        sm_out = 1.0 - tx._smoothstep(0.032, 0.038, sr)
+        sm_in = 1.0 - tx._smoothstep(0.016, 0.022, sr)
+        rgb = rgb * (1.0 - sm_out[:, :, None]) + peach_seal[None, None, :] * sm_out[:, :, None]
+        rgb = rgb * (1.0 - sm_in[:, :, None]) + seal_red[None, None, :] * sm_in[:, :, None]
+
+    # 6. Four glossy cartoon bugs / flies with translucent silver-blue wings & spindly legs!
+    bug_mask_all = np.zeros_like(u)
+    bug_dark = np.array([0.11, 0.12, 0.22], dtype=np.float32)
+    bug_wing = np.array([0.72, 0.78, 0.92], dtype=np.float32)
+    bug_spec = np.array([0.92, 0.96, 1.00], dtype=np.float32)
+    for (bu, bv, bang, bsc) in (
+        (0.615, 0.655, -0.45, 1.12),   # Hero winged fly right near 'Cola' (visible on BOTH can1 & can2!)
+        (0.605, 0.845, 0.85, 0.92),    # Crawling bug near bottom-right hot-pink splatter
+        (0.325, 0.785, -1.10, 0.96),   # Upper-left crawling bug above 'C' on can1
+        (0.085, 0.500, 0.40, 1.05),    # Back-side flying bug for 360° orbit detail
+    ):
+        du_b = _wrap_du(bu) * 1.82 / bsc
+        dv_b = (v - bv) / bsc
+        cb, sb = math.cos(bang), math.sin(bang)
+        bx = du_b * cb + dv_b * sb
+        by = -du_b * sb + dv_b * cb
+        # 6 spindly dark legs
+        d_leg = np.full_like(u, 10.0)
+        for lx0, ly0, lx1, ly1 in (
+            (-0.008, -0.008, -0.044, -0.028), (-0.008, +0.008, -0.044, +0.028),
+            (0.002, -0.010, 0.006, -0.046), (0.002, +0.010, 0.006, +0.046),
+            (0.016, -0.009, 0.048, -0.036), (0.016, +0.009, 0.048, +0.036),
+        ):
+            d_leg = np.minimum(d_leg, tx._sdf_segment(bx, by, lx0, ly0, lx1, ly1))
+        m_legs = 1.0 - tx._smoothstep(0.0025, 0.0055, d_leg)
+        # Translucent pale-silver splayed wings
+        w1 = np.hypot((bx - 0.018) / 0.036, (by + 0.028) / 0.016)
+        w2 = np.hypot((bx - 0.018) / 0.036, (by - 0.028) / 0.016)
+        m_wing = np.clip((1.0 - tx._smoothstep(0.85, 1.08, np.minimum(w1, w2))) * 0.74, 0.0, 1.0)
+        # Segmented glossy dark body (head + thorax + plump abdomen)
+        d_head = np.hypot((bx + 0.028) / 0.013, by / 0.012)
+        d_thor = np.hypot((bx + 0.006) / 0.016, by / 0.015)
+        d_abdo = np.hypot((bx - 0.024) / 0.025, by / 0.018)
+        m_body = 1.0 - tx._smoothstep(0.86, 1.06, np.minimum(d_head, np.minimum(d_thor, d_abdo)))
+        # Shiny pale-blue specular glint dots on thorax & abdomen
+        d_glint = np.minimum(np.hypot(bx - 0.018, by + 0.004), np.hypot(bx + 0.006, by + 0.003))
+        m_glint = (1.0 - tx._smoothstep(0.004, 0.010, d_glint)) * m_body
+        rgb = rgb * (1.0 - m_legs[:, :, None]) + bug_dark[None, None, :] * m_legs[:, :, None]
+        rgb = rgb * (1.0 - m_wing[:, :, None]) + bug_wing[None, None, :] * m_wing[:, :, None]
+        rgb = rgb * (1.0 - m_body[:, :, None]) + bug_dark[None, None, :] * m_body[:, :, None]
+        rgb = rgb * (1.0 - 0.85 * m_glint[:, :, None]) + bug_spec[None, None, :] * (0.85 * m_glint[:, :, None])
+        bug_mask_all = np.maximum(bug_mask_all, np.maximum(m_body, m_wing))
+
+    # 7. Bright silvery-white 4-point sparkle bursts (exact hero sparkle visible on BOTH cans!).
+    sparkle_all = np.zeros_like(u)
+    for (su, sv, sr_sc) in (
+        (0.735, 0.675, 1.25),   # Hero bright sparkle burst (mid-left can1 / upper-right can2!)
+        (0.245, 0.420, 0.72),
+        (0.760, 0.340, 0.68),
+        (0.455, 0.725, 0.65),
+        (0.145, 0.285, 0.75),
+        (0.955, 0.460, 0.70),
+    ):
+        dx_s = _wrap_du(su) * 1.82 / sr_sc
+        dy_s = (v - sv) / sr_sc
+        core = np.exp(-((dx_s * dx_s + dy_s * dy_s) / (0.016 ** 2)))
+        rays = np.exp(-(np.abs(dx_s) / 0.0045)) * np.exp(-(np.abs(dy_s) / 0.052))
+        rays = np.maximum(rays, np.exp(-(np.abs(dy_s) / 0.0045)) * np.exp(-(np.abs(dx_s) / 0.052)))
+        diag_a = 0.7071 * (dx_s + dy_s)
+        diag_b = 0.7071 * (dx_s - dy_s)
+        rays = np.maximum(rays, 0.65 * np.exp(-(np.abs(diag_a) / 0.004)) * np.exp(-(np.abs(diag_b) / 0.032)))
+        rays = np.maximum(rays, 0.65 * np.exp(-(np.abs(diag_b) / 0.004)) * np.exp(-(np.abs(diag_a) / 0.032)))
+        sp = np.clip(core + 0.85 * rays, 0.0, 1.0)
+        sparkle_all = np.maximum(sparkle_all, sp)
+    rgb = rgb * (1.0 - 0.92 * sparkle_all[:, :, None]) + np.array([0.95, 0.97, 1.00], dtype=np.float32)[None, None, :] * (0.92 * sparkle_all[:, :, None])
+
+    # 8. Authentic diagonal stacked 'Critter Cola' retro script + giant spiral 'a' + cyan tagline!
+    # Tilted ~18° UP-RIGHT in aspect-corrected cylinder space & sized boldly to match BOTH can1 & can2 1:1!
+    du_p = _wrap_du(0.500) * 1.82
+    dv_p = v - 0.395
+    th = math.radians(18.0)
+    ct, st = math.cos(th), math.sin(th)
+    lx = (du_p * ct - dv_p * st) / 0.345
+    ly = (du_p * st + dv_p * ct) / 0.345
+
+    # Upper line: playful hand-lettered 'Critter' (`ly ~ -0.34`, tightly stacked above 'Cola'!).
+    dc = np.full_like(u, 10.0)
+    # 'C'
+    dc = np.minimum(dc, tx._sdf_ring_arc(lx, ly, -0.64, -0.34, 0.105, 0.145, 0.42 * math.pi, 1.62 * math.pi))
+    # 'r'
+    dc = np.minimum(dc, tx._sdf_segment(lx, ly, -0.47, -0.42, -0.47, -0.20))
+    dc = np.minimum(dc, tx._sdf_ring_arc(lx, ly, -0.40, -0.35, 0.070, 0.065, 1.05 * math.pi, 1.85 * math.pi))
+    # 'i' + dot
+    dc = np.minimum(dc, tx._sdf_segment(lx, ly, -0.26, -0.40, -0.26, -0.20))
+    dc = np.minimum(dc, np.hypot(lx + 0.26, ly + 0.50))
+    # 't' + 't' with shared sweeping retro crossbar!
+    dc = np.minimum(dc, tx._sdf_segment(lx, ly, -0.12, -0.48, -0.12, -0.20))
+    dc = np.minimum(dc, tx._sdf_segment(lx, ly, +0.06, -0.48, +0.06, -0.20))
+    dc = np.minimum(dc, tx._sdf_segment(lx, ly, -0.20, -0.39, +0.16, -0.41))
+    # 'e'
+    dc = np.minimum(dc, tx._sdf_ring_arc(lx, ly, +0.26, -0.30, 0.095, 0.105, 0.18 * math.pi, 1.90 * math.pi))
+    dc = np.minimum(dc, tx._sdf_segment(lx, ly, +0.17, -0.30, +0.35, -0.32))
+    # 'r'
+    dc = np.minimum(dc, tx._sdf_segment(lx, ly, +0.45, -0.41, +0.45, -0.20))
+    dc = np.minimum(dc, tx._sdf_ring_arc(lx, ly, +0.52, -0.34, 0.072, 0.068, 1.05 * math.pi, 1.88 * math.pi))
+
+    # Lower line: HUGE bold retro script 'Cola' (`ly ~ +0.10`) with iconic coiled spiral 'a'!
+    dl = np.full_like(u, 10.0)
+    # Big flared retro 'C'
+    dl = np.minimum(dl, tx._sdf_ring_arc(lx, ly, -0.68, +0.08, 0.23, 0.27, 0.34 * math.pi, 1.72 * math.pi))
+    dl = np.minimum(dl, tx._sdf_ring_arc(lx, ly, -0.56, -0.10, 0.065, 0.065, -0.2 * math.pi, 0.85 * math.pi))
+    # Plump slightly tilted 'o'
+    dl = np.minimum(dl, tx._sdf_ring_arc(lx, ly, -0.27, +0.13, 0.155, 0.195, 0.0, 2.0 * math.pi))
+    # Sweeping tall curved 'l'
+    l_pts = [(+0.02, -0.17), (+0.00, -0.02), (-0.01, +0.15), (+0.01, +0.29), (+0.09, +0.33)]
+    dl = _draw_polyline_sdf(dl, lx, ly, l_pts, tx._sdf_segment)
+    # Iconic HUGE cinnamon-roll coiled spiral 'a' (1.85 turns spiraling smoothly inward!).
+    spiral_pts = []
+    n_sp = 34
+    for i in range(n_sp):
+        t = i / float(n_sp - 1)
+        ang = -0.38 * math.pi + t * 3.55 * math.pi
+        rad = 0.245 * (1.0 - 0.84 * (t ** 0.92))
+        spiral_pts.append((0.46 + rad * math.cos(ang) * 1.06, 0.12 + rad * math.sin(ang) * 1.02))
+    dl = _draw_polyline_sdf(dl, lx, ly, spiral_pts, tx._sdf_segment)
+    # Small sweeping tail kick below the 'a' bowl
+    dl = np.minimum(dl, tx._sdf_segment(lx, ly, 0.65, 0.24, 0.74, 0.31))
+
+    # Crisp offset navy drop-shadow -> bold fiery orange-red outline -> bright snowy cream fill!
+    # Shift shadow slightly down-right in local logo space
+    sh_c = tx._smoothstep(0.115, 0.075, np.minimum(dc, dl))
+    # Approximate drop-shadow via dilated outer dark halo on bottom-right side
+    d_min = np.minimum(dc * 1.38, dl)
+    shadow_m = (1.0 - tx._smoothstep(0.095, 0.155, d_min)) * tx._smoothstep(-0.20, 0.20, ly + 0.35)
+    critter_out = 1.0 - tx._smoothstep(0.058, 0.088, dc)
+    critter_in = 1.0 - tx._smoothstep(0.024, 0.044, dc)
+    cola_out = 1.0 - tx._smoothstep(0.088, 0.122, dl)
+    cola_in = 1.0 - tx._smoothstep(0.042, 0.068, dl)
+    logo_out = np.maximum(critter_out, cola_out)
+    logo_in = np.maximum(critter_in, cola_in)
+
+    # Tiny hand-scrawled bright cyan/magenta tagline right beneath 'Cola' (`ly ~ +0.52`).
+    tag_zone = (lx > -0.45) & (lx < 0.72) & (np.abs(ly - 0.51) < 0.055)
+    tag_strokes = (np.sin(lx * 44.0 + 0.6 * np.sin(ly * 32.0)) > 0.25) & (np.cos(lx * 21.0 + ly * 18.0) > -0.25)
+    tag_m = (tag_zone & tag_strokes).astype(np.float32) * 0.90
+    tag_col = np.array([0.24, 0.76, 1.00], dtype=np.float32)
+
+    rgb = rgb * (1.0 - 0.82 * shadow_m[:, :, None]) + shadow_ink[None, None, :] * (0.82 * shadow_m[:, :, None])
+    rgb = rgb * (1.0 - logo_out[:, :, None]) + orange_out[None, None, :] * logo_out[:, :, None]
+    rgb = rgb * (1.0 - logo_in[:, :, None]) + cream[None, None, :] * logo_in[:, :, None]
+    rgb = rgb * (1.0 - tag_m[:, :, None]) + tag_col[None, None, :] * tag_m[:, :, None]
+
+    # Subtle metallic-ink height, glossy anodized aluminum roughness, and high metallic sheen!
+    opaque_ink = np.clip(np.maximum(logo_out, np.maximum(bc_box.astype(np.float32), ing_box.astype(np.float32))), 0.0, 1.0)
+    height = np.clip(0.42 + 0.12 * brush + 0.22 * logo_in + 0.14 * m_silver + 0.10 * bug_mask_all - 0.06 * sh_c, 0.0, 1.0)
+    rough = np.clip(0.24 + 0.08 * brush + 0.14 * opaque_ink - 0.08 * m_silver, 0.14, 0.52)
+    metal = np.clip(0.76 + 0.18 * m_silver - 0.56 * opaque_ink - 0.30 * bug_mask_all, 0.14, 0.95)
+    return _pack_from_rgb("cola_label", size, rgb, height, rough, metal)
+
+
 def build_food_texture_pack(family: str, size: int):
     """Dispatch procedural 1998 food label & candy texture packs."""
+    if family == "cola_label":
+        return _build_cola_label_pack(size)
     if family == "pizza_tube":
         return _build_pizza_tube_pack(size)
     if family == "steak_whiz":
