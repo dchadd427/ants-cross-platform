@@ -719,3 +719,281 @@ def build_broken3() -> SceneBuilder:
     handle = build_silver_spoon_handle("spoon_handle", length=0.72).translate(+0.36, 0.012, 0.0)
     sc.add("broken3", handle.rotate_xyz(ry=2.0, degrees=True))
     return _finalize_item(sc, target_span=0.92)
+
+
+def _wireless_shell_patch(
+    x_grid: np.ndarray,
+    y_grid: np.ndarray,
+    z_grid: np.ndarray,
+    y_bot_grid: np.ndarray,
+    *,
+    name: str,
+    material: str,
+) -> MeshPart:
+    """Build a watertight beveled top-deck panel from a parametric (Nu, Nv) surface grid."""
+    nu, nv = x_grid.shape
+    p_top = np.stack([x_grid, y_grid, z_grid], axis=2)
+    p_bot = np.stack([x_grid * 0.972, y_bot_grid, z_grid * 0.988], axis=2)
+    n_top = nu * nv
+    pos = np.vstack([p_top.reshape(-1, 3), p_bot.reshape(-1, 3)]).astype(np.float32)
+
+    ii = np.arange(nu - 1, dtype=np.uint32)[:, None]
+    jj = np.arange(nv - 1, dtype=np.uint32)[None, :]
+    a0 = ii * nv + jj
+    a1 = (ii + 1) * nv + jj
+    b0 = ii * nv + (jj + 1)
+    b1 = (ii + 1) * nv + (jj + 1)
+    tris_top = np.stack([a0, a1, b1, a0, b1, b0], axis=2).reshape(-1, 3)
+    tris_bot = np.stack([a0 + n_top, b1 + n_top, a1 + n_top, a0 + n_top, b0 + n_top, b1 + n_top], axis=2).reshape(-1, 3)
+
+    j_e = np.arange(nv - 1, dtype=np.uint32)
+    i_e = np.arange(nu - 1, dtype=np.uint32)
+    f0, f1 = j_e, j_e + 1
+    r0, r1 = (nu - 1) * nv + j_e, (nu - 1) * nv + j_e + 1
+    l0, l1 = i_e * nv, (i_e + 1) * nv
+    g0, g1 = i_e * nv + (nv - 1), (i_e + 1) * nv + (nv - 1)
+    walls = np.vstack([
+        np.stack([f0, f1, f1 + n_top, f0, f1 + n_top, f0 + n_top], axis=1).reshape(-1, 3),
+        np.stack([r0, r1 + n_top, r1, r0, r0 + n_top, r1 + n_top], axis=1).reshape(-1, 3),
+        np.stack([l0 + n_top, l1 + n_top, l1, l0 + n_top, l1, l0], axis=1).reshape(-1, 3),
+        np.stack([g0, g1, g1 + n_top, g0, g1 + n_top, g0 + n_top], axis=1).reshape(-1, 3),
+    ])
+    idx = np.vstack([tris_top, tris_bot, walls]).reshape(-1).astype(np.uint32)
+    nrm = recompute_smooth_normals(pos, idx)
+    return MeshPart(name=name, material=material, positions=pos, normals=nrm, indices=idx)
+
+
+def build_mouse1() -> SceneBuilder:
+    """Sleek cordless ergonomic wireless mouse with sculpted split click buttons, scroll wheel & optical underside (`243:mouse1`)."""
+    register_item_materials()
+    sc = SceneBuilder(name="item_mouse1")
+    parts: List[MeshPart] = []
+    half_l, half_w0 = 0.42, 0.256
+
+    def _mouse_half_w(u: np.ndarray) -> np.ndarray:
+        t = 2.0 * np.clip(u, 0.0, 1.0) - 1.0
+        pwr = np.where(t < 0.0, 2.30, 2.00)
+        env = np.sqrt(np.maximum(0.0, 1.0 - np.abs(t) ** pwr))
+        waist = 0.90 - 0.08 * np.exp(-((u - 0.40) / 0.16) ** 2) + 0.12 * np.exp(-((u - 0.70) / 0.24) ** 2)
+        return half_w0 * env * waist
+
+    def _mouse_belt_y(u: np.ndarray) -> np.ndarray:
+        return 0.068 + 0.022 * np.sin(math.pi * np.clip(u, 0.0, 1.0))
+
+    def _mouse_top_y(u: np.ndarray, vx: np.ndarray) -> np.ndarray:
+        uc = np.clip(u, 0.0, 1.0)
+        spine = 0.070 + 0.205 * (np.sin(math.pi * (uc ** 0.80)) ** 0.86)
+        yb = _mouse_belt_y(uc)
+        crown = np.power(np.maximum(0.0, 1.0 - (0.94 * np.clip(vx, -1.0, 1.0)) ** 2), 0.56)
+        btn_mask = np.exp(-((uc - 0.22) / 0.13) ** 2)
+        dimple = 0.012 * btn_mask * (np.exp(-((vx + 0.48) / 0.24) ** 2) + np.exp(-((vx - 0.48) / 0.24) ** 2))
+        return yb + (spine - yb) * crown - dimple
+
+    # 1. Contoured matte-charcoal lower chassis with subtle ergonomic thumb recess & fine side-grip ribs (backs all button seams!).
+    def _chassis_deform(pos: np.ndarray) -> np.ndarray:
+        p = pos.copy()
+        u = np.clip((p[:, 2] + half_l) / (2.0 * half_l), 0.0, 1.0)
+        hw = np.maximum(_mouse_half_w(u), 0.024)
+        nx = np.clip(p[:, 0] / half_w0, -1.0, 1.0)
+        yb = _mouse_belt_y(u)
+        yt = _mouse_top_y(u, nx) - 0.0055
+        bot_taper = np.where(p[:, 1] < 0.0, 0.84 + 0.16 * (1.0 + p[:, 1] / 0.14), 1.0)
+        # Subtle ergonomic left-side thumb contour + gentle tactile horizontal grip grooves flush on lower flanks.
+        thumb_scoop = np.where(nx < -0.60, 0.014 * np.exp(-((u - 0.46) / 0.20) ** 2) * np.clip((-nx - 0.60) / 0.40, 0.0, 1.0), 0.0)
+        side_band = (p[:, 1] < 0.0) & (np.abs(nx) > 0.78) & (u > 0.22) & (u < 0.74)
+        grip_rib = np.where(side_band, 0.0022 * np.sin(u * 120.0), 0.0)
+        p[:, 0] = nx * (hw * bot_taper + grip_rib) + thumb_scoop
+        p[:, 1] = np.where(p[:, 1] >= 0.0, yb + (yt - yb) * np.clip(p[:, 1] / 0.14, 0.0, 1.0), 0.010 + (yb - 0.010) * np.clip(1.0 + p[:, 1] / 0.14, 0.0, 1.0))
+        return p
+
+    parts.append(superellipsoid(half_w0, 0.14, half_l, e1=0.68, e2=0.74, u_segs=56, v_segs=28, name="mouse_chassis", material="item_leather_smooth").deform(_chassis_deform))
+
+    # 2. Molded pearl-ivory rear palm dome (u in [0.452, 0.988]) with smooth beveled front parting lip.
+    u_palm = np.linspace(0.452, 0.988, 22)
+    v_palm = np.linspace(-0.98, +0.98, 28)
+    ug, vg = np.meshgrid(u_palm, v_palm, indexing="ij")
+    hw_g = np.maximum(_mouse_half_w(ug), 0.022)
+    xg, zg = vg * hw_g, -half_l + 2.0 * half_l * ug
+    yg = _mouse_top_y(ug, vg) + 0.004 - np.exp(-((ug - 0.452) / 0.016) ** 2) * 0.0045 - np.power(np.abs(vg), 10.0) * 0.006
+    parts.append(_wireless_shell_patch(xg, yg, zg, np.maximum(_mouse_belt_y(ug) - 0.004, yg - 0.016), name="mouse_palm", material="item_wireless_shell"))
+
+    # 3. Generous sculpted split Left & Right click paddles (u in [0.012, 0.436]) wrapping cleanly ahead of the recessed scroll well!
+    u_btn = np.linspace(0.012, 0.436, 26)
+    s_btn = np.linspace(0.0, 1.0, 18)
+    ub, sb = np.meshgrid(u_btn, s_btn, indexing="ij")
+    hw_b = np.maximum(_mouse_half_w(ub), 0.030)
+    # Crisp pill-shaped cutout centered around scroll wheel (u in [0.135, 0.385]); tight 0.009 centerline slit at very front tips!
+    well_t = np.clip((ub - 0.260) / 0.132, -1.0, 1.0)
+    well_half_x = 0.0048 + 0.0362 * np.power(np.maximum(0.0, 1.0 - well_t * well_t), 0.42)
+    for side, tag in ((-1.0, "l"), (+1.0, "r")):
+        x_in = np.minimum(well_half_x, hw_b * 0.62)
+        x_abs = x_in + sb * (hw_b * 0.985 - x_in)
+        xb = side * x_abs
+        vxb = np.clip(xb / hw_b, -1.0, 1.0)
+        zb = -half_l + 2.0 * half_l * ub
+        yb_top = _mouse_top_y(ub, vxb) + 0.0045
+        edge_drop = 0.0042 * (
+            np.exp(-((ub - 0.436) / 0.016) ** 2)
+            + np.exp(-((ub - 0.012) / 0.020) ** 2)
+            + np.exp(-(sb / 0.08) ** 2)
+            + np.power(sb, 10.0)
+        )
+        yb_top = yb_top - edge_drop
+        if side < 0:
+            xb, yb_top, zb, ub_use = xb[:, ::-1], yb_top[:, ::-1], zb[:, ::-1], ub[:, ::-1]
+        else:
+            ub_use = ub
+        parts.append(_wireless_shell_patch(xb, yb_top, zb, np.maximum(_mouse_belt_y(ub_use) - 0.004, yb_top - 0.015), name=f"mouse_btn_{tag}", material="item_wireless_shell"))
+
+    # 4. Recessed scroll wheel tray, brushed-chrome & knurled-rubber scroll wheel, sleek DPI pill button & emerald wireless LED!
+    wheel_z = -half_l + 2.0 * half_l * 0.245
+    wheel_y = float(_mouse_top_y(np.array([0.245]), np.array([0.0]))[0]) - 0.012
+    parts.append(rounded_box(0.056, 0.016, 0.148, bevel=0.005, segs=2, name="mouse_wheel_well", material="item_hair_black").rotate_xyz(rx=+0.15).translate(0.0, wheel_y - 0.002, wheel_z + 0.022))
+    parts.append(cylinder(0.042, 0.042, 0.036, radial_segs=24, bevel=0.004, axis="x", name="mouse_wheel_hub", material="item_chrome_polished").translate(0.0, wheel_y, wheel_z))
+    parts.append(cylinder(0.044, 0.044, 0.026, radial_segs=24, bevel=0.003, axis="x", name="mouse_wheel_tire", material="item_rubber_dark").translate(0.0, wheel_y, wheel_z))
+    for ri in range(20):
+        ra = ri * (2.0 * math.pi / 20.0)
+        parts.append(rounded_box(0.025, 0.0045, 0.0045, bevel=0.001, segs=1, name=f"mouse_wrib_{ri}", material="item_hair_black").rotate_xyz(rx=ra).translate(0.0, wheel_y + 0.044 * math.cos(ra), wheel_z + 0.044 * math.sin(ra)))
+    dpi_z = -half_l + 2.0 * half_l * 0.362
+    dpi_y = float(_mouse_top_y(np.array([0.362]), np.array([0.0]))[0]) - 0.001
+    parts.append(rounded_box(0.026, 0.012, 0.048, bevel=0.004, segs=2, name="mouse_dpi_btn", material="item_chrome_polished").rotate_xyz(rx=+0.11).translate(0.0, dpi_y, dpi_z))
+    led_z = -half_l + 2.0 * half_l * 0.492
+    led_y = float(_mouse_top_y(np.array([0.492]), np.array([0.0]))[0]) + 0.0030
+    parts.append(cylinder(0.0095, 0.0095, 0.006, radial_segs=14, axis="y", name="mouse_led_ring", material="item_hair_black").translate(0.0, led_y, led_z))
+    parts.append(sphere(0.0065, u_segs=12, v_segs=8, name="mouse_wireless_led", material="item_led_green").scale(1.0, 0.45, 1.0).translate(0.0, led_y + 0.0022, led_z))
+
+    # 5. Sleek flush-contoured Back & Forward thumb buttons along the ergonomic left ridge!
+    for idx_b, bu in enumerate((0.355, 0.485)):
+        bz = -half_l + 2.0 * half_l * bu
+        bx = -float(_mouse_half_w(np.array([bu]))[0]) + 0.011
+        by = float(_mouse_belt_y(np.array([bu]))[0]) + 0.002
+        parts.append(rounded_box(0.020, 0.018, 0.076, bevel=0.006, segs=2, name=f"mouse_thumb_{idx_b}", material="item_chrome_polished").rotate_xyz(rz=+0.18).translate(bx, by, bz))
+
+    # 6. Authentic wireless optical underside: tucked elliptical PTFE skates flush on Y=0, optical sensor lens, ON/OFF switch & battery hatch.
+    for sz, rx_s, rz_s, tag in ((-0.26, 0.088, 0.036, "front"), (+0.26, 0.095, 0.038, "rear")):
+        parts.append(cylinder(1.0, 1.0, 0.010, radial_segs=20, bevel=0.0025, axis="y", name=f"mouse_skate_{tag}", material="item_hair_black").scale(rx_s, 1.0, rz_s).translate(0.0, 0.005, sz))
+    parts.append(rounded_box(0.068, 0.012, 0.088, bevel=0.004, segs=2, name="mouse_sensor_well", material="item_hair_black").translate(0.0, 0.009, 0.01))
+    parts.append(sphere(0.013, u_segs=12, v_segs=8, name="mouse_sensor_led", material="item_candy_red").scale(1.0, 0.4, 1.0).translate(0.0, 0.009, 0.01))
+    parts.append(rounded_box(0.020, 0.012, 0.052, bevel=0.003, segs=1, name="mouse_power_sw", material="item_chrome_polished").translate(+0.072, 0.009, -0.02))
+    parts.append(rounded_box(0.135, 0.008, 0.125, bevel=0.004, segs=2, name="mouse_batt_door", material="item_rubber_dark").translate(0.0, 0.008, +0.155))
+
+    sc.add("mouse1", [p.rotate_xyz(ry=40.0, degrees=True) for p in parts])
+    return _finalize_item(sc, target_span=0.90)
+
+
+def _hdmi_trapezoid_shell(
+    z0: float,
+    z1: float,
+    y_ctr: float,
+    *,
+    hw_top: float = 0.128,
+    hw_bot: float = 0.098,
+    hy: float = 0.042,
+    y_step: float = -0.008,
+    wall: float = 0.011,
+    name: str = "hdmi_shield",
+    material: str = "item_hdmi_gold",
+) -> MeshPart:
+    """Build a watertight hollow open-front trapezoidal HDMI Type-A male metal shield with chamfered bottom corners."""
+    outer_xy = np.array([
+        [+hw_top, +hy], [+hw_top * 0.94, +hy], [-hw_top * 0.94, +hy], [-hw_top, +hy],
+        [-hw_top, y_step], [-hw_bot, -hy], [+hw_bot, -hy], [+hw_top, y_step],
+    ], dtype=np.float64)
+    # Remove duplicate top corners -> crisp 8-point chamfered HDMI trapezoid (subtle top bevels + iconic bottom 45-deg chamfers).
+    outer_xy = np.array([
+        [+hw_top - 0.008, +hy], [-hw_top + 0.008, +hy],
+        [-hw_top, +hy - 0.008], [-hw_top, y_step],
+        [-hw_bot, -hy], [+hw_bot, -hy],
+        [+hw_top, y_step], [+hw_top, +hy - 0.008],
+    ], dtype=np.float64)
+    inner_xy = np.array([
+        [+hw_top - wall - 0.005, +hy - wall], [-hw_top + wall + 0.005, +hy - wall],
+        [-hw_top + wall, +hy - wall - 0.005], [-hw_top + wall, y_step + 0.004],
+        [-hw_bot + wall * 0.9, -hy + wall], [+hw_bot - wall * 0.9, -hy + wall],
+        [+hw_top - wall, y_step + 0.004], [+hw_top - wall, +hy - wall - 0.005],
+    ], dtype=np.float64)
+    n = len(outer_xy)
+    verts = []
+    # Rings: 0=outer_back(z0), 1=outer_front(z1), 2=inner_front(z1), 3=inner_back(z0+0.012)
+    z_in_back = z0 + 0.012
+    for xy, z in ((outer_xy, z0), (outer_xy, z1), (inner_xy, z1), (inner_xy, z_in_back)):
+        for x, y in xy:
+            verts.append((float(x), float(y + y_ctr), float(z)))
+    c_in_back = len(verts)
+    verts.append((0.0, float(y_ctr), float(z_in_back)))
+    c_out_back = len(verts)
+    verts.append((0.0, float(y_ctr), float(z0)))
+
+    tris: List[Tuple[int, int, int]] = []
+    for j in range(n):
+        jn = (j + 1) % n
+        ob0, ob1 = j, jn
+        of0, of1 = n + j, n + jn
+        if0, if1 = 2 * n + j, 2 * n + jn
+        ib0, ib1 = 3 * n + j, 3 * n + jn
+        # Outer wall (+outward), front bevel rim (+Z), inner cavity wall (-outward)
+        tris.extend(((ob0, ob1, of1), (ob0, of1, of0)))
+        tris.extend(((of0, of1, if1), (of0, if1, if0)))
+        tris.extend(((if0, if1, ib1), (if0, ib1, ib0)))
+        # Inner rear floor (+Z facing out of mouth) and outer rear seal (-Z)
+        tris.append((c_in_back, ib0, ib1))
+        tris.append((c_out_back, ob1, ob0))
+
+    pos = np.asarray(verts, dtype=np.float32)
+    idx = np.asarray(tris, dtype=np.uint32).reshape(-1)
+    nrm = recompute_smooth_normals(pos, idx)
+    return MeshPart(name=name, material=material, positions=pos, normals=nrm, indices=idx)
+
+
+def build_mouse2() -> SceneBuilder:
+    """Modern gold-plated HDMI Type-A male connector plug with matte-charcoal grip hood & ribbed strain-relief cable (`244:mouse2`)."""
+    register_item_materials()
+    sc = SceneBuilder(name="item_mouse2")
+    parts: List[MeshPart] = []
+    y_c = 0.064
+
+    # 1. Ergonomic matte-charcoal molded HDMI grip housing with chamfered edges, chrome trim collar & top/bottom finger-grip ribs.
+    hood = rounded_box(0.310, 0.126, 0.275, bevel=0.018, segs=3, name="hdmi_hood", material="item_leather_smooth").translate(0.0, y_c, 0.0)
+    collar = rounded_box(0.296, 0.114, 0.028, bevel=0.008, segs=2, name="hdmi_collar", material="item_chrome_polished").translate(0.0, y_c, +0.136)
+    parts.extend([hood, collar])
+    # Sculpted non-slip thumb grip bars centered on top & bottom + recessed side thumb-pinch grip strips.
+    for ri in range(4):
+        rz = -0.085 + ri * 0.036
+        for sy, tag in ((+1.0, "t"), (-1.0, "b")):
+            parts.append(rounded_box(0.185, 0.010, 0.015, bevel=0.003, segs=1, name=f"hdmi_rib_{tag}_{ri}", material="item_rubber_dark").translate(0.0, y_c + sy * 0.062, rz))
+    for side, tag in ((-1.0, "l"), (+1.0, "r")):
+        parts.append(rounded_box(0.014, 0.072, 0.175, bevel=0.005, segs=2, name=f"hdmi_sidegrip_{tag}", material="item_rubber_dark").translate(side * 0.153, y_c, -0.01))
+    # Subtle crisp silver trapezoid HDMI orientation emblem embossed near the front of the top face.
+    parts.append(rounded_box(0.115, 0.006, 0.022, bevel=0.002, segs=1, name="hdmi_badge_bar", material="item_chrome_polished").translate(0.0, y_c + 0.063, +0.086))
+    parts.append(rounded_box(0.072, 0.006, 0.014, bevel=0.002, segs=1, name="hdmi_badge_tip", material="item_chrome_polished").translate(0.0, y_c + 0.063, +0.105))
+
+    # 2. Authentic hollow open-front 24k gold-plated HDMI Type-A trapezoidal metal shield + retention detents + 19-pin inner tongue!
+    parts.append(_hdmi_trapezoid_shell(z0=+0.140, z1=+0.305, y_ctr=y_c, name="hdmi_shield", material="item_hdmi_gold"))
+    for side, tag in ((-1.0, "l"), (+1.0, "r")):
+        parts.append(rounded_box(0.030, 0.006, 0.034, bevel=0.002, segs=1, name=f"hdmi_latch_{tag}", material="item_hair_black").translate(side * 0.056, y_c + 0.041, +0.232))
+    # Dark insulating inner contact carrier wafer + crisp dual-row gold contact pins visible right inside the open mouth!
+    parts.append(rounded_box(0.184, 0.014, 0.135, bevel=0.002, segs=1, name="hdmi_tongue", material="item_hair_black").translate(0.0, y_c + 0.003, +0.220))
+    for pi in range(9):
+        px = -0.076 + pi * 0.019
+        parts.append(rounded_box(0.009, 0.004, 0.105, bevel=0.001, segs=1, name=f"hdmi_pin_t_{pi}", material="item_hdmi_gold").translate(px, y_c + 0.011, +0.232))
+        parts.append(rounded_box(0.009, 0.004, 0.105, bevel=0.001, segs=1, name=f"hdmi_pin_b_{pi}", material="item_hdmi_gold").translate(px, y_c - 0.005, +0.232))
+
+    # 3. Slotted flexible matte-rubber strain-relief boot + thick matte-black HDMI cable tail curving gently back-left.
+    parts.append(cylinder(0.042, 0.056, 0.115, radial_segs=18, bevel=0.005, axis="z", name="hdmi_boot_core", material="item_rubber_dark").translate(0.0, y_c, -0.188))
+    for bi in range(4):
+        bz = -0.152 - bi * 0.026
+        br = 0.062 - bi * 0.0055
+        parts.append(cylinder(br, br, 0.014, radial_segs=18, bevel=0.003, axis="z", name=f"hdmi_boot_ring_{bi}", material="item_leather_smooth").translate(0.0, y_c, bz))
+    cable = curved_tube(
+        [(0.0, y_c, -0.242), (-0.005, y_c - 0.008, -0.320), (-0.025, y_c - 0.018, -0.405), (-0.058, y_c - 0.022, -0.480)],
+        [0.036, 0.035, 0.035, 0.035],
+        samples_per_seg=4,
+        radial_segs=16,
+        cap_rings=2,
+        name="hdmi_cable_stub",
+        material="item_rubber_dark",
+    )
+    parts.append(cable)
+
+    sc.add("mouse2", [p.rotate_xyz(ry=38.0, degrees=True) for p in parts])
+    return _finalize_item(sc, target_span=0.90)

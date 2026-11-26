@@ -484,74 +484,164 @@ def build_tad2() -> SceneBuilder:
 
 
 def build_santahed() -> SceneBuilder:
-    """Santa Claus head with clear rosy face, button nose, matte white beard & red fur-trimmed Santa cap (`429:santahed`)."""
+    """Santa Claus head with rosy cheeks, button nose, lush layered snow-white sculpted beard & velvet cap (`429:santahed`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_santahed")
     parts: List[MeshPart] = []
-    snow = _const_tint((1.00, 1.00, 1.00))
 
-    # 1. Warm plump rosy-cheeked Santa face + round rosy nose + merry dark eyes (zero fur-shell occlusion!)
-    head = sphere(0.168, u_segs=28, v_segs=20, name="santa_head", material="item_doll_skin").translate(0.0, 0.245, 0.0)
+    def _snow_shade(pos: np.ndarray, nrm: np.ndarray) -> np.ndarray:
+        # Soft luminous snow-white fur/beard shading: crisp pure white crests, cool ice-blue soft recess AO!
+        lit = np.clip(0.84 + 0.16 * (0.55 * nrm[:, 1] + 0.45 * nrm[:, 2]), 0.72, 1.0)
+        return np.column_stack([lit * 0.96, lit * 0.98, np.minimum(1.0, lit * 1.02)])
+
+    # 1. Warm plump rosy-cheeked Santa face + round rosy nose + cheerful pink smile + bright merry eyes!
+    head = sphere(0.164, u_segs=28, v_segs=20, name="santa_head", material="item_doll_skin").translate(0.0, 0.258, 0.0)
     nose = tint_part(
-        sphere(0.044, u_segs=16, v_segs=12, name="santa_nose", material="item_doll_skin").translate(0.0, 0.235, +0.168),
-        _const_tint((0.98, 0.58, 0.52)),
+        ellipsoid(0.044, 0.048, 0.046, u_segs=18, v_segs=12, name="santa_nose", material="item_doll_skin").translate(0.0, 0.242, +0.164),
+        _const_tint((0.98, 0.56, 0.50)),
     )
     mouth = tint_part(
-        ellipsoid(0.036, 0.022, 0.022, u_segs=14, v_segs=8, name="santa_mouth", material="item_doll_skin").translate(0.0, 0.162, +0.158),
-        _const_tint((0.92, 0.44, 0.44)),
+        ellipsoid(0.042, 0.026, 0.026, u_segs=16, v_segs=10, name="santa_mouth", material="item_doll_skin").translate(+0.004, 0.168, +0.162),
+        _const_tint((0.95, 0.48, 0.48)),
     )
     for side, tag in ((-1.0, "l"), (+1.0, "r")):
         cheek = tint_part(
-            sphere(0.046, u_segs=14, v_segs=10, name=f"santa_cheek_{tag}", material="item_doll_skin").translate(side * 0.088, 0.222, +0.128),
-            _const_tint((0.98, 0.66, 0.60)),
+            sphere(0.046, u_segs=14, v_segs=10, name=f"santa_cheek_{tag}", material="item_doll_skin").translate(side * 0.078, 0.232, +0.128),
+            _const_tint((0.98, 0.64, 0.58)),
         )
-        eye = sphere(0.022, u_segs=14, v_segs=10, name=f"santa_eye_{tag}", material="eye_pupil").translate(side * 0.056, 0.278, +0.152)
-        glint = sphere(0.007, u_segs=8, v_segs=6, name=f"santa_glint_{tag}", material="eye_catchlight").translate(side * 0.049, 0.285, +0.169)
-        parts.extend([cheek, eye, glint])
+        eye = sphere(0.022, u_segs=14, v_segs=10, name=f"santa_eye_{tag}", material="eye_pupil").translate(side * 0.052, 0.286, +0.150)
+        glint = sphere(0.007, u_segs=8, v_segs=6, name=f"santa_glint_{tag}", material="eye_catchlight").translate(side * 0.046, 0.293, +0.167)
+        brow = tint_part(
+            curved_tube(
+                [(side * 0.024, 0.318, +0.146), (side * 0.054, 0.328, +0.145), (side * 0.084, 0.316, +0.130)],
+                [0.011, 0.014, 0.009],
+                samples_per_seg=3,
+                radial_segs=10,
+                cap_rings=2,
+                name=f"santa_brow_{tag}",
+                material="item_santa_beard",
+            ),
+            _snow_shade,
+        )
+        parts.extend([cheek, eye, glint, brow])
     parts.extend([head, nose, mouth])
 
-    # 2. Billowing sculpted velvety-white Santa beard & tucked mustache (`item_bun_crumb` snow-white, zero fur cloud!)
-    beard = tint_part(
-        superellipsoid(0.165, 0.168, 0.128, e1=0.80, e2=0.86, u_segs=28, v_segs=18, name="santa_beard", material="item_bun_crumb")
+    # 2. Lush, full, billowing layered snow-white Santa beard sweeping broadly down & right (`429:santahed`)!
+    # Main plush sculpted beard volume tapering softly down to a rounded fluffy point while billowing generously to the right.
+    beard_core = tint_part(
+        superellipsoid(0.182, 0.175, 0.140, e1=0.78, e2=0.84, u_segs=32, v_segs=20, name="santa_beard_core", material="item_santa_beard")
         .deform(lambda p: np.column_stack([
-            p[:, 0] * (1.0 - 0.30 * np.clip((-p[:, 1] - 0.02) / 0.16, 0.0, 1.0)) + 0.042 * np.clip((-p[:, 1]) / 0.16, 0.0, 1.0),
-            p[:, 1] + 0.009 * np.sin(p[:, 0] * 28.0) * np.cos(p[:, 1] * 22.0),
-            p[:, 2] + 0.012 * np.cos(p[:, 0] * 18.0),
+            p[:, 0] * (1.06 - 0.34 * np.clip((-p[:, 1] - 0.02) / 0.17, 0.0, 1.0)) + 0.052 * np.clip((0.06 - p[:, 1]) / 0.22, 0.0, 1.0) * (0.4 + 0.6 * np.clip(p[:, 0] / 0.16 + 0.5, 0.0, 1.0)),
+            p[:, 1] - 0.018 * np.exp(-((p[:, 0] + 0.02) / 0.11) ** 2) * (p[:, 1] < 0.0),
+            p[:, 2] + 0.016 * np.cos(p[:, 0] * 14.0) * (p[:, 2] > 0.0),
         ]))
-        .translate(0.022, 0.095, +0.048),
-        snow,
+        .translate(+0.026, 0.105, +0.036),
+        _snow_shade,
     )
+    parts.append(beard_core)
+
+    # Thick billowing cheek-whiskers & sideburns rising seamlessly up BOTH cheeks right into the white fur hat brim!
+    for side, tag in ((-1.0, "l"), (+1.0, "r")):
+        sideburn = tint_part(
+            curved_tube(
+                [
+                    (side * 0.145, 0.325, +0.042),
+                    (side * 0.158, 0.245, +0.072),
+                    (side * 0.154 + (0.022 if side > 0 else 0.0), 0.165, +0.094),
+                    (side * 0.120 + (0.045 if side > 0 else 0.0), 0.088, +0.095),
+                ],
+                [0.042, 0.052, 0.056, 0.044],
+                samples_per_seg=4,
+                radial_segs=14,
+                cap_rings=3,
+                name=f"santa_sideburn_{tag}",
+                material="item_santa_beard",
+            ),
+            _snow_shade,
+        )
+        parts.append(sideburn)
+    # Full white hair & beard wrap around the back-lower head so 360-degree orbits look lush & complete!
+    back_hair = tint_part(
+        ellipsoid(0.175, 0.135, 0.145, u_segs=22, v_segs=12, name="santa_back_hair", material="item_santa_beard").translate(0.0, 0.220, -0.045),
+        _snow_shade,
+    )
+    parts.append(back_hair)
+
+    # 7 sculpted cascading flowing beard waves/locks layering the front & sweeping gracefully right-down like `429:santahed`!
+    beard_locks = (
+        # (x_top, x_mid, x_bot, y_top, y_bot, z_front, r_top, r_mid, r_bot)
+        (-0.125, -0.118, -0.075, 0.190, 0.035, 0.126, 0.040, 0.048, 0.030),
+        (-0.078, -0.068, -0.038, 0.168, 0.010, 0.150, 0.044, 0.052, 0.034),
+        (-0.022, -0.010, +0.008, 0.148, -0.004, 0.162, 0.046, 0.054, 0.038),
+        (+0.036, +0.056, +0.068, 0.158, 0.012, 0.158, 0.046, 0.056, 0.038),
+        (+0.094, +0.132, +0.146, 0.182, 0.044, 0.144, 0.046, 0.058, 0.038),
+        (+0.142, +0.194, +0.205, 0.215, 0.088, 0.112, 0.044, 0.056, 0.034),
+        (+0.162, +0.215, +0.210, 0.265, 0.140, 0.068, 0.038, 0.048, 0.028),
+    )
+    for li, (xt, xm, xb, yt, yb, zf, rt, rm, rb) in enumerate(beard_locks):
+        ym = 0.52 * yt + 0.48 * yb
+        lock = tint_part(
+            curved_tube(
+                [(xt, yt, zf - 0.012), (xm, ym, zf + 0.016), (xb, yb, zf - 0.008)],
+                [rt, rm, rb],
+                samples_per_seg=4,
+                radial_segs=14,
+                cap_rings=3,
+                name=f"santa_lock_{li}",
+                material="item_santa_beard",
+            ),
+            _snow_shade,
+        )
+        parts.append(lock)
+
+    # Full lush curved fluffy Santa handlebar mustache framing the warm rosy smile cleanly!
     for side, tag in ((-1.0, "l"), (+1.0, "r")):
         stache = tint_part(
-            ellipsoid(0.068, 0.026, 0.032, u_segs=16, v_segs=10, name=f"santa_stache_{tag}", material="item_bun_crumb")
-            .rotate_xyz(rz=-side * 0.24)
-            .translate(side * 0.058, 0.184, +0.154),
-            snow,
+            curved_tube(
+                [
+                    (side * 0.010, 0.202, +0.168),
+                    (side * 0.056, 0.198, +0.172),
+                    (side * 0.104, 0.184, +0.156),
+                    (side * 0.138, 0.196, +0.132),
+                ],
+                [0.024, 0.032, 0.027, 0.016],
+                samples_per_seg=4,
+                radial_segs=14,
+                cap_rings=3,
+                name=f"santa_stache_{tag}",
+                material="item_santa_beard",
+            ),
+            _snow_shade,
         )
         parts.append(stache)
-    parts.append(beard)
 
-    # 3. Classic crimson-red slouchy Santa cap drooping right + plush velvety white faux-fur trim band + white pom-pom!
+    # 3. Classic plush crimson-velvet slouchy Santa cap drooping right + snowy puffy fur trim band + fluffy white pom-pom!
     fur_brim = tint_part(
-        torus_arc(0.168, 0.040, u_segs=28, v_segs=12, plane="xz", name="santa_fur_brim", material="item_bun_crumb")
+        torus_arc(0.168, 0.044, u_segs=32, v_segs=14, plane="xz", name="santa_fur_brim", material="item_santa_beard")
+        .deform(lambda p: p + 0.006 * np.sin(np.arctan2(p[:, 2], p[:, 0]) * 11.0)[:, None] * np.array([[0.6, 1.0, 0.6]]))
         .rotate_xyz(rx=-0.22, rz=-0.10)
-        .translate(0.0, 0.358, -0.010),
-        snow,
+        .translate(0.0, 0.366, -0.008),
+        _snow_shade,
     )
     hat = curved_tube(
-        [(0.0, 0.362, -0.018), (+0.038, 0.448, -0.028), (+0.132, 0.478, -0.022), (+0.222, 0.432, +0.005), (+0.252, 0.362, +0.028)],
-        [0.152, 0.120, 0.076, 0.035, 0.016],
+        [(0.0, 0.370, -0.018), (+0.038, 0.456, -0.028), (+0.132, 0.486, -0.022), (+0.222, 0.440, +0.005), (+0.254, 0.370, +0.028)],
+        [0.154, 0.122, 0.078, 0.036, 0.016],
         samples_per_seg=4,
-        radial_segs=18,
+        radial_segs=20,
         cap_rings=2,
         name="santa_hat",
-        material="item_candy_red",
+        material="item_flag_red",
     )
-    pom = tint_part(sphere(0.046, u_segs=16, v_segs=12, name="santa_pom", material="item_bun_crumb").translate(+0.258, 0.342, +0.036), snow)
+    pom = tint_part(
+        sphere(0.050, u_segs=18, v_segs=14, name="santa_pom", material="item_santa_beard")
+        .deform(lambda p: p * (1.0 + 0.07 * np.sin(p[:, 0] * 60.0) * np.cos(p[:, 1] * 60.0))[:, None])
+        .translate(+0.260, 0.348, +0.036),
+        _snow_shade,
+    )
     parts.extend([fur_brim, hat, pom])
 
     sc.add("santahed", [p.rotate_xyz(rx=-10.0, ry=-12.0, degrees=True) for p in parts])
-    return _finalize_item(sc, target_span=0.82)
+    return _finalize_item(sc, target_span=0.84)
 
 
 def build_elvished() -> SceneBuilder:

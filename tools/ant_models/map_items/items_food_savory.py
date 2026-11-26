@@ -189,12 +189,12 @@ def extrude_star_piped_ribbon(
             # Carve real vertical V-groove channels downward into top arch so overhead camera sees crisp 3D fins!
             ly = ly_base * flute_scale - (flute_depth * 0.30 * hh * (1.0 - fin) * top_w)
 
-            # Slight jagged bite edge if ribbon ends on a chewed bite
+            # Slight jagged bite edge if ribbon ends on a chewed bite (kept strictly inside cap tip!)
             bite_shift = 0.0
             if jagged_start and i <= 2:
-                bite_shift = -0.020 * (1.0 - i / 2.5) * (0.5 + 0.5 * math.sin(th * 5.0 + 0.8))
+                bite_shift = -0.008 * (1.0 - i / 2.5) * (0.5 + 0.5 * math.sin(th * 5.0 + 0.8))
             elif jagged_end and i >= n_c - 3:
-                bite_shift = +0.020 * (1.0 - (n_c - 1 - i) / 2.5) * (0.5 + 0.5 * math.cos(th * 5.0 - 0.4))
+                bite_shift = +0.008 * (1.0 - (n_c - 1 - i) / 2.5) * (0.5 + 0.5 * math.cos(th * 5.0 - 0.4))
 
             pt = centers[i] + r_v * lx + u_v * ly + t_v * bite_shift
             # Keep solid non-degenerate rounded belly cleanly above ground (never squash floor triangles coplanar!)
@@ -224,11 +224,11 @@ def extrude_star_piped_ribbon(
             d = i * stride + (j + 1)
             tris.extend(((a, b, c), (a, c, d)))
 
-    # Crisp OUTWARD-FACING solid closed end-caps (fixed winding so sides/ends are 100% solid & watertight from EVERY angle!)
+    # Crisp OUTWARD-FACING solid closed end-caps (strictly proud of jagged edge so ends are 100% solid & watertight!)
     c0_idx = len(verts)
     t0 = tangents[0]
-    p0_tip = centers[0] - t0 * (0.010 if start_pinch else 0.005)
-    verts.append((float(p0_tip[0]), max(y_floor + 0.004, float(p0_tip[1])), float(p0_tip[2])))
+    p0_tip = centers[0] - t0 * (0.014 if start_pinch else 0.014)
+    verts.append((float(p0_tip[0]), max(y_floor + 0.010, float(p0_tip[1])), float(p0_tip[2])))
     uvs.append((0.5, 0.0))
     cap_c = m_col * 0.55 + c_col * 0.45
     cols.append((float(cap_c[0]), float(cap_c[1]), float(cap_c[2])))
@@ -237,8 +237,8 @@ def extrude_star_piped_ribbon(
 
     c1_idx = len(verts)
     t1 = tangents[-1]
-    p1_tip = centers[-1] + t1 * (0.010 if end_pinch else 0.005)
-    verts.append((float(p1_tip[0]), max(y_floor + 0.004, float(p1_tip[1])), float(p1_tip[2])))
+    p1_tip = centers[-1] + t1 * (0.014 if end_pinch else 0.014)
+    verts.append((float(p1_tip[0]), max(y_floor + 0.010, float(p1_tip[1])), float(p1_tip[2])))
     uvs.append((0.5, 4.0))
     cols.append((float(cap_c[0]), float(cap_c[1]), float(cap_c[2])))
     last_off = (n_c - 1) * stride
@@ -340,7 +340,18 @@ def build_pizzatube() -> SceneBuilder:
     for ix in range(n_x):
         for j in range(n_th):
             a, b, c, d = ix * stride + j, (ix + 1) * stride + j, (ix + 1) * stride + (j + 1), ix * stride + (j + 1)
-            tris.extend(((a, b, c), (a, c, d)))
+            # Outward winding (dP/dx = +X, dP/dang = (+Z, +Y) -> (+X) x dP/dang = inward, so flip to outward!).
+            tris.extend(((a, c, b), (a, d, c)))
+    # Solid closed rear and shoulder end caps so the squeezed tube is 100% watertight from every angle.
+    c_tail, c_head = len(verts), len(verts) + 1
+    verts.append((x0, 0.060, 0.0))
+    uvs.append((0.0, 0.5))
+    verts.append((x1, 0.066, 0.0))
+    uvs.append((1.0, 0.5))
+    last_ring = n_x * stride
+    for j in range(n_th):
+        tris.append((c_tail, j, j + 1))
+        tris.append((c_head, last_ring + j + 1, last_ring + j))
     pos_t = np.asarray(verts, dtype=np.float32)
     idx_t = np.asarray(tris, dtype=np.uint32).reshape(-1)
     tube_body = MeshPart("pizzatube_body", "item_pizza_tube", pos_t, recompute_smooth_normals(pos_t, idx_t), idx_t, uvs=np.asarray(uvs, dtype=np.float32))
@@ -621,7 +632,7 @@ def build_steakwhiz() -> SceneBuilder:
     parts: List[MeshPart] = []
 
     # Cylindrical crimson aerosol body along X (-0.23 left shoulder -> +0.34 right bottom rim)
-    n_x, n_rad = 20, 44
+    n_x, n_rad = 20, 48
     x_lo, x_hi = -0.225, +0.335
     rad = 0.168
     verts, uvs, tris = [], [], []
@@ -636,47 +647,57 @@ def build_steakwhiz() -> SceneBuilder:
             py = rad * math.cos(ang)
             pz = rad * math.sin(ang)
             verts.append((x, py, pz))
-            # Map front-top 180 deg arc to full texture v=0..1; wrap cleanly around rear
-            tex_v = (vf_c * 1.45 - 0.14) % 1.0
+            # Continuous unwrapped REPEAT V (zero seam strip!) mapping front-top 180 deg cleanly.
+            tex_v = vf_c * 1.45 - 0.14
             uvs.append((uf, tex_v))
     stride = n_rad + 1
     for ix in range(n_x):
         for j in range(n_rad):
             a, b, c, d = ix * stride + j, (ix + 1) * stride + j, (ix + 1) * stride + (j + 1), ix * stride + (j + 1)
             tris.extend(((a, c, b), (a, d, c)))
+    # Solid closed end caps on the can cylinder so it can NEVER appear hollow from any orbit angle!
+    c_l, c_r = len(verts), len(verts) + 1
+    verts.append((x_lo, 0.0, 0.0))
+    uvs.append((0.0, 0.5))
+    verts.append((x_hi, 0.0, 0.0))
+    uvs.append((1.0, 0.5))
+    r_off = n_x * stride
+    for j in range(n_rad):
+        tris.append((c_l, j, j + 1))
+        tris.append((c_r, r_off + j + 1, r_off + j))
     pos_c = np.asarray(verts, dtype=np.float32)
     idx_c = np.asarray(tris, dtype=np.uint32).reshape(-1)
     can_body = MeshPart("steakwhiz_body", "item_steak_whiz", pos_c, recompute_smooth_normals(pos_c, idx_c), idx_c, uvs=np.asarray(uvs, dtype=np.float32))
     parts.append(can_body)
 
-    # Gleaming metallic aluminum left dome shoulder & rolled crimp rims
+    # Gleaming stamped-aluminum left dome shoulder & rolled crimp rims (strictly INCREASING x for outward lathe winding!)
     shoulder_prof = [
-        (0.168, -0.225),
-        (0.176, -0.236),
-        (0.166, -0.252),
-        (0.148, -0.282),
-        (0.114, -0.318),
-        (0.072, -0.346),
-        (0.056, -0.362),
         (0.052, -0.376),
+        (0.056, -0.362),
+        (0.072, -0.346),
+        (0.114, -0.318),
+        (0.148, -0.282),
+        (0.166, -0.252),
+        (0.176, -0.236),
+        (0.168, -0.222),
     ]
-    shoulder = lathe(shoulder_prof, radial_segs=38, cap_bottom=False, cap_top=True, axis="x", name="steakwhiz_shoulder", material="item_aluminum")
+    shoulder = lathe(shoulder_prof, radial_segs=42, cap_bottom=True, cap_top=True, axis="x", name="steakwhiz_shoulder", material="item_tin_aluminum")
     parts.append(shoulder)
-    # Right silver bottom chime rim + recessed base
-    base_prof = [(0.168, +0.335), (0.175, +0.346), (0.162, +0.364), (0.132, +0.368), (0.112, +0.354), (0.000, +0.348)]
-    base = lathe(base_prof, radial_segs=38, cap_bottom=False, cap_top=False, axis="x", name="steakwhiz_base", material="item_aluminum")
+    # Right silver bottom chime rim + slightly recessed solid stamped base!
+    base_prof = [(0.168, +0.332), (0.175, +0.346), (0.162, +0.364), (0.132, +0.368), (0.112, +0.354), (0.000, +0.348)]
+    base = lathe(base_prof, radial_segs=42, cap_bottom=True, cap_top=False, axis="x", name="steakwhiz_base", material="item_tin_aluminum")
     parts.append(base)
 
-    # Fluted black spray-cheese/steak nozzle pointing LEFT (`-X`) + crisp white spray tip!
+    # Fluted black spray-cheese/steak nozzle pointing LEFT (`-X`, strictly INCREASING x for outward lathe winding!) + crisp white spray tip!
     nozzle_prof = [
-        (0.050, -0.374),
-        (0.048, -0.398),
-        (0.038, -0.430),
-        (0.032, -0.470),
-        (0.025, -0.515),
         (0.018, -0.542),
+        (0.025, -0.515),
+        (0.032, -0.470),
+        (0.038, -0.430),
+        (0.048, -0.398),
+        (0.050, -0.370),
     ]
-    nozzle = lathe(nozzle_prof, radial_segs=24, cap_bottom=False, cap_top=True, axis="x", name="steakwhiz_nozzle", material="item_rubber_dark")
+    nozzle = lathe(nozzle_prof, radial_segs=26, cap_bottom=True, cap_top=True, axis="x", name="steakwhiz_nozzle", material="item_rubber_dark")
     parts.append(nozzle)
     spray_tip = cylinder(0.014, 0.019, 0.055, radial_segs=18, bevel=0.004, axis="x", name="steakwhiz_tip", material="item_candy_white").translate(-0.562, 0.0, 0.0)
     parts.append(spray_tip)

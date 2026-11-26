@@ -44,7 +44,7 @@ _FONT_5X7: Dict[str, Tuple[int, ...]] = {
 FOOD_TEXTURE_SIZES: Dict[str, int] = {
     "cola_label": 512,
     "pizza_tube": 128,
-    "steak_whiz": 128,
+    "steak_whiz": 256,
     "choco_fishy": 128,
     "potted_meat": 512,
     "choc_bar": 128,
@@ -160,17 +160,28 @@ def _build_steak_whiz_pack(size: int):
     _blit_text(m_wh, "WHIZ", cx=0.36, cy=0.63, char_w=0.092, char_h=0.22, bold=1)
     rgb = rgb * (1.0 - m_st[:, :, None]) + white[None, None, :] * m_st[:, :, None]
     rgb = rgb * (1.0 - m_wh[:, :, None]) + yellow[None, None, :] * m_wh[:, :, None]
-    # Authentic triangular T-bone steak emblem on the right side (`u ~ 0.77, v ~ 0.50`)!
-    du = (u - 0.76) / 0.155
-    dv = (v - 0.50) / 0.21
-    # Tapered steak silhouette: wide rounded top-right lobe, tapered bottom-left tail
-    steak_shape = (du ** 2) + ((dv + 0.18 * du) ** 2) * (1.0 + 0.45 * np.clip(-du, 0.0, 1.0)) - 0.14 * np.sin(du * 3.0) * dv
-    rgb[steak_shape < 1.05] = white
-    rgb[steak_shape < 0.78] = meat
-    # Authentic white T-bone inside the meat (vertical stem + upper crossbar)
-    t_stem = (np.abs(u - 0.77) < 0.015) & (v > 0.42) & (v < 0.62) & (steak_shape < 0.80)
-    t_bar = (np.abs(v - 0.44) < 0.018) & (u > 0.70) & (u < 0.85) & (steak_shape < 0.80)
-    rgb[t_stem | t_bar] = white
+    # Authentic triangular seared steak chop emblem on the right side (`u ~ 0.77, v ~ 0.50`, matching `377:steakwhiz`)!
+    du = (u - 0.77) / 0.145
+    dv = (v - 0.50) / 0.190
+    # Rounded triangular T-bone cut: broad flat-ish upper shoulder (dv < 0), tapering toward lower-right tail!
+    tri_w = 1.0 - 0.42 * np.clip((dv + 0.35) / 1.25, 0.0, 1.0)
+    steak_shape = ((du / np.maximum(0.45, tri_w)) ** 2) + ((dv - 0.05 * du) ** 2)
+    steak_outer = steak_shape < 1.02
+    steak_inner = steak_shape < 0.74
+    fat_cream = np.array([0.96, 0.90, 0.80], dtype=np.float32)
+    sear_brown = np.array([0.48, 0.20, 0.12], dtype=np.float32)
+    rgb[steak_outer] = fat_cream
+    # Juicy seared reddish-brown steak with subtle marbled flecks & golden highlight
+    marble = 0.5 + 0.5 * np.sin(u * 58.0 + v * 42.0) * np.cos(u * 38.0 - v * 52.0)
+    grill = np.clip(np.sin((u * 34.0 + v * 28.0) * math.pi), 0.0, 1.0) ** 4
+    meat_col = meat[None, None, :] * (0.80 + 0.24 * marble[:, :, None]) + sear_brown[None, None, :] * (0.24 + 0.20 * grill[:, :, None])
+    rgb = np.where(steak_inner[:, :, None], np.clip(meat_col, 0.0, 1.0), rgb)
+    # Small organic white rib bone spot tucked on the upper-left corner of the steak cut (like `377:steakwhiz`!)
+    bone_spot = (((u - 0.725) / 0.022) ** 2 + ((v - 0.43) / 0.042) ** 2 < 1.0) & steak_inner
+    rgb[bone_spot] = fat_cream
+    # Crisp dark outline framing the steak badge against the crimson can
+    steak_rim = (steak_shape >= 0.96) & (steak_shape < 1.12)
+    rgb[steak_rim] = dark
     height = 0.45 + 0.18 * (m_st + m_wh)
     rough = np.full((size, size), 0.24, dtype=np.float32)
     metal = np.where((v < 0.08) | (v > 0.92), 0.88, 0.32).astype(np.float32)

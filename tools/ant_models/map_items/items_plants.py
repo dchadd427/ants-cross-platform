@@ -908,59 +908,70 @@ def _build_groucho_daisy(name: str, *, animated: bool) -> SceneBuilder:
     sc.add("dflower_stache", stache_parts)
 
     if animated:
-        # Authentic 1998 `420:dflower1` playful head-bobbing + flexing S-wave stem animation (`strip_groucho.png` 7 frames!)
-        times = [0.00, 0.12, 0.24, 0.36, 0.48, 0.60, 0.72, 0.84]
-        # Articulated 3-segment stem flexes left -> S-bend dip -> upright -> right nod -> S-bend rebound -> left!
+        # Exact 0.70s 1998 `420:dflower1` smooth rhythmic head-bobbing + graceful flexing stem (7 frames x 100ms!).
+        # Matched directly to `strip_dflower1.png`: steady grounded lower leaves, smooth organic stem sway,
+        # gentle left tilt (f0-f1) -> soft center glide (f2) -> slight lift (f3) -> signature cheerful right head-bob (f4) -> rebound (f5-f6).
+        times = [0.00, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70]
         bot_rot = [
-            (+2.0, 0.0, +13.0),   # f0: stem arches left
-            (+5.0, 0.0, +9.0),    # f1: bobbing down-left
-            (+9.0, 0.0, +2.0),    # f2: dipping forward through center
-            (+3.0, 0.0, -4.0),    # f3: popping up center-right
-            (+8.0, 0.0, -14.0),   # f4: bold right arch & bob (matches frame 5!)
-            (+6.0, 0.0, -6.0),    # f5: bouncing back toward center
-            (+3.0, 0.0, +5.0),    # f6: swinging back left
-            (+2.0, 0.0, +13.0),   # seamless loop
+            (+0.5, 0.0, +2.5),    # f0: grounded steady base, slight left lean
+            (+1.0, 0.0, +1.5),    # f1: smooth glide toward center
+            (+1.5, 0.0, +0.0),    # f2: center
+            (+0.5, 0.0, -1.5),    # f3: lifting into right lean
+            (+2.5, 0.0, -4.5),    # f4: smooth right bow on bob beat
+            (+1.0, 0.0, -1.5),    # f5: smooth elastic rebound
+            (+0.5, 0.0, +1.2),    # f6: returning left
+            (+0.5, 0.0, +2.5),    # seamless 700ms loop
         ]
         mid_rot = [
-            (+4.0, 0.0, -15.0),   # S-curve counter-bend!
-            (+9.0, 0.0, -8.0),
-            (+13.0, 0.0, +5.0),
-            (+2.0, 0.0, +10.0),
-            (+12.0, 0.0, +15.0),
-            (+8.0, 0.0, +4.0),
-            (+3.0, 0.0, -9.0),
-            (+4.0, 0.0, -15.0),
+            (+1.0, 0.0, +4.0),    # f0: smooth continuous arc (same direction as base, zero robotic kink!)
+            (+1.5, 0.0, +2.2),    # f1
+            (+2.5, 0.0, -0.5),    # f2
+            (+0.5, 0.0, -2.8),    # f3
+            (+4.5, 0.0, -7.5),    # f4: flexible stem bows smoothly right
+            (+1.5, 0.0, -2.5),    # f5
+            (+1.0, 0.0, +2.0),    # f6
+            (+1.0, 0.0, +4.0),
         ]
         top_rot = [
-            (-6.0, 0.0, +12.0),   # whip follow-through on upper stem neck!
-            (+7.0, 0.0, +5.0),
-            (+12.0, 0.0, -5.0),
-            (-5.0, 0.0, -4.0),
-            (+14.0, 0.0, -11.0),
-            (+4.0, 0.0, -2.0),
-            (-4.0, 0.0, +8.0),
-            (-6.0, 0.0, +12.0),
+            (-1.0, 0.0, +2.5),    # f0: gentle neck follow-through
+            (+0.5, 0.0, +1.2),    # f1
+            (+1.5, 0.0, -0.5),    # f2
+            (-1.5, 0.0, -1.8),    # f3: slight buoyant lift
+            (+4.0, 0.0, -5.5),    # f4: neck nods smoothly down-right
+            (-0.5, 0.0, -1.5),    # f5
+            (-0.5, 0.0, +1.2),    # f6
+            (-1.0, 0.0, +2.5),
         ]
-        # Playful bouncy head-bobbing + forward nodding (`rx` dips boldly on bob beats!) + cheekily glancing left/right!
         head_poses = [
-            (60.0, -18.0, +14.0),  # f0: head up-left, leaning left
-            (74.0, -12.0, +9.0),   # f1: nodding/bobbing down-left
-            (78.0, -4.0, +2.0),    # f2: low center bob!
-            (58.0, +2.0, -2.0),    # f3: bouncing upright center
-            (82.0, +20.0, -16.0),  # f4: big expressive right-nod head bob (`strip_groucho.png` frame 5!)
-            (60.0, +6.0, -4.0),    # f5: rebounding up center
-            (70.0, -10.0, +8.0),   # f6: dipping slightly back left
-            (60.0, -18.0, +14.0),  # loop closure
+            (66.0, -5.0, +6.5),   # f0: gentle cheeky left tilt
+            (67.5, -2.5, +3.8),   # f1: gliding smoothly right
+            (69.5, +0.0, +0.5),   # f2: soft center bob
+            (64.5, +3.5, -2.5),   # f3: upright anticipation lift
+            (74.5, +8.5, -9.5),   # f4: iconic playful right-down head bob (`strip_dflower1.png` f4!)
+            (65.5, +3.0, -2.5),   # f5: buoyant rebound up-center
+            (67.0, -2.5, +3.5),   # f6: gliding back left
+            (66.0, -5.0, +6.5),   # seamless loop
+        ]
+        # Subtle rhythmic vertical head-bob translation matching the 10px vertical dip on f4!
+        head_trans = [
+            (-0.004, 0.230, +0.022),
+            (-0.004, 0.227, +0.022),
+            (-0.004, 0.224, +0.023),
+            (-0.004, 0.234, +0.021),
+            (-0.004, 0.208, +0.028),
+            (-0.004, 0.232, +0.022),
+            (-0.004, 0.228, +0.022),
+            (-0.004, 0.230, +0.022),
         ]
         stache_twitches = [
-            (-5.0, +5.0, +4.0),
-            (+6.0, -3.0, -2.0),
-            (+8.0, +2.0, +3.0),
-            (-6.0, 0.0, 0.0),
-            (+9.0, -6.0, -5.0),
-            (-5.0, +3.0, +2.0),
+            (-1.0, +1.0, +1.0),
+            (+0.5, +0.0, +0.0),
+            (+1.5, +0.0, +0.5),
+            (-1.5, -0.5, -0.5),
             (+3.0, -2.0, -2.0),
-            (-5.0, +5.0, +4.0),
+            (-1.0, +0.5, +0.5),
+            (+0.0, +0.5, +0.5),
+            (-1.0, +1.0, +1.0),
         ]
         sc.add_animation(
             "Idle",
@@ -969,6 +980,7 @@ def _build_groucho_daisy(name: str, *, animated: bool) -> SceneBuilder:
                 AnimationChannel("dflower_stem_mid", "rotation", times, [quat_from_euler_xyz(rx=rx, ry=ry, rz=rz, degrees=True) for rx, ry, rz in mid_rot]),
                 AnimationChannel("dflower_stem_top", "rotation", times, [quat_from_euler_xyz(rx=rx, ry=ry, rz=rz, degrees=True) for rx, ry, rz in top_rot]),
                 AnimationChannel("dflower_head", "rotation", times, [quat_from_euler_xyz(rx=rx, ry=ry, rz=rz, degrees=True) for rx, ry, rz in head_poses]),
+                AnimationChannel("dflower_head", "translation", times, head_trans),
                 AnimationChannel("dflower_stache", "rotation", times, [quat_from_euler_xyz(rx=rx, ry=ry, rz=rz, degrees=True) for rx, ry, rz in stache_twitches]),
             ],
             replace=True,

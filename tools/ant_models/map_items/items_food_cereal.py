@@ -527,84 +527,75 @@ def _build_power_nectar(name: str, pu_builder: Callable[[], SceneBuilder]) -> Sc
     sc.set_node_transform("gear_reveal", translation=(0.0, 0.012, 0.0))
     sc.add("gear_reveal", gear_parts)
 
-    # Authentic 2.6s looping 1998 drip-fall-splat-reveal animation matching `strip_nectar.png` frames 0..7!
-    # 0.00: small bead forming high up (f0)
-    # 0.24: swelling & beginning to hang (f1)
-    # 0.48: long dramatic stretched honey tear hanging before detaching (f2)
-    # 0.68: detached plump teardrop falling mid-air (f3)
-    # 0.86: accelerating downward, rounding plump (f4)
-    # 1.00: round golden globule just above impact (f5)
-    # 1.10: SPLAT into golden landing puddle mound (f6)
-    # 1.26: actual 3D Power-Up gear pops out of the landed puddle (f7)
-    # 2.18: hold Power-Up clearly on ground so player sees the pickup!
-    # 2.42: fade out cleanly -> 2.60: new tiny drop beads at top!
-    times = np.array([0.00, 0.24, 0.48, 0.68, 0.86, 1.00, 1.10, 1.26, 1.42, 2.18, 2.42, 2.60], dtype=np.float32)
+    # Exact 0.82s looping 1998 CHD timeline (`FD_COMB..FD_BOMB`: 9 subitems = [100,100,120,80,60,60,100,100,100] ms = 820 ms!)
+    # Synchronized 1:1 with the 1998 sprite so drip, stretch, free-fall, splat, and Power-Up pop stay in exact lockstep.
+    times = np.array([0.00, 0.10, 0.20, 0.32, 0.40, 0.46, 0.52, 0.62, 0.72, 0.78, 0.805, 0.82], dtype=np.float32)
 
     drop_trans = np.array(
         [
-            [0.0, 0.78, 0.0],  # 0.00: tiny drop beading high up (f0)
-            [0.0, 0.71, 0.0],  # 0.24: swelling & stretching down (f1)
-            [0.0, 0.54, 0.0],  # 0.48: long stretched hanging teardrop (f2)
-            [0.0, 0.40, 0.0],  # 0.68: snapped free, falling mid-air (f3)
-            [0.0, 0.22, 0.0],  # 0.86: accelerating downward (f4)
-            [0.0, 0.05, 0.0],  # 1.00: plump orb just above ground (f5)
-            [0.0, 0.00, 0.0],  # 1.10: ground impact squish (f6)
-            [0.0, 0.00, 0.0],  # 1.26: vanished into splash
-            [0.0, 0.00, 0.0],  # 1.42: hidden while Power-Up shines
-            [0.0, 0.00, 0.0],  # 2.18: hidden
-            [0.0, 0.80, 0.0],  # 2.42: resetting to top while tiny
-            [0.0, 0.78, 0.0],  # 2.60: seamless loop back to f0
+            [0.0, 0.78, 0.0],  # 0.00: small bead forming high up (sub 0: 0..100ms)
+            [0.0, 0.72, 0.0],  # 0.10: swelling & stretching down (sub 1: 100..200ms)
+            [0.0, 0.56, 0.0],  # 0.20: iconic long stretched hanging drip (sub 2: 200..320ms)
+            [0.0, 0.40, 0.0],  # 0.32: snapped free, falling teardrop (sub 3: 320..400ms)
+            [0.0, 0.22, 0.0],  # 0.40: accelerating downward (sub 4: 400..460ms)
+            [0.0, 0.06, 0.0],  # 0.46: plump orb right above ground (sub 5: 460..520ms)
+            [0.0, 0.00, 0.0],  # 0.52: ground impact squish (sub 6: 520..620ms)
+            [0.0, 0.00, 0.0],  # 0.62: absorbed into puddle (sub 7: 620..720ms)
+            [0.0, 0.00, 0.0],  # 0.72: hidden while Power-Up shines (sub 8: 720..820ms)
+            [0.0, 0.00, 0.0],  # 0.78: hidden
+            [0.0, 0.79, 0.0],  # 0.805: silently reset to top while scaled 0.001
+            [0.0, 0.78, 0.0],  # 0.82: seamless loop back to sub 0
         ],
         dtype=np.float32,
     )
     drop_scale = np.array(
         [
-            [0.54, 0.56, 0.54],    # 0.00: small bead (f0)
-            [0.52, 0.98, 0.52],    # 0.24: elongating (f1)
-            [0.44, 1.88, 0.44],    # 0.48: iconic long stretched drip! (f2)
-            [0.84, 1.04, 0.84],    # 0.68: classic falling teardrop (f3)
-            [0.98, 0.86, 0.98],    # 0.86: plump falling drop (f4)
-            [1.08, 0.76, 1.08],    # 1.00: plump pre-impact sphere (f5)
-            [1.35, 0.22, 1.35],    # 1.10: flat impact squish (f6)
-            [0.001, 0.001, 0.001], # 1.26: absorbed into puddle
-            [0.001, 0.001, 0.001], # 1.42: hidden
-            [0.001, 0.001, 0.001], # 2.18: hidden
-            [0.001, 0.001, 0.001], # 2.42: hidden while teleporting back to top
-            [0.54, 0.56, 0.54],    # 2.60: loop
+            [0.54, 0.56, 0.54],    # 0.00: small bead (sub 0)
+            [0.52, 0.98, 0.52],    # 0.10: elongating (sub 1)
+            [0.44, 1.90, 0.44],    # 0.20: dramatic hanging stretch (sub 2)
+            [0.84, 1.04, 0.84],    # 0.32: falling teardrop (sub 3)
+            [0.98, 0.86, 0.98],    # 0.40: plump falling drop (sub 4)
+            [1.08, 0.76, 1.08],    # 0.46: plump pre-impact sphere (sub 5)
+            [1.34, 0.22, 1.34],    # 0.52: flat impact squish (sub 6)
+            [0.001, 0.001, 0.001], # 0.62: absorbed into puddle
+            [0.001, 0.001, 0.001], # 0.72: hidden
+            [0.001, 0.001, 0.001], # 0.78: hidden
+            [0.001, 0.001, 0.001], # 0.805: hidden while resetting to top
+            [0.54, 0.56, 0.54],    # 0.82: loop
         ],
         dtype=np.float32,
     )
     splash_scale = np.array(
         [
-            [0.001, 0.001, 0.001], # 0.00: hidden
-            [0.001, 0.001, 0.001], # 0.24: hidden
-            [0.001, 0.001, 0.001], # 0.48: hidden
-            [0.001, 0.001, 0.001], # 0.68: hidden
-            [0.001, 0.001, 0.001], # 0.86: hidden
-            [0.001, 0.001, 0.001], # 1.00: hidden right before touch
-            [1.06, 1.00, 1.06],    # 1.10: golden landing mound appears (f6)!
-            [1.16, 0.58, 1.16],    # 1.26: flattens into glowing puddle under Power-Up (f7)!
-            [1.10, 0.48, 1.10],    # 1.42: soft golden puddle bed
-            [0.98, 0.42, 0.98],    # 2.18: hold puddle under Power-Up
-            [0.001, 0.001, 0.001], # 2.42: clean dissolve
-            [0.001, 0.001, 0.001], # 2.60: loop
+            [0.001, 0.001, 0.001], # 0.00..0.46: hidden while teardrop falls
+            [0.001, 0.001, 0.001],
+            [0.001, 0.001, 0.001],
+            [0.001, 0.001, 0.001],
+            [0.001, 0.001, 0.001],
+            [0.001, 0.001, 0.001],
+            [1.06, 1.00, 1.06],    # 0.52: golden landing mound appears (sub 6)
+            [1.16, 0.56, 1.16],    # 0.62: flattens into puddle under Power-Up (sub 7)
+            [1.04, 0.44, 1.04],    # 0.72: golden bed beneath Power-Up (sub 8)
+            [0.92, 0.36, 0.92],    # 0.78: hold puddle
+            [0.001, 0.001, 0.001], # 0.805: clean vanish before loop
+            [0.001, 0.001, 0.001], # 0.82: loop
         ],
         dtype=np.float32,
     )
     gear_scale = np.array(
         [
-            [0.001, 0.001, 0.001], # 0.00..1.00: hidden while teardrop falls
+            [0.001, 0.001, 0.001], # 0.00..0.52: hidden until puddle lands
             [0.001, 0.001, 0.001],
             [0.001, 0.001, 0.001],
             [0.001, 0.001, 0.001],
             [0.001, 0.001, 0.001],
             [0.001, 0.001, 0.001],
-            [0.001, 0.001, 0.001], # 1.10: still pure golden puddle (f6)
-            [0.94, 0.86, 0.94],    # 1.26: Power-Up emerges cleanly out of splash (f7)!
-            [1.04, 1.04, 1.04],    # 1.42: playful bounce settle
-            [1.00, 1.00, 1.00],    # 2.18: hold clear hero Power-Up
-            [0.001, 0.001, 0.001], # 2.42: disappear cleanly before next drop
-            [0.001, 0.001, 0.001], # 2.60: loop
+            [0.001, 0.001, 0.001], # 0.52: pure golden landing mound (sub 6)
+            [0.96, 0.90, 0.96],    # 0.62: Power-Up pops cleanly out of puddle (sub 7)
+            [1.04, 1.04, 1.04],    # 0.72: full hero Power-Up pickup (sub 8)
+            [0.98, 0.98, 0.98],    # 0.78: hold clearly
+            [0.001, 0.001, 0.001], # 0.805: clean reset
+            [0.001, 0.001, 0.001], # 0.82: loop
         ],
         dtype=np.float32,
     )

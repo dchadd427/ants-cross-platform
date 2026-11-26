@@ -80,7 +80,7 @@ def build_orig_items_bundle(specs: Sequence[MapItemSpec], out_path: Path) -> Dic
                         layers.append((sid, dx, dy, im))
                     if layers:
                         loaded_subs.append((dur_ms, layers))
-                    if len(loaded_subs) >= 8:
+                    if len(loaded_subs) >= 12:
                         break
                 if loaded_subs and max_x > min_x and max_y > min_y:
                     cw, ch = max_x - min_x, max_y - min_y
@@ -124,7 +124,7 @@ def build_orig_items_bundle(specs: Sequence[MapItemSpec], out_path: Path) -> Dic
                         "duration_ms": max(60, dur_ms),
                         "data_uri": "data:image/png;base64," + base64.b64encode(raw).decode("ascii"),
                     })
-                    if len(frames_out) >= 8:
+                    if len(frames_out) >= 12:
                         break
         items_out[spec.id] = {
             "id": spec.id,
