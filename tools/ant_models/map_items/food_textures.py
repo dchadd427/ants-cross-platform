@@ -46,7 +46,7 @@ FOOD_TEXTURE_SIZES: Dict[str, int] = {
     "pizza_tube": 128,
     "steak_whiz": 128,
     "choco_fishy": 128,
-    "potted_meat": 128,
+    "potted_meat": 512,
     "choc_bar": 128,
     "skittle_a": 128,
     "skittle_n": 128,
@@ -199,20 +199,64 @@ def _build_choco_fishy_pack(size: int):
 
 
 def _build_potted_meat_pack(size: int):
-    """Navy-blue tin can label stamped 'POTTED MEAT' in crimson & cream (`357..360:fdpmeat1..4`)."""
+    """512px vintage royal-blue 'Potted Meat' tin label with crisp white/red shadowed lettering & bottom red ribbon (`357..360`)."""
+    try:
+        from .. import textures as tx
+    except ImportError:
+        import textures as tx  # type: ignore
+
     lin = np.linspace(0.0, 1.0, size, dtype=np.float32)
     u, v = np.meshgrid(lin, lin)
-    navy = np.array([0.12, 0.16, 0.56], dtype=np.float32)
-    red = np.array([0.92, 0.22, 0.20], dtype=np.float32)
-    gold = np.array([0.96, 0.80, 0.24], dtype=np.float32)
-    white = np.array([0.96, 0.96, 0.98], dtype=np.float32)
-    rgb = np.tile(navy[None, None, :], (size, size, 1))
-    rgb[(v < 0.12) | (v > 0.88)] = gold
-    m1 = _blit_text(np.zeros((size, size), np.float32), "POTTED", cx=0.50, cy=0.38, char_w=0.108, char_h=0.22, bold=1)
-    m2 = _blit_text(np.zeros((size, size), np.float32), "MEAT", cx=0.50, cy=0.68, char_w=0.138, char_h=0.24, bold=1)
-    rgb = rgb * (1.0 - m1[:, :, None]) + white[None, None, :] * m1[:, :, None]
-    rgb = rgb * (1.0 - m2[:, :, None]) + red[None, None, :] * m2[:, :, None]
-    return _pack_from_rgb("potted_meat", size, rgb, 0.5 + 0.12 * (m1 + m2), np.full((size, size), 0.34, np.float32), np.full((size, size), 0.28, np.float32))
+    paper = tx._tile_noise(size, 28, 28, seed=851)
+    sheen = tx._tile_noise(size, 6, 36, seed=852)
+
+    # Authentic deep royal cobalt-blue vintage tin wrap (NO yellow bands; bold crimson ribbon along lower edge!)
+    royal = np.array([0.16, 0.20, 0.72], dtype=np.float32)
+    navy_deep = np.array([0.07, 0.08, 0.34], dtype=np.float32)
+    crimson = np.array([0.84, 0.10, 0.12], dtype=np.float32)
+    crimson_dark = np.array([0.46, 0.04, 0.06], dtype=np.float32)
+    white = np.array([0.97, 0.97, 0.99], dtype=np.float32)
+    pale_sky = np.array([0.74, 0.80, 0.98], dtype=np.float32)
+
+    # Subtle glossy wrap gradient across the cobalt-blue paper label
+    rgb = royal[None, None, :] * (0.86 + 0.16 * sheen[:, :, None] + 0.06 * paper[:, :, None])
+    # Thin deep-navy vignette near top & bottom seams
+    top_edge = 1.0 - tx._smoothstep(0.00, 0.06, v)
+    rgb = rgb * (1.0 - 0.38 * top_edge[:, :, None]) + navy_deep[None, None, :] * (0.38 * top_edge[:, :, None])
+
+    # Iconic bold crimson-red ribbon band along the lower edge (`v in 0.77..0.93`, matching `strip_pmeat.png`!)
+    red_band = tx._smoothstep(0.75, 0.78, v) * (1.0 - tx._smoothstep(0.91, 0.94, v))
+    red_trim = (
+        tx._smoothstep(0.73, 0.75, v) * (1.0 - tx._smoothstep(0.75, 0.77, v))
+        + tx._smoothstep(0.92, 0.94, v) * (1.0 - tx._smoothstep(0.95, 0.97, v))
+    )
+    rgb = rgb * (1.0 - red_band[:, :, None]) + crimson[None, None, :] * red_band[:, :, None]
+    rgb = rgb * (1.0 - 0.80 * red_trim[:, :, None]) + navy_deep[None, None, :] * (0.80 * red_trim[:, :, None])
+
+    # Subtle tiny pale-blue brand micro-header above 'Potted' (`v ~ 0.12..0.21`)
+    m_sub = _blit_text(np.zeros((size, size), np.float32), "GOURMET", cx=0.50, cy=0.15, char_w=0.036, char_h=0.08, spacing=1.16, bold=2)
+    rgb = rgb * (1.0 - 0.72 * m_sub[:, :, None]) + pale_sky[None, None, :] * (0.72 * m_sub[:, :, None])
+
+    # Crisp compact 'POTTED' over 'MEAT' centered cleanly on the front face (zero wrap distortion at edges!)
+    m1 = _blit_text(np.zeros((size, size), np.float32), "POTTED", cx=0.50, cy=0.38, char_w=0.068, char_h=0.22, spacing=1.18, bold=4)
+    m2 = _blit_text(np.zeros((size, size), np.float32), "MEAT", cx=0.50, cy=0.63, char_w=0.082, char_h=0.22, spacing=1.22, bold=4)
+    txt = np.clip(m1 + m2, 0.0, 1.0)
+    # Crisp dark-navy + crimson offset drop shadow behind white lettering so it pops like the 1998 sprite!
+    sh_px = max(2, size // 64)
+    txt_sh = np.roll(np.roll(txt, sh_px, axis=0), sh_px, axis=1)
+    txt_red = np.roll(np.roll(txt, max(1, sh_px // 2), axis=0), max(1, sh_px // 2), axis=1)
+    rgb = rgb * (1.0 - 0.85 * txt_sh[:, :, None]) + navy_deep[None, None, :] * (0.85 * txt_sh[:, :, None])
+    rgb = rgb * (1.0 - 0.65 * txt_red[:, :, None]) + crimson_dark[None, None, :] * (0.65 * txt_red[:, :, None])
+    rgb = rgb * (1.0 - txt[:, :, None]) + white[None, None, :] * txt[:, :, None]
+
+    # Subtle micro-text specks on the bottom crimson ribbon
+    m_bot = _blit_text(np.zeros((size, size), np.float32), "NET WT 3 OZ", cx=0.50, cy=0.84, char_w=0.028, char_h=0.072, spacing=1.14, bold=1)
+    rgb = rgb * (1.0 - 0.78 * m_bot[:, :, None]) + pale_sky[None, None, :] * (0.78 * m_bot[:, :, None])
+
+    height = np.clip(0.46 + 0.08 * paper + 0.16 * txt + 0.08 * red_band, 0.0, 1.0)
+    rough = np.clip(0.36 + 0.08 * paper - 0.06 * red_band, 0.24, 0.50)
+    metal = np.full((size, size), 0.18, dtype=np.float32)
+    return _pack_from_rgb("potted_meat", size, np.clip(rgb, 0.04, 1.0), height, rough, metal)
 
 
 def _build_choc_bar_pack(size: int):

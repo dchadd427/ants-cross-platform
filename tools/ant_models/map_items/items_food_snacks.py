@@ -187,100 +187,204 @@ def build_fdtwink3() -> SceneBuilder:
 # 2. 'POTTED MEAT' PULL-TAB TIN CAN (`357..360:fdpmeat1..4`, `fdpmeat1` ANIMATED!)
 # ---------------------------------------------------------------------------
 
+def _bend_peeled_lid_point(s: float, thickness_off: float, *, bend_r: float = 0.030, max_deg: float = 82.0) -> Tuple[float, float]:
+    """Arc-length-preserving sheet-metal fold for a half-peeled pull-tab aluminum lid (`s >= 0` flat sealed, `s < 0` peeled upright!)."""
+    if s >= 0.0:
+        return s, thickness_off
+    u = -s  # arc length along peeled-back left semicircle moving from crease outward
+    rad_max = math.radians(max_deg)
+    bend_len = bend_r * rad_max
+    if u <= bend_len:
+        ang = u / bend_r
+        s_mid = -bend_r * math.sin(ang)
+        y_mid = bend_r * (1.0 - math.cos(ang))
+        return s_mid + thickness_off * math.sin(ang), y_mid + thickness_off * math.cos(ang)
+    rem = u - bend_len
+    # Gentle realistic upward-to-slight-back-curl sheet profile (~82 -> 94 deg) matching `strip_pmeat.png`!
+    ang = rad_max + 0.55 * rem
+    ang_mid = rad_max + 0.275 * rem
+    s_end = -bend_r * math.sin(rad_max) - rem * math.cos(ang_mid)
+    y_end = bend_r * (1.0 - math.cos(rad_max)) + rem * math.sin(ang_mid)
+    return s_end + thickness_off * math.sin(ang), y_end + thickness_off * math.cos(ang)
+
+
+def _build_half_peeled_aluminum_lid(name: str, *, r_lid: float, y_seat: float, crease_yaw_deg: float = +24.0) -> List[MeshPart]:
+    """Authentic 1998 half-peeled aluminum pull-tab lid: right half sealed flat inside rim, left half bent cleanly up with D-ring pull-tab!"""
+    n_s, n_t = 40, 32
+    half_th = 0.0044
+    verts, uvs, cols, tris = [], [], [], []
+    s_vals = np.linspace(-1.0, 1.0, n_s + 1)
+    t_vals = np.linspace(-1.0, 1.0, n_t + 1)
+    for is_top in (True, False):
+        sgn = +1.0 if is_top else -1.0
+        for it in range(n_t + 1):
+            tv = float(t_vals[it])
+            for is_i in range(n_s + 1):
+                sv = float(s_vals[is_i])
+                s_disc = sv * r_lid
+                t_max = math.sqrt(max(1e-6, 1.0 - sv * sv)) * r_lid
+                t_disc = tv * t_max
+                rad = math.hypot(s_disc, t_disc)
+                # Stamped concentric aluminum expansion grooves on the lid (`r ~ 0.56, 0.78`)
+                ridge = (
+                    0.0048 * math.exp(-(((rad / r_lid - 0.78) / 0.060) ** 2))
+                    + 0.0036 * math.exp(-(((rad / r_lid - 0.56) / 0.055) ** 2))
+                )
+                # Crisp slightly upturned torn aluminum score edge along the outer rim of the peeled half (`s < 0`)
+                tear_lip = 0.0052 * max(0.0, (rad / r_lid - 0.87) / 0.13) if s_disc < 0.0 else 0.0
+                th_off = sgn * half_th + ridge + tear_lip
+                s_b, y_b = _bend_peeled_lid_point(s_disc, th_off)
+                verts.append((s_b, y_b, t_disc))
+                uvs.append((0.5 + 0.5 * sv, 0.5 + 0.5 * tv))
+                if is_top:
+                    crease_sh = 1.0 - 0.24 * math.exp(-((s_disc / 0.036) ** 2))
+                    c_v = (0.94 * crease_sh, 0.96 * crease_sh, 0.99 * crease_sh)
+                else:
+                    # Distinct cool shaded gunmetal-silver underside along the peeled-up lid (`strip_pmeat.png`!)
+                    und = 0.44 + 0.22 * min(1.0, abs(s_disc) / r_lid)
+                    c_v = (0.80 * und, 0.83 * und, 0.88 * und)
+                cols.append(c_v)
+
+    st = n_s + 1
+    off = (n_t + 1) * st
+    for it in range(n_t):
+        for is_i in range(n_s):
+            a, b, c, d = it * st + is_i, (it + 1) * st + is_i, (it + 1) * st + (is_i + 1), it * st + (is_i + 1)
+            tris.extend(((a, b, c), (a, c, d)))
+            tris.extend(((off + a, off + c, off + b), (off + a, off + d, off + c)))
+    for is_i in range(n_s):
+        t0, t1, b0, b1 = is_i, is_i + 1, off + is_i, off + is_i + 1
+        tris.extend(((t0, t1, b1), (t0, b1, b0)))
+        r = n_t * st
+        t0, t1, b0, b1 = r + is_i, r + is_i + 1, off + r + is_i, off + r + is_i + 1
+        tris.extend(((t0, b1, t1), (t0, b0, b1)))
+    for it in range(n_t):
+        t0, t1, b0, b1 = it * st, (it + 1) * st, off + it * st, off + (it + 1) * st
+        tris.extend(((t0, b1, t1), (t0, b0, b1)))
+        t0, t1, b0, b1 = it * st + n_s, (it + 1) * st + n_s, off + it * st + n_s, off + (it + 1) * st + n_s
+        tris.extend(((t0, t1, b1), (t0, b1, b0)))
+
+    pos = np.asarray(verts, dtype=np.float32)
+    idx = np.asarray(tris, dtype=np.uint32).reshape(-1)
+    lid_sheet = MeshPart(
+        f"{name}_lid_sheet",
+        "item_tin_aluminum",
+        pos,
+        recompute_smooth_normals(pos, idx),
+        idx,
+        uvs=np.asarray(uvs, dtype=np.float32),
+        colors=np.asarray(cols, dtype=np.float32),
+    )
+
+    # Stamped metal pull-tab rivet + sleek elongated oval aluminum finger pull-ring hugging the upper-left crest & sweeping down-right (`strip_pmeat.png`!)
+    sa, ya = _bend_peeled_lid_point(-0.188, +0.008)
+    rivet = cylinder(0.014, 0.016, 0.016, radial_segs=14, bevel=0.003, axis="x", name=f"{name}_rivet", material="item_chrome_polished").translate(sa + 0.003, ya + 0.006, -0.055)
+    # Sculpted stamped pull-tab hinge tongue bridging the rivet to the oval finger loop!
+    tab_nose = rounded_box(0.010, 0.044, 0.058, bevel=0.003, segs=2, name=f"{name}_tab_nose", material="item_chrome_polished").rotate_xyz(rx=36.0, ry=-16.0, rz=-18.0, degrees=True).translate(sa + 0.012, ya + 0.018, -0.042)
+    # Sleek elongated flat-profile stamped aluminum D-ring loop tilted steeply down-right matching `#357..360`!
+    ring_pts: List[Tuple[float, float, float]] = []
+    n_rp = 28
+    for i in range(n_rp + 1):
+        a = 2.0 * math.pi * i / float(n_rp)
+        ring_pts.append((0.080 * math.cos(a), 0.044 * math.sin(a), 0.0))
+    pull_ring = curved_tube(
+        ring_pts,
+        [0.0110] * len(ring_pts),
+        samples_per_seg=2,
+        radial_segs=12,
+        cap_start=False,
+        cap_end=False,
+        name=f"{name}_pull_ring",
+        material="item_chrome_polished",
+    ).scale(1.0, 1.0, 0.50).rotate_xyz(rx=48.0, ry=-56.0, rz=-48.0, degrees=True).translate(sa + 0.048, ya + 0.008, +0.022)
+
+    return [
+        p.rotate_xyz(ry=crease_yaw_deg, degrees=True).translate(0.0, y_seat, 0.0)
+        for p in (lid_sheet, rivet, tab_nose, pull_ring)
+    ]
+
+
 def _build_potted_meat(name: str, stage: int) -> SceneBuilder:
-    """Short squat upright silver tin with navy 'POTTED MEAT' label & vertical peeled pull-tab lid (`357..360`)."""
+    """Authentic 1998 aluminum 'Potted Meat' tin cup with royal-blue label & half-peeled pull-tab lid (`357..360`)."""
     register_item_materials()
     sc = SceneBuilder(name=name)
     can_parts: List[MeshPart] = []
 
-    r_can = 0.235
-    h_can = 0.255
+    r_top = 0.236
+    r_bot = 0.228
+    h_can = 0.278
 
-    # Outer cylindrical label sleeve with outward normals (`u` wraps around, `u=0.5` centered straight FRONT +Z!)
-    n_rad, n_y = 44, 12
+    # 1. Outer royal-blue vintage 'Potted Meat' paper label wrapping cleanly around the tin cup!
+    n_rad, n_y = 48, 12
     verts, uvs, tris = [], [], []
     for iy in range(n_y + 1):
-        vf = iy / float(n_y)  # 0 at top -> 1 at bottom
-        y = h_can - 0.018 - (h_can - 0.036) * vf
+        vf = iy / float(n_y)
+        y = h_can - 0.022 - (h_can - 0.044) * vf
+        r_cur = r_top * (1.0 - vf) + r_bot * vf + 0.0015
         for j in range(n_rad + 1):
             uf = j / float(n_rad)
-            # Map front facing arc (+Z, ang = pi/2) cleanly to u=0.50 so 'POTTED / MEAT' reads upright left-to-right!
-            ang = math.pi * 0.5 + (uf - 0.5) * 2.0 * math.pi
-            px = -r_can * math.cos(ang)  # wait: ang=pi/2 -> x=0, z=+r; uf increases -> x goes -r to +r!
-            # Let's check exact cross product: at ang = pi/2, cos=0, sin=1. As uf increases: x = +r*sin(theta), z = +r*cos(theta)!
-            theta = (uf - 0.5) * 2.0 * math.pi  # -pi -> +pi; 0 at front (+Z), -pi/2 at left (-X), +pi/2 at right (+X)
-            px = r_can * math.sin(theta)
-            pz = r_can * math.cos(theta)
+            theta = (uf - 0.5) * 2.0 * math.pi
+            px = r_cur * math.sin(theta)
+            pz = r_cur * math.cos(theta)
             verts.append((px, y, pz))
-            # Repeat label 2x around circumference so 'POTTED MEAT' fits generously across front 180-deg face!
-            tex_u = (uf * 2.0 - 0.5) % 1.0
+            tex_u = uf * 2.0 - 0.5
             uvs.append((tex_u, vf))
     stride = n_rad + 1
     for iy in range(n_y):
         for j in range(n_rad):
             a, b, c, d = iy * stride + j, (iy + 1) * stride + j, (iy + 1) * stride + (j + 1), iy * stride + (j + 1)
-            # a=(y_hi, x_lo), b=(y_lo, x_lo), c=(y_lo, x_hi), d=(y_hi, x_hi) -> (a,b,c) faces OUTWARD (+Z)!
             tris.extend(((a, b, c), (a, c, d)))
     pos_l = np.asarray(verts, dtype=np.float32)
     idx_l = np.asarray(tris, dtype=np.uint32).reshape(-1)
     label_wall = MeshPart(f"{name}_label", "item_potted_meat", pos_l, recompute_smooth_normals(pos_l, idx_l), idx_l, uvs=np.asarray(uvs, dtype=np.float32))
     can_parts.append(label_wall)
 
-    # Hollow gleaming silver tin interior + beaded rolled top & bottom metal rims!
+    # 2. Gleaming smooth stamped aluminum tin cup with double-seamed top rolled rim, score lip & concentric stamped interior floor!
     tin_prof = [
-        (0.000, 0.004),
-        (r_can - 0.008, 0.004),
-        (r_can + 0.008, 0.012),
-        (r_can + 0.008, 0.026),
-        (r_can - 0.002, 0.028),
-        (r_can - 0.002, h_can - 0.024),
-        (r_can + 0.010, h_can - 0.016),
-        (r_can + 0.010, h_can + 0.004),
-        (r_can - 0.006, h_can + 0.008),
-        (r_can - 0.018, h_can - 0.004),
-        (r_can - 0.020, 0.026),
-        (0.000, 0.024),
+        (0.000, 0.005),
+        (r_bot - 0.022, 0.005),
+        (r_bot - 0.012, 0.001),
+        (r_bot + 0.004, 0.006),
+        (r_bot + 0.006, 0.022),
+        (r_bot, 0.025),
+        (r_top, h_can - 0.022),
+        (r_top + 0.011, h_can - 0.012),
+        (r_top + 0.012, h_can + 0.006),
+        (r_top + 0.002, h_can + 0.013),
+        (r_top - 0.008, h_can + 0.008),
+        (r_top - 0.010, h_can - 0.010),
+        (r_top - 0.018, h_can - 0.016),
+        (r_bot - 0.014, 0.032),
+        (r_bot - 0.036, 0.022),
+        (r_bot - 0.048, 0.027),
+        (r_bot - 0.068, 0.021),
+        (0.000, 0.021),
     ]
-    tin_shell = lathe(tin_prof, radial_segs=42, cap_bottom=False, cap_top=False, axis="y", name=f"{name}_tin", material="item_aluminum")
+    tin_shell = lathe(tin_prof, radial_segs=48, cap_bottom=False, cap_top=False, axis="y", name=f"{name}_tin", material="item_tin_aluminum")
     can_parts.append(tin_shell)
 
-    # Peeled-back round silver tin lid standing curled STRAIGHT UP vertically on the back-center rim (`357..360`)!
-    lid_disc = cylinder(0.185, 0.185, 0.014, radial_segs=32, bevel=0.004, axis="y", name=f"{name}_lid", material="item_aluminum")
-    # Gently curl the peeled metal lid like a real pull-tab lid bent upward!
-    pl = lid_disc.positions.astype(np.float64)
-    pl[:, 1] += 0.048 * ((pl[:, 2] / 0.185) ** 2)
-    lid_disc.positions = pl.astype(np.float32)
-    lid_disc.normals = recompute_smooth_normals(lid_disc.positions, lid_disc.indices)
-    # Stand lid nearly upright angled edge-on like `#357..360` showing classic half-moon curl + oval pull ring!
-    lid_disc = lid_disc.rotate_xyz(rx=78.0, ry=-54.0, degrees=True).translate(+0.055, h_can + 0.140, -0.045)
-    can_parts.append(lid_disc)
-
-    # Classic metal pull-tab ring riveted near the top of the peeled-up lid!
-    rivet = sphere(0.018, u_segs=12, v_segs=8, name=f"{name}_rivet", material="item_steel_dark").translate(+0.012, h_can + 0.258, -0.025)
-    pull_ring = torus_arc(0.054, 0.013, u_segs=22, v_segs=8, plane="xy", name=f"{name}_ring", material="item_chrome_spring").rotate_xyz(rx=-16.0, ry=-48.0, degrees=True).translate(-0.012, h_can + 0.305, -0.018)
-    can_parts.extend([rivet, pull_ring])
+    # 3. Authentic half-peeled stamped aluminum top lid + D-ring pull-tab angled on exact 11:00 -> 5:00 diagonal (`+24 deg`)!
+    can_parts.extend(_build_half_peeled_aluminum_lid(name, r_lid=r_top - 0.010, y_seat=h_can - 0.011, crease_yaw_deg=+24.0))
     sc.add("can", can_parts)
 
-    # Authentic speckled rosy-pink minced potted-meat hash filling (`stage 1..3`; `stage 4` is completely empty!)
+    # 4. Authentic speckled rosy-pink & savory brown-flecked minced potted meat hash (`stage 1..3`; `stage 4` empty!)
     def _spam_tint(pos: np.ndarray, _n: np.ndarray) -> np.ndarray:
-        sp = 0.5 + 0.5 * np.sin(pos[:, 0] * 112.0 + pos[:, 2] * 94.0) * np.cos(pos[:, 1] * 105.0 - pos[:, 0] * 78.0)
-        fat = (np.sin(pos[:, 0] * 155.0 - pos[:, 2] * 140.0) * np.cos(pos[:, 2] * 130.0 + pos[:, 1] * 110.0) > 0.62).astype(np.float64)
-        hi = np.clip((pos[:, 1] - 0.04) / 0.22, 0.0, 1.0)
-        return np.clip(
-            np.column_stack([
-                0.86 + 0.12 * hi + 0.06 * sp + 0.08 * fat,
-                0.42 + 0.16 * hi + 0.09 * sp + 0.30 * fat,
-                0.34 + 0.14 * hi + 0.08 * sp + 0.28 * fat,
-            ]),
-            0.20,
-            1.0,
-        )
+        # Warm rosy ham-pink base (`item_bun_crumb`) speckled richly with savory roasted brown flecks & pale pork-fat dots (`strip_pmeat.png`)!
+        grain_a = np.sin(pos[:, 0] * 135.0 + pos[:, 2] * 118.0) * np.cos(pos[:, 1] * 125.0 - pos[:, 0] * 92.0)
+        grain_b = np.sin(pos[:, 0] * 210.0 - pos[:, 2] * 195.0) * np.cos(pos[:, 2] * 175.0 + pos[:, 1] * 140.0)
+        savory = (grain_a < -0.32).astype(np.float64)
+        fat = (grain_b > 0.50).astype(np.float64)
+        hi = np.clip((pos[:, 1] - 0.06) / 0.22, 0.0, 1.0)
+        r_c = 0.86 + 0.12 * hi - 0.36 * savory + 0.12 * fat
+        g_c = 0.48 + 0.14 * hi - 0.26 * savory + 0.34 * fat
+        b_c = 0.38 + 0.12 * hi - 0.22 * savory + 0.32 * fat
+        return np.clip(np.column_stack([r_c, g_c, b_c]), 0.16, 1.0)
 
     def _meat_morsel(tag: str, mx: float, my: float, mz: float, mr: float, seed: float) -> MeshPart:
-        m = ellipsoid(mr, mr * 0.68, mr * 0.82, u_segs=10, v_segs=7, name=tag, material="item_bun_crumb")
+        m = ellipsoid(mr, mr * 0.62, mr * 0.80, u_segs=10, v_segs=7, name=tag, material="item_bun_crumb")
         pm = m.positions.astype(np.float64)
         ang = np.arctan2(pm[:, 2], pm[:, 0])
-        jag = 1.0 + 0.20 * np.sin(ang * 3.0 + seed) + 0.12 * np.cos(ang * 5.0 - seed * 1.7)
+        jag = 1.0 + 0.22 * np.sin(ang * 3.0 + seed) + 0.14 * np.cos(ang * 5.0 - seed * 1.7)
         pm[:, 0] *= jag
         pm[:, 2] *= jag
         m.positions = pm.astype(np.float32)
@@ -289,52 +393,62 @@ def _build_potted_meat(name: str, stage: int) -> SceneBuilder:
 
     if stage <= 3:
         meat_parts: List[MeshPart] = []
+        y_cap = h_can - 0.024
+        # Signed distance to the `+24 deg` diagonal crease (`s_perp < 0` is the open left half!)
+        ca, sa_c = math.cos(math.radians(24.0)), math.sin(math.radians(24.0))
         if stage == 1:
-            loaf = cylinder(r_can - 0.022, r_can - 0.024, 0.215, radial_segs=36, bevel=0.016, axis="y", name=f"{name}_loaf", material="item_bun_crumb").translate(0.0, 0.130, 0.0)
+            loaf = cylinder(r_top - 0.022, r_bot - 0.018, h_can - 0.054, radial_segs=38, bevel=0.014, axis="y", name=f"{name}_loaf", material="item_bun_crumb").translate(0.0, 0.136, 0.0)
+            pm = loaf.positions.astype(np.float64)
+            s_perp = pm[:, 0] * ca - pm[:, 2] * sa_c
+            top = pm[:, 1] > 0.20
+            open_mask = np.clip((-s_perp[top] + 0.02) / 0.07, 0.0, 1.0)
+            pm[top, 1] += open_mask * (
+                0.018 * np.sin(pm[top, 0] * 58.0) * np.cos(pm[top, 2] * 62.0)
+                + 0.012 * np.cos(pm[top, 0] * 98.0 - pm[top, 2] * 88.0)
+            )
+            pm[:, 1] = np.minimum(pm[:, 1], y_cap + 0.010 * np.clip((-s_perp - 0.01) / 0.07, 0.0, 1.0))
+            loaf.positions = pm.astype(np.float32)
+            loaf.normals = recompute_smooth_normals(loaf.positions, loaf.indices)
+            meat_parts.append(tint_part(loaf, _spam_tint))
+            for k in range(22):
+                a = math.pi * 0.42 + (k / 21.0) * (math.pi * 1.02) + 0.14 * math.sin(k * 2.7)
+                rr = 0.040 + 0.148 * math.sqrt(((k * 7 + 3) % 22 + 0.5) / 22.0)
+                mx, mz = rr * math.cos(a), rr * math.sin(a)
+                if mx * ca - mz * sa_c < -0.022:
+                    meat_parts.append(_meat_morsel(f"{name}_morsel_{k}", mx, y_cap, mz, 0.025 + 0.006 * (k % 3), 1.3 + k * 1.1))
+        elif stage == 2:
+            # Scooped lower (~68% full) matching `358:fdpmeat2`: clear minced meat mound on open left half!
+            loaf = cylinder(r_top - 0.024, r_bot - 0.018, 0.195, radial_segs=36, bevel=0.014, axis="y", name=f"{name}_loaf", material="item_bun_crumb").translate(0.0, 0.120, 0.0)
             pm = loaf.positions.astype(np.float64)
             top = pm[:, 1] > 0.18
-            pm[top, 1] += (
-                0.022 * np.sin(pm[top, 0] * 48.0) * np.cos(pm[top, 2] * 52.0)
-                + 0.014 * np.cos(pm[top, 0] * 86.0 - pm[top, 2] * 78.0)
-                + 0.016 * np.exp(-((pm[top, 0] ** 2 + pm[top, 2] ** 2) / 0.032))
-            )
+            pm[top, 1] += 0.016 * np.sin(pm[top, 0] * 56.0) * np.cos(pm[top, 2] * 52.0) - 0.020 * np.clip((-pm[top, 2] + 0.16) / 0.34, 0.0, 1.0)
             loaf.positions = pm.astype(np.float32)
             loaf.normals = recompute_smooth_normals(loaf.positions, loaf.indices)
             meat_parts.append(tint_part(loaf, _spam_tint))
             for k in range(16):
-                a = k * 2.39996
-                rr = 0.028 + 0.140 * math.sqrt((k + 0.5) / 16.0)
+                a = math.pi * 0.44 + (k / 15.0) * (math.pi * 0.98)
+                rr = 0.038 + 0.135 * math.sqrt(((k * 5 + 2) % 16 + 0.5) / 16.0)
                 mx, mz = rr * math.cos(a), rr * math.sin(a)
-                mr = 0.034 + 0.014 * ((k * 7) % 3) * 0.5
-                meat_parts.append(_meat_morsel(f"{name}_morsel_{k}", mx, 0.236 + 0.010 * (1.0 - rr / 0.18), mz, mr, 1.3 + k * 1.1))
-        elif stage == 2:
-            loaf = ellipsoid(0.185, 0.105, 0.178, u_segs=26, v_segs=14, name=f"{name}_loaf", material="item_bun_crumb").translate(-0.032, 0.122, +0.012)
+                if mx * ca - mz * sa_c < -0.022:
+                    meat_parts.append(_meat_morsel(f"{name}_morsel_{k}", mx, 0.212 - 0.012 * (-mz + 0.12), mz, 0.024, 2.2 + k * 1.3))
+        else:
+            # Nearly empty low mound nestled in front-left of gleaming aluminum cup (`359:fdpmeat3`)!
+            loaf = ellipsoid(0.160, 0.095, 0.155, u_segs=24, v_segs=12, name=f"{name}_loaf", material="item_bun_crumb").translate(-0.058, 0.105, +0.048)
             pm = loaf.positions.astype(np.float64)
-            pm[:, 1] = np.maximum(pm[:, 1], 0.026)
-            pm[:, 1] += 0.018 * np.sin(pm[:, 0] * 54.0) * np.cos(pm[:, 2] * 50.0)
+            pm[:, 1] = np.maximum(pm[:, 1], 0.024)
+            pm[:, 1] += 0.015 * np.sin(pm[:, 0] * 58.0) * np.cos(pm[:, 2] * 54.0)
             loaf.positions = pm.astype(np.float32)
             loaf.normals = recompute_smooth_normals(loaf.positions, loaf.indices)
             meat_parts.append(tint_part(loaf, _spam_tint))
             for k in range(10):
-                a = k * 2.39996 + 0.4
-                rr = 0.022 + 0.115 * math.sqrt((k + 0.5) / 10.0)
-                mx, mz = -0.032 + rr * math.cos(a), +0.012 + rr * math.sin(a)
-                meat_parts.append(_meat_morsel(f"{name}_morsel_{k}", mx, 0.198 + 0.012 * (1.0 - rr / 0.15), mz, 0.034, 2.2 + k * 1.3))
-        else:
-            loaf = ellipsoid(0.135, 0.072, 0.128, u_segs=22, v_segs=12, name=f"{name}_loaf", material="item_bun_crumb").translate(-0.068, 0.086, +0.042)
-            pm = loaf.positions.astype(np.float64)
-            pm[:, 1] = np.maximum(pm[:, 1], 0.026)
-            pm[:, 1] += 0.014 * np.sin(pm[:, 0] * 56.0) * np.cos(pm[:, 2] * 54.0)
-            loaf.positions = pm.astype(np.float32)
-            loaf.normals = recompute_smooth_normals(loaf.positions, loaf.indices)
-            meat_parts.append(tint_part(loaf, _spam_tint))
-            for k in range(5):
                 a = k * 2.4 + 0.8
-                rr = 0.018 + 0.065 * math.sqrt((k + 0.5) / 5.0)
-                meat_parts.append(_meat_morsel(f"{name}_morsel_{k}", -0.068 + rr * math.cos(a), 0.142, +0.042 + rr * math.sin(a), 0.030, 3.1 + k * 1.5))
+                rr = 0.018 + 0.088 * math.sqrt((k + 0.5) / 10.0)
+                mx, mz = -0.068 + rr * math.cos(a), +0.052 + rr * math.sin(a)
+                if mx * ca - mz * sa_c < -0.022:
+                    meat_parts.append(_meat_morsel(f"{name}_morsel_{k}", mx, 0.168, mz, 0.023, 3.1 + k * 1.5))
         sc.add("meat_fill", meat_parts, parent="can")
 
-    # Stage 1 (`357:fdpmeat1`) has 42-frame authentic creeping/throbbing potted-meat idle animation!
+    # Stage 1 (`357:fdpmeat1`) subtle creeping/throbbing potted-meat idle animation staying cleanly beneath sealed lid!
     if stage == 1:
         n_kf = 17
         times = np.linspace(0.0, 2.0, n_kf, dtype=np.float32)
@@ -342,11 +456,11 @@ def _build_potted_meat(name: str, stage: int) -> SceneBuilder:
         trans = []
         for t in times:
             ph = float(t) * math.pi * 2.0
-            sx = 1.0 + 0.045 * math.sin(ph)
-            sy = 1.0 + 0.065 * math.cos(ph * 2.0)
-            sz = 1.0 - 0.040 * math.sin(ph)
+            sx = 1.0 + 0.022 * math.sin(ph)
+            sy = 1.0 + 0.036 * math.cos(ph * 2.0)
+            sz = 1.0 - 0.020 * math.sin(ph)
             scales.append([sx, sy, sz])
-            trans.append([0.006 * math.sin(ph), 0.008 * max(0.0, math.sin(ph * 2.0)), 0.005 * math.cos(ph)])
+            trans.append([0.004 * math.sin(ph), 0.005 * max(0.0, math.sin(ph * 2.0)), 0.004 * math.cos(ph)])
         sc.add_animation(
             "Idle",
             [
@@ -355,7 +469,7 @@ def _build_potted_meat(name: str, stage: int) -> SceneBuilder:
             ],
         )
 
-    return _finalize_item(sc, target_span=0.72)
+    return _finalize_item(sc, target_span=0.74)
 
 
 def build_fdpmeat1() -> SceneBuilder:
