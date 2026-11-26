@@ -8,6 +8,7 @@
   const { buildCarriedLunchboxMat, buildHeistsForMap, updateHeists } = window.__demoHeist;
   const { buildBorderGrassMesh } = window.__demoBorder;
   const { buildGroundScatterMesh, buildAtmoParticles } = window.__demoAtmo;
+  const { ACTION_ANT_CLASSES, ACTION_ITEM_IDS, buildActionVignettes, updateActionVignettes } = window.__demoActions;
 
   const $ = (id) => document.getElementById(id);
 
@@ -41,13 +42,14 @@
   const MAP_FOCUSES = {
     treasure: [
       { id: "center",   label: "Center Crossroads", target: [30.5, 0.3, 29.0], zoom: 0.92 },
+      { id: "combat",   label: "Combat Knockback",  target: [31.2, 0.35, 22.2], zoom: 0.36 },
+      { id: "fire",     label: "Fire Ant & Flames", target: [30.4, 0.35, 36.0], zoom: 0.38 },
+      { id: "bomber",   label: "Bomber Blast",      target: [39.0, 0.35, 29.0], zoom: 0.38 },
+      { id: "bridge",   label: "Swimmer Bridge",    target: [15.0, 0.25, 29.5], zoom: 0.38 },
+      { id: "brawl",    label: "Worker Brawl",      target: [21.4, 0.30, 29.0], zoom: 0.34 },
       { id: "heist",    label: "Thief Base Heist",  target: [39.1, 0.35, 22.8], zoom: 0.42 },
-      { id: "pond",     label: "West Pond Swimmer", target: [16.5, 0.2, 29.5], zoom: 0.42 },
       { id: "can",      label: "Can & Slingshot",   target: [15.5, 0.3, 14.0], zoom: 0.66 },
       { id: "steak",    label: "Steak Whiz & Bear", target: [38.5, 0.3,  6.5], zoom: 0.78 },
-      { id: "slinky",   label: "Slinky & Glasses",  target: [10.0, 0.3, 47.5], zoom: 0.72 },
-      { id: "chicken",  label: "Chicken & Pond",    target: [38.5, 0.3, 45.0], zoom: 0.72 },
-      { id: "pizza",    label: "Pizza Tube",        target: [ 4.5, 0.3, 28.5], zoom: 0.52 },
       { id: "full",     label: "Full 60×60 Map",    target: [30.0, 0.2, 30.0], zoom: 2.55 },
     ],
     popcorn: [
@@ -534,8 +536,8 @@
       $("demo-loading-title").textContent = `Loading ${mapData.label} (${mapData.cols}×${mapData.rows})…`;
 
       const antSpecs = buildAntSpecsForMap(mapData);
-      const uniqueAnts = [...new Set([...antSpecs.map((a) => a.cls), "thief"])];
-      const uniqueItems = [...new Set([...mapData.objects.map((o) => o.id), "lunchbox"])];
+      const uniqueAnts = [...new Set([...antSpecs.map((a) => a.cls), "thief", ...ACTION_ANT_CLASSES])];
+      const uniqueItems = [...new Set([...mapData.objects.map((o) => o.id), "lunchbox", ...ACTION_ITEM_IDS])];
       const queue = [
         ...uniqueAnts.map((cls) => [`ant:${cls}`, `models/${cls}.glb`]),
         ...uniqueItems.map((id) => [`item:${id}`, `models/items/${id}.glb`]),
@@ -573,9 +575,16 @@
         if (activeMap.scene.groundScatter) activeMap.scene.groundScatter.dispose();
         if (activeMap.scene.atmoParticles) activeMap.scene.atmoParticles.dispose();
       }
+      if (activeMap && activeMap.actions && activeMap.actions.bridgeModel) {
+        activeMap.actions.bridgeModel.dispose();
+      }
       const borderGrass = buildBorderGrassMesh(renderer.gl, mapData, mapsCatalog.water_tile_index);
       const groundScatter = buildGroundScatterMesh(renderer.gl, mapData, mapsCatalog.water_tile_index);
       const atmoParticles = buildAtmoParticles(renderer.gl, mapData);
+      const actionModels = {};
+      for (const cls of ACTION_ANT_CLASSES) actionModels[cls] = await modelCache.get(`ant:${cls}`);
+      for (const iid of ACTION_ITEM_IDS) actionModels[iid] = await modelCache.get(`item:${iid}`);
+      const actions = buildActionVignettes(renderer.gl, mapData, actionModels, mapsCatalog.water_tile_index, ANT_SCALE);
 
       const lunchboxModel = await modelCache.get("item:lunchbox");
       const thiefModel = await modelCache.get("ant:thief");
@@ -619,8 +628,10 @@
         itemEntries,
         antEntries,
         heists,
+        actions,
         lunchboxModel,
         ripples: [],
+        dynGlows: [],
         scene: {
           instances: [],
           borderGrass,
@@ -680,9 +691,13 @@
     const tx = cam.target[0], tz = cam.target[2];
     const visible = [];
     const ripples = [];
+    const dynGlows = [];
 
     if (activeMap.heists && activeMap.heists.length) {
       updateHeists(activeMap.heists, t, state.patrols, tx, tz, visHalfSpan, visible);
+    }
+    if (activeMap.actions) {
+      updateActionVignettes(activeMap.actions, t, state.patrols, tx, tz, visHalfSpan, visible, ripples, dynGlows);
     }
 
     for (let i = 0; i < itemEntries.length; i++) {
@@ -763,6 +778,7 @@
     }
     scene.instances = visible;
     activeMap.ripples = ripples;
+    activeMap.dynGlows = dynGlows;
   }
 
   function updateCamera(dt) {
@@ -1183,7 +1199,7 @@
       const ls = LIGHT_SCENARIOS[state.lighting] || LIGHT_SCENARIOS.daylight;
       const sunDir = sunVectorFromAngles(state.sunElev, state.sunAzim);
       const shadowRadius = clamp(BASE_FIT_RADIUS * cam.zoom * 1.65, 9.5, 36.0);
-      const glows = buildAtmosphereGlows(mapData, antEntries, ls.glowMode, cam.target);
+      const glows = [...(activeMap.dynGlows || []), ...buildAtmosphereGlows(mapData, antEntries, ls.glowMode, cam.target)].slice(0, 8);
       renderer.drawScene(scene, cam, {
         width: w,
         height: h,
