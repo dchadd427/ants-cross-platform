@@ -53,8 +53,11 @@ body .screen { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 .gdock .gmap { grid-area: m; width: 72px; height: 72px; }
 .gdock .gtxt { display: contents; }
 .gdock .gtop { grid-area: t; } .gdock .gline { grid-area: l; } .gdock .gjoin, .gdock .gwatch { grid-area: j; } .gdock .glockbox { grid-area: j; }
-.gdock .gempty { align-content: center; min-height: 100%; background: none; border: 0; }
 .gdock .gemtitle { font-size: 26px; }
+.gdock .glist .gitem + .gitem.gslot { border-top: 1px dashed #2f7a5e; }       /* (an empty card keeps its dashed edge after another card) */
+.gdock .gitem.glive { grid-template-areas: "m t t" "m l j" "s s s"; align-content: start; }       /* (a match in progress: the card, and the strip of its scores across the foot; beside a taller card its rows stay at the top) */
+.gdock .gitem.glive.gopen { grid-template-areas: "m t j" "m l j" "s s s"; }       /* (the scoreboard open: its names are in the board, so Watch stands beside the head) */
+.gdock .gscore { grid-area: s; }
 @media (max-height: 700px) { .gdock .glegend { display: none; } .gdock .gcode .joinbox input { min-height: 44px; } }
 /* ---- a phone: a window up to 700 px wide or up to 500 px high (a phone held sideways). One of the three at a time, picked by the strip along the bottom ---- */
 @media (max-width: 700px), (max-height: 500px) {

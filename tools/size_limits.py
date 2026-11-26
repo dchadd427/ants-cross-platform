@@ -67,7 +67,7 @@ MAP_DATA_BUDGET, MAP_DATA_GZIP_BUDGET = 66_000, 18_500         # map_library_dat
 MAP_PAGE_BUDGET, MAP_INDEX_PAGE_BUDGET = 10_500, 25_500        # one map's page, one page of the index (each is also what a search engine reads)
 # the front page (web/home/, web/front/player_name.js)
 HOME_BUDGET, HOME_GZIP_BUDGET = 53_600, 15_900
-GAMES_BUDGET, GAMES_GZIP_BUDGET = 105_000, 29_800
+GAMES_BUDGET, GAMES_GZIP_BUDGET = 128_000, 36_500      # games.js and games.css: raised from 105,000 and 29,800 for the lobby slots and the live scores (docs/HOME_GAMES.md); measured 121,620 and 34,652, plus about 5 %
 PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET = 61_000, 18_500       # players.js and players.css: raised from 46,500 and 14,400 for the Everyone and Following tabs, the star and the people who are not here (docs/HUB_PEOPLE.md)
 VP_BUDGET, VP_GZIP_BUDGET = 4_200, 1_900            # vp.js: the screen numbers of /?vp (loaded for that address only)
 CHAT_BUDGET, CHAT_GZIP_BUDGET = 125_000, 37_500     # chat.js and chat.css: raised from 112,000 and 33,800 for the frames of follows and private messages that the dock hands on and the answers of the sheet's own commands (docs/HUB_PEOPLE.md)

@@ -235,7 +235,7 @@
   {
    "id": "host_card_forgets_the_quick_host_button",
    "file": "web/home/games.js",
-   "old": "focus: 0, opener: parts.quickHost });",
+   "old": "focus: 0, opener: hostFrom || parts.quickHost });",
    "new": "focus: 0 });",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
   }

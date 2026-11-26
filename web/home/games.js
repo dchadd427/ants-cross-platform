@@ -7,7 +7,8 @@
 //   * Private rooms (rows that say `private: true`, docs/PUBLIC_ROOMS.md) stand after the joinable rooms as LOCKED cards: a padlock, an INVITE ONLY tag, no button, no link. A private row has no code (one that has is dropped), and Quick join never tries one.
 //   * Matches that run now (GET /live, docs/REPLAYS.md "Live") stand in the list below the open rooms as rows with a Live mark and Watch (/play?live=<id>: the same tab, a new one only while the page holds a room); they are always shown (the open rooms first; nothing is kept in
 //     this browser). The door carries no room code and a room that is listed is waiting, so a running match is never a room's row. /live is looked at every 5 s (and at once, 1.5 s apart at the least, when a room of the list has gone: it may have started its match, which is listed from its start), only while the list shows, and a
-//     server without that door (404) or a failed look only hides the section.
+//     server without that door (404) or a failed look only hides the section. The same answer carries the score boxes of each match (live, no delay: only what every player sees): a row shows them as a strip, and a press on it opens a scoreboard (docs/HOME_GAMES.md).
+//   * The empty cards (lobby slots): while the list is on, it is padded with dashed "Open lobby" cards, two rows of its grid (one row while matches are in progress; 3 cards on a phone), real rooms taking the first places. Each card's button is Quick host.
 //   * The list is polled (30 s closed, 5 s open, never while the tab is hidden or the Room shows, +-20 % of jitter, doubled after a failure). Nothing that goes wrong here reaches Home, the Room or the hand-off:
 //     every call out of this file is guarded, and a failed look is only "the list is off".
 (function (root, factory) {
@@ -39,6 +40,9 @@
     var LIVE_URL = '/live';                              // the site's own address of the matches that run now (no query, no credentials)
     var LIVE_EVERY = 5000, LIVE_SOON = 1500, LIVE_CAP = 300000;           // ms between two looks at /live (never less: the page's own door asks no faster), the shortest wait when a room has gone (it may have started its match), the longest wait after failures
     var LIVE_MAX = 50;                                   // matches that are shown (the door lists 50 at the most)
+    var BOX_MAX = 999999;                                // the most that a score box shows (the door cuts to it; so does this page)
+    var CARD_MIN = 290, CARD_GAP = 12;                   // the grid's cards: at least 290 px wide, 12 px apart (home.css)
+    var SLOT_ROWS = 2, SLOT_ROWS_LIVE = 1, SLOT_PHONE = 3, SLOT_PHONE_LIVE = 2;       // the empty cards: rows of the grid (a row while matches are in progress), and the cards of a one-column list
     var LIVE_ID = /^[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?$/;           // the shape of a match's id (docs/SERVER.md "Live matches"): nothing else is ever put into an address
     var BOT_NAME = /^Bot \(|\(bot(, [^()]+)?\)$/;           // a computer player's name as a server writes it ("Pip (bot, Hard)", "Kit (bot, idle)"; the older "Bot (Medium)"): the rule of the lobby's name check, which keeps these names from people
     var SEATS = ['Green', 'Red', 'Blue', 'Black'];       // the colors of seats 0 - 3, in the words of the door's players strings
@@ -48,7 +52,7 @@
     var LOCKED_SHOWN = 6;                                // locked cards that are drawn; the rest is the line "and 6 more invite-only rooms"
     var TEXT = {
         title: 'Open games', loading: 'Looking for games…', off: 'Games list is off right now', offHint: 'Join by code still works.', none: 'none waiting',
-        emptyTitle: 'No open games right now.', emptyLine: 'Rooms show up here when their host switches them to Public.', hostOne: 'Host one!', quickHost: 'Quick host', quickJoin: 'Quick join',
+        emptyTitle: 'No open games right now.', hostOne: 'Host one!', quickHost: 'Quick host', quickJoin: 'Quick join',
         legendPlayer: 'player', legendBot: 'bot', legendOpen: 'open seat', code: 'Join by code', haveCode: 'Have a code?', closeCode: 'Close', codePlaceholder: 'Room code, like k7m 2xq', join: 'Join',
         private: 'Invite only', public: 'Public', privateRoom: 'Invite-only room', visLabel: 'Who can join this room',
         noteHow: 'Invite-only rooms show locked in Open games. Only people with the link can join.', noteListed: 'Public rooms are listed in Open games. The link always works.', noteWait: 'One moment, then press again.',
@@ -56,8 +60,10 @@
         noneLine: 'Nobody is waiting for a player. Host one, and others can join you.', noneYours: 'Your room goes public with its map and your friends in it.', noneNew: 'A new room opens for you, and it goes public.', joiningCode: 'Joining the room…', joinFirst: ' Wait for it, or cancel it in the list.', opening: 'The game is opening. If it does not, reload this page.',
         already: 'Your room is already public.', running: 'Your match is running.', idle: 'Your room went invite only after 30 minutes. Make it public again?',
         hostChanged: 'This room is invite only again because the host changed.', stillPrivate: 'Your room is still invite only. Use the Public switch in the room.',
-        privateTag: 'Invite only', fogTag: 'Fog', noneJoin: 'No open games to join right now.',
+        privateTag: 'Invite only', fogTag: 'Fog',
+        slotName: 'Open lobby', slotSay: 'Empty', slotHost: 'Host here', slotAria: 'Host a game here',
         watch: 'Watch', liveMark: 'Live', mode187: '187', inProgress: 'In progress', soFar: ' so far', starting: 'Starting\u2026', nobodyNamed: 'Players not named',
+        scoresLive: ' scores are live', showBoard: 'Show the scoreboard', hideBoard: 'Hide the scoreboard', score: 'Score', kills: 'Kills', noScore: 'no score yet', player: 'Player', team: 'Team', bot: ' (bot)', leading: ' leading',
         full: 'That room is full.', started: 'The match in that room has already started.', gone: 'That game is not open any more.', silent: 'The server did not answer. Try again in a moment.'
     };
 
@@ -88,12 +94,15 @@
         var file = typeof raw.map === 'string' ? raw.map : raw.id.replace(/-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?$/, '') + '.LVL';
         if (!rules.validMapFile(file)) return null;
         var secs = typeof raw.seconds === 'number' ? raw.seconds : typeof raw.turns === 'number' ? raw.turns / 20 : 0, who = [], known = rules.mapOfFile(file), list = Array.isArray(raw.players) ? raw.players : [];
+        var boxes = Array.isArray(raw.scores) && Array.isArray(raw.sides) && raw.scores.length === list.length && raw.sides.length === list.length, scores = [], sides = [];       // (the score boxes: one number and one side for each string of players, in its order; an answer that does not fit says no score)
         for (var i = 0; i < list.length && who.length < 4; i++) {
             if (typeof list[i] !== 'string' || !/^[\x20-\x7e]{1,80}$/.test(list[i])) continue;
             var m = /^(Green|Red|Blue|Black)(?: \(([\s\S]*)\))?$/.exec(list[i]);
             who.push(m ? { seat: SEATS.indexOf(m[1]), name: m[2] || m[1] } : { seat: -1, name: list[i] });
+            if (boxes) { scores.push(whole(raw.scores[i], BOX_MAX) ? raw.scores[i] : null); sides.push(whole(raw.sides[i], 3) ? raw.sides[i] : 10 + i); }       // (a covered box, or one that is no number, is null; a side that is no seat is a side of its own)
         }
-        return { id: raw.id, map: file, mapKey: known ? known.key : '', mapName: known ? known.name : rules.communityName(file).slice(0, 28), seconds: isFinite(secs) && secs > 0 ? Math.min(Math.floor(secs), 359999) : 0, who: who, mode187: raw.mode === '187', starting: raw.turns === 0 };         // (a match that has run no turn yet: its room has just started it, and the row says so)
+        return { id: raw.id, map: file, mapKey: known ? known.key : '', mapName: known ? known.name : rules.communityName(file).slice(0, 28), seconds: isFinite(secs) && secs > 0 ? Math.min(Math.floor(secs), 359999) : 0, who: who, mode187: raw.mode === '187', starting: raw.turns === 0,         // (a match that has run no turn yet: its room has just started it, and the row says so)
+                 scores: boxes && who.length ? scores : null, sides: boxes && who.length ? sides : null };
     }
     // The matches of an answer ({ live: [...] }), at most 50, an id once, in the door's order (newest first); null when the answer is not that shape (the section is hidden)
     function parseLive(data, rules) {
@@ -111,6 +120,32 @@
     function clockText(s) { return Math.floor(s / 60) + ':' + (s % 60 < 10 ? '0' : '') + (s % 60); }
     // What a row says of its match's length: "Starting..." until its first turn has run, then the clock "0:07 so far"
     function lengthWords(e) { return e.starting ? TEXT.starting : clockText(e.seconds) + TEXT.soFar; }
+    // 12345 -> "12,345"
+    function groupDigits(n) { return String(n).replace(/\B(?=(\d{3})+$)/g, ','); }
+    // A computer player's name without its level or its mark: "Kit (bot, Medium)", "Kit (bot)" and the older "Bot (Medium)" -> "Kit", "Kit", "Bot"
+    function plainName(name) { return name.replace(/ \(bot(, [^()]+)?\)$/, '').replace(/^(Bot) \([^()]*\)$/, '$1'); }
+    // The sides of a match for its scoreboard: the players grouped by the side that the door says (allies share one: a team), each with its number (null: no box, or no score yet), the side that leads (alone at the top, above 0: a tie marks nobody),
+    // and the column's word (the score; in mode 187 the kills). `scored` is false for a match with no score yet.
+    function boardOf(e) {
+        var sides = [], by = Object.create(null), top = -1, ties = 0, i, k, side;
+        for (i = 0; i < e.who.length; i++) {
+            k = e.scores ? 's' + e.sides[i] : 'p' + i;
+            side = by[k];
+            if (!side) { side = by[k] = { who: [], n: null, lead: false }; sides.push(side); }
+            side.who.push(e.who[i]);
+            if (e.scores && e.scores[i] !== null && side.n === null) side.n = e.scores[i];
+        }
+        sides.forEach(function (x) { if (x.n === null) return; if (x.n > top) { top = x.n; ties = 1; } else if (x.n === top) ties++; });
+        sides.forEach(function (x) { x.lead = ties === 1 && top > 0 && x.n === top; });
+        return { sides: sides, top: top, scored: !!e.scores, label: e.mode187 ? TEXT.kills : TEXT.score, team: sides.some(function (x) { return x.who.length > 1; }) };
+    }
+    // The columns that the docked grid has in a window of `width` x `height` when there is no layout to ask (a covered list, a fake browser): the grid is repeat(auto-fill, minmax(290px, 1fr)) with a gap of 12 px (web/home/home.css) on the dock's
+    // width. A phone (up to 700 px wide) is one column; a short window (up to 500 px high) has no players column, so the dock is the window less the page's margins and its own padding (50 px); else the players column (280 px at the most), its gap
+    // and the margins stand beside the dock (378 px in all, with the dock's padding). Where there is a layout the grid's own count is read instead (columns() in mount).
+    function columnsFor(width, height) {
+        if (width <= 700) return 1;
+        return Math.max(1, Math.floor((width - (height <= 500 ? 50 : 378) + CARD_GAP) / (CARD_MIN + CARD_GAP)));
+    }
     // The wait before the next look at /live: 5 s doubled for every failure in a row up to 5 minutes, then 0 to +20 % (random: 0 to 1): never under 5 s
     function liveDelay(failures, random) {
         var wait = Math.min(LIVE_CAP, LIVE_EVERY * Math.pow(2, Math.min(failures, 10)));
@@ -172,7 +207,7 @@
         var docked = !!env.dock, rows = [], loaded = false, off = false, failures = 0, isOpen = docked, polling = false, round = 0, pollTimer = null, gone = !!env.handoff, joining = false, joinButtons = [];
         var tracked = null, lastRoom = null, lastSent = 0, refreshTimer = null, refreshFor = null, pending = null, pendingTimer = null, askedAt = 0, locked = false, lockTimer = null, hint = '', lastInput = now(), lastLook = 0, floorTimer = null, joinSeq = 0, cancelTimer = null, paintedSig = null;
         var dialog = null, noticeKind = '', quiet = [], finding = false, priv = [];             // priv: the locked rows (private rooms) of the last good answer
-        var live = [], liveLoaded = false, liveOff = false, liveFails = 0, liveTimer = null, liveBusy = false, liveRound = 0, lastLive = 0, liveSig = null, liveLens = [];
+        var live = [], liveLoaded = false, liveOff = false, liveFails = 0, liveTimer = null, liveBusy = false, liveRound = 0, lastLive = 0, liveSig = null, liveLens = [], opened = Object.create(null), hostFrom = null, lastCols = 0;       // opened: the ids of the matches whose scoreboard the visitor opened (nothing is kept past the page)
         var sided = [], matches = false, talk = null;                   // sided: the ids of matches whose Watch the page showed while it held a room; matches: it held a room, so its Matches links were new tabs; talk: the channel of those tabs
 
         function el(tag, cls, text) {
@@ -373,7 +408,7 @@
             ctl.show('room', 'push');
         }
         function chooseHost() {                            // Quick host with no room asks first: Public (listed, Visibility(public) when the room is ready) or Invite only (the room is listed, locked; people join only by its link); Escape or Cancel changes nothing
-            card({ title: TEXT.hostTitle, lines: [TEXT.hostLine], stack: true, acts: [{ text: TEXT.hostPublic, cls: 'gyes', run: startHost }, { text: TEXT.hostPrivate, cls: 'gyes', run: startPrivate }, { text: TEXT.cancel, cls: 'gstay', back: true }], focus: 0, opener: parts.quickHost });
+            card({ title: TEXT.hostTitle, lines: [TEXT.hostLine], stack: true, acts: [{ text: TEXT.hostPublic, cls: 'gyes', run: startHost }, { text: TEXT.hostPrivate, cls: 'gyes', run: startPrivate }, { text: TEXT.cancel, cls: 'gstay', back: true }], focus: 0, opener: hostFrom || parts.quickHost });
         }
         function stillJoining() {                          // a press while a Join of the list waits: the list shows it again (with its Cancel), and the toast says why nothing else starts
             openList();
@@ -463,25 +498,23 @@
 
         // ---- the list's popover ----
         var pop = el('section', 'gpop'), popHead = el('div', 'gphead'), popTitle = el('h2', 'gptitle', TEXT.title), popCount = el('span', 'gpcount'), popNote = el('p', 'gpnote');
-        var popBody = el('div', 'gpbody'), popList = el('ul', 'glist'), popLoad = el('p', 'gemline', TEXT.loading), popEmpty = el('div', 'gempty'), popOff = el('div', 'goff'), popLegend = el('p', 'glegend');
+        var popBody = el('div', 'gpbody'), popList = el('ul', 'glist'), popLoad = el('p', 'gemline', TEXT.loading), popOff = el('div', 'goff'), popLegend = el('p', 'glegend');
         var liveBox = el('div', 'glivebox'), liveHead = el('h3', 'gsub', TEXT.inProgress), liveList = el('ul', 'glist glivelist');
         var popJoin = el('div', 'gjoining'), popJoinText = el('span'), popJoinStop = button('sm', TEXT.cancel, guard(function () { cancelJoin(); }));
         var codeBox = el('div', 'gcode'), codeLink = el('button', 'gcodelink', TEXT.haveCode), codeClose = button('sm gcx', '\u00d7'), codeOpen = false, codeRow = el('div', 'joinbox'), codeInput = el('input'), codeGo = button('sm gcgo', TEXT.join), codeHint = el('p', 'hint');
         pop.hidden = !docked; pop.setAttribute('role', docked ? 'region' : 'dialog'); pop.setAttribute('aria-label', TEXT.title); popNote.setAttribute('role', 'status'); codeHint.setAttribute('role', 'status'); popNote.hidden = true;
         popHead.appendChild(popTitle); popHead.appendChild(popCount); popHead.appendChild(codeLink);
+        var liveNote = el('span', 'gnote', TEXT.scoresLive);
+        liveNote.hidden = true; liveHead.appendChild(liveNote);
         liveBox.hidden = true; liveBox.appendChild(liveHead); liveBox.appendChild(liveList);
         popJoin.hidden = true; popJoin.setAttribute('role', 'status'); popJoin.appendChild(popJoinText); popJoin.appendChild(popJoinStop);
-        popEmpty.appendChild(el('span', 'ant ant-green')); popEmpty.firstChild.setAttribute('aria-hidden', 'true');
-        var popEmptyTitle = el('p', 'gemtitle', TEXT.emptyTitle);
-        popEmpty.appendChild(popEmptyTitle); popEmpty.appendChild(el('p', 'gemline', TEXT.emptyLine));
-        popEmpty.appendChild(button('gemhost', TEXT.hostTitle, guard(function () { quickHost(); })));       // (Host a game: the same as Quick host in the bar)
         popOff.appendChild(el('p', 'gemtitle', TEXT.off)); popOff.appendChild(el('p', 'gemline', TEXT.offHint));
         [['player', TEXT.legendPlayer], ['bot', TEXT.legendBot], ['open', TEXT.legendOpen]].forEach(function (k) { var s = el('span', 'gleg'); s.appendChild(el('i', 'gdot ' + k[0])); s.appendChild(doc.createTextNode(k[1])); popLegend.appendChild(s); });
         codeInput.type = 'text'; codeInput.setAttribute('placeholder', TEXT.codePlaceholder); codeInput.setAttribute('aria-label', TEXT.code); codeInput.setAttribute('autocomplete', 'off'); codeInput.setAttribute('autocapitalize', 'off');
         codeInput.setAttribute('spellcheck', 'false'); codeInput.setAttribute('aria-describedby', 'gc-hint'); codeHint.id = 'gc-hint';
         codeRow.appendChild(codeInput); codeRow.appendChild(codeGo); codeRow.appendChild(codeClose); codeBox.appendChild(codeRow); codeBox.appendChild(codeHint);
         codeLink.type = 'button'; codeBox.id = 'gc-box'; codeBox.hidden = true; codeLink.setAttribute('aria-expanded', 'false'); codeLink.setAttribute('aria-controls', 'gc-box'); codeClose.setAttribute('aria-label', TEXT.closeCode);
-        [popEmpty, popList, popLoad, popOff, liveBox].forEach(function (n) { popBody.appendChild(n); });
+        [popList, popLoad, popOff, liveBox].forEach(function (n) { popBody.appendChild(n); });
         [popHead, codeBox, popJoin, popNote, popBody, popLegend].forEach(function (n) { pop.appendChild(n); });
         if (docked) pop.className += ' gdock';
         (env.dock || host).appendChild(pop);
@@ -594,24 +627,87 @@
             go.setAttribute('href', '/play?live=' + encodeURIComponent(e.id)); go.setAttribute('data-live', e.id); go.addEventListener('click', function () { markWatch(go, e.id); }); markWatch(go, e.id);
             go.setAttribute('aria-label', 'Watch the ' + kind + ' on ' + e.mapName + ', ' + names + ', ' + lengthWords(e));
             li.appendChild(go);
-            liveLens.push({ id: e.id, node: len, link: go, names: names, map: e.mapName, kind: kind });
+            var score = scoreNode(e, li);
+            li.appendChild(score.box);
+            liveLens.push({ id: e.id, node: len, link: go, names: names, map: e.mapName, kind: kind, score: score });
             return li;
+        }
+        // The score block of a match's card: a strip (a square of each side's color and its number, the leader's number in gold, one thin bar split by the shares; the column's word under it) that is one button, and the scoreboard that it opens (a line for each side:
+        // its square(s), name(s), a bar against the best side, and the number; the leader is marked by a triangle too). The card starts with the strip; the visitor's choice stays while the match is listed, and is kept nowhere else. paintScore writes the numbers in place.
+        function scoreNode(e, li) {
+            var box = el('div', 'gscore'), sum = el('button', 'gsum'), nums = el('span', 'gnums'), foot = el('span', 'gfoot'), label = el('span', 'glabel'), share = el('span', 'gshare'), head = el('span', 'ghead'), headWho = el('span'), headLabel = el('span'), chev = el('i', 'gchev'), board = el('div', 'gboard');
+            var s = { box: box, sum: sum, nums: nums, share: share, label: label, headWho: headWho, headLabel: headLabel, board: board, li: li, id: e.id, sig: null, words: '' };
+            board.id = 'gboard-' + e.id; sum.setAttribute('aria-controls', board.id);       // (the match's id is letters, digits, _ and -: a good id)
+            sum.type = 'button'; sum.setAttribute('data-score', e.id); chev.setAttribute('aria-hidden', 'true'); foot.setAttribute('aria-hidden', 'true'); nums.setAttribute('aria-hidden', 'true'); head.setAttribute('aria-hidden', 'true');
+            foot.appendChild(label); foot.appendChild(share); head.appendChild(headWho); head.appendChild(headLabel);
+            sum.appendChild(nums); sum.appendChild(foot); sum.appendChild(head); sum.appendChild(chev);
+            box.appendChild(sum); box.appendChild(board);
+            sum.addEventListener('click', guard(function () { if (opened[e.id] === true) delete opened[e.id]; else opened[e.id] = true; openScore(s); }));
+            s.words = TEXT.noScore; openScore(s);
+            return s;
+        }
+        function openScore(s) {                            // the card shows the strip or the scoreboard, as the visitor chose (the same press opens and closes it)
+            var on = opened[s.id] === true;
+            s.li.classList.toggle('gopen', on);
+            s.sum.setAttribute('aria-expanded', on ? 'true' : 'false');
+            s.sum.setAttribute('aria-label', s.words + '. ' + (on ? TEXT.hideBoard : TEXT.showBoard));       // (the name says what a press does now)
+            s.board.hidden = !on;
+        }
+        function seatClass(w) { return w.seat < 0 ? 'n' : String(w.seat); }                  // (the color of a seat; a color that the door does not know is the neutral one)
+        function sideColors(x) { return 'c' + seatClass(x.who[0]) + (x.who.length > 1 ? ' two d' + seatClass(x.who[1]) : ''); }        // (a team's bar is its two colors)
+        function sideNames(x) { return x.who.map(function (w) { return plainName(w.name) + (BOT_NAME.test(w.name) ? TEXT.bot : ''); }).join(' + '); }
+        function squareOf(w) { var q = el('i', 'gsq'); q.className += ' c' + seatClass(w) + (BOT_NAME.test(w.name) ? ' bot' : ''); return q; }                 // (a computer player is a ring, as its dot is)
+        function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+        function numberText(x) { return x.n === null ? '\u2013' : groupDigits(x.n); }
+        function scoreWords(e, b) {                        // what a screen reader hears for the strip: the numbers by name (the squares and bars are pictures)
+            var words = 'Scores of the ' + (e.mode187 ? TEXT.mode187 + ' ' : '') + 'match on ' + e.mapName + ': ';
+            return words + (b.scored ? b.sides.map(function (x) { return sideNames(x) + ' ' + (x.n === null ? 'left' : groupDigits(x.n)) + (x.lead ? TEXT.leading : ''); }).join(', ') : TEXT.noScore);
+        }
+        function paintScore(e, l) {                        // the numbers, in place: made again only when a number, a side or the leader changed (the button, and its focus, stay)
+            var s = l.score, b = boardOf(e), sum = 0, sig;
+            s.box.hidden = !(b.scored || e.starting);          // (a server that says no scores for a match that has run: the card is what it was)
+            if (s.box.hidden) return;
+            sig = JSON.stringify([b.label, b.scored, b.team, b.sides.map(function (x) { return [x.who.map(function (w) { return [w.seat, w.name]; }), x.n, x.lead]; })]);
+            if (sig === s.sig) return;
+            s.sig = sig;
+            clear(s.nums); clear(s.share); clear(s.board);
+            s.label.textContent = b.label; s.headWho.textContent = b.team ? TEXT.team : TEXT.player; s.headLabel.textContent = b.label;
+            s.words = scoreWords(e, b); openScore(s);
+            b.sides.forEach(function (x) { sum += x.n || 0; });
+            if (!b.scored) s.nums.appendChild(el('span', 'gwait', TEXT.noScore));
+            b.sides.forEach(function (x, k) {
+                var pair = el('span', x.n === null ? 'gpair gout' : 'gpair'), row = el('span', x.lead ? 'gside glead' : 'gside'), who = el('span', 'gpl'), bar = el('span', 'gtrack'), num = el('span', x.lead ? 'gn glead' : 'gn', b.scored ? numberText(x) : '\u2013'), seg;
+                x.who.forEach(function (w) { pair.appendChild(squareOf(w)); who.appendChild(squareOf(w)); });
+                who.appendChild(el('b', '', sideNames(x)));
+                if (b.scored) {
+                    if (k && b.sides.length === 2 && x.who.length > 1) s.nums.appendChild(el('span', 'gvs', 'vs'));
+                    pair.appendChild(el('span', x.lead ? 'gn glead' : 'gn', numberText(x)));
+                    s.nums.appendChild(pair);
+                    if (x.n !== null) {
+                        seg = el('i', sideColors(x)); seg.style.flex = (sum ? Math.max(x.n, sum * 0.02) : 1) + ' 0 0'; s.share.appendChild(seg);          // (the share of the whole: a side with a small number still shows)
+                        if (x.n > 0) { seg = el('i', sideColors(x)); seg.style.width = Math.round(100 * x.n / b.top) + '%'; bar.appendChild(seg); }       // (the scoreboard's bar: against the best side)
+                    }
+                }
+                if (x.lead) num.appendChild(el('span', 'sr', TEXT.leading));
+                row.appendChild(who); row.appendChild(bar); row.appendChild(num); s.board.appendChild(row);
+            });
         }
         function liveShown() { return liveLoaded && !liveOff && loaded; }          // (the section stands only with an answer of /live that was good and the list's own first look done)
         function paintLive() {
-            var on = liveShown(), active = doc.activeElement, focusId = active && active.getAttribute ? active.getAttribute('data-live') : null;
+            var on = liveShown(), active = doc.activeElement, focusAttr = active && active.getAttribute ? (active.getAttribute('data-live') ? 'data-live' : active.getAttribute('data-score') ? 'data-score' : '') : '', focusId = focusAttr ? active.getAttribute(focusAttr) : null;
             liveBox.hidden = !on || !live.length;                             // (no match running: no box at all, so an empty list does not grow the panel)
+            liveNote.hidden = !live.some(function (e) { return !!e.scores; });          // ("scores are live" only when the door gives scores)
             if (!on) { liveSig = null; liveLens = []; while (liveList.firstChild) liveList.removeChild(liveList.firstChild); return; }          // (nothing of a match stays in the page while the section is away)
             var sig = JSON.stringify(live.map(function (e) { return [e.id, e.map, e.who, e.mode187]; }));
             if (sig !== liveSig) {                                              // (made again only when a match, its map or its players came or went: a focus stays, and the clocks tick in place)
                 liveSig = sig; liveLens = [];
                 while (liveList.firstChild) liveList.removeChild(liveList.firstChild);
                 live.forEach(function (e) { liveList.appendChild(liveNode(e)); });
-                if (focusId) { var again = liveList.querySelector('[data-live="' + focusId + '"]'); if (again && again.focus) again.focus(); }
+                if (focusId) { var again = liveList.querySelector('[' + focusAttr + '="' + focusId + '"]'); if (again && again.focus) again.focus(); }
             }
             live.forEach(function (e, i) {
                 var l = liveLens[i];
-                if (l) { l.node.textContent = lengthWords(e); l.link.setAttribute('aria-label', 'Watch the ' + l.kind + ' on ' + l.map + ', ' + l.names + ', ' + lengthWords(e)); }
+                if (l) { l.node.textContent = lengthWords(e); l.link.setAttribute('aria-label', 'Watch the ' + l.kind + ' on ' + l.map + ', ' + l.names + ', ' + lengthWords(e)); paintScore(e, l); }
             });
         }
         function countLine(n, p) {                         // the list's head: "3 open, 3 invite only, 2 in progress" (a part only when there is one: "none open, 2 invite only"), else "3 waiting - updates live"
@@ -628,20 +724,50 @@
             popCount.textContent = countLine(shown.length, locks.length);
             paintLive();
             paintPill();
-            popLoad.hidden = loaded; popOff.hidden = !(loaded && off); popEmpty.hidden = !(loaded && !off && !shown.length && (locks.length || !(liveShown() && live.length)));
-            popEmpty.className = locks.length ? 'gempty gslim' : 'gempty'; popEmptyTitle.textContent = locks.length ? TEXT.noneJoin : TEXT.emptyTitle;         // (private rooms but none to join: the card becomes a slim strip above the locked cards)
-            popList.hidden = !(loaded && !off && (shown.length || locks.length)); popLegend.hidden = popList.hidden;
+            popLoad.hidden = loaded; popOff.hidden = !(loaded && off);
+            popList.hidden = !(loaded && !off); popLegend.hidden = popList.hidden;          // (a list that is on always has cards: the empty ones fill what the rooms leave)
             popNote.hidden = !popNote.textContent;
-            var sig = JSON.stringify(shown.map(function (r) { return [r.code, r.host, r.map, r.people, r.bots, r.free, r.size, r.fog]; }).concat(lead, locks.map(function (l) { return [l.row.host, l.row.map, l.row.mode187, l.row.people, l.row.bots, l.row.free, l.row.size, l.yours, l.row.fog]; })));       // (the rows are made again only when what they show changed: a press that straddles a repaint is not lost, and a focus stays)
+            var slots = loaded && !off ? slotCount(shown.length) : 0, focusSlot = active && active.getAttribute ? active.getAttribute('data-slot') : null;
+            var sig = JSON.stringify(shown.map(function (r) { return [r.code, r.host, r.map, r.people, r.bots, r.free, r.size, r.fog]; }).concat(lead, locks.map(function (l) { return [l.row.host, l.row.map, l.row.mode187, l.row.people, l.row.bots, l.row.free, l.row.size, l.yours, l.row.fog]; }), slots));       // (the rows are made again only when what they show changed: a press that straddles a repaint is not lost, and a focus stays)
             if (sig === paintedSig) return;
             paintedSig = sig;
             while (popList.firstChild) popList.removeChild(popList.firstChild);
             joinButtons = [];
             shown.forEach(function (r, n) { popList.appendChild(rowNode(r, true, n === lead && shown.length - lead > 1, n < lead)); });
+            for (var k = 0; k < slots; k++) popList.appendChild(slotNode(k));          // (after the rooms and before the locked cards, which take no place)
             locks.slice(0, LOCKED_SHOWN).forEach(function (l) { popList.appendChild(rowNode(l.row, true, false, false, l.yours ? 'yours' : 'private')); });
             if (locks.length > LOCKED_SHOWN) { var more = locks.length - LOCKED_SHOWN; popList.appendChild(el('li', 'gmore', 'and ' + (locks.length >= ROWS_MAX ? (ROWS_MAX - LOCKED_SHOWN) + '+' : more) + ' more invite-only room' + (more === 1 ? '' : 's'))); }
             busy(joining, popJoinText.textContent);
             if (focusCode) { var again = popList.querySelector('[data-code="' + focusCode + '"]'); if (again && again.focus) again.focus(); }
+            if (focusSlot !== null) { var slot = popList.querySelector('[data-slot="' + focusSlot + '"]'); if (slot && slot.focus) slot.focus(); }
+        }
+        // ---- the empty cards ("lobby slots"): they fill what the open rooms leave of the first rows of the grid ----
+        function hasLive() { return liveShown() && live.length > 0; }
+        function columns() {                               // the cards in a row of the list as it is drawn (the grid's own tracks); with no layout to ask (the list is covered, or has none), the window's width says it as the style does
+            var n = 0, tracks;
+            if (!docked) return 1;
+            try {
+                if (drawn() && popList.getClientRects && popList.getClientRects().length && win.getComputedStyle) {
+                    tracks = win.getComputedStyle(popList).gridTemplateColumns || '';
+                    n = tracks === 'none' ? 0 : tracks.split(/\s+/).filter(Boolean).length;
+                }
+            } catch (e) { n = 0; }
+            if (n > 0 && n <= 40) return n;
+            return columnsFor(win.innerWidth || 0, win.innerHeight || 0);
+        }
+        function slotCount(taken) {                        // two rows of the grid (3 cards on a phone), one row while matches are in progress (2 on a phone); the rooms take the first places, and what is left is empty cards
+            var cols = lastCols = columns(), places = cols === 1 ? (hasLive() ? SLOT_PHONE_LIVE : SLOT_PHONE) : cols * (hasLive() ? SLOT_ROWS_LIVE : SLOT_ROWS);
+            return Math.max(0, places - taken);
+        }
+        function slotNode(n) {                             // a dashed card with a plus: no name and no count, nobody waits; its button is Quick host (the question first: Public or Invite only)
+            var li = el('li', 'gitem gslot'), text = el('span', 'gtxt'), top = el('span', 'gtop'), line = el('span', 'gline'), dots = el('span', 'gdots'), pic = el('span', 'gmap'), b = button('gjoin', TEXT.slotHost, null), i;
+            pic.setAttribute('aria-hidden', 'true'); dots.setAttribute('aria-hidden', 'true');
+            for (i = 0; i < 4; i++) { var d = el('i', 'gdot open'); d.className += ' c' + i; dots.appendChild(d); }
+            top.appendChild(el('span', 'gname', TEXT.slotName)); line.appendChild(dots); line.appendChild(el('span', 'gsay', TEXT.slotSay));
+            text.appendChild(top); text.appendChild(line); li.appendChild(pic); li.appendChild(text); li.appendChild(b);
+            b.setAttribute('aria-label', TEXT.slotAria); b.setAttribute('data-slot', String(n));
+            b.addEventListener('click', guard(function () { hostFrom = b; try { quickHost(); } finally { hostFrom = null; } }));
+            return li;
         }
         function place() {                                 // under the bar, at the Games button (a phone: the whole width); no taller than what is left of the window
             if (docked) return;
@@ -658,7 +784,7 @@
             place(); paintList(); poll(); pollLive();
             focusList();
         }
-        function focusList() { var first = popList.querySelector('button') || popEmpty.querySelector('button') || codeLink; if (first && first.focus) first.focus(); }
+        function focusList() { var first = popList.querySelector('button') || codeLink; if (first && first.focus) first.focus(); }
         function closeList(back) {
             if (!isOpen || docked) return;
             isOpen = false; pop.hidden = true;
@@ -908,6 +1034,9 @@
             lastLive = now();                              // (the wait before the next look is counted from the end of this one: while one is out, only liveBusy holds the next back)
             liveLoaded = true;
             if (list === null) { liveOff = true; liveFails++; live = []; } else { liveOff = false; liveFails = 0; live = list; }
+            var keep = Object.create(null);                // (a scoreboard that was opened is remembered only for a match that is still listed)
+            live.forEach(function (e) { if (opened[e.id] === true) keep[e.id] = true; });
+            opened = keep;
             if (isOpen) paintList();
             scheduleLive();
         }
@@ -938,6 +1067,10 @@
             poll(); schedule(); armRefresh(); pollLive();
         }));
         win.addEventListener('resize', guard(function () { if (isOpen) place(); placeToast(); }));
+        var repaint = guard(function () { if (isOpen) paintList(); });
+        win.addEventListener('resize', repaint);          // (the list is painted again: its rows of cards may hold more or fewer, and the empty cards fill what is left)
+        var gridWatch = win.ResizeObserver ? new win.ResizeObserver(guard(function () { if (isOpen && lastCols && columns() !== lastCols) paintList(); })) : null;          // (the grid took more or fewer columns without the window changing, for example when the players' column came in: the empty cards are counted again)
+        if (gridWatch) gridWatch.observe(popList);
         var toastWatch = win.MutationObserver ? new win.MutationObserver(guard(function () { if (!toast.hidden) placeToast(); pollLive(); })) : null, lastFocus = null;
         if (toastWatch) toastWatch.observe(doc.body, { attributes: true, subtree: true, attributeFilter: ['data-tab', 'data-open', 'data-screen', 'hidden'] });       // (the list is drawn or covered again: the looks at /live follow; a phone's view, the chat's fold or one of the page's strips changes: the toast is placed again)
         doc.addEventListener('focusin', guard(function (e) { if (e && e.target && !toast.contains(e.target)) lastFocus = e.target; }));       // (where the focus was before it went to the toast)
@@ -951,6 +1084,8 @@
         function opening() {                               // START reached the page: nothing here takes a press or a timer or looks at the list any more
             gone = true; closeAll(); clearNotice();
             if (toastWatch) toastWatch.disconnect();
+            if (gridWatch) gridWatch.disconnect();
+            win.removeEventListener('resize', repaint);
             [pollTimer, refreshTimer, pendingTimer, lockTimer, floorTimer, cancelTimer, liveTimer].forEach(function (t) { if (t !== null) cancel(t); });
             pollTimer = refreshTimer = pendingTimer = lockTimer = floorTimer = cancelTimer = liveTimer = null; liveRound++;
         }
@@ -965,9 +1100,9 @@
         pollLive();
         return {
             sync: guard(sync), shown: guard(shown), leaving: leaving, joinInvite: guard(joinInvite), said: guard(function (words) { notice('left', words, '', []); }), told: guard(function (kind, text, tone, actions) { notice(kind, text, tone, actions || []); return true; }), opening: opening, stalled: stalled, inert: inert, poll: poll,
-            state: function () { return { rows: rows, loaded: loaded, off: off, failures: failures, open: isOpen, pending: !!pending, joining: joining, notice: noticeKind, live: live, liveOff: liveOff, liveLoaded: liveLoaded, showLive: showLive }; }
+            state: function () { return { rows: rows, loaded: loaded, off: off, failures: failures, open: isOpen, pending: !!pending, joining: joining, notice: noticeKind, live: live, liveOff: liveOff, liveLoaded: liveLoaded }; }
         };
     }
 
-    return { TEXT: TEXT, rowOf: rowOf, parseList: parseList, lockedOf: lockedOf, parseLocked: parseLocked, liveOf: liveOf, parseLive: parseLive, liveDelay: liveDelay, clockText: clockText, LIVE_EVERY: LIVE_EVERY, LIVE_SOON: LIVE_SOON, delayOf: delayOf, countText: countText, bestOrder: bestOrder, seatsOf: seatsOf, mount: mount, EVERY_CLOSED: EVERY_CLOSED, EVERY_OPEN: EVERY_OPEN, REFRESH_MS: REFRESH_MS, ROWS_MAX: ROWS_MAX };
+    return { TEXT: TEXT, rowOf: rowOf, parseList: parseList, lockedOf: lockedOf, parseLocked: parseLocked, liveOf: liveOf, parseLive: parseLive, columnsFor: columnsFor, liveDelay: liveDelay, clockText: clockText, groupDigits: groupDigits, plainName: plainName, boardOf: boardOf, LIVE_EVERY: LIVE_EVERY, LIVE_SOON: LIVE_SOON, delayOf: delayOf, countText: countText, bestOrder: bestOrder, seatsOf: seatsOf, mount: mount, EVERY_CLOSED: EVERY_CLOSED, EVERY_OPEN: EVERY_OPEN, REFRESH_MS: REFRESH_MS, ROWS_MAX: ROWS_MAX };
 });
