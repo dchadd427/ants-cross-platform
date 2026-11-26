@@ -1,5 +1,5 @@
 // Tests of the numbers of the results screen besides the original's four (match_report.hpp, live_match_stats.hpp, docs/REPLAYS.md "The match pages"):
-//   MR1  the honors and the Play of the game, on made-up counts of the stats pass (the MVP rule, First blood, Top Thief, Last stand, the play's window, its credit, its floor and its ties)
+//   MR1  the honors and the Play of the game, on made-up counts of the stats pass (the MVP rule, First blood, Top Thief, Last stand; the play: its points, its bonuses, its moment and its ties)
 //   MR2  the live pass against the recording's pass: a match that is counted while it is played says what the replay of its own recording says, field by field (four computer players on three maps, a game on one machine,
 //        a match of the network, a catch-up through the lock-step runner in slices of every size, the lists of bombs and fires on a world made by hand)
 //   MR3  a tick or a turn that the pass did not see, a match that was not played from its first turn: the report is not ok; and counting changes nothing (the state hash, the file, the engine's queues of cues)
@@ -82,8 +82,8 @@ namespace {
 constexpr size_t kSeats = MatchReport::kSeats;
 using Action = MatchStats::Action;
 constexpr size_t kDeath = static_cast<size_t>(Action::Death);
-constexpr size_t kBomb = static_cast<size_t>(Action::Bomb);
 constexpr size_t kTheft = static_cast<size_t>(Action::Theft);
+constexpr size_t kBombAction = static_cast<size_t>(Action::Bomb);
 constexpr size_t kFire = static_cast<size_t>(Action::Fire);
 constexpr size_t kHit = static_cast<size_t>(Action::Hit);
 constexpr uint8_t kNone = MatchStats::kNoKiller;
@@ -136,6 +136,21 @@ MatchStats::Kill kill_of(uint32_t turn, uint8_t killer, uint8_t victim, int32_t 
     k.tile_x = x;
     k.tile_y = y;
     k.drowned = drowned;
+    k.mates_near = 1;                                                              // (an ant of the victim's seat was left near it: not the last of a group, unless a test says so)
+    return k;
+}
+// A kill with `mates` ants of the victim's own seat left within 4 tiles of it (0: it was the last of its group)
+MatchStats::Kill kill_with(uint32_t turn, uint8_t killer, uint8_t victim, int32_t x, int32_t y, uint8_t mates) {
+    MatchStats::Kill k = kill_of(turn, killer, victim, x, y);
+    k.mates_near = mates;
+    return k;
+}
+// The kill of a Thief (the type 3): it was raiding the hill of seat `raid_on` (kNone: none) and carried loot or not
+MatchStats::Kill thief_kill(uint32_t turn, uint8_t killer, uint8_t victim, int32_t x, int32_t y, uint8_t raid_on, bool loot) {
+    MatchStats::Kill k = kill_of(turn, killer, victim, x, y);
+    k.victim_type = 3;
+    k.raid_on = raid_on;
+    k.carried_loot = loot;
     return k;
 }
 
@@ -156,7 +171,7 @@ void count_in_bucket(MatchStats& st, size_t kind, uint32_t turn, uint32_t n = 1)
     if (series.size() <= bucket) series.resize(bucket + 1);
     series[bucket] += n;
 }
-// The way the pass adds an event: to its list and to the count of the bucket of its turn (a death 14 of the activity, a bomb 10, a theft 6, a fire 5, a hit 2)
+// The way the pass adds an event: to its list and to the count of the bucket of its turn
 void add_kill(MatchStats& st, const MatchStats::Kill& k) {
     st.kills.push_back(k);
     count_in_bucket(st, kDeath, k.turn);
@@ -165,30 +180,6 @@ void add_raid(MatchStats& st, const MatchStats::Raid& r) {
     st.raids.push_back(r);
     count_in_bucket(st, kTheft, r.turn);
 }
-void add_bomb(MatchStats& st, uint32_t turn, uint8_t owner, int32_t x, int32_t y) {
-    st.bomb_events.push_back(MatchStats::BombOff{turn, owner, x, y});
-    ++st.bombs_off[owner];
-    count_in_bucket(st, kBomb, turn);
-}
-void add_fire(MatchStats& st, uint32_t turn, uint8_t seat, int32_t x, int32_t y, bool has_tile = true) {
-    MatchStats::FireLit f;
-    f.turn = turn;
-    f.seat = seat;
-    f.has_tile = has_tile;
-    f.tile_x = x;
-    f.tile_y = y;
-    st.fire_events.push_back(f);
-    ++st.fires_lit[seat];
-    count_in_bucket(st, kFire, turn);
-}
-// `n` hits in the bucket, credited to `seat` (kNone: to nobody)
-void add_hits(MatchStats& st, size_t bucket, uint8_t seat, uint32_t n) {
-    count_in_bucket(st, kHit, static_cast<uint32_t>(bucket) * MatchStats::kSampleTurns, n);
-    if (seat >= kSeats) return;
-    if (st.hit_credit.size() <= bucket) st.hit_credit.resize(bucket + 1);
-    st.hit_credit[bucket][seat] += n;
-}
-
 MatchReport report_of(const MatchStats& st, const sim::MatchResult& result, sim::GameMode mode = sim::GameMode::HighestScore, uint8_t local = 0) {
     return make_match_report(st, result, mode, local);
 }
@@ -211,7 +202,10 @@ std::string differs(const MatchStats& a, const MatchStats& b) {
     if (a.kills.size() != b.kills.size()) return "kills (how many)";
     for (size_t i = 0; i < a.kills.size(); ++i) {
         const MatchStats::Kill &x = a.kills[i], &y = b.kills[i];
-        if (x.turn != y.turn || x.killer != y.killer || x.victim != y.victim || x.victim_type != y.victim_type || x.drowned != y.drowned || x.tile_x != y.tile_x || x.tile_y != y.tile_y) return "kills";
+        if (x.turn != y.turn || x.killer != y.killer || x.victim != y.victim || x.victim_type != y.victim_type || x.drowned != y.drowned || x.tile_x != y.tile_x || x.tile_y != y.tile_y || x.raid_on != y.raid_on ||
+            x.carried_loot != y.carried_loot || x.mates_near != y.mates_near) {
+            return "kills";
+        }
     }
     if (a.raids.size() != b.raids.size()) return "raids (how many)";
     for (size_t i = 0; i < a.raids.size(); ++i) {
@@ -235,18 +229,8 @@ std::string differs(const MatchStats& a, const MatchStats& b) {
     SAME(loot_home);
     SAME(bombs_planted);
     SAME(fires_lit);
-    SAME(hit_credit);
-    SAME(events_ok);
-    if (a.bomb_events.size() != b.bomb_events.size()) return "bomb_events (how many)";
-    for (size_t i = 0; i < a.bomb_events.size(); ++i) {
-        const MatchStats::BombOff &x = a.bomb_events[i], &y = b.bomb_events[i];
-        if (x.turn != y.turn || x.owner != y.owner || x.tile_x != y.tile_x || x.tile_y != y.tile_y) return "bomb_events";
-    }
-    if (a.fire_events.size() != b.fire_events.size()) return "fire_events (how many)";
-    for (size_t i = 0; i < a.fire_events.size(); ++i) {
-        const MatchStats::FireLit &x = a.fire_events[i], &y = b.fire_events[i];
-        if (x.turn != y.turn || x.seat != y.seat || x.has_tile != y.has_tile || x.tile_x != y.tile_x || x.tile_y != y.tile_y) return "fire_events";
-    }
+    SAME(hill_x);
+    SAME(hill_y);
 #undef SAME
     return std::string();
 }
@@ -276,7 +260,10 @@ std::string differs(const MatchReport& a, const MatchReport& b) {
     if (!same_honor(a.top_thief, b.top_thief)) return "top_thief";
     if (!same_honor(a.last_stand, b.last_stand)) return "last_stand";
     const MatchReport::Play &x = a.play, &y = b.play;
-    if (x.present != y.present || x.seat != y.seat || x.kind != y.kind || x.count != y.count || x.turn != y.turn || x.tile_x != y.tile_x || x.tile_y != y.tile_y) return "play";
+    if (x.present != y.present || x.seat != y.seat || x.kills != y.kills || x.points != y.points || x.seconds != y.seconds || x.bonuses != y.bonuses || x.knocked_out != y.knocked_out || x.turn != y.turn || x.tile_x != y.tile_x ||
+        x.tile_y != y.tile_y) {
+        return "play";
+    }
     return std::string();
 }
 
@@ -416,19 +403,21 @@ Run through_runner(const Played& played, uint32_t catch_up_turns, uint32_t slice
 
 // What was in the matches that the tests play: some of everything, so that "equal" is not "equally empty"
 struct Content {
-    size_t kills{0}, raids{0}, bombs{0}, fires{0}, fires_with_tile{0}, hits{0}, credited_hits{0};
+    size_t kills{0}, raids{0}, bombs{0}, fires{0}, hits{0}, near_mates{0}, last_of_group{0};
     uint64_t damage{0}, food_trips{0};
 };
 Content content_of(const MatchStats& s) {
     Content c;
     c.kills = s.kills.size();
     c.raids = s.raids.size();
-    c.bombs = s.bomb_events.size();
-    c.fires = s.fire_events.size();
-    for (const MatchStats::FireLit& f : s.fire_events) c.fires_with_tile += f.has_tile ? 1u : 0u;
+    for (size_t seat = 0; seat < kSeats; ++seat) {
+        c.bombs += s.bombs_off[seat];
+        c.fires += s.fires_lit[seat];
+    }
     for (const uint32_t n : s.action[kHit]) c.hits += n;
-    for (const auto& bucket : s.hit_credit) {
-        for (const uint32_t n : bucket) c.credited_hits += n;
+    for (const MatchStats::Kill& k : s.kills) {
+        c.near_mates += k.mates_near > 0 ? 1u : 0u;
+        c.last_of_group += k.mates_near == 0 ? 1u : 0u;
     }
     for (size_t seat = 0; seat < kSeats; ++seat) {
         c.damage += s.damage_dealt[seat];
@@ -768,285 +757,248 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(r.top_thief.present && r.top_thief.seat == 1 && r.top_thief.value == 1 && r.loot_home[1] == -30);
     } TEST_END();
 
-    TEST_CASE("MR1.6 The Play of the game is the busiest 10 seconds (two neighboring buckets of 100 turns) of at least 28 of the activity curve's weights (death 14, bomb 10, theft 6, fire 5, hit 2); the earlier window wins a tie") {
-        // two deaths are 28: a play; one is not
-        MatchStats two = empty_stats();
-        add_kill(two, kill_of(330, 1, 0, 11, 12));
-        add_kill(two, kill_of(340, 1, 2, 13, 14));
-        MatchReport r = report_of(two, seat_wins(1));
-        ASSERT_TRUE(r.play.present && r.play.seat == 1 && r.play.kind == MatchReport::PlayKind::Fight && r.play.count == 2);
-        ASSERT_TRUE(r.play.turn == 330 && r.play.tile_x == 11 && r.play.tile_y == 12);   // (the middle of two kills is the first)
-        MatchStats one = empty_stats();
-        add_kill(one, kill_of(330, 1, 0));
-        ASSERT_FALSE(report_of(one, seat_wins(1)).play.present);
-        // the weights: a death, a bomb and a hit are 26; one more hit makes 28
-        MatchStats w = empty_stats();
-        add_kill(w, kill_of(1010, 0, 1, 20, 20));
-        add_bomb(w, 1020, 0, 40, 40);
-        add_hits(w, 10, 0, 1);
-        ASSERT_FALSE(report_of(w, seat_wins(0)).play.present);
-        add_hits(w, 10, 0, 1);
-        r = report_of(w, seat_wins(0));
-        ASSERT_TRUE(r.play.present && r.play.seat == 0);
-        // theft 6 and fire 5: three thefts and a fire are 23, a second fire makes 28
-        MatchStats tf = empty_stats();
-        add_raid(tf, raid_of(500, 2, 0, 20));
-        add_raid(tf, raid_of(510, 2, 1, 20));
-        add_raid(tf, raid_of(520, 2, 3, 20));
-        add_fire(tf, 530, 2, 8, 8);
-        ASSERT_FALSE(report_of(tf, seat_wins(2)).play.present);
-        add_fire(tf, 540, 2, 9, 9);
-        r = report_of(tf, seat_wins(2));
-        ASSERT_TRUE(r.play.present && r.play.seat == 2 && r.play.kind == MatchReport::PlayKind::Raid);
-        // every weight is exact: 27 is not a play, whichever kinds make it (a death, a theft, a fire and a hit; a bomb, a theft, a fire and three hits)
-        MatchStats a27 = empty_stats();
-        add_kill(a27, kill_of(610, 1, 0));
-        add_raid(a27, raid_of(620, 1, 2, 5));
-        add_fire(a27, 630, 1, 6, 6);
-        add_hits(a27, 6, 1, 1);
-        ASSERT_FALSE(report_of(a27, seat_wins(1)).play.present);
-        add_hits(a27, 6, 1, 1);                                                    // 29
-        ASSERT_TRUE(report_of(a27, seat_wins(1)).play.present);
-        MatchStats b27 = empty_stats();
-        add_bomb(b27, 710, 2, 7, 7);
-        add_raid(b27, raid_of(720, 2, 0, 5));
-        add_fire(b27, 730, 2, 6, 6);
-        add_hits(b27, 7, 2, 3);
-        ASSERT_FALSE(report_of(b27, seat_wins(2)).play.present);
-        add_hits(b27, 7, 2, 1);                                                    // 29
-        ASSERT_TRUE(report_of(b27, seat_wins(2)).play.present);
-        // the window is two neighbors: deaths in buckets 3 and 4 are one window, in 3 and 5 are not
-        MatchStats near = empty_stats();
-        add_kill(near, kill_of(350, 1, 0));
-        add_kill(near, kill_of(450, 1, 0));
-        ASSERT_TRUE(report_of(near, seat_wins(1)).play.present);
+    TEST_CASE("MR1.6 The Play of the game is a seat's best 10 seconds: 10 points for every kill of another seat's ant, a moment runs from one kill to the last that is less than 200 turns after it, and the card's facts (kills, seconds, the first kill's time and place) are read off its kills") {
+        MatchStats one = empty_stats();                                            // one kill is a play when it is all there is: there is no minimum
+        add_kill(one, kill_of(330, 1, 2, 11, 12));
+        MatchReport r = report_of(one, seat_wins(0));
+        ASSERT_TRUE(r.play.present && r.play.seat == 1 && r.play.kills == 1 && r.play.points == 10 && r.play.seconds == 0 && r.play.bonuses == 0);
+        ASSERT_TRUE(r.play.turn == 330 && r.play.tile_x == 11 && r.play.tile_y == 12 && r.play.watch_turn() == 230);       // (Watch opens 5 seconds before the first kill)
+        // a kill that is nobody's is none: a drowned ant, a death that no team did, an ant of a team's own
+        MatchStats nobody = empty_stats();
+        add_kill(nobody, kill_of(100, 1, 2, 10, 10, true));
+        add_kill(nobody, kill_of(110, kNone, 2));
+        add_kill(nobody, kill_of(120, 2, 2));
+        ASSERT_FALSE(report_of(nobody, seat_wins(0)).play.present);
+        add_kill(nobody, kill_of(500, 3, 0, 4, 5));
+        r = report_of(nobody, seat_wins(0));
+        ASSERT_TRUE(r.play.present && r.play.seat == 3 && r.play.kills == 1 && r.play.points == 10 && r.play.turn == 500);      // (a seat that did not win can have it: the play is about every seat)
+        // 10 seconds: a kill 199 turns after the first is in its moment, one 200 turns after is not (and is a moment of its own)
+        MatchStats edge = empty_stats();
+        add_kill(edge, kill_of(1000, 0, 1));
+        add_kill(edge, kill_of(1199, 0, 1));
+        r = report_of(edge, seat_wins(1));
+        ASSERT_TRUE(r.play.kills == 2 && r.play.points == 20 && r.play.turn == 1000 && r.play.seconds == 10);
         MatchStats apart = empty_stats();
-        add_kill(apart, kill_of(350, 1, 0));
-        add_kill(apart, kill_of(550, 1, 0));
-        ASSERT_FALSE(report_of(apart, seat_wins(1)).play.present);
-        // a match of one bucket has its window: the second half is empty
-        MatchStats tiny = empty_stats();
-        add_kill(tiny, kill_of(10, 1, 0));
-        add_kill(tiny, kill_of(20, 1, 0));
-        ASSERT_TRUE(report_of(tiny, seat_wins(1)).play.present);
-        // the earlier of two windows of the same weight: the windows of buckets 3-4 and 4-5 both hold 28, seats 0 and 1 share the first, seats 1 and 2 the second
+        add_kill(apart, kill_of(1000, 0, 1));
+        add_kill(apart, kill_of(1200, 0, 1));
+        r = report_of(apart, seat_wins(1));
+        ASSERT_TRUE(r.play.kills == 1 && r.play.points == 10 && r.play.turn == 1000 && r.play.seconds == 0);          // (two moments of 10 points: the earlier)
+        // the seconds from the first kill to the last, rounded up, at least 1 for two kills or more, 0 for one
+        const struct { uint32_t span, seconds; } spans[] = {{0, 1}, {1, 1}, {20, 1}, {21, 2}, {40, 2}, {41, 3}, {100, 5}, {179, 9}, {180, 9}, {181, 10}, {199, 10}};
+        for (const auto& s : spans) {
+            MatchStats st = empty_stats();
+            add_kill(st, kill_of(2000, 2, 0));
+            add_kill(st, kill_of(2000 + s.span, 2, 0));
+            ASSERT_EQ(report_of(st, seat_wins(0)).play.seconds, s.seconds);
+        }
+        // the seconds are those of the moment's own kills: a third kill that is out of it does not add to them
+        MatchStats three = empty_stats();
+        add_kill(three, kill_of(3000, 2, 0));
+        add_kill(three, kill_of(3030, 2, 0));
+        add_kill(three, kill_of(3400, 2, 0));
+        r = report_of(three, seat_wins(0));
+        ASSERT_TRUE(r.play.kills == 2 && r.play.seconds == 2 && r.play.turn == 3000);
+        // a moment is the best that a seat has, not the first: the moment begins at a kill, and the kills of other seats are none of it
+        MatchStats later = empty_stats();
+        add_kill(later, kill_of(100, 1, 0, 3, 3));
+        add_kill(later, kill_of(105, 0, 1));                                       // (another seat's kill in the same 10 seconds adds to nobody else)
+        add_kill(later, kill_of(1000, 1, 0, 7, 8));
+        add_kill(later, kill_of(1010, 1, 0));
+        add_kill(later, kill_of(1020, 1, 0));
+        r = report_of(later, seat_wins(0));
+        ASSERT_TRUE(r.play.seat == 1 && r.play.kills == 3 && r.play.points == 30 && r.play.turn == 1000 && r.play.tile_x == 7 && r.play.tile_y == 8 && r.play.seconds == 1);
+        MatchStats slide = empty_stats();                                          // 0, 150, 300 and 310: the moment that begins at 150 has three kills, the one that begins at 0 two
+        for (const uint32_t turn : {0u, 150u, 300u, 310u}) add_kill(slide, kill_of(turn, 3, 0));
+        r = report_of(slide, seat_wins(0));
+        ASSERT_TRUE(r.play.seat == 3 && r.play.kills == 3 && r.play.turn == 150 && r.play.seconds == 8);
+        // kills in turn order or not, and several in one turn: the moment is the same
+        MatchStats shuffled = empty_stats();
+        for (const uint32_t turn : {310u, 0u, 300u, 150u}) add_kill(shuffled, kill_of(turn, 3, 0));
+        r = report_of(shuffled, seat_wins(0));
+        ASSERT_TRUE(r.play.kills == 3 && r.play.turn == 150);
+    } TEST_END();
+
+    TEST_CASE("MR1.7 A kill that knocked a seat out is worth 20 more: the last ant that the seat lost before it was out of the match, when a seat killed it; a seat that came back from an egg was not out then, and a drowned last ant is nobody's") {
+        const auto play_of = [](const MatchStats& st) { return report_of(st, seat_wins(0)).play; };
+        MatchStats ko = empty_stats();
+        ko.out_turn = {-1, 500, -1, -1};
+        add_kill(ko, kill_of(300, 0, 1));                                          // (seat 1's first ant to go: 10 points, as any kill)
+        add_kill(ko, kill_of(500, 2, 1, 7, 8));                                    // (its last)
+        MatchReport::Play p = play_of(ko);
+        ASSERT_TRUE(p.present && p.seat == 2 && p.kills == 1 && p.points == 30 && p.bonuses == MatchReport::kKnockedOut && p.knocked_out == 1 && p.turn == 500);
+        ko.out_turn = {-1, 520, -1, -1};                                           // out a little later, when its last egg was gone: the last ant that it lost is still the one
+        p = play_of(ko);
+        ASSERT_TRUE(p.seat == 2 && p.points == 30 && p.bonuses == MatchReport::kKnockedOut);
+        ko.out_turn = {-1, -1, -1, -1};                                            // not out at the end: no knockout
+        p = play_of(ko);
+        ASSERT_TRUE(p.seat == 0 && p.points == 10 && p.bonuses == 0);              // (two kills of 10: the earlier)
+        MatchStats back = empty_stats();                                           // wiped out at 300, an egg gave it an ant, lost at 700 and out: only the last is the knockout
+        back.out_turn = {-1, 700, -1, -1};
+        add_kill(back, kill_of(300, 0, 1));
+        add_kill(back, kill_of(700, 3, 1));
+        p = play_of(back);
+        ASSERT_TRUE(p.seat == 3 && p.points == 30 && p.knocked_out == 1);
+        MatchStats same = empty_stats();                                           // the same seat made both kills, 400 turns apart: two moments, and the knockout's is the best
+        same.out_turn = {-1, 700, -1, -1};
+        add_kill(same, kill_of(300, 0, 1));
+        add_kill(same, kill_of(700, 0, 1));
+        p = play_of(same);
+        ASSERT_TRUE(p.seat == 0 && p.kills == 1 && p.points == 30 && p.turn == 700);
+        MatchStats drowned = empty_stats();                                        // the last ant fell in the water: nobody knocked the seat out
+        drowned.out_turn = {-1, 500, -1, -1};
+        add_kill(drowned, kill_of(300, 0, 1));
+        add_kill(drowned, kill_of(500, 2, 1, 10, 10, true));
+        p = play_of(drowned);
+        ASSERT_TRUE(p.seat == 0 && p.points == 10 && p.bonuses == 0);
+        MatchStats nobodys = empty_stats();                                        // ... or died of something that no team did
+        nobodys.out_turn = {-1, 500, -1, -1};
+        add_kill(nobodys, kill_of(300, 0, 1));
+        add_kill(nobodys, kill_of(500, kNone, 1));
+        p = play_of(nobodys);
+        ASSERT_TRUE(p.seat == 0 && p.points == 10 && p.bonuses == 0);
+        MatchStats two = empty_stats();                                            // two seats knocked out in one moment: 60 points, and the first is the one that the card names
+        two.out_turn = {-1, 100, 150, -1};
+        add_kill(two, kill_of(100, 0, 1));
+        add_kill(two, kill_of(150, 0, 2));
+        p = play_of(two);
+        ASSERT_TRUE(p.seat == 0 && p.kills == 2 && p.points == 60 && p.bonuses == MatchReport::kKnockedOut && p.knocked_out == 1);
+        MatchStats other = empty_stats();                                          // a seat that does not play has no knockout, whatever its turn says
+        other.roster = 0x07;
+        other.out_turn = {-1, -1, -1, 400};
+        add_kill(other, kill_of(400, 0, 3));
+        ASSERT_TRUE(play_of(other).points == 10);
+    } TEST_END();
+
+    TEST_CASE("MR1.8 A Thief that was raiding the killer's own hill and was killed within 4 tiles of its mound is 15 more (the hill is saved); a Thief that carried loot is 10 more, wherever it was killed") {
+        MatchStats base = empty_stats();
+        base.hill_x = {20, 40, -1, 5};                                             // the mounds: 20 to 23 across and down, 40 to 43, none, 5 to 8
+        base.hill_y = {20, 40, -1, 5};
+        const auto saved = [&](int32_t x, int32_t y, uint8_t raid_on, uint8_t killer) {
+            MatchStats st = base;
+            add_kill(st, thief_kill(100, killer, static_cast<uint8_t>(killer == 2 ? 3 : 2), x, y, raid_on, false));
+            return report_of(st, seat_wins(0)).play;
+        };
+        MatchReport::Play p = saved(21, 21, 0, 0);                                 // on the mound
+        ASSERT_TRUE(p.present && p.points == 25 && p.bonuses == MatchReport::kSavedHill && p.kills == 1);
+        // 4 tiles away is near, 5 is not: on each side, and across a corner (the larger of the two differences)
+        const int32_t inside[][2] = {{27, 20}, {27, 23}, {16, 21}, {20, 27}, {21, 16}, {27, 27}, {16, 16}, {27, 16}, {16, 27}};
+        const int32_t outside[][2] = {{28, 20}, {15, 21}, {20, 28}, {21, 15}, {28, 28}, {15, 15}, {28, 15}, {15, 28}};
+        for (const auto& t : inside) ASSERT_TRUE(saved(t[0], t[1], 0, 0).points == 25);
+        for (const auto& t : outside) ASSERT_TRUE(saved(t[0], t[1], 0, 0).points == 10);
+        ASSERT_TRUE(saved(21, 21, 1, 0).points == 10);                             // raiding another seat's hill: nothing to save
+        ASSERT_TRUE(saved(21, 21, kNone, 0).points == 10);                         // not raiding
+        ASSERT_TRUE(saved(41, 41, 0, 1).points == 10);                             // killed by another seat, near that seat's own hill: it was raiding seat 0's
+        ASSERT_TRUE(saved(41, 41, 1, 1).points == 25);                             // ... and the hill that it was raiding is the killer's own
+        ASSERT_TRUE(saved(1, 1, 2, 2).points == 10);                               // a seat with no hill saves none
+        ASSERT_TRUE(saved(7, 7, 3, 3).points == 25 && saved(7, 7, 3, 3).seat == 3);
+        // loot: a Thief that carried it, wherever it was and whatever it was raiding
+        MatchStats loot = empty_stats();
+        add_kill(loot, thief_kill(100, 1, 0, 3, 3, kNone, true));
+        p = report_of(loot, seat_wins(0)).play;
+        ASSERT_TRUE(p.present && p.seat == 1 && p.points == 20 && p.bonuses == MatchReport::kStoppedLoot);
+        MatchStats empty_handed = empty_stats();
+        add_kill(empty_handed, thief_kill(100, 1, 0, 3, 3, kNone, false));
+        ASSERT_TRUE(report_of(empty_handed, seat_wins(0)).play.points == 10);
+        // every one of them on one kill: the last ant of seat 2, a Thief that raided the killer's hill, and had loot: 10 + 20 + 15 + 10
+        MatchStats all = base;
+        all.out_turn = {-1, -1, 100, -1};
+        add_kill(all, thief_kill(100, 0, 2, 22, 22, 0, true));
+        p = report_of(all, seat_wins(0)).play;
+        ASSERT_TRUE(p.points == 55 && p.bonuses == (MatchReport::kKnockedOut | MatchReport::kSavedHill | MatchReport::kStoppedLoot) && p.knocked_out == 2);
+        // the bonuses are what a kill is worth, and they make the best moment: a knockout alone (30) beats two plain kills (20); a Thief with loot alone (20) ties them, and the earlier moment is the play
+        MatchStats beats = empty_stats();
+        beats.out_turn = {-1, -1, 5000, -1};
+        add_kill(beats, kill_of(100, 0, 1));
+        add_kill(beats, kill_of(120, 0, 1));
+        add_kill(beats, kill_of(5000, 3, 2));
+        p = report_of(beats, seat_wins(0)).play;
+        ASSERT_TRUE(p.seat == 3 && p.points == 30 && p.bonuses == MatchReport::kKnockedOut);
+        MatchStats tied = empty_stats();
+        add_kill(tied, kill_of(100, 0, 1));
+        add_kill(tied, kill_of(120, 0, 1));
+        add_kill(tied, thief_kill(50, 3, 2, 3, 3, kNone, true));
+        p = report_of(tied, seat_wins(0)).play;
+        ASSERT_TRUE(p.seat == 3 && p.points == 20 && p.turn == 50);
+    } TEST_END();
+
+    TEST_CASE("MR1.9 Wiping out a group is 15 more: the kill after which no ant of its victim's seat is left within 4 tiles of the victim, when 3 or more ants of that seat that the same seat killed in the moment, up to and with that kill, lay within 4 tiles of it; once for a place") {
+        const auto group = [](std::initializer_list<MatchStats::Kill> kills) {
+            MatchStats st = empty_stats();
+            for (const MatchStats::Kill& k : kills) add_kill(st, k);
+            return report_of(st, seat_wins(0)).play;
+        };
+        // three ants of seat 1 by seat 0 within 4 tiles of each other, the last leaving none of its group: 3 kills and the bonus
+        MatchReport::Play p = group({kill_with(100, 0, 1, 10, 10, 1), kill_with(110, 0, 1, 12, 11, 1), kill_with(120, 0, 1, 14, 10, 0)});
+        ASSERT_TRUE(p.present && p.kills == 3 && p.points == 45 && p.bonuses == MatchReport::kWipedGroup);
+        // ... but not when an ant of its seat is left near (the last has company): a fight that goes on is not a group wiped out
+        p = group({kill_with(100, 0, 1, 10, 10, 1), kill_with(110, 0, 1, 12, 11, 1), kill_with(120, 0, 1, 14, 10, 1)});
+        ASSERT_TRUE(p.points == 30 && p.bonuses == 0);
+        // the ants that count are those up to and with the kill: a kill that leaves none near is the wipe of the ants before it, not of those after
+        p = group({kill_with(100, 0, 1, 10, 10, 1), kill_with(110, 0, 1, 12, 11, 0), kill_with(120, 0, 1, 14, 10, 1)});
+        ASSERT_TRUE(p.points == 30 && p.bonuses == 0);
+        // two ants are not a group
+        p = group({kill_with(100, 0, 1, 10, 10, 1), kill_with(110, 0, 1, 12, 11, 0)});
+        ASSERT_TRUE(p.points == 20 && p.bonuses == 0);
+        // the ants of the group lie within 4 tiles of the last one: 4 is near, 5 is not
+        p = group({kill_with(100, 0, 1, 10, 10, 1), kill_with(110, 0, 1, 12, 10, 1), kill_with(120, 0, 1, 14, 14, 0)});
+        ASSERT_TRUE(p.points == 45);                                               // (both are within 4 of (14, 14)? (10, 10) is 4 away, (12, 10) is 4 away)
+        p = group({kill_with(100, 0, 1, 10, 10, 1), kill_with(110, 0, 1, 12, 10, 1), kill_with(120, 0, 1, 15, 14, 0)});
+        ASSERT_TRUE(p.points == 30 && p.bonuses == 0);                             // ((10, 10) is 5 from (15, 14))
+        // the ants are of one seat, and the same seat killed them
+        p = group({kill_with(100, 0, 1, 10, 10, 1), kill_with(110, 0, 1, 11, 10, 1), kill_with(120, 0, 2, 12, 10, 0)});
+        ASSERT_TRUE(p.points == 30 && p.bonuses == 0);
+        p = group({kill_with(100, 0, 1, 10, 10, 1), kill_with(110, 2, 1, 11, 10, 1), kill_with(120, 0, 1, 12, 10, 0)});
+        ASSERT_TRUE(p.points == 20 && p.seat == 0 && p.bonuses == 0);              // (seat 2's kill is its own moment)
+        // the ants of the moment: a group whose first ants fell before the moment began is not wiped out in it (the moment of the first two kills is 20, so is the one of the last two: the earlier)
+        p = group({kill_with(0, 0, 1, 10, 10, 1), kill_with(100, 0, 1, 11, 10, 1), kill_with(250, 0, 1, 12, 10, 0)});
+        ASSERT_TRUE(p.points == 20 && p.turn == 0 && p.bonuses == 0);
+        // once for a place: five ants die where they stand, the last three leave none near; the bonus is one
+        p = group({kill_with(100, 0, 1, 10, 10, 2), kill_with(100, 0, 1, 11, 10, 2), kill_with(100, 0, 1, 12, 10, 0), kill_with(100, 0, 1, 11, 11, 0), kill_with(100, 0, 1, 12, 11, 0)});
+        ASSERT_TRUE(p.kills == 5 && p.points == 65 && p.bonuses == MatchReport::kWipedGroup);
+        // two places, two groups
+        p = group({kill_with(100, 0, 1, 10, 10, 1), kill_with(105, 0, 1, 11, 10, 1), kill_with(110, 0, 1, 12, 10, 0),
+                   kill_with(120, 0, 1, 30, 30, 1), kill_with(125, 0, 1, 31, 30, 1), kill_with(130, 0, 1, 32, 30, 0)});
+        ASSERT_TRUE(p.kills == 6 && p.points == 90);
+        // two groups of two seats
+        p = group({kill_with(100, 0, 1, 10, 10, 1), kill_with(105, 0, 1, 11, 10, 1), kill_with(110, 0, 1, 12, 10, 0),
+                   kill_with(120, 0, 2, 12, 12, 1), kill_with(125, 0, 2, 13, 12, 1), kill_with(130, 0, 2, 14, 12, 0)});
+        ASSERT_TRUE(p.points == 90 && p.bonuses == MatchReport::kWipedGroup);
+    } TEST_END();
+
+    TEST_CASE("MR1.10 The Play of the game is the best moment of any seat: the most points (three kills in a few seconds beat a brawl in which everybody did a little), the earlier moment on a tie, then the lower seat; none when no seat killed anything") {
+        MatchStats brawl = empty_stats();
+        for (const uint8_t seat : {uint8_t{0}, uint8_t{1}, uint8_t{3}}) {                                     // seats 0, 1 and 3 each make two kills in a brawl and seat 2 three in a fight of its own
+            add_kill(brawl, kill_of(200u + seat, seat, 2, 20, 20));
+            add_kill(brawl, kill_of(260u + seat, seat, 2, 20, 20));
+        }
+        for (const uint32_t turn : {4000u, 4040u, 4090u}) add_kill(brawl, kill_of(turn, 2, 0, 9, 9));
+        MatchReport r = report_of(brawl, seat_wins(0));
+        ASSERT_TRUE(r.play.present && r.play.seat == 2 && r.play.kills == 3 && r.play.points == 30 && r.play.turn == 4000 && r.play.seconds == 5);
+        // a tie goes to the earlier moment, whatever the seat, and then to the lower seat
         MatchStats tie = empty_stats();
-        add_kill(tie, kill_of(350, 0, 3));
-        add_kill(tie, kill_of(450, 1, 3));
-        add_kill(tie, kill_of(550, 2, 3));
+        add_kill(tie, kill_of(800, 0, 2, 4, 4));
+        add_kill(tie, kill_of(500, 3, 2, 5, 5));
+        add_kill(tie, kill_of(500, 1, 2, 6, 6));
         r = report_of(tie, seat_wins(0));
-        ASSERT_TRUE(r.play.present && r.play.seat == 0 && r.play.turn == 350);     // (the first window; its credit goes to the lower seat of two equal ones)
-        // a busier window later wins whatever came first
-        add_kill(tie, kill_of(1050, 3, 0));
-        add_kill(tie, kill_of(1060, 3, 1));
-        add_kill(tie, kill_of(1070, 3, 2));
-        r = report_of(tie, seat_wins(0));
-        ASSERT_TRUE(r.play.present && r.play.seat == 3 && r.play.count == 3);
+        ASSERT_TRUE(r.play.seat == 1 && r.play.turn == 500 && r.play.tile_x == 6);
+        // within one seat too: two moments of 20 points, the earlier is the play
+        MatchStats own = empty_stats();
+        for (const uint32_t turn : {100u, 150u, 400u, 450u}) add_kill(own, kill_of(turn, 2, 0));
+        r = report_of(own, seat_wins(0));
+        ASSERT_TRUE(r.play.seat == 2 && r.play.kills == 2 && r.play.turn == 100 && r.play.points == 20);
+        // nobody killed anything: no play, whatever else was counted
+        MatchStats quiet = empty_stats();
+        quiet.damage_dealt = {40, 30, 0, 0};
+        add_raid(quiet, raid_of(100, 0, 1, 20));
+        quiet.bombs_off = {1, 0, 0, 0};
+        ASSERT_FALSE(report_of(quiet, seat_wins(0)).play.present);
+        // the report of a count that is not ok has no play
+        MatchStats failed = brawl;
+        failed.ok = false;
+        ASSERT_FALSE(report_of(failed, seat_wins(0)).play.present);
     } TEST_END();
 
-    TEST_CASE("MR1.7 The play is credited to the seat with the largest weighted share of its window (the lower seat on a tie), and the sentence is its biggest kind (death, bomb, theft, fire, hit: the earlier on a tie)") {
-        // seat 1 with three deaths (42) beats seat 0 with two bombs (20): a fight
-        MatchStats st = empty_stats();
-        add_bomb(st, 1000, 0, 30, 30);
-        add_bomb(st, 1010, 0, 31, 30);
-        add_kill(st, kill_of(1020, 1, 2, 5, 6));
-        add_kill(st, kill_of(1030, 1, 2, 7, 8));
-        add_kill(st, kill_of(1040, 1, 3, 9, 10));
-        MatchReport r = report_of(st, seat_wins(1));
-        ASSERT_TRUE(r.play.present && r.play.seat == 1 && r.play.kind == MatchReport::PlayKind::Fight && r.play.count == 3);
-        ASSERT_TRUE(r.play.turn == 1030 && r.play.tile_x == 7 && r.play.tile_y == 8);     // (the middle kill of three)
-        // a seat's kinds: a bomb (10), two thefts (12), two fires (10): theft is its biggest
-        MatchStats kinds = empty_stats();
-        add_bomb(kinds, 2000, 2, 3, 3);
-        add_raid(kinds, raid_of(2010, 2, 0, 15, 20, 21));
-        add_raid(kinds, raid_of(2020, 2, 1, 40, 22, 23));
-        add_fire(kinds, 2030, 2, 4, 4);
-        add_fire(kinds, 2035, 2, 4, 5);
-        r = report_of(kinds, seat_wins(2));
-        ASSERT_TRUE(r.play.present && r.play.seat == 2 && r.play.kind == MatchReport::PlayKind::Raid);
-        ASSERT_EQ(r.play.count, 55u);                                              // (the points that its raids of the window took)
-        ASSERT_TRUE(r.play.turn == 2020 && r.play.tile_x == 22 && r.play.tile_y == 23);   // (the raid with the most points)
-        // a tie between kinds goes to the earlier one: two bombs (20) and ten hits (20) are a bomb (the fight that the hits make counts the one kill of the seat, and is not the sentence)
-        MatchStats tie = empty_stats();
-        add_bomb(tie, 3000, 1, 12, 12);
-        add_bomb(tie, 3010, 1, 12, 13);
-        add_hits(tie, 30, 1, 10);
-        add_kill(tie, kill_of(3020, 1, 0, 12, 12));                                // (and a kill of its own near the bombs, 14: both kinds count something, so the order of a tie is what decides)
-        r = report_of(tie, seat_wins(1));
-        ASSERT_TRUE(r.play.present && r.play.seat == 1 && r.play.kind == MatchReport::PlayKind::Bomb);
-        // a tie between seats goes to the lower
-        MatchStats seats = empty_stats();
-        add_kill(seats, kill_of(4000, 2, 0));
-        add_kill(seats, kill_of(4010, 1, 0));
-        r = report_of(seats, seat_wins(0));
-        ASSERT_TRUE(r.play.present && r.play.seat == 1 && r.play.count == 1);
-        // hits are the team of the damage's: seat 3's 12 hits (24) beat seat 0's death (14), but a fight of seat 3 with no kill of its own is nothing to say "0 kills" of: the play is seat 0's, with its one kill
-        MatchStats hits = empty_stats();
-        add_hits(hits, 5, 3, 12);
-        add_kill(hits, kill_of(520, 0, 1, 14, 15));
-        r = report_of(hits, seat_wins(0));
-        ASSERT_TRUE(r.play.present && r.play.seat == 0 && r.play.kind == MatchReport::PlayKind::Fight && r.play.count == 1);
-        ASSERT_TRUE(r.play.turn == 520 && r.play.tile_x == 14 && r.play.tile_y == 15);
-    } TEST_END();
-
-    TEST_CASE("MR1.8 What the bomb, the fight and the fire count: ants of other seats that died near it in time and place (once each), the kills made in the window, the deaths near a fire that it lit; the moment is the busiest of its kind") {
-        // a bomb: victims of other seats within 20 turns after it and 4 tiles from it, each once; the busiest bomb is the moment
-        MatchStats b = empty_stats();
-        add_bomb(b, 1000, 0, 20, 20);
-        add_bomb(b, 1005, 0, 22, 20);
-        add_bomb(b, 1007, 0, 40, 40);                                              // (a bomb that hurt nobody)
-        add_kill(b, kill_of(1010, kNone, 1, 22, 21));                              // near both bombs of the pair (counted once)
-        add_kill(b, kill_of(1015, kNone, 2, 26, 20));                              // 4 tiles from the second: counted
-        add_kill(b, kill_of(1020, kNone, 3, 27, 20));                              // 5 tiles from the second, 7 from the first: not
-        add_kill(b, kill_of(1026, kNone, 1, 22, 20));                              // 21 turns after the second, 26 after the first: not (20 is the most)
-        add_kill(b, kill_of(1025, kNone, 3, 22, 20, true));                        // (drowned: nobody's)
-        add_kill(b, kill_of(1012, 1, 0, 21, 20));                                  // (the planter's own ant is not a victim)
-        add_kill(b, kill_of(1016, kNone, 2, 25, 22));                              // 3 tiles from the second bomb, 5 from the first: counted
-        add_kill(b, kill_of(1020, kNone, 3, 17, 24));                              // 20 turns after the first bomb, 4 tiles from it (5 from the second): counted (the limits are in)
-        MatchReport r = report_of(b, seat_wins(0));
-        ASSERT_TRUE(r.play.present && r.play.seat == 0 && r.play.kind == MatchReport::PlayKind::Bomb);
-        ASSERT_EQ(r.play.count, 4u);
-        ASSERT_TRUE(r.play.turn == 1005 && r.play.tile_x == 22 && r.play.tile_y == 20);   // (the second bomb is near three victims: the busiest; the first is near two)
-        add_kill(b, kill_of(1030, kNone, 3, 22, 19));                              // (25 turns after the second bomb: not)
-        ASSERT_EQ(report_of(b, seat_wins(0)).play.count, 4u);
-        // a fight: the kills that the seat made in the window (two neighbors: the buckets 6 and 7 of the earlier of two equal ones), the middle of them is the moment
-        MatchStats f = empty_stats();
-        add_kill(f, kill_of(500, 1, 0, 9, 9));                                     // (outside the window)
-        add_kill(f, kill_of(705, 1, 2, 1, 1));
-        add_kill(f, kill_of(715, 1, 2, 2, 2));
-        add_kill(f, kill_of(725, 1, 3, 3, 3));
-        add_kill(f, kill_of(735, 1, 3, 4, 4));
-        add_kill(f, kill_of(799, 0, 3));
-        r = report_of(f, seat_wins(1));
-        ASSERT_TRUE(r.play.present && r.play.seat == 1 && r.play.kind == MatchReport::PlayKind::Fight);
-        ASSERT_EQ(r.play.count, 4u);
-        ASSERT_TRUE(r.play.turn == 715 && r.play.tile_x == 2);                    // (the middle of four: the lower of the two in the middle)
-        // a fire: the walls that it lit; ants of other seats that died in the window within 3 tiles of one, from the turn it was lit
-        MatchStats fire = empty_stats();
-        for (int32_t i = 0; i < 4; ++i) add_fire(fire, 1100 + 10 * static_cast<uint32_t>(i), 3, 10 + i * 10, 10);        // four fires, 20 of the activity
-        add_kill(fire, kill_of(1120, kNone, 1, 12, 11));                           // within 3 of the first fire (10, 10), after it was lit
-        add_kill(fire, kill_of(1125, kNone, 2, 33, 12));                           // 3 tiles from the third (30, 10), lit before it
-        add_kill(fire, kill_of(1126, kNone, 0, 14, 10));                           // 4 tiles from the first: not
-        add_kill(fire, kill_of(1127, kNone, 1, 10, 10, true));                     // (drowned)
-        add_kill(fire, kill_of(1128, kNone, 2, 10, 10));                           // within 3 of the first: counted
-        add_kill(fire, kill_of(1129, kNone, 1, 31, 11));                           // within 3 of the third: counted
-        add_kill(fire, kill_of(1130, kNone, 0, 29, 9));                            // within 3 of the third: counted
-        add_kill(fire, kill_of(1131, kNone, 3, 10, 11));                           // (the firing seat's own ant is not a victim)
-        r = report_of(fire, seat_wins(3));
-        ASSERT_TRUE(r.play.present && r.play.seat == 3 && r.play.kind == MatchReport::PlayKind::Fire);
-        ASSERT_EQ(r.play.count, 5u);
-        ASSERT_TRUE(r.play.turn == 1120 && r.play.tile_x == 30 && r.play.tile_y == 10);   // (the first fire is near two of the victims, the third near three: the busiest)
-        add_kill(fire, kill_of(2000, kNone, 2, 10, 10));                           // (a death near the first fire, 900 turns later, outside the window: not)
-        ASSERT_EQ(report_of(fire, seat_wins(3)).play.count, 5u);
-        // a fire burns for 3 minutes (3,600 turns): a death 3,590 turns after the one that was lit long before the window is near it, one 3,610 turns after is not
-        MatchStats life = empty_stats();
-        add_fire(life, 100, 1, 10, 10);                                            // (lit long before; fires in the window follow)
-        for (uint32_t i = 0; i < 6; ++i) add_fire(life, 3700 + 5 * i, 1, 50, 50);
-        add_kill(life, kill_of(3690, kNone, 0, 10, 10));
-        r = report_of(life, seat_wins(1));
-        ASSERT_TRUE(r.play.present && r.play.seat == 1 && r.play.kind == MatchReport::PlayKind::Fire);
-        ASSERT_EQ(r.play.count, 1u);
-        add_kill(life, kill_of(3710, kNone, 0, 10, 10));
-        ASSERT_EQ(report_of(life, seat_wins(1)).play.count, 1u);                   // (3,610 turns after: the wall is gone)
-        // a death before the fire was lit is not near it in time
-        MatchStats early = empty_stats();
-        for (uint32_t i = 0; i < 6; ++i) add_fire(early, 1150 + 5 * i, 0, 50, 50);
-        add_kill(early, kill_of(1105, kNone, 1, 50, 50));
-        r = report_of(early, seat_wins(0));
-        ASSERT_FALSE(r.play.present);                                              // (the fires burnt nobody: "burns 0 ants" is no sentence, and no other seat did anything)
-        // a fire that left no wall has no place to show: no play
-        MatchStats bare = empty_stats();
-        for (uint32_t i = 0; i < 6; ++i) add_fire(bare, 1100 + 5 * i, 0, 0, 0, false);
-        ASSERT_FALSE(report_of(bare, seat_wins(0)).play.present);
-    } TEST_END();
-
-    TEST_CASE("MR1.9 No play where there is nobody to give it to or nowhere to show it: deaths by drowning, hits of no team, a window of blows alone; a raid that took nothing is no play; hits are the team of the damage's; a play never counts 0") {
-        MatchStats drowned = empty_stats();
-        add_kill(drowned, kill_of(100, 1, 0, 5, 5, true));
-        add_kill(drowned, kill_of(110, 1, 0, 6, 6, true));
-        add_kill(drowned, kill_of(120, kNone, 0, 7, 7));
-        ASSERT_FALSE(report_of(drowned, seat_wins(1)).play.present);               // 42 of the activity, and nobody's
-        MatchStats loose = empty_stats();
-        add_hits(loose, 4, kNone, 30);
-        ASSERT_FALSE(report_of(loose, seat_wins(1)).play.present);
-        MatchStats blows = empty_stats();
-        add_hits(blows, 4, 2, 30);                                                 // 60 for seat 2, and not one death anywhere: the report cannot say where
-        ASSERT_FALSE(report_of(blows, seat_wins(2)).play.present);
-        MatchStats nothing = empty_stats();
-        for (uint32_t i = 0; i < 5; ++i) add_raid(nothing, raid_of(800 + 10 * i, 1, 0, 0, 3, 4));
-        MatchReport r = report_of(nothing, seat_wins(1));
-        ASSERT_FALSE(r.play.present);                                              // (five raids and not a point: "steals 0 points" is no sentence)
-        ASSERT_FALSE(r.top_thief.present);                                         // (the honor needs a raid that got home)
-        // seat 3's 20 hits (40) beat seat 0's two deaths (28): the hits are credited to the one who did the damage
-        MatchStats credit = empty_stats();
-        add_hits(credit, 2, 3, 20);
-        add_kill(credit, kill_of(250, 0, 3, 8, 8));
-        add_kill(credit, kill_of(255, 0, 3, 8, 9));
-        add_kill(credit, kill_of(260, 3, 1, 9, 9));                                // (and seat 3's one kill: 54 against seat 0's 28 only because the hits are seat 3's)
-        r = report_of(credit, seat_wins(0));
-        ASSERT_TRUE(r.play.present && r.play.seat == 3 && r.play.kind == MatchReport::PlayKind::Fight && r.play.count == 1);
-        ASSERT_EQ(r.play.turn, 260u);                                              // (its own kill)
-        ASSERT_TRUE(r.play.tile_x == 9 && r.play.tile_y == 9);
-        // the play is only what counts something: a seat whose kind of play counts nothing gives it to its next kind, then to the next seat, else there is none
-        MatchStats bombs_nobody = empty_stats();                                   // seat 1's three bombs (30) go off near nobody; seat 2 makes two kills (28): "Bea's bomb takes out 0 ants" is no sentence, the play is seat 2's fight
-        add_bomb(bombs_nobody, 1000, 1, 60, 60);
-        add_bomb(bombs_nobody, 1010, 1, 60, 61);
-        add_bomb(bombs_nobody, 1020, 1, 60, 62);
-        add_kill(bombs_nobody, kill_of(1030, 2, 0, 5, 5));
-        add_kill(bombs_nobody, kill_of(1040, 2, 0, 6, 6));
-        r = report_of(bombs_nobody, seat_wins(1));
-        ASSERT_TRUE(r.play.present && r.play.seat == 2 && r.play.kind == MatchReport::PlayKind::Fight && r.play.count == 2);
-        ASSERT_TRUE(r.play.turn == 1030 && r.play.tile_x == 5 && r.play.tile_y == 5);
-        MatchStats blows_only = empty_stats();                                     // seat 0's ants hit fifteen times (30) and kill nobody, seat 2 makes two kills (28): not "Ann wins a fight: 0 kills", and not at seat 2's kill as Ann's: the play is seat 2's
-        add_hits(blows_only, 10, 0, 15);
-        add_kill(blows_only, kill_of(1030, 2, 1, 7, 7));
-        add_kill(blows_only, kill_of(1040, 2, 1, 8, 8));
-        r = report_of(blows_only, seat_wins(0));
-        ASSERT_TRUE(r.play.present && r.play.seat == 2 && r.play.kind == MatchReport::PlayKind::Fight && r.play.count == 2);
-        MatchStats fires_nobody = empty_stats();                                   // seat 1's six fires (30) burn nobody, seat 2 makes two kills (28): the play is seat 2's, not "burns 0 ants"
-        for (uint32_t i = 0; i < 6; ++i) add_fire(fires_nobody, 1000 + 5 * i, 1, 70, 70);
-        add_kill(fires_nobody, kill_of(1050, 2, 0, 5, 5));
-        add_kill(fires_nobody, kill_of(1060, 2, 0, 6, 6));
-        r = report_of(fires_nobody, seat_wins(1));
-        ASSERT_TRUE(r.play.present && r.play.seat == 2 && r.play.kind == MatchReport::PlayKind::Fight && r.play.count == 2);
-        MatchStats kinds_next = empty_stats();                                     // a seat's biggest kind counts nothing (four bombs, 40, near nobody) and its next does (two thefts, 12): its raid
-        for (uint32_t i = 0; i < 4; ++i) add_bomb(kinds_next, 1000 + 10 * i, 1, 80, 80);
-        add_raid(kinds_next, raid_of(1050, 1, 0, 9, 3, 4));
-        add_raid(kinds_next, raid_of(1060, 1, 1, 6, 5, 6));
-        r = report_of(kinds_next, seat_wins(1));
-        ASSERT_TRUE(r.play.present && r.play.seat == 1 && r.play.kind == MatchReport::PlayKind::Raid && r.play.count == 15);
-        MatchStats nothing_counts = empty_stats();                                 // three bombs (30) near nobody and nothing else: no play
-        add_bomb(nothing_counts, 1000, 1, 60, 60);
-        add_bomb(nothing_counts, 1010, 1, 60, 61);
-        add_bomb(nothing_counts, 1020, 1, 60, 62);
-        ASSERT_FALSE(report_of(nothing_counts, seat_wins(1)).play.present);
-        // when the busiest window has no play to tell, the next busiest has one (still at least 28): the card of a match in which anything real happened
-        MatchStats later = empty_stats();                                          // (turns 1000 to 1100: five bombs (50) near nobody; turns 3000 to 3100: seat 2's two kills (28))
-        for (uint32_t i = 0; i < 5; ++i) add_bomb(later, 1000 + 10 * i, 1, 60, 60 + static_cast<int32_t>(i));
-        add_kill(later, kill_of(3010, 2, 0, 5, 5));
-        add_kill(later, kill_of(3020, 2, 0, 6, 6));
-        r = report_of(later, seat_wins(1));
-        ASSERT_TRUE(r.play.present && r.play.seat == 2 && r.play.kind == MatchReport::PlayKind::Fight && r.play.count == 2 && r.play.turn == 3010);
-        MatchStats earlier_wins = empty_stats();                                   // the busiest window that has a play wins, not the earliest: seat 2's two kills at 3000 (28) against seat 3's three kills at 5000 (42)
-        add_kill(earlier_wins, kill_of(3010, 2, 0, 5, 5));
-        add_kill(earlier_wins, kill_of(3020, 2, 0, 6, 6));
-        for (uint32_t i = 0; i < 3; ++i) add_kill(earlier_wins, kill_of(5010 + 10 * i, 3, 0, 7, 7));
-        r = report_of(earlier_wins, seat_wins(1));
-        ASSERT_TRUE(r.play.present && r.play.seat == 3 && r.play.count == 3);
-        MatchStats below_the_floor = empty_stats();                                // a window under 28 is no window, whatever it holds (one kill and a bomb that took out nobody: 24)
-        add_kill(below_the_floor, kill_of(3010, 2, 0, 5, 5));
-        add_bomb(below_the_floor, 1000, 1, 60, 60);
-        ASSERT_FALSE(report_of(below_the_floor, seat_wins(1)).play.present);
-        MatchStats equal_windows = empty_stats();                                  // two windows of the same activity that both have a play: the earlier
-        add_kill(equal_windows, kill_of(1010, 2, 0, 5, 5));
-        add_kill(equal_windows, kill_of(1020, 2, 0, 6, 6));
-        add_kill(equal_windows, kill_of(4010, 3, 0, 5, 5));
-        add_kill(equal_windows, kill_of(4020, 3, 0, 6, 6));
-        r = report_of(equal_windows, seat_wins(1));
-        ASSERT_TRUE(r.play.present && r.play.seat == 2 && r.play.turn == 1010);
-    } TEST_END();
-
-    TEST_CASE("MR1.10 The totals come from the counts, by seat; a count that is not ok, or whose bombs and fires cannot be placed, gives a report that is not ok and holds nothing but its length") {
+    TEST_CASE("MR1.11 The totals come from the counts, by seat; a count that is not ok gives a report that is not ok and holds nothing but its length") {
         MatchStats st = empty_stats();
         st.damage_dealt = {5, 6, 7, 8};
         st.damage_taken = {1, 2, 3, 4};
@@ -1073,9 +1025,6 @@ int main(int argc, char* argv[]) {
         const MatchReport bad = report_of(failed, seat_wins(0));
         ASSERT_FALSE(bad.ok);
         ASSERT_TRUE(bad.turns == 6000 && bad.damage_done[0] == 0 && bad.food_trips[0] == 0 && bad.loot[1] == 0 && !bad.mvp.present && !bad.first_blood.present && !bad.play.present);
-        MatchStats unsure = st;
-        unsure.events_ok = false;
-        ASSERT_FALSE(report_of(unsure, seat_wins(0)).ok);
     } TEST_END();
 
     // ---- MR2: the live pass says what the recording says ------------------------------------------------------------------------------------------------------
@@ -1090,13 +1039,13 @@ int main(int argc, char* argv[]) {
         return m;
     };
 
-    TEST_CASE("MR2.1 A match counted while it is played says what the replay of its own recording says, field by field: damage, kills, raids with their tiles, bombs and fires with theirs, hits credited, the curve of the activity, the food, the seats that ran out; the same report; and the matches had all of it") {
+    TEST_CASE("MR2.1 A match counted while it is played says what the replay of its own recording says, field by field: damage, kills (with the Thief that raided and the ants left near each), raids with their tiles, the hills, the bombs and fires, the curve of the activity, the food, the seats that ran out; the same report; and the matches had all of it") {
         const Matches& m = matches();
         Content all;
         size_t top_thieves = 0;
         for (const Played* p : {&m.hellraiser, &m.treasure, &m.popcorn}) {
             ASSERT_FALSE(p->bytes.empty());
-            ASSERT_TRUE(p->live.ok && p->live.events_ok && p->live_report.ok);
+            ASSERT_TRUE(p->live.ok && p->live_report.ok);
             const MatchReport& thief = p->live_report;                              // (the Top Thief of a real match has the most raids home, and no seat got more home than it began)
             for (size_t s = 0; s < kSeats; ++s) ASSERT_TRUE(thief.raids_home[s] <= thief.raids[s] && (!thief.top_thief.present || thief.raids_home[s] <= static_cast<uint32_t>(thief.top_thief.value)));
             ASSERT_TRUE(!thief.top_thief.present || thief.top_thief.value == static_cast<int64_t>(thief.raids_home[thief.top_thief.seat]));
@@ -1120,9 +1069,9 @@ int main(int argc, char* argv[]) {
             all.raids += c.raids;
             all.bombs += c.bombs;
             all.fires += c.fires;
-            all.fires_with_tile += c.fires_with_tile;
             all.hits += c.hits;
-            all.credited_hits += c.credited_hits;
+            all.near_mates += c.near_mates;
+            all.last_of_group += c.last_of_group;
             all.damage += c.damage;
             all.food_trips += c.food_trips;
             // what the engine itself counted agrees with what the pass found
@@ -1140,19 +1089,21 @@ int main(int argc, char* argv[]) {
                 ASSERT_EQ(p->live_report.bombs_set[s], e.bombs_planted);
                 ASSERT_EQ(p->live_report.fires_lit[s], e.fires_lit);
             }
-            std::array<size_t, kSeats> fires_by_seat{};
-            for (const MatchStats::FireLit& f : p->live.fire_events) ++fires_by_seat[f.seat];
-            for (size_t s = 0; s < kSeats; ++s) ASSERT_EQ(fires_by_seat[s], size_t{p->live_report.fires_lit[s]});
-            size_t bombs_off = 0;
-            for (size_t s = 0; s < kSeats; ++s) bombs_off += p->live.bombs_off[s];
-            ASSERT_EQ(bombs_off, p->live.bomb_events.size());
+            for (size_t seat = 0; seat < kSeats; ++seat) {                         // (every seat of a match has its hill: the tile of its mound; a kill's Thief raided another seat's hill, and an ant that was killed with loot was a Thief that raided)
+                const auto* hill = engine.grid().find_anthill(static_cast<uint8_t>(seat));
+                ASSERT_TRUE(hill != nullptr && p->live.hill_x[seat] == hill->x && p->live.hill_y[seat] == hill->y);
+            }
+            for (const MatchStats::Kill& kill : p->live.kills) ASSERT_TRUE(kill.raid_on == MatchStats::kNoKiller || (kill.raid_on < kSeats && kill.raid_on != kill.victim));
         }
         ASSERT_TRUE(top_thieves > 0);                                              // (some match had a raid that got home)
-        ASSERT_TRUE(all.kills > 0 && all.raids > 0 && all.bombs > 0 && all.fires > 0 && all.hits > 0 && all.credited_hits > 0 && all.damage > 0 && all.food_trips > 0);
-        ASSERT_EQ(all.fires_with_tile, all.fires);                                 // (a fire wall was there for each fire: none of these matches lit one at the entrance of a hill)
-        ASSERT_TRUE(m.hellraiser.live_report.play.present && m.treasure.live_report.play.present);         // (a real match has a play: the busiest window of hellraiser has bombs and deaths that no team did, the next busiest one has a play to tell)
-        for (const Played* p : {&m.hellraiser, &m.treasure, &m.popcorn}) ASSERT_TRUE(!p->live_report.play.present || p->live_report.play.count > 0);          // (and a play always counts something)
-        std::cout << "(" << all.kills << " kills, " << all.raids << " raids, " << all.bombs << " bombs, " << all.fires << " fires, " << all.hits << " hits, " << all.credited_hits << " of them credited) ";
+        ASSERT_TRUE(all.kills > 0 && all.raids > 0 && all.bombs > 0 && all.fires > 0 && all.hits > 0 && all.damage > 0 && all.food_trips > 0);
+        ASSERT_TRUE(all.near_mates > 0 && all.last_of_group > 0);                  // (the ants left near a kill: with some there were, with some there were none)
+        ASSERT_TRUE(m.hellraiser.live_report.play.present && m.treasure.live_report.play.present);         // (a real match in which a seat killed an ant has a play, and a play always has a kill and the points of it)
+        for (const Played* p : {&m.hellraiser, &m.treasure, &m.popcorn}) {
+            const MatchReport::Play& play = p->live_report.play;
+            ASSERT_TRUE(!play.present || (play.kills > 0 && play.points >= 10 * play.kills && play.seat < kSeats && play.seconds <= 10));
+        }
+        std::cout << "(" << all.kills << " kills, " << all.raids << " raids, " << all.bombs << " bombs, " << all.fires << " fires, " << all.hits << " hits, " << all.near_mates << " kills with company) ";
     } TEST_END();
 
     TEST_CASE("MR2.2 A machine of the network says the same however its turns came: live, or as the catch-up of a machine that came back (in slices of one turn, of 777, of all the match, with the live turns after it), the engine's queues never drained") {
@@ -1272,7 +1223,7 @@ int main(int argc, char* argv[]) {
         v.app.shutdown();
     } TEST_END();
 
-    TEST_CASE("MR2.6 What a world made by hand shows that the matches played above do not: a bomb that went off in the tick in which another was defused (which was which is read off the ants), a bomb with its planter and tile, fires with their seats and tiles, a wall that nobody lit") {
+    TEST_CASE("MR2.6 What a world made by hand shows that the matches played above do not: a bomb that went off in the tick in which another was defused (which was which is read off the ants) and the seat that planted it, the hits and damage of the team that did them, fires counted for their seats") {
         {   // a bomb of seat 0 goes off under an ant of seat 1 ...
             Bench b;
             const uint32_t bomber0 = b.engine.spawn_unit(0, sim::AntType::Bomber, {10, 10});
@@ -1289,18 +1240,16 @@ int main(int argc, char* argv[]) {
             ASSERT_TRUE(b.engine.has_bomb_at({31, 30}));
             b.live.finish(b.engine, 0);
             const MatchStats& st = b.live.stats();
-            ASSERT_TRUE(st.ok && st.events_ok);
-            ASSERT_EQ(st.bomb_events.size(), size_t{1});
-            ASSERT_TRUE(st.bomb_events[0].owner == 0 && st.bomb_events[0].turn == 5 && st.bomb_events[0].tile_x == 11 && st.bomb_events[0].tile_y == 10);      // (the planter's, not the ant's seat: seat 0's)
-            ASSERT_TRUE(st.bombs_off[0] == 1 && st.bombs_off[1] == 0);
+            ASSERT_TRUE(st.ok);
+            ASSERT_TRUE(st.bombs_off[0] == 1 && st.bombs_off[1] == 0);             // (the planter's, not the ant's seat: seat 0's)
             ASSERT_TRUE(st.bombs_planted[0] == 1 && st.bombs_planted[1] == 1);
-            // the ant that set it off took the hits from seat 0's team: they are seat 0's damage and hit (the first bucket), nobody else's
+            ASSERT_EQ(st.action[kBombAction].size(), size_t{1});
+            ASSERT_EQ(st.action[kBombAction][0], 1u);
+            // the ant that set it off took the hits from seat 0's team: they are seat 0's damage and a hit
             ASSERT_TRUE(st.damage_dealt[0] > 0 && st.damage_dealt[1] == 0 && st.damage_taken[1] == st.damage_dealt[0] && st.damage_from[0][1] == st.damage_dealt[0]);
-            ASSERT_EQ(st.hit_credit.size(), size_t{1});
-            ASSERT_TRUE(st.hit_credit[0][0] == 1 && st.hit_credit[0][1] == 0 && st.hit_credit[0][2] == 0 && st.hit_credit[0][3] == 0);
             ASSERT_EQ(st.action[kHit][0], 1u);
         }
-        {   // a bomb of the seat's own set off by its own ant hurts it, and nobody did that: a hit, no damage dealt, no credit
+        {   // a bomb of the seat's own set off by its own ant hurts it, and nobody did that: a hit, no damage dealt
             Bench b;
             const uint32_t bomber = b.engine.spawn_unit(0, sim::AntType::Bomber, {10, 10});
             const uint32_t walker = b.engine.spawn_unit(0, sim::AntType::Worker, {12, 10});
@@ -1312,12 +1261,9 @@ int main(int argc, char* argv[]) {
             b.step(1);
             b.live.finish(b.engine, 0);
             const MatchStats& st = b.live.stats();
-            ASSERT_TRUE(st.ok && st.events_ok);
+            ASSERT_TRUE(st.ok);
             ASSERT_TRUE(st.damage_taken[0] > 0 && st.damage_dealt[0] == 0 && st.bombs_off[0] == 1);
             ASSERT_EQ(st.action[kHit][0], 1u);
-            uint32_t credited = 0;
-            for (const auto& bucket : st.hit_credit) credited += bucket[0] + bucket[1] + bucket[2] + bucket[3];
-            ASSERT_EQ(credited, 0u);
         }
         {   // ... and in the same tick an ant takes the other bomb away: two bombs are gone and one was defused, the ant on the tile says which went off
             Bench b;
@@ -1335,117 +1281,25 @@ int main(int argc, char* argv[]) {
             ASSERT_FALSE(b.engine.has_bomb_at({11, 10}) || b.engine.has_bomb_at({31, 30}));
             b.live.finish(b.engine, 0);
             const MatchStats& st = b.live.stats();
-            ASSERT_TRUE(st.ok && st.events_ok);
-            ASSERT_EQ(st.bomb_events.size(), size_t{1});
-            ASSERT_TRUE(st.bomb_events[0].owner == 0 && st.bomb_events[0].tile_x == 11 && st.bomb_events[0].tile_y == 10);      // (the one that went off, not the one that was taken away, which seat 1 had planted)
-            ASSERT_TRUE(st.bombs_off[0] == 1 && st.bombs_off[1] == 0);
+            ASSERT_TRUE(st.ok);
+            ASSERT_TRUE(st.bombs_off[0] == 1 && st.bombs_off[1] == 0);             // (the one that went off, not the one that was taken away, which seat 1 had planted)
         }
-        {   // fires: the wall that appears, and the seat that lit it
+        {   // fires: the count of the engine, seat by seat, and the activity of the tick that they were lit in
             Bench b;
             const uint32_t fire0 = b.engine.spawn_unit(0, sim::AntType::Fire, {10, 10});
             const uint32_t fire1 = b.engine.spawn_unit(1, sim::AntType::Fire, {30, 30});
             b.step(2);
             ASSERT_TRUE(b.engine.ignite_fire(fire0, {11, 10}));
             ASSERT_TRUE(b.engine.ignite_fire(fire1, {30, 31}));
-            b.step(1);
-            ASSERT_TRUE(b.engine.has_fire_at({11, 10}) && b.engine.has_fire_at({30, 31}));
-            b.step(3);
+            b.step(4);
             ASSERT_TRUE(b.engine.ignite_fire(fire0, {9, 10}));
             b.step(1);
             b.live.finish(b.engine, 0);
             const MatchStats& st = b.live.stats();
-            ASSERT_TRUE(st.ok && st.events_ok);
-            ASSERT_EQ(st.fire_events.size(), size_t{3});
-            ASSERT_TRUE(st.fire_events[0].seat == 0 && st.fire_events[0].has_tile && st.fire_events[0].tile_x == 11 && st.fire_events[0].tile_y == 10 && st.fire_events[0].turn == 3);
-            ASSERT_TRUE(st.fire_events[1].seat == 1 && st.fire_events[1].has_tile && st.fire_events[1].tile_x == 30 && st.fire_events[1].tile_y == 31 && st.fire_events[1].turn == 3);
-            ASSERT_TRUE(st.fire_events[2].seat == 0 && st.fire_events[2].has_tile && st.fire_events[2].tile_x == 9 && st.fire_events[2].tile_y == 10 && st.fire_events[2].turn == 7);
+            ASSERT_TRUE(st.ok);
             ASSERT_TRUE(st.fires_lit[0] == 2 && st.fires_lit[1] == 1);
             ASSERT_EQ(st.action[kFire].size(), size_t{1});
             ASSERT_EQ(st.action[kFire][0], 3u);
-        }
-        {   // a wall that burns out and is lit again on the same tile is a new fire with its tile (the walls that are gone are forgotten as they go)
-            Bench b;
-            const uint32_t fire0 = b.engine.spawn_unit(0, sim::AntType::Fire, {10, 10});
-            b.engine.spawn_unit(1, sim::AntType::Worker, {40, 40});
-            b.step(2);
-            ASSERT_TRUE(b.engine.ignite_fire(fire0, {11, 10}));
-            b.step(1);
-            for (int i = 0; i < 4000 && b.engine.has_fire_at({11, 10}); ++i) b.step(1);
-            ASSERT_FALSE(b.engine.has_fire_at({11, 10}));
-            ASSERT_TRUE(b.engine.ignite_fire(fire0, {11, 10}));
-            b.step(1);
-            b.live.finish(b.engine, 0);
-            const MatchStats& st = b.live.stats();
-            ASSERT_TRUE(st.ok && st.events_ok);
-            ASSERT_EQ(st.fire_events.size(), size_t{2});
-            ASSERT_TRUE(st.fire_events[1].has_tile && st.fire_events[1].tile_x == 11 && st.fire_events[1].tile_y == 10 && st.fire_events[1].turn > st.fire_events[0].turn + 3000);
-        }
-        {   // a wall that no count of fires lit explains, and a fire counted with no wall of its own seat: the pass says that it cannot tell, and the report is not ok
-            Bench b;
-            b.engine.spawn_unit(0, sim::AntType::Worker, {10, 10});
-            b.step(2);
-            b.engine.grid_mut().place_firewall(20, 20, 0);
-            b.engine.stats_manager_mut().get_player_stats_mut(1).fires_lit += 1;
-            b.step(1);
-            b.live.finish(b.engine, 0);
-            ASSERT_TRUE(b.live.stats().ok);
-            ASSERT_FALSE(b.live.stats().events_ok);
-            ASSERT_FALSE(b.live.report().ok);
-        }
-        {   // a new wall that belongs to no seat: nobody lit it
-            Bench b;
-            b.engine.spawn_unit(0, sim::AntType::Worker, {10, 10});
-            b.step(2);
-            b.engine.grid_mut().place_firewall(20, 20, sim::PLAYER_NEUTRAL);
-            b.engine.stats_manager_mut().get_player_stats_mut(1).fires_lit += 1;
-            b.step(1);
-            b.live.finish(b.engine, 0);
-            ASSERT_FALSE(b.live.stats().events_ok);
-            ASSERT_FALSE(b.live.report().ok);
-        }
-        {   // two new walls of one seat for one fire counted: not believed
-            Bench b;
-            b.engine.spawn_unit(0, sim::AntType::Worker, {10, 10});
-            b.step(2);
-            b.engine.grid_mut().place_firewall(20, 20, 0);
-            b.engine.grid_mut().place_firewall(22, 20, 0);
-            b.engine.stats_manager_mut().get_player_stats_mut(0).fires_lit += 1;
-            b.step(1);
-            b.live.finish(b.engine, 0);
-            ASSERT_FALSE(b.live.stats().events_ok);
-            ASSERT_FALSE(b.live.report().ok);
-        }
-        {   // a wall that the map itself had when the match began was lit by nobody: a fire that is lit later is the only new wall
-            sim::SimulationEngine engine;
-            engine.init_test_world(60, 60, 1);
-            engine.grid_mut().place_firewall(5, 5, sim::PLAYER_NEUTRAL);
-            LiveMatchStats live;
-            live.start(engine);
-            const uint32_t fire0 = engine.spawn_unit(0, sim::AntType::Fire, {10, 10});
-            for (int i = 0; i < 2; ++i) {
-                engine.tick();
-                live.on_tick(engine);
-            }
-            ASSERT_TRUE(engine.ignite_fire(fire0, {11, 10}));
-            engine.tick();
-            live.on_tick(engine);
-            live.finish(engine, 0);
-            const MatchStats& st = live.stats();
-            ASSERT_TRUE(st.ok && st.events_ok);
-            ASSERT_EQ(st.fire_events.size(), size_t{1});
-            ASSERT_TRUE(st.fire_events[0].seat == 0 && st.fire_events[0].has_tile && st.fire_events[0].tile_x == 11 && st.fire_events[0].tile_y == 10);
-        }
-        {   // a fire that the engine counted and that left no wall (there is none at the entrance of a hill) is a fire with no place: it counts, the seat is its, and nothing is made up
-            Bench b;
-            b.engine.spawn_unit(0, sim::AntType::Worker, {10, 10});
-            b.step(2);
-            b.engine.stats_manager_mut().get_player_stats_mut(2).fires_lit += 1;
-            b.step(1);
-            b.live.finish(b.engine, 0);
-            const MatchStats& st = b.live.stats();
-            ASSERT_TRUE(st.ok && st.events_ok);
-            ASSERT_EQ(st.fire_events.size(), size_t{1});
-            ASSERT_TRUE(st.fire_events[0].seat == 2 && !st.fire_events[0].has_tile && st.fire_events[0].turn == 3);
         }
     } TEST_END();
 

@@ -34,6 +34,7 @@ Work that is not released yet is written in the same template under a heading th
 - **Copy link on a phone.** A live view and a replay have the button in the top bar on a phone now (a share symbol, 44 px; on a computer it says Copy link as before). It opens the phone's share sheet where there is one, otherwise copies the match's address and says Copied!. The bar shows Matches and Full instead of All matches and Fullscreen on a narrow phone, so that all five buttons fit in one row.
 - **Kills first on the Podium.** The results show Killed before Lost (then Hatched), for the winner and for each of the other players.
 - **Fill a box in the Map Maker.** A switch under the Objects, Food and Ants tools: drag a box and it fills with every cell, every other cell, every Nth row or column or a random pattern, as one Undo step. Water, rock and things in the way are skipped and counted; one fill puts at most 250 ants. An AI that you connect has it too (`fill_area`).
+- **A better Play of the game.** It is now one player's best 10 seconds: 10 points a kill, more for knocking a player out, saving your hill from a Thief, stopping a Thief with loot and wiping out a whole group. The card says it ("Gory: triple kill in 8 seconds", "saved the hill").
 - **Computer players fight for the flower and get stuck less on ISLANDS.** Hard bots strike at the ants of other teams that wait with them at a flower's strip when they have the edge, and win more of the flower's power-ups (ISLANDS: 3.3 a bot and match against 2.9). An ant with food or loot that meets another team's ant at the one tile of a bridge's landing steps back and lets it pass, and an ant that holds a load far from home gets its bridge from one Swimmer. Standing on a power-up when hurt and fighting only with an edge were built and measured too; they did not win, so they are off. Bots only.
 
 **Fixes:**
@@ -559,17 +560,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4e6c7c0c...f436bd12)
 
-## v0.16.2 - 2026-11-12 - One map chooser in the room lobby and the site can be installed as an app
+## Older versions (v0.16.2 and before)
 
-**For players:**
-- **One chooser for the map in a room.** The room shows the map as one card with its picture, name and facts. The host's Change map button opens a single list of every map the game server offers: the six original maps first, then players' maps, with a search box. The old drop-down and the Browse all maps button are gone.
-- **The site can be installed like an app.** In a computer's browser use Install in the menu; on a phone use Add to Home screen. It is called Ants! and opens in a window of its own without the browser's bars.
-- **It still needs a connection.** The installed app is the same site: there is no offline mode, and nothing works without the network.
-
-**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.1 page or game still joins. Under the hood: the size limits of documents, code files and web files sit in one place, one file reads the saved seat of a running game for the front page and the game page, and the testing guide now has written rules for tests and mutants.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/635fcae2...7298d031)
-
-## Older versions (v0.16.1 and before)
-
-Every release before v0.16.2, and the long notes of v0.16.1, v0.16.0, v0.15.1, v0.15.0, v0.14.1, v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.16.3, and the long notes of v0.16.2, v0.16.1, v0.16.0, v0.15.1, v0.15.0, v0.14.1, v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

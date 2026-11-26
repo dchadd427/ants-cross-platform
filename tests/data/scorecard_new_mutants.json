@@ -440,6 +440,78 @@
       "build": "test_scorecard_new",
       "test": "./build/tests/test_app/test_scorecard_new",
       "expect": "[app]"
+    },
+    {
+      "id": "one_kill_is_not_one_kill",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "case 1: return \"1 kill\";",
+      "new": "case 1: return \"single kill\";",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[play]"
+    },
+    {
+      "id": "a_double_kill_is_two_kills",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "case 2: return \"double kill\";",
+      "new": "case 2: return \"2 kills\";",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[play]"
+    },
+    {
+      "id": "a_triple_kill_is_three_kills",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "case 3: return \"triple kill\";",
+      "new": "case 3: return \"3 kills\";",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[play]"
+    },
+    {
+      "id": "a_quad_kill_is_four_kills",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "case 4: return \"quad kill\";",
+      "new": "case 4: return \"4-kill streak\";",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[play]"
+    },
+    {
+      "id": "five_kills_are_a_penta_kill",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "default: return std::to_string(kills) + \"-kill streak\";",
+      "new": "case 5: return \"penta kill\";\n        default: return std::to_string(kills) + \"-kill streak\";",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[play]"
+    },
+    {
+      "id": "a_streak_has_no_number",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "std::to_string(kills) + \"-kill streak\"",
+      "new": "\"kill streak\"",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[play]"
+    },
+    {
+      "id": "a_name_that_keeps_no_letters_is_kept",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "if (name_room < c.pen.width(\"Abcd...\", 12.0)) {",
+      "new": "if (false) {",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[play]"
+    },
+    {
+      "id": "the_shorter_seconds_wording_is_not_tried",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "wordings.push_back(\": \" + kills + \" in \" + seconds + \" s\" + tail);",
+      "new": "(void)tail;",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[play]"
     }
   ]
 }

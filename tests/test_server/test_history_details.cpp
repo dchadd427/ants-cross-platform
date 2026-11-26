@@ -1000,6 +1000,84 @@ int main() {
         }
     } TEST_END();
 
+    TEST_CASE("HD1.8 What the Play of the game reads from the pass (docs/REPLAYS.md, \"The match pages\"): the tile of every hill, the hill that a Thief was raiding and whether it carried loot when it was killed, and the ants of the victim's own seat that were left near a lost ant") {
+        replay::Replay shell;
+        shell.head.roster = 0x03;
+        {   // the hills: the top left tile of each mound, -1 for a seat without one
+            Bench b(shell);
+            b.engine.set_anthill(0, {40, 34});
+            b.engine.set_anthill(1, {10, 22});
+            b.engine.spawn_unit(0, sim::AntType::Worker, {45, 45});
+            b.step(3);
+            const MatchStats st = b.collector.take(b.turns);
+            ASSERT_TRUE(st.ok && st.hill_x[0] == 40 && st.hill_y[0] == 34 && st.hill_x[1] == 10 && st.hill_y[1] == 22 && st.hill_x[2] == -1 && st.hill_y[3] == -1);
+        }
+        {   // a Thief killed during its raid, before it has taken the loot, was raiding the hill of the robbed seat; one killed with the loot in its hands is not raiding any more and carries it
+            struct Fall {
+                MatchStats st;
+                bool had_loot{false};
+            };
+            const auto fall = [&](bool with_loot) {
+                Bench b(shell);
+                b.engine.set_anthill(0, {40, 40});
+                b.engine.set_anthill(1, {10, 10});
+                b.engine.set_player_score(1, 120);
+                const uint32_t thief = b.engine.spawn_unit(0, sim::AntType::Thief, {13, 12});
+                b.step(2);
+                b.engine.start_thief_infiltration(thief, 1);
+                Fall out;
+                if (with_loot) out.had_loot = b.until([&] { return b.engine.get_unit(thief).is_holding(); }, 400);
+                else b.step(2);
+                b.engine.kill_unit(thief);
+                b.step(5);
+                out.st = b.collector.take(b.turns);
+                return out;
+            };
+            const Fall raiding = fall(false);
+            ASSERT_TRUE(raiding.st.ok && raiding.st.kills.size() == 1);
+            ASSERT_TRUE(raiding.st.kills[0].victim == 0 && raiding.st.kills[0].raid_on == 1 && !raiding.st.kills[0].carried_loot);
+            const Fall looting = fall(true);
+            ASSERT_TRUE(looting.had_loot && looting.st.ok && looting.st.kills.size() == 1);
+            ASSERT_TRUE(looting.st.kills[0].raid_on == MatchStats::kNoKiller && looting.st.kills[0].carried_loot);
+            // an ant that is not a Thief, and a Thief that is not on a raid, have neither
+            Bench b(shell);
+            const uint32_t worker = b.engine.spawn_unit(0, sim::AntType::Worker, {20, 20});
+            const uint32_t idle = b.engine.spawn_unit(0, sim::AntType::Thief, {30, 30});
+            b.step(3);
+            b.engine.kill_unit(worker);
+            b.engine.kill_unit(idle);
+            b.step(5);
+            const MatchStats st = b.collector.take(b.turns);
+            ASSERT_EQ(st.kills.size(), size_t{2});
+            for (const MatchStats::Kill& kill : st.kills) ASSERT_TRUE(kill.raid_on == MatchStats::kNoKiller && !kill.carried_loot);
+        }
+        {   // the ants of the victim's own seat that are left within 4 tiles of the lost ant (the larger of the two tile differences, 4 included) at the look that finds it gone: not those that are lost in the same tick, not the other
+            // seat's, not those further away on either side
+            Bench b(shell);
+            const uint32_t first = b.engine.spawn_unit(1, sim::AntType::Worker, {20, 20});
+            const uint32_t second = b.engine.spawn_unit(1, sim::AntType::Worker, {22, 21});
+            const uint32_t third = b.engine.spawn_unit(1, sim::AntType::Worker, {24, 20});
+            const uint32_t fourth = b.engine.spawn_unit(1, sim::AntType::Worker, {29, 20});
+            b.engine.spawn_unit(1, sim::AntType::Worker, {21, 24});                // (4 tiles below the first, across the other axis)
+            b.engine.spawn_unit(1, sim::AntType::Worker, {20, 26});                // (6 tiles below it, in the same column)
+            b.engine.spawn_unit(0, sim::AntType::Worker, {21, 20});
+            b.step(3);
+            b.engine.kill_unit(first);                                             // the second (2 tiles away), the third (4) and the one below (4) are near; the fourth (9), the one in the column (6) and the other seat's ant are not
+            b.step(3);
+            b.engine.kill_unit(second);                                            // lost in the same tick: the third is 2 tiles from the second and is lost too; the one below is near both
+            b.engine.kill_unit(third);
+            b.step(3);
+            b.engine.kill_unit(fourth);
+            b.step(3);
+            const MatchStats st = b.collector.take(b.turns);
+            ASSERT_EQ(st.kills.size(), size_t{4});
+            ASSERT_TRUE(st.kills[0].tile_x == 20 && st.kills[0].mates_near == 3);
+            ASSERT_TRUE(st.kills[1].turn == st.kills[2].turn && st.kills[1].tile_x == 22 && st.kills[1].mates_near == 1);
+            ASSERT_TRUE(st.kills[2].tile_x == 24 && st.kills[2].mates_near == 1);
+            ASSERT_TRUE(st.kills[3].tile_x == 29 && st.kills[3].mates_near == 0);
+        }
+    } TEST_END();
+
     TEST_CASE("HD2.1 The series: a point every 15 seconds, at the look that ends it; more turns than 48 points of 15 seconds make the step longer; a seat that did not play has no points") {
         MatchStats st = blank(14405, 0x0B);
         for (MatchStats::Sample& sm : st.samples) {
