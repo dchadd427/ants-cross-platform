@@ -316,7 +316,87 @@ def _crimped_bottle_cap(prefix: str, top_mat: str, *, radius: float = 0.106, pla
         u = np.clip(0.5 + top.positions[:, 0] / (2.0 * top_r * 1.05), 0.0, 1.0)
         v = np.clip(0.5 + top.positions[:, 2] / (2.0 * top_r * 1.05), 0.0, 1.0)
         top.uvs = np.column_stack([u, v]).astype(np.float32)
-    return [metal, top]
+    # Bright metallic silver underside liner visible when a Thief flips the bottle-cap hatch open (`atcr501`)!
+    liner = cylinder(radius * 0.84, radius * 0.84, 0.008, radial_segs=28, bevel=0.002, axis="y", name=f"{prefix}_liner", material="item_aluminum").translate(0.0, -0.017, 0.0)
+    return [metal, top, liner]
+
+
+def _add_hatch_bottle_cap(
+    sc: SceneBuilder,
+    *,
+    prefix: str,
+    cap_parts: List[MeshPart],
+    pos: Tuple[float, float, float],
+    rot_rad: Tuple[float, float, float],
+    radius: float,
+    soil_mat: str,
+) -> None:
+    """Mount a hinged bottle-cap secret tunnel hatch + dark hole on the anthill slope with a synced 3.60s `Raid` clip."""
+    hole_node = f"{prefix}_hatch_hole"
+    hinge_node = f"{prefix}_cap_hinge"
+    sc.set_node_parent(hole_node, "anthill")
+    sc.set_node_transform(
+        hole_node,
+        translation=pos,
+        rotation=quat_from_euler_xyz(rx=rot_rad[0], ry=rot_rad[1], rz=rot_rad[2]),
+    )
+    # Dark circular secret tunnel mouth + earthen rim hidden underneath the closed bottle cap!
+    rim = tint_part(
+        torus_arc(radius * 0.90, 0.020, u_segs=28, v_segs=10, plane="xz", name=f"{prefix}_hatch_rim", material=soil_mat).translate(0.0, -0.010, 0.0),
+        lambda p, _n: np.full((len(p), 3), 0.42, dtype=np.float64),
+    )
+    pit_outer = cylinder(radius * 0.88, radius * 0.80, 0.024, radial_segs=28, axis="y", name=f"{prefix}_hatch_pit_outer", material="item_soil_hole").translate(0.0, -0.016, 0.0)
+    pit_core = cylinder(radius * 0.82, radius * 0.78, 0.016, radial_segs=28, axis="y", name=f"{prefix}_hatch_pit", material="item_soil_hole").translate(0.0, -0.006, 0.0)
+    sc.add(hole_node, [rim, pit_outer, pit_core])
+
+    # Hinge along upper-left edge so +Z rotation swings the bottle cap up-and-left, exposing its silver underside (`atcr501`).
+    hx, hy, hz = -radius * 0.96, 0.012, -radius * 0.22
+    sc.set_node_parent(hinge_node, hole_node)
+    sc.set_node_transform(hinge_node, translation=(hx, hy, hz))
+    sc.add(hinge_node, [p.translate(-hx, -hy, -hz) for p in cap_parts])
+
+    # Build synced 3.60s `Raid` clip: carries the existing waving flag channels + authentic `atcr501` cap flip timeline!
+    raid_dur = 3.60
+    raid_channels: List[AnimationChannel] = []
+    idle_clip = next((c for c in sc.animations if c.name == "Idle"), None)
+    if idle_clip is not None:
+        # Keep cap tightly closed in Idle clip.
+        idle_dur = max((ch.times[-1] for ch in idle_clip.channels if ch.times), default=0.70)
+        idle_clip.channels.append(
+            AnimationChannel(hinge_node, "rotation", [0.0, idle_dur], [quat_from_euler_xyz(), quat_from_euler_xyz()])
+        )
+        # Repeat waving flag seamlessly across the 3.60s Raid clip.
+        reps = max(1, int(round(raid_dur / max(0.15, idle_dur))))
+        for ch in idle_clip.channels:
+            if ch.target_node == hinge_node or not ch.times:
+                continue
+            t_out: List[float] = []
+            v_out: List[Tuple[float, ...]] = []
+            for rep in range(reps):
+                t_off = rep * (raid_dur / float(reps))
+                t_scale = (raid_dur / float(reps)) / max(1e-4, ch.times[-1])
+                start_idx = 0 if rep == 0 else 1
+                for ti, vi in zip(ch.times[start_idx:], ch.values[start_idx:]):
+                    t_out.append(t_off + ti * t_scale)
+                    v_out.append(vi)
+            raid_channels.append(AnimationChannel(ch.target_node, ch.path, t_out, v_out))
+
+    # Cap hinge keyframes (seconds, open_deg around local +Z):
+    # closed -> pry wiggle -> pop wide open (148° showing full silver underside & dark tunnel hole!) -> hold until thief pops out -> snap shut!
+    cap_kfs = [
+        (0.00, 0.0), (1.30, 0.0), (1.42, 16.0), (1.50, 5.0), (1.62, 26.0),
+        (1.86, 156.0), (1.98, 146.0), (2.74, 146.0), (2.85, 153.0), (2.96, 145.0),
+        (3.38, 146.0), (3.52, 0.0), (3.56, 7.0), (3.60, 0.0),
+    ]
+    raid_channels.append(
+        AnimationChannel(
+            hinge_node,
+            "rotation",
+            [t for t, _ in cap_kfs],
+            [quat_from_euler_xyz(rz=deg, degrees=True) for _, deg in cap_kfs],
+        )
+    )
+    sc.add_animation("Raid", raid_channels, replace=True)
 
 
 def _paperclip(name: str, material: str = "item_aluminum", scale: float = 1.0) -> MeshPart:
@@ -409,13 +489,12 @@ def build_blackhill() -> SceneBuilder:
     rod = curved_tube([rod_a, rod_mid, rod_b], [0.024, 0.034, 0.044], samples_per_seg=4, radial_segs=14, cap_rings=3, name="bh_black_rod", material="item_rubber_dark")
     sc.add("anthill", rod)
 
-    # 5. Domed gleaming silver fluted metal cap / thimble resting prominently on the far-right slope (`245:BLACKHILL`)!
+    # 5. Hinged silver metal bottle-cap secret hatch on the far-right slope (`245:BLACKHILL`)!
     gx, gz = +0.38, +0.06
     gy = surf_y(gx, gz) + 0.046
-    for p in _crimped_bottle_cap("bh_silver_cap", "item_aluminum", radius=0.112):
-        sc.add("anthill", p.rotate_xyz(rx=0.28, rz=-0.42).translate(gx, gy, gz))
-    dome = superellipsoid(0.095, 0.072, 0.095, e1=0.80, e2=0.92, u_segs=24, v_segs=14, name="bh_cap_dome", material="item_aluminum").rotate_xyz(rx=0.28, rz=-0.42).translate(gx + 0.024, gy + 0.034, gz + 0.010)
-    sc.add("anthill", dome)
+    cap_parts = _crimped_bottle_cap("bh_silver_cap", "item_aluminum", radius=0.112)
+    dome = superellipsoid(0.095, 0.072, 0.095, e1=0.80, e2=0.92, u_segs=24, v_segs=14, name="bh_cap_dome", material="item_aluminum").translate(0.0, 0.036, 0.0)
+    _add_hatch_bottle_cap(sc, prefix="bh", cap_parts=cap_parts + [dome], pos=(gx, gy, gz), rot_rad=(0.28, 0.0, -0.42), radius=0.112, soil_mat="item_soil_grey")
     return _finalize_item(sc, target_span=1.00)
 
 
@@ -461,11 +540,18 @@ def build_bluehill() -> SceneBuilder:
     hose = curved_tube(hose_pts, [0.032, 0.040, 0.044, 0.044, 0.038, 0.030], samples_per_seg=5, radial_segs=16, cap_rings=3, name="bl_rubber_skirt", material="item_rubber_blue")
     sc.add("anthill", hose)
 
-    # 3. Scavenged crimped metallic silver & royal-blue "H2O" soda bottle cap on the far-right slope (`246:BLUEHILL`)!
+    # 3. Hinged metallic silver & royal-blue "H2O" soda bottle cap secret hatch on the far-right slope (`246:BLUEHILL`)!
     cx, cz = +0.40, +0.02
     cy = surf_y(cx, cz) + 0.048
-    for p in _crimped_bottle_cap("bl_h2o_cap", "item_cap_h2o", radius=0.112, planar_top_uv=True):
-        sc.add("anthill", p.rotate_xyz(rx=0.48, ry=-0.18, rz=-0.38).translate(cx, cy, cz))
+    _add_hatch_bottle_cap(
+        sc,
+        prefix="bl",
+        cap_parts=_crimped_bottle_cap("bl_h2o_cap", "item_cap_h2o", radius=0.112, planar_top_uv=True),
+        pos=(cx, cy, cz),
+        rot_rad=(0.48, -0.18, -0.38),
+        radius=0.112,
+        soil_mat="item_soil_mound",
+    )
 
     # 4. Six vivid colored office thumbtacks / pushpins jammed into the mound (`246:BLUEHILL`)!
     pin_specs = (
@@ -526,7 +612,7 @@ def build_redhill() -> SceneBuilder:
         droop=-0.028,
     )
 
-    # 2. Four iconic crimped crimson "soda" soda bottle caps framing the base (`247:REDHILL`)!
+    # 2. Four iconic crimped crimson "soda" bottle caps framing the base (right-side cap is the hinged thief hatch!)
     cap_specs = (
         (-0.34, +0.28, 0.112, 0.40, +0.22, +0.52),
         (-0.14, +0.40, 0.116, 0.36, +0.16, +0.20),
@@ -535,8 +621,12 @@ def build_redhill() -> SceneBuilder:
     )
     for idx, (cx, cz, rad, rx, ry, rz) in enumerate(cap_specs):
         cy = max(0.042, surf_y(cx, cz) + 0.038)
-        for p in _crimped_bottle_cap(f"rd_cap_{idx}", "item_cap_soda", radius=rad, planar_top_uv=True):
-            sc.add("anthill", p.rotate_xyz(rx=rx, ry=ry, rz=rz).translate(cx, cy, cz))
+        parts = _crimped_bottle_cap(f"rd_cap_{idx}", "item_cap_soda", radius=rad, planar_top_uv=True)
+        if idx == 2:
+            _add_hatch_bottle_cap(sc, prefix="rd", cap_parts=parts, pos=(cx, cy, cz), rot_rad=(rx, ry, rz), radius=rad, soil_mat="item_soil_pink")
+        else:
+            for p in parts:
+                sc.add("anthill", p.rotate_xyz(rx=rx, ry=ry, rz=rz).translate(cx, cy, cz))
 
     # 3. Prominent giant shiny silver oval paperclip resting cleanly on the front-right clay slope (`247:REDHILL`)!
     px, pz = +0.16, +0.36

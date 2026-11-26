@@ -31,12 +31,12 @@ if np is not None:
         )
         from .item_materials import gradient_y_tint, register_item_materials, tint_part
         from .items_plants import _curved_grass_blade
-        from .items_structures import _add_waving_flag, _build_anthill_base, _crimped_bottle_cap
+        from .items_structures import _add_hatch_bottle_cap, _add_waving_flag, _build_anthill_base, _crimped_bottle_cap
         from .items_toys import _finalize_item
     except ImportError:
         from map_items.item_materials import gradient_y_tint, register_item_materials, tint_part  # type: ignore
         from map_items.items_plants import _curved_grass_blade  # type: ignore
-        from map_items.items_structures import _add_waving_flag, _build_anthill_base, _crimped_bottle_cap  # type: ignore
+        from map_items.items_structures import _add_hatch_bottle_cap, _add_waving_flag, _build_anthill_base, _crimped_bottle_cap  # type: ignore
         from map_items.items_toys import _finalize_item  # type: ignore
         from mesh_core import (  # type: ignore
             MeshPart,
@@ -204,6 +204,8 @@ def build_greenhill() -> SceneBuilder:
         ang = 0.16 + (k / 27.0) * 2.82
         rad = 0.30 + 0.18 * ((k * 7) % 6) / 5.0
         bx, bz = rad * math.cos(ang), rad * math.sin(ang)
+        if math.hypot(bx - 0.40, bz - 0.14) < 0.18:
+            continue
         by = max(0.012, surf_y(bx, bz) - 0.006)
         sc.add(
             "anthill",
@@ -239,16 +241,18 @@ def build_greenhill() -> SceneBuilder:
             ),
         )
 
-    # 4. Prominent scavenged crimped metallic silver & deep emerald-teal soda bottle cap on the far-right slope!
+    # 4. Hinged metallic silver & deep emerald-teal soda bottle cap secret hatch on the far-right slope (`248:GREENHILL`)!
     cap_x, cap_z = +0.40, +0.14
     cap_y = surf_y(cap_x, cap_z) + 0.044
-    for p in _crimped_bottle_cap("gh_teal_cap", "item_bottle_teal", radius=0.114):
-        sc.add("anthill", p.rotate_xyz(rx=0.44, ry=-0.12, rz=-0.46).translate(cap_x, cap_y, cap_z))
-    # Glossy recessed emerald-green inner bevel ring inside the bottle cap for extra realism (`248:GREENHILL`)!
-    cap_ring = (
-        torus_arc(0.072, 0.012, u_segs=26, v_segs=8, plane="xz", name="gh_cap_inner_rim", material="item_aluminum")
-        .rotate_xyz(rx=0.44, ry=-0.12, rz=-0.46)
-        .translate(cap_x + 0.012, cap_y + 0.022, cap_z + 0.010)
+    cap_parts = _crimped_bottle_cap("gh_teal_cap", "item_bottle_teal", radius=0.114)
+    cap_ring = torus_arc(0.072, 0.012, u_segs=26, v_segs=8, plane="xz", name="gh_cap_inner_rim", material="item_aluminum").translate(0.0, 0.024, 0.0)
+    _add_hatch_bottle_cap(
+        sc,
+        prefix="gh",
+        cap_parts=cap_parts + [cap_ring],
+        pos=(cap_x, cap_y, cap_z),
+        rot_rad=(0.44, -0.12, -0.46),
+        radius=0.114,
+        soil_mat="item_soil_mound",
     )
-    sc.add("anthill", cap_ring)
     return _finalize_item(sc, target_span=1.00)

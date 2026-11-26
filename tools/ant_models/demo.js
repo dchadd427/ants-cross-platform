@@ -5,6 +5,7 @@
   const {
     DEG, TEAMS, validLighting, wrapAngleDeg, AntRenderer, installToolbarRovingTabindex,
   } = window.__antRender;
+  const { buildCarriedLunchboxMat, buildHeistsForMap, updateHeists } = window.__demoHeist;
 
   const $ = (id) => document.getElementById(id);
 
@@ -38,6 +39,7 @@
   const MAP_FOCUSES = {
     treasure: [
       { id: "center",   label: "Center Crossroads", target: [30.5, 0.3, 29.0], zoom: 0.92 },
+      { id: "heist",    label: "Thief Base Heist",  target: [39.1, 0.35, 22.8], zoom: 0.42 },
       { id: "pond",     label: "West Pond Swimmer", target: [16.5, 0.2, 29.5], zoom: 0.42 },
       { id: "can",      label: "Can & Slingshot",   target: [15.5, 0.3, 14.0], zoom: 0.66 },
       { id: "steak",    label: "Steak Whiz & Bear", target: [38.5, 0.3,  6.5], zoom: 0.78 },
@@ -48,23 +50,25 @@
     ],
     popcorn: [
       { id: "center",   label: "Full Popcorn Arena", target: [15.5, 0.3, 15.5], zoom: 1.44 },
+      { id: "heist",    label: "Thief Base Heist",   target: [ 7.1, 0.35,  6.8], zoom: 0.44 },
       { id: "n_bolts",  label: "North Bolt Castle",  target: [15.5, 0.3,  5.5], zoom: 0.60 },
       { id: "s_bolts",  label: "South Bolt Castle",  target: [15.5, 0.3, 25.5], zoom: 0.60 },
       { id: "moat",     label: "Fire & Bomb Moat",   target: [15.5, 0.3, 15.5], zoom: 0.72 },
-      { id: "hills",    label: "Green Anthill",      target: [ 6.5, 0.3,  6.5], zoom: 0.56 },
     ],
     tiny: [
       { id: "center",   label: "Center Arena",      target: [15.5, 0.3, 15.5], zoom: 0.95 },
-      { id: "green",    label: "Green Corner",      target: [ 7.0, 0.3,  7.0], zoom: 0.62 },
+      { id: "heist",    label: "Thief Base Heist",  target: [ 7.1, 0.35,  6.8], zoom: 0.44 },
       { id: "red",      label: "Red Corner",        target: [24.0, 0.3, 24.0], zoom: 0.62 },
       { id: "full",     label: "Full 31×31 Map",    target: [15.5, 0.2, 15.5], zoom: 1.48 },
     ],
     small: [
       { id: "center",   label: "Center Pond",       target: [20.0, 0.3, 20.0], zoom: 0.96 },
+      { id: "heist",    label: "Thief Base Heist",  target: [34.1, 0.35,  6.8], zoom: 0.44 },
       { id: "full",     label: "Full 40×40 Map",    target: [20.0, 0.2, 20.0], zoom: 1.85 },
     ],
     islands: [
       { id: "center",   label: "Center Islands",    target: [30.0, 0.3, 30.0], zoom: 1.05 },
+      { id: "heist",    label: "Thief Base Heist",  target: [24.1, 0.35, 24.8], zoom: 0.44 },
       { id: "full",     label: "Full 60×60 Map",    target: [30.0, 0.2, 30.0], zoom: 2.55 },
     ],
   };
@@ -78,14 +82,14 @@
     { cls: "combat", team: "blue",  clip: "Attack",    x: 31.5, z: 30.5, face: [29.5, 28.5], phase: 0.81 },
     // NW Soda Can, Cola Spill & Slingshot raid
     { cls: "worker", team: "black", clip: "Harvest",   x: 16.5, z: 18.5, face: [16.5, 16.5], phase: 0.15 },
-    { cls: "worker", team: "black", clip: "Walk",      phase: 0.0, speed: 1.25,
+    { cls: "worker", team: "black", clip: "Walk",      phase: 0.0, speed: 1.25, carryLunchbox: true,
       path: [[21, 21], [18, 18], [16, 18], [19, 21]] },
     { cls: "thief",  team: "black", clip: "Walk",      phase: 0.4, speed: 1.45,
       path: [[10, 17], [15, 11], [19, 14], [14, 18]] },
     { cls: "fire",   team: "green", clip: "StartFire", x: 19.5, z: 15.5, face: [16.5, 15.5], phase: 0.5 },
     // North Steak Whiz, Shirt Button & Teddy Bear Body
     { cls: "worker", team: "green", clip: "Harvest",   x: 30.5, z:  6.5, face: [29.5, 5.5], phase: 0.2 },
-    { cls: "worker", team: "green", clip: "Walk",      phase: 0.25, speed: 1.30,
+    { cls: "worker", team: "green", clip: "Walk",      phase: 0.25, speed: 1.30, carryLunchbox: true,
       path: [[36, 19], [35, 11], [33, 7], [36, 12]] },
     { cls: "thief",  team: "green", clip: "Walk",      phase: 0.6, speed: 1.45,
       path: [[42, 8], [46, 11], [50, 7], [44, 4]] },
@@ -93,10 +97,11 @@
     { cls: "combat", team: "red",   clip: "Walk",      phase: 0.1, speed: 1.35,
       path: [[9, 45], [16, 47], [14, 53], [8, 49]] },
     { cls: "bomber", team: "red",   clip: "PlantBomb", x:  8.5, z: 45.5, face: [6.5, 44.5], phase: 0.3 },
-    { cls: "worker", team: "red",   clip: "Harvest",   x: 28.5, z: 54.5, face: [30.5, 54.5], phase: 0.7 },
+    { cls: "worker", team: "red",   clip: "Walk",      phase: 0.5, speed: 1.28, carryLunchbox: true,
+      path: [[25, 38], [28, 44], [30, 52], [27, 45]] },
     // SE Roast Chicken, Mushroom & Potted Meat
     { cls: "worker", team: "blue",  clip: "Harvest",   x: 40.5, z: 46.5, face: [43.5, 46.5], phase: 0.1 },
-    { cls: "worker", team: "blue",  clip: "Walk",      phase: 0.2, speed: 1.30,
+    { cls: "worker", team: "blue",  clip: "Walk",      phase: 0.2, speed: 1.30, carryLunchbox: true,
       path: [[38, 39], [41, 44], [41, 46], [38, 42]] },
     { cls: "combat", team: "blue",  clip: "Idle",      x: 35.5, z: 44.5, face: [33.5, 44.5], phase: 0.4 },
     { cls: "worker", team: "blue",  clip: "Harvest",   x: 54.5, z: 30.5, face: [56.5, 30.5], phase: 0.6 },
@@ -334,7 +339,7 @@
       if (cls === "worker" && idx === 0 && hill) {
         const mc = Math.round((st.col + cx) * 0.5), mr = Math.round((st.row + cz) * 0.5);
         specs.push({
-          cls, team: t, clip: "Walk", phase: (idx * 0.23 + t.length * 0.11) % 1, speed: 1.35,
+          cls, team: t, clip: "Walk", phase: (idx * 0.23 + t.length * 0.11) % 1, speed: 1.35, carryLunchbox: true,
           path: [[st.col, st.row], [mc, mr], [st.col, st.row]],
         });
       } else if (idx === 1 && !isWaterTile(st.col + Math.sign(cx - st.col), st.row + Math.sign(cz - st.row))) {
@@ -527,8 +532,8 @@
       $("demo-loading-title").textContent = `Loading ${mapData.label} (${mapData.cols}×${mapData.rows})…`;
 
       const antSpecs = buildAntSpecsForMap(mapData);
-      const uniqueAnts = [...new Set(antSpecs.map((a) => a.cls))];
-      const uniqueItems = [...new Set(mapData.objects.map((o) => o.id))];
+      const uniqueAnts = [...new Set([...antSpecs.map((a) => a.cls), "thief"])];
+      const uniqueItems = [...new Set([...mapData.objects.map((o) => o.id), "lunchbox"])];
       const queue = [
         ...uniqueAnts.map((cls) => [`ant:${cls}`, `models/${cls}.glb`]),
         ...uniqueItems.map((id) => [`item:${id}`, `models/items/${id}.glb`]),
@@ -561,6 +566,8 @@
         itemEntries.push({ inst, spec, x: spec.x, z: spec.z, radius });
       }
 
+      const lunchboxModel = await modelCache.get("item:lunchbox");
+      const thiefModel = await modelCache.get("ant:thief");
       const antEntries = [];
       for (let i = 0; i < antSpecs.length; i++) {
         const spec = antSpecs[i];
@@ -584,13 +591,24 @@
           blink: { active: false, elapsed: 0, nextIn: 1.4 + ((i * 1.73) % 3.6) },
           offsetMat: buildWorldMat(model, x, z, ANT_SCALE, yawRad, spec.yLift || 0),
         };
-        antEntries.push({ inst, spec, pathData, x, z, yawRad, renderYaw: yawRad, walkDist: (spec.phase || 0) * 3.0 });
+        const lunchboxInst = spec.carryLunchbox ? {
+          kind: "item",
+          id: "lunchbox",
+          model: lunchboxModel,
+          clipName: "Idle",
+          idleTime: 0,
+          offsetMat: buildCarriedLunchboxMat(lunchboxModel, x, 0, z, yawRad, 0, false, ANT_SCALE, false),
+        } : null;
+        antEntries.push({ inst, lunchboxInst, spec, pathData, x, z, yawRad, renderYaw: yawRad, walkDist: (spec.phase || 0) * 3.0 });
       }
+      const heists = buildHeistsForMap(mapData, itemEntries, thiefModel, lunchboxModel, ANT_SCALE);
 
       activeMap = {
         mapData,
         itemEntries,
         antEntries,
+        heists,
+        lunchboxModel,
         ripples: [],
         scene: {
           instances: [],
@@ -646,6 +664,10 @@
     const tx = cam.target[0], tz = cam.target[2];
     const visible = [];
     const ripples = [];
+
+    if (activeMap.heists && activeMap.heists.length) {
+      updateHeists(activeMap.heists, t, state.patrols, tx, tz, visHalfSpan, visible);
+    }
 
     for (let i = 0; i < itemEntries.length; i++) {
       const e = itemEntries[i];
@@ -716,6 +738,11 @@
         }
       }
       visible.push(inst);
+      if (e.lunchboxInst && activeMap.lunchboxModel) {
+        const lbBob = isWalking ? Math.abs(Math.sin(e.walkDist * 14.5)) * 0.024 : 0;
+        e.lunchboxInst.offsetMat = buildCarriedLunchboxMat(activeMap.lunchboxModel, e.x, lbBob, e.z, e.renderYaw, e.walkDist, isWalking, ANT_SCALE, false);
+        visible.push(e.lunchboxInst);
+      }
     }
     scene.instances = visible;
     activeMap.ripples = ripples;
@@ -1204,6 +1231,12 @@
       cam.yaw = yaw; cam.pitch = pitch; cam.zoom = zoom;
       if (target) cam.target = target.slice();
       if (proj) cam.projection = proj;
+      syncUi();
+    },
+    setSimTime(sec) {
+      state.simTime = Number(sec) || 0;
+      state.playing = false;
+      state.fixedTime = true;
       syncUi();
     },
   };
