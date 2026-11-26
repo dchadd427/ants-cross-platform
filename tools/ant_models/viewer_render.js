@@ -13,6 +13,7 @@
     PLINTH_VS, PLINTH_FS, buildPlinthMesh,
     SHADOW_VS, SHADOW_FS,
     TILE_GROUND_VS, TILE_GROUND_FS, buildTileGroundMesh,
+    BORDER_GRASS_VS, BORDER_GRASS_FS, drawBorderGrassMesh,
     evalJelloWobble,
   } = window.__antFx;
 
@@ -618,6 +619,7 @@
 
   function evaluateWorldMats(inst, opts) {
     const m = inst.model, bi = m.blinkInfo;
+    if (!m.animations.length && (!bi || !bi.hasBlink)) return m.baseWorldMats;
     const isClosed = opts.blinkMode === "closed", isPulsing = !isClosed && inst.blink && inst.blink.active;
     const clipName = inst.clipName || opts.clipName;
     const actionAnims = selectActionAnims(m, clipName).anims;
@@ -679,6 +681,10 @@
       this.furProg = createProgram(gl, FUR_VS, FUR_FS);
       this.shadowProg = createProgram(gl, SHADOW_VS, SHADOW_FS);
       this.tileGroundProg = createProgram(gl, TILE_GROUND_VS, TILE_GROUND_FS);
+      this.borderGrassProg = createProgram(gl, BORDER_GRASS_VS, BORDER_GRASS_FS);
+      this.uBorderGrass = getUniforms(gl, this.borderGrassProg, [
+        "u_viewProj", "u_time", "u_keyDir", "u_fillDir", "u_keyColor", "u_fillColor", "u_skyColor", "u_groundColor", "u_lightMix",
+      ]);
       this.fireParticles = buildFireParticles(gl);
       this.sparkParticles = buildSparkParticles(gl);
       this.tileGroundMesh = null;
@@ -916,6 +922,7 @@
         gl.useProgram(this.shadowProg);
         gl.uniformMatrix4fv(this.uShadow.u_lightViewProj, false, lightViewProj);
         scene.instances.forEach((inst, instIdx) => {
+          if (opts.skipGrassShadows && inst.isGrass) return;
           const worldMats = instMats[instIdx];
           const fxTime = Number.isFinite(opts.fixedIdleTime) ? opts.fixedIdleTime : (inst.idleTime || 0);
           if (inst.model._isJello === undefined) {
@@ -998,8 +1005,11 @@
 
       if (hasTileGround) {
         gl.disable(gl.BLEND); gl.depthMask(true);
-        drawTileGroundPass(0, 0.0);    // opaque land tiles
+        drawTileGroundPass(0, 0.0);    // opaque land tiles + fast outer grass lawn
         drawTileGroundPass(1, -1.35);  // recessed pond bed deep beneath submerged swimmers
+        if (scene.borderGrass) {
+          drawBorderGrassMesh(gl, this.borderGrassProg, this.uBorderGrass, scene.borderGrass, camera.viewProj, keyDir, fillDir, lp, pal, opts.tileGround.time);
+        }
       } else if (opts.showPlinth !== false && !opts.transparent) {
         const plinth = this.ensurePlinth(scene.plinthSpanX, scene.plinthRadius);
         gl.disable(gl.BLEND); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK); gl.frontFace(gl.CCW);
@@ -1044,7 +1054,13 @@
           gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
         } else { gl.disable(gl.BLEND); gl.depthMask(true); }
         scene.instances.forEach((inst, instIdx) => {
+          const m = inst.model;
+          if (m._hasBlend === undefined) {
+            m._hasBlend = m.drawCalls.some((dc) => dc.prim.material.alphaMode === "BLEND" || dc.prim.material.name === "item_fire_volume" || dc.prim.material.name === "item_spark_volume");
+          }
+          if (wantBlend && !m._hasBlend) return;
           const worldMats = instMats[instIdx];
+          gl.uniform1i(this.uPbr.u_useShadowMap, (useShadowMap && !(opts.skipGrassShadows && inst.isGrass)) ? 1 : 0);
           gl.uniform1i(this.uPbr.u_allowUnderwater, inst.submerged ? 1 : 0);
           if (inst.model._isJello === undefined) {
             inst.model._isJello = inst.model.drawCalls.some((dc) => dc.prim.material.name === "item_jello_ruby");

@@ -74,7 +74,7 @@ def _curved_grass_blade(
     sway: float = 0.0,
     shade_mult: float = 1.0,
     hue_shift: Tuple[float, float, float] = (1.0, 1.0, 1.0),
-    segs: int = 8,
+    segs: int = 4,
 ) -> MeshPart:
     """Build one realistic broad V-ribbed, gracefully arching & flexing 3D grass blade with rich root-to-tip chlorophyll gradient."""
     bx, bz = base_xz
@@ -216,7 +216,7 @@ def _build_grass_cluster(
                 sway=sway,
                 shade_mult=shade_m,
                 hue_shift=hue,
-                segs=7 if tier == 0 else 8,
+                segs=4,
             ),
         )
     return _finalize_item(sc, target_span=0.96)
@@ -275,7 +275,7 @@ def _build_grass_lobes(
                 sway=sway,
                 shade_mult=sh_m,
                 hue_shift=hue,
-                segs=7,
+                segs=4,
             ),
         )
     return _finalize_item(sc, target_span=0.96)
@@ -369,7 +369,7 @@ def _build_grass_strip(
                 sway=sway,
                 shade_mult=sh_m,
                 hue_shift=hue,
-                segs=7,
+                segs=4,
             ),
         )
     return _finalize_item(sc, target_span=0.96)

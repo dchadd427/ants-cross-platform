@@ -650,38 +650,25 @@
       if (u_waterPass != 0) discard;
       vec2 edgeD = max(max(-p, p - u_mapSize), vec2(0.0));
       float dOut = length(edgeD);
-      // Organic lush backyard grass meadow surrounding every map edge (replaces the old black void!)
-      float macro = tgFbm(p * 0.24 + vec2(2.3, 7.1));
-      float clump = tgFbm(p * 1.15 + vec2(macro * 1.4, -macro * 1.1));
-      float tufts = tgFbm(p * 3.8 + vec2(clump * 1.2, 4.7));
-      float blade1 = tgNoise(vec2(p.x * 16.0 + macro * 2.6, p.y * 26.0 + clump * 1.8));
-      float blade2 = tgNoise(vec2(p.x * 28.0 - clump * 2.1, p.y * 18.0 + macro * 2.2));
-      float blades = blade1 * 0.56 + blade2 * 0.44;
+      // Fast mobile-friendly backyard grass lawn (3 noise ops instead of 28 FBM octaves; shadow PCF only near border!)
+      float macro = tgNoise(p * 0.26 + vec2(2.3, 7.1));
+      float clump = tgNoise(p * 1.45 + vec2(macro * 1.6, -macro * 1.2));
+      float blades = tgNoise(vec2(p.x * 13.5 + macro * 2.2, p.y * 19.5 + clump * 1.6));
       // Rich chlorophyll palette matched directly to the 3D grass clumps (item_grass_blade)
-      vec3 gRoot = vec3(0.024, 0.098, 0.011);
-      vec3 gMid  = vec3(0.068, 0.258, 0.022);
-      vec3 gSun  = vec3(0.145, 0.390, 0.036);
-      vec3 lawnAlb = mix(gRoot, gMid, smoothstep(0.16, 0.74, clump * 0.55 + tufts * 0.45));
-      lawnAlb = mix(lawnAlb, gSun, smoothstep(0.46, 0.90, macro * 0.52 + blades * 0.48) * 0.72);
-      // Subtle root-shadow earth blend right at the clearing edge so 3D border grass feels naturally rooted
-      float edgeWobble = (tgFbm(p * 2.8) - 0.5) * 0.22;
-      float edgeBlend = smoothstep(0.0, 0.42, dOut + edgeWobble);
-      vec3 edgeMoss = vec3(0.036, 0.122, 0.016);
-      lawnAlb = mix(edgeMoss, lawnAlb, 0.35 + 0.65 * edgeBlend);
-      // Soft ambient occlusion tucked directly under the inner 3D border grass hedge
-      float hedgeAo = mix(0.76, 1.0, smoothstep(0.25, 2.2, dOut) * 0.65 + 0.35 * tufts);
-      lawnAlb *= hedgeAo * (0.90 + 0.20 * blades);
+      vec3 gRoot = vec3(0.022, 0.092, 0.010);
+      vec3 gMid  = vec3(0.064, 0.248, 0.021);
+      vec3 gSun  = vec3(0.140, 0.378, 0.034);
+      vec3 lawnAlb = mix(gRoot, gMid, smoothstep(0.18, 0.76, clump * 0.62 + macro * 0.38));
+      lawnAlb = mix(lawnAlb, gSun, smoothstep(0.46, 0.90, macro * 0.55 + blades * 0.45) * 0.68);
+      // Organic grassy root edge blend + soft ambient occlusion directly under the 3D perimeter grass hedge
+      float edgeBlend = smoothstep(0.0, 0.40, dOut + (clump - 0.5) * 0.24);
+      lawnAlb = mix(vec3(0.034, 0.118, 0.015), lawnAlb, 0.38 + 0.62 * edgeBlend);
+      float hedgeAo = mix(0.76, 1.0, smoothstep(0.25, 2.4, dOut) * 0.65 + 0.35 * clump);
+      lawnAlb *= hedgeAo * (0.91 + 0.18 * blades);
 
-      float eN = 0.08;
-      float hL = tgFbm((p - vec2(eN, 0.0)) * 3.2) * 0.6 + tgNoise((p - vec2(eN, 0.0)) * 18.0) * 0.4;
-      float hR = tgFbm((p + vec2(eN, 0.0)) * 3.2) * 0.6 + tgNoise((p + vec2(eN, 0.0)) * 18.0) * 0.4;
-      float hD = tgFbm((p - vec2(0.0, eN)) * 3.2) * 0.6 + tgNoise((p - vec2(0.0, eN)) * 18.0) * 0.4;
-      float hU = tgFbm((p + vec2(0.0, eN)) * 3.2) * 0.6 + tgNoise((p + vec2(0.0, eN)) * 18.0) * 0.4;
-      vec3 gN = normalize(vec3((hL - hR) * 0.85, 1.0, (hD - hU) * 0.85));
-
-      float sh = sampleTileShadow(v_worldPos);
-      float NoL = max(dot(gN, u_keyDir), 0.0);
-      float NoF = max(dot(gN, u_fillDir), 0.0);
+      float sh = (dOut < 2.6) ? sampleTileShadow(v_worldPos) : 1.0;
+      float NoL = max(u_keyDir.y, 0.0);
+      float NoF = max(u_fillDir.y, 0.0);
       float keyNorm = max(u_keyDir.y, 0.28);
       float sunFactor = (NoL / keyNorm) * mix(1.0 - u_shadowStrength, 1.0, sh);
       vec3 shadowCool = mix(vec3(0.88, 0.92, 1.02), vec3(1.0), sh);
@@ -1048,6 +1035,62 @@
     return { vao, count: idx.length, halfSpanX, radius, dispose() { gl.deleteVertexArray(vao); bufs.forEach((b) => gl.deleteBuffer(b)); } };
   }
 
+  // --- Ultra-Fast Single-Draw-Call Batched 3D Border Grass Shaders (Zero Shadow Pass, GPU Wind Sway) ---
+  const BORDER_GRASS_VS = `#version 300 es
+  layout(location = 0) in vec3 a_pos;
+  layout(location = 1) in vec3 a_nrm;
+  layout(location = 2) in vec4 a_col;
+  uniform mat4 u_viewProj;
+  uniform float u_time;
+  out vec3 v_nrm;
+  out vec3 v_col;
+  void main() {
+    float bend = a_col.a * a_col.a;
+    float w = sin(u_time * 1.9 + a_pos.x * 0.45 + a_pos.z * 0.36) * 0.095
+            + cos(u_time * 1.3 - a_pos.x * 0.24 + a_pos.z * 0.52) * 0.045;
+    vec3 wp = a_pos + vec3(w * bend, -abs(w) * bend * 0.24, w * 0.58 * bend);
+    gl_Position = u_viewProj * vec4(wp, 1.0);
+    v_nrm = a_nrm;
+    v_col = a_col.rgb;
+  }`;
+
+  const BORDER_GRASS_FS = `#version 300 es
+  precision highp float;
+  in vec3 v_nrm;
+  in vec3 v_col;
+  uniform vec3 u_keyDir, u_fillDir, u_keyColor, u_fillColor, u_skyColor, u_groundColor;
+  uniform vec4 u_lightMix;
+  out vec4 fragColor;
+  vec3 bgAces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+  vec3 bgSrgb(vec3 c) { return mix(c * 12.92, 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c)); }
+  void main() {
+    vec3 N = normalize(v_nrm);
+    if (!gl_FrontFacing) N = -N;
+    float NoL = max(dot(N, u_keyDir), 0.0);
+    float wrapL = max(dot(N, u_keyDir) * 0.55 + 0.45, 0.0);
+    float NoF = max(dot(N, u_fillDir), 0.0);
+    vec3 hemi = mix(u_groundColor, u_skyColor, N.y * 0.5 + 0.5);
+    vec3 lit = v_col * (u_keyColor * (NoL * 0.28 + wrapL * 0.11) + u_fillColor * NoF * 0.14 + hemi * 0.25 * u_lightMix.x);
+    vec3 outCol = bgSrgb(bgAces(lit * 1.08 * u_lightMix.z));
+    if (u_lightMix.w > 0.001) outCol = mix(outCol, bgSrgb(bgAces(v_col * 1.18)), u_lightMix.w);
+    fragColor = vec4(outCol, 1.0);
+  }`;
+
+  function drawBorderGrassMesh(gl, prog, u, mesh, viewProj, keyDir, fillDir, lp, pal, time) {
+    if (!mesh || !mesh.count) return;
+    gl.useProgram(prog);
+    gl.disable(gl.BLEND); gl.depthMask(true); gl.disable(gl.CULL_FACE);
+    gl.uniformMatrix4fv(u.u_viewProj, false, viewProj);
+    gl.uniform1f(u.u_time, time || 0);
+    gl.uniform3fv(u.u_keyDir, keyDir); gl.uniform3fv(u.u_fillDir, fillDir);
+    gl.uniform3fv(u.u_keyColor, lp.keyColor); gl.uniform3fv(u.u_fillColor, lp.fillColor);
+    gl.uniform3fv(u.u_skyColor, pal.sky); gl.uniform3fv(u.u_groundColor, pal.ground);
+    gl.uniform4fv(u.u_lightMix, lp.lightMix);
+    gl.bindVertexArray(mesh.vao);
+    gl.drawElements(gl.TRIANGLES, mesh.count, gl.UNSIGNED_INT, 0);
+    gl.bindVertexArray(null);
+  }
+
   window.__antFx = {
     FIRE_VS, FIRE_FS, buildFireParticles,
     SPARK_VS, SPARK_FS, buildSparkParticles,
@@ -1055,6 +1098,7 @@
     PLINTH_VS, PLINTH_FS, buildPlinthMesh,
     SHADOW_VS, SHADOW_FS,
     TILE_GROUND_VS, TILE_GROUND_FS, buildTileGroundMesh,
+    BORDER_GRASS_VS, BORDER_GRASS_FS, drawBorderGrassMesh,
     evalJelloWobble,
   };
 })();

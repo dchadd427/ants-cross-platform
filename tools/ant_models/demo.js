@@ -6,7 +6,7 @@
     DEG, TEAMS, validLighting, wrapAngleDeg, AntRenderer, installToolbarRovingTabindex,
   } = window.__antRender;
   const { buildCarriedLunchboxMat, buildHeistsForMap, updateHeists } = window.__demoHeist;
-  const { BORDER_GRASS_IDS, appendBorderGrass } = window.__demoBorder;
+  const { buildBorderGrassMesh } = window.__demoBorder;
 
   const $ = (id) => document.getElementById(id);
 
@@ -534,7 +534,7 @@
 
       const antSpecs = buildAntSpecsForMap(mapData);
       const uniqueAnts = [...new Set([...antSpecs.map((a) => a.cls), "thief"])];
-      const uniqueItems = [...new Set([...mapData.objects.map((o) => o.id), "lunchbox", ...BORDER_GRASS_IDS])];
+      const uniqueItems = [...new Set([...mapData.objects.map((o) => o.id), "lunchbox"])];
       const queue = [
         ...uniqueAnts.map((cls) => [`ant:${cls}`, `models/${cls}.glb`]),
         ...uniqueItems.map((id) => [`item:${id}`, `models/items/${id}.glb`]),
@@ -559,6 +559,7 @@
         const inst = {
           kind: "item",
           id: spec.id,
+          isGrass: spec.id.startsWith("grass"),
           model,
           clipName: "Idle",
           idleTime: ((i * 0.29) % 1.1),
@@ -566,9 +567,10 @@
         };
         itemEntries.push({ inst, spec, x: spec.x, z: spec.z, radius });
       }
-      const grassModels = {};
-      for (const gid of BORDER_GRASS_IDS) grassModels[gid] = await modelCache.get(`item:${gid}`);
-      appendBorderGrass(itemEntries, mapData, grassModels, mapsCatalog.water_tile_index, buildWorldMat);
+      if (activeMap && activeMap.scene && activeMap.scene.borderGrass) {
+        activeMap.scene.borderGrass.dispose();
+      }
+      const borderGrass = buildBorderGrassMesh(renderer.gl, mapData, mapsCatalog.water_tile_index);
 
       const lunchboxModel = await modelCache.get("item:lunchbox");
       const thiefModel = await modelCache.get("ant:thief");
@@ -616,6 +618,7 @@
         ripples: [],
         scene: {
           instances: [],
+          borderGrass,
           target: [mapData.cols * 0.5, 0.3, mapData.rows * 0.5],
           fitRadius: BASE_FIT_RADIUS,
           halfWidth: BASE_FIT_RADIUS * 1.35,
@@ -664,7 +667,9 @@
     }
     const t = state.simTime;
 
-    const visHalfSpan = BASE_FIT_RADIUS * cam.zoom * 1.75 + 9.0;
+    const aspect = Math.max(0.6, (canvas.clientWidth || 1000) / Math.max(1, canvas.clientHeight || 700));
+    const pitchSin = Math.max(0.42, Math.sin(cam.pitch * DEG));
+    const visHalfSpan = BASE_FIT_RADIUS * cam.zoom * Math.max(aspect, 1.0 / pitchSin) * 1.18 + 4.0;
     const tx = cam.target[0], tz = cam.target[2];
     const visible = [];
     const ripples = [];
@@ -774,8 +779,10 @@
     }
   }
 
+  const isCoarsePointer = Boolean(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
   function resizeCanvas() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const maxDpr = isCoarsePointer ? 1.5 : 2.0;
+    const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
     const w = Math.max(120, Math.floor(canvas.clientWidth * dpr));
     const h = Math.max(80, Math.floor(canvas.clientHeight * dpr));
     if (canvas.width !== w || canvas.height !== h) {
@@ -1182,6 +1189,7 @@
         showPlinth: false,
         sunDir,
         shadowMap: state.castShadows,
+        skipGrassShadows: cam.zoom > 1.15,
         shadowRadius,
         customTarget: cam.target,
         squareGameView: state.camPreset === "game" && cam.projection === "ortho",

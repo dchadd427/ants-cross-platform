@@ -1,10 +1,8 @@
 "use strict";
 
-// Lush 3D backyard grass perimeter wrapping all 4 outer edges & corners of every demo map
-// so the boundary blends seamlessly into the surrounding grassy lawn with zero harsh black drop-off.
+// Single-draw-call batched 3D backyard grass perimeter VAO wrapping all 4 outer edges & corners.
+// ~115x fewer triangles and 1 draw call (vs ~560 draw calls / ~3.9M tris), zero shadow pass, GPU wind sway!
 (() => {
-  const BORDER_GRASS_IDS = ["grassbig1", "grassmed1", "grassmed2", "grass3", "grass4"];
-
   function hash01(seed) {
     let s = (seed >>> 0) + 0x6D2B79F5;
     s = Math.imul(s ^ (s >>> 15), 1 | s);
@@ -19,94 +17,147 @@
     return mapData.tiles[r * mapData.cols + c] === waterTile;
   }
 
-  // Build deterministic, organically staggered 3D grass tufts around all 4 edges + outer lawn bands.
-  // Keeps inner tufts cleanly outside playable tiles (extra south lip clearance for 39° Game View).
-  function appendBorderGrass(itemEntries, mapData, grassModels, waterTile, buildWorldMat) {
+  // Build one batched GPU mesh of ~4,000-6,800 curved, tapered 3D grass blades (5 tris/blade) around [0..cols, 0..rows].
+  function buildBorderGrassMesh(gl, mapData, waterTile) {
     const cols = mapData.cols, rows = mapData.rows;
-    const big = grassModels.grassbig1;
-    const med1 = grassModels.grassmed1 || big;
-    const med2 = grassModels.grassmed2 || big;
-    const tuft3 = grassModels.grass3 || big;
-    const tuft4 = grassModels.grass4 || tuft3;
-    if (!big) return;
-
     let seed = (cols * 73856093) ^ (rows * 19349663) ^ 0x51A7F3;
     const nextR = () => hash01(++seed);
 
-    function addClump(id, model, x, z, scale, yawRad) {
-      if (!model) return;
-      const radius = 0.65 * Math.max(model.size[0], model.size[2], 1.0) * scale;
-      const inst = {
-        kind: "item",
-        id,
-        model,
-        clipName: "Idle",
-        idleTime: nextR() * 2.2,
-        offsetMat: buildWorldMat(model, x, z, scale, yawRad),
-      };
-      itemEntries.push({ inst, spec: { id, x, z, s: scale, border: true }, x, z, radius });
+    const pos = [], nrm = [], col = [], idx = [];
+    let vCount = 0;
+
+    // Exact linear chlorophyll palette matched to `item_grass_blade` (baseColorFactor linear + root-to-tip tint)
+    const baseR = 0.106, baseG = 0.610, baseB = 0.020;
+
+    function pushBlade(bx, bz, height, width, yaw, lean, shade, hueG) {
+      const cy = Math.cos(yaw), sy = Math.sin(yaw);
+      const nx0 = sy, nz0 = cy;
+      // 3 height rings + pointed apex tip = 7 verts, 5 triangles!
+      const levels = [
+        [0.00, 1.00, 0.00],
+        [0.36, 0.80, 0.20],
+        [0.72, 0.44, 0.56],
+      ];
+      const baseV = vCount;
+      for (let i = 0; i < 3; i++) {
+        const [u, wF, lF] = levels[i];
+        const horiz = lean * height * lF;
+        const vy = height * u * (1.0 - 0.16 * lF * lF);
+        const cx = bx + sy * horiz, cz = bz + cy * horiz;
+        const hw = width * 0.5 * wF;
+        // Root-to-tip linear chlorophyll gradient (deep shaded forest root -> rich emerald -> sunlit chartreuse tip)
+        const rc = baseR * (0.26 + 0.72 * u) * shade;
+        const gc = baseG * (0.34 + 0.66 * Math.pow(u, 0.78)) * shade * hueG;
+        const bc = baseB * (0.28 + 0.62 * u) * shade;
+        // Subtle normal tilt along blade arch so directional sunlight models each tuft cleanly
+        const ny = 0.55 + 0.35 * u;
+        const nLen = Math.hypot(nx0 * 0.65, ny, nz0 * 0.65) || 1;
+        const nx = (nx0 * 0.65) / nLen, nyn = ny / nLen, nz = (nz0 * 0.65) / nLen;
+        for (const side of [-1, 1]) {
+          pos.push(cx + cy * (side * hw), vy, cz - sy * (side * hw));
+          nrm.push(nx, nyn, nz);
+          col.push(rc, gc, bc, u);
+          vCount++;
+        }
+      }
+      // Pointed blade tip vertex
+      const tipH = lean * height;
+      const tipY = height * 0.86;
+      const tr = baseR * 1.06 * shade, tg = baseG * 1.04 * shade * hueG, tb = baseB * 0.96 * shade;
+      pos.push(bx + sy * tipH, tipY, bz + cy * tipH);
+      nrm.push(sy * 0.35, 0.88, cy * 0.35);
+      col.push(tr, tg, tb, 1.0);
+      vCount++;
+
+      // 2 quads (4 tris) + tip triangle (1 tri) = 5 tris total
+      idx.push(
+        baseV + 0, baseV + 1, baseV + 3,  baseV + 0, baseV + 3, baseV + 2,
+        baseV + 2, baseV + 3, baseV + 5,  baseV + 2, baseV + 5, baseV + 4,
+        baseV + 4, baseV + 5, baseV + 6,
+      );
     }
 
-    // 3 concentric staggered organic grass bands outside all 4 edges:
-    // Band 0: tight lush hedge hugging the edge (zero flat gap); Band 1: full mid-lawn thicket; Band 2: outer meadow clumps
-    const bands = [
-      { offN: 1.15, offS: 1.75, offW: 1.25, offE: 1.25, step: 2.15, jitterAlong: 0.45, jitterOut: 0.28, sMin: 4.1, sMax: 5.2, cornerPad: 1.6 },
-      { offN: 3.70, offS: 4.35, offW: 3.90, offE: 3.90, step: 3.30, jitterAlong: 0.78, jitterOut: 0.58, sMin: 5.1, sMax: 6.6, cornerPad: 4.5 },
-      { offN: 7.80, offS: 8.40, offW: 8.10, offE: 8.10, step: 4.80, jitterAlong: 1.10, jitterOut: 0.90, sMin: 6.0, sMax: 7.6, cornerPad: 8.8 },
-    ];
+    function addClump(cx, cz, nBlades, radX, radZ, hMin, hMax, wScale, leanOutX, leanOutZ) {
+      const clumpShade = 0.86 + nextR() * 0.24;
+      const clumpHue = 0.90 + nextR() * 0.22;
+      for (let k = 0; k < nBlades; k++) {
+        const ang = nextR() * Math.PI * 2;
+        const r = Math.sqrt(nextR());
+        const bx = cx + Math.cos(ang) * radX * r;
+        const bz = cz + Math.sin(ang) * radZ * r;
+        // Fan blades slightly outward from clump center + slight bias away from playable clearing edge
+        const outX = Math.cos(ang) * 0.72 + leanOutX * 0.28;
+        const outZ = Math.sin(ang) * 0.72 + leanOutZ * 0.28;
+        const yaw = Math.atan2(outX, outZ) + (nextR() - 0.5) * 0.55;
+        const h = hMin + nextR() * (hMax - hMin);
+        const w = (0.14 + nextR() * 0.11) * wScale;
+        const lean = 0.28 + nextR() * 0.36;
+        const shade = clumpShade * (0.82 + nextR() * 0.30);
+        pushBlade(bx, bz, h, w, yaw, lean, shade, clumpHue);
+      }
+    }
 
-    const pickModel = (bandIdx, isHoriz) => {
-      const r = nextR();
-      if (bandIdx === 0) {
-        if (r < 0.42) return ["grassbig1", big, 1.0];
-        if (r < 0.72) return isHoriz ? ["grassmed1", med1, 0.96] : ["grassmed2", med2, 0.76];
-        return r < 0.86 ? ["grass3", tuft3, 0.66] : ["grass4", tuft4, 0.68];
-      }
-      if (bandIdx === 1) {
-        if (r < 0.68) return ["grassbig1", big, 1.0];
-        return isHoriz ? ["grassmed1", med1, 0.92] : ["grassmed2", med2, 0.74];
-      }
-      return ["grassbig1", big, 1.0];
-    };
+    // 3 concentric staggered organic bands outside all 4 edges + corners:
+    // Band 0 hugs the clearing tightly (zero bare strip; South slightly lower & further out so row `rows-1` stays clear!)
+    const bands = [
+      { offN: 0.55, offS: 1.15, offW: 0.58, offE: 0.58, step: 1.05, jA: 0.34, jO: 0.28, blades: 10, rad: 0.72, hMin: 0.80, hMax: 1.48, wS: 1.08, pad: 1.0 },
+      { offN: 2.75, offS: 3.30, offW: 2.85, offE: 2.85, step: 2.25, jA: 0.65, jO: 0.60, blades: 10, rad: 1.42, hMin: 0.92, hMax: 1.72, wS: 1.28, pad: 3.6 },
+      { offN: 6.75, offS: 7.30, offW: 6.95, offE: 6.95, step: 3.70, jA: 1.05, jO: 1.05, blades: 9,  rad: 2.10, hMin: 1.05, hMax: 1.92, wS: 1.48, pad: 8.0 },
+    ];
 
     for (let b = 0; b < bands.length; b++) {
       const cfg = bands[b];
-      const pad = cfg.cornerPad;
-
-      // North & South edges (spanning past corners to wrap cleanly)
-      for (let t = -pad; t <= cols + pad; t += cfg.step) {
+      // North & South edges (wrapping all 4 corners)
+      for (let t = -cfg.pad; t <= cols + cfg.pad; t += cfg.step) {
         for (const isSouth of [false, true]) {
-          const jA = (nextR() - 0.5) * 2 * cfg.jitterAlong;
-          const jO = (nextR() - 0.5) * 2 * cfg.jitterOut;
-          const x = t + jA;
-          const waterPush = (b === 0 && isEdgeWater(mapData, waterTile, x, isSouth ? rows - 1 : 0)) ? 0.55 : 0.0;
-          const z = isSouth ? (rows + cfg.offS + jO + waterPush) : (-cfg.offN - jO - waterPush);
-          const [id, model, sMul] = pickModel(b, true);
-          const sc = (cfg.sMin + nextR() * (cfg.sMax - cfg.sMin)) * sMul;
-          const yaw = (id === "grassmed1") ? ((nextR() - 0.5) * 0.45 + (nextR() > 0.5 ? Math.PI : 0)) : (nextR() * Math.PI * 2);
-          addClump(id, model, x, z, sc, yaw);
+          const x = t + (nextR() - 0.5) * 2 * cfg.jA;
+          const waterPush = (b === 0 && isEdgeWater(mapData, waterTile, x, isSouth ? rows - 1 : 0)) ? 0.50 : 0.0;
+          const z = isSouth
+            ? (rows + cfg.offS + (nextR() - 0.5) * 2 * cfg.jO + waterPush)
+            : (-cfg.offN + (nextR() - 0.5) * 2 * cfg.jO - waterPush);
+          const hMul = (b === 0 && isSouth) ? 0.80 : 1.0;
+          addClump(x, z, cfg.blades, cfg.rad * 1.15, cfg.rad * 0.82, cfg.hMin * hMul, cfg.hMax * hMul, cfg.wS, 0, isSouth ? 1 : -1);
         }
       }
-
-      // West & East edges (filling between North & South inner spans so corners aren't over-stacked)
-      for (let t = 0.6; t <= rows - 0.6; t += cfg.step) {
+      // West & East edges
+      for (let t = 0.5; t <= rows - 0.5; t += cfg.step) {
         for (const isEast of [false, true]) {
-          const jA = (nextR() - 0.5) * 2 * cfg.jitterAlong;
-          const jO = (nextR() - 0.5) * 2 * cfg.jitterOut;
-          const z = t + jA;
-          const waterPush = (b === 0 && isEdgeWater(mapData, waterTile, isEast ? cols - 1 : 0, z)) ? 0.55 : 0.0;
-          const x = isEast ? (cols + cfg.offE + jO + waterPush) : (-cfg.offW - jO - waterPush);
-          const [id, model, sMul] = pickModel(b, false);
-          const sc = (cfg.sMin + nextR() * (cfg.sMax - cfg.sMin)) * sMul;
-          const yaw = (id === "grassmed2") ? ((nextR() - 0.5) * 0.45 + (nextR() > 0.5 ? Math.PI : 0)) : (nextR() * Math.PI * 2);
-          addClump(id, model, x, z, sc, yaw);
+          const z = t + (nextR() - 0.5) * 2 * cfg.jA;
+          const waterPush = (b === 0 && isEdgeWater(mapData, waterTile, isEast ? cols - 1 : 0, z)) ? 0.50 : 0.0;
+          const x = isEast
+            ? (cols + cfg.offE + (nextR() - 0.5) * 2 * cfg.jO + waterPush)
+            : (-cfg.offW + (nextR() - 0.5) * 2 * cfg.jO - waterPush);
+          addClump(x, z, cfg.blades, cfg.rad * 0.82, cfg.rad * 1.15, cfg.hMin, cfg.hMax, cfg.wS, isEast ? 1 : -1, 0);
         }
       }
     }
+
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    const makeBuf = (target, data, loc, size) => {
+      const buf = gl.createBuffer();
+      gl.bindBuffer(target, buf);
+      gl.bufferData(target, data, gl.STATIC_DRAW);
+      if (loc !== undefined) { gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0); }
+      return buf;
+    };
+    const bufs = [
+      makeBuf(gl.ARRAY_BUFFER, new Float32Array(pos), 0, 3),
+      makeBuf(gl.ARRAY_BUFFER, new Float32Array(nrm), 1, 3),
+      makeBuf(gl.ARRAY_BUFFER, new Float32Array(col), 2, 4),
+      makeBuf(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(idx)),
+    ];
+    gl.bindVertexArray(null);
+    return {
+      vao,
+      count: idx.length,
+      cols,
+      rows,
+      dispose() { gl.deleteVertexArray(vao); bufs.forEach((b) => gl.deleteBuffer(b)); },
+    };
   }
 
   window.__demoBorder = {
-    BORDER_GRASS_IDS,
-    appendBorderGrass,
+    buildBorderGrassMesh,
   };
 })();
