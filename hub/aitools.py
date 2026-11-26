@@ -15,6 +15,7 @@ import re
 READ, EDIT = "read", "edit"
 TEAMS = ("green", "red", "blue", "black")
 ANT_TYPES = ("none", "combat", "thief", "bomber", "swimmer", "fire")
+FILL_PATTERNS = ("all", "checker", "rows", "cols", "random")
 GUIDE_TOPICS = ("guide", "tools", "vocabulary", "terrain", "layout", "check-and-fix")
 TILE_GROUPS = ("ground", "objects", "bigger", "plants", "food", "teams", "ants")
 VIEWS = ("info", "region", "picture")
@@ -96,6 +97,22 @@ def check_erase(args):
     return None
 
 
+def check_fill(args):
+    names = [n for n in ("object", "plant", "food", "ants") if n in args]
+    if len(names) != 1:
+        return "bad_args", "give exactly one of object, plant, food or ants: the thing to put"
+    rect = args["rect"]
+    if rect["rows"] * rect["columns"] > MAX_CELLS:
+        return "too_big", "one call changes at most %d cells: split the box" % MAX_CELLS
+    if "n" in args and args.get("pattern") not in ("rows", "cols"):
+        return "bad_args", "n is for the pattern rows or cols"
+    if "density" in args and args.get("pattern") != "random":
+        return "bad_args", "density is for the pattern random"
+    if "seed" in args and args.get("pattern") != "random":
+        return "bad_args", "seed is for the pattern random"
+    return None
+
+
 def check_properties(args):
     names = [n for n in args if n != "base"]
     return None if names else ("bad_args", "give at least one of description, minutes, eggs or default_ant")
@@ -143,6 +160,11 @@ T = [
          {"row": ROW, "column": ROW, "stages": {"type": "integer", "minimum": 2, "maximum": 6}, "food": TILE, "bites": {"type": "integer", "minimum": 5, "maximum": 200}, "points": {"type": "integer", "minimum": 5, "maximum": 200}}, ("row", "column")),
     Tool("put_plant", EDIT, "Put a plant", "Put a plant or a power-up flower (a plant id from list_tiles) at row, column; `dropper` is the seconds between the power-ups that it drops (0 for none, up to 180).",
          {"tile": TILE, "row": ROW, "column": ROW, "dropper": {"type": "integer", "minimum": 0, "maximum": 180}}, ("tile", "row", "column")),
+    Tool("fill_area", EDIT, "Fill a box", "Fill a rectangle with one thing on the cells of a pattern, as the Map Maker's Fill a box does (at most 5,000 cells; one step that Undo takes back). The thing is exactly one of `object` (a one-cell object tile of list_tiles: a bomb, power-up, rock, fire wall or bridge piece), `plant` {tile, dropper}, `food` {food or stages, bites, points} or `ants` {team, type; at most 250 ants a call, the answer says how many it left out). `pattern` is all (the default), checker (every other cell, counted from the box's corner), rows or cols (every `n`th row or column, 2 to 9, from the box's first), or random (`density` 5 to 95 percent, `seed`, which the answer repeats). Cells that cannot take the thing (water, solid ground, something already there) are skipped and counted; a bridge piece goes on water only and a swimmer ant may stand on water.",
+         {"rect": RECT, "pattern": {"type": "string", "enum": list(FILL_PATTERNS)}, "n": {"type": "integer", "minimum": 2, "maximum": 9}, "density": {"type": "integer", "minimum": 5, "maximum": 95}, "seed": {"type": "integer", "minimum": 1, "maximum": 9999},
+          "object": TILE, "plant": obj({"tile": TILE, "dropper": {"type": "integer", "minimum": 0, "maximum": 180}}, ("tile",)),
+          "food": obj({"food": TILE, "stages": {"type": "integer", "minimum": 2, "maximum": 6}, "bites": {"type": "integer", "minimum": 5, "maximum": 200}, "points": {"type": "integer", "minimum": 5, "maximum": 200}}),
+          "ants": obj({"team": TEAM, "type": ANT}, ("team",))}, ("rect",), check_fill),
     Tool("erase", EDIT, "Erase", "Erase the objects on cells (a whole object goes at once, hills, ants and piles too): give exactly one of cells (a list of [row, column]) or rect {row, column, rows, columns}. The ground stays.",
          {"cells": {"type": "array", "items": CELL, "minItems": 1, "maxItems": MAX_LISTED}, "rect": RECT}, (), check_erase),
     Tool("set_properties", EDIT, "Set the properties", "Set the description (a short text), the minutes of a match (1 to 120), the eggs each team starts with (0 to 255) and the default ant type. Give at least one.",
