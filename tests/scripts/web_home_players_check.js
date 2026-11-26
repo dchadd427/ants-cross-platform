@@ -86,7 +86,7 @@ function rig(o) {
     const env = { elements: {}, innerHTMLWrites: [] };
     const clock = makeClock();
     const Players = loadPlayers(clock);
-    const doc = { hidden: false, listeners: {}, activeElement: null, createElement: (t) => new El(env, t), getElementById: () => null, addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); } };
+    const doc = { hidden: false, listeners: {}, activeElement: null, createElement: (t) => new El(env, t), createTextNode: (t) => ({ isText: true, textContent: String(t), parent: null }), getElementById: () => null, addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); } };
     env.doc = doc;
     const state = { client: o.client || null, count: o.count || null, handing: !!o.handing };       // (count: { people, size } stands for the Room's model: that many persons, then open colors up to size, then Closed ones)
     const modelOf = (c) => (c ? { slots: [0, 1, 2, 3].map((i) => ({ kind: i < c.people ? 'person' : i < c.size ? 'open' : 'nobody' })) } : null);
@@ -136,7 +136,7 @@ function rig(o) {
 {
     const P = Pure;
     const rowOf = (raw) => P.rowOf(raw, Chat, Rules);
-    same('a plain row: the name, where, no mark, no details', rowOf({ i: 4, name: 'sage', at: 'look' }), { id: 4, name: 'sage', at: 'look', mod: false, role: 'none', pic: '', pub: false, priv: false, solo: false, map: '', mapName: '', guess: '', n: -1, of: -1, code: '' });
+    same('a plain row: the name, where, no mark, no details', rowOf({ i: 4, name: 'sage', at: 'look' }), { id: 4, name: 'sage', tag: '', at: 'look', mod: false, role: 'none', pic: '', pub: false, priv: false, solo: false, map: '', mapName: '', guess: '', n: -1, of: -1, code: '' });
     same('the mark of a moderator is exactly true (a string or a number is none)', [rowOf(row(1, 'a1', 'look', { mod: true })).mod, rowOf(row(1, 'a1', 'look', { mod: 'true' })).mod, rowOf(row(1, 'a1', 'look', { mod: 1 })).mod], [true, false, false]);
     same('a name loses the invisible and bidirectional characters and is cut at 32 code points', [rowOf(row(1, '‮alice​⁦')).name, rowOf(row(1, 'x'.repeat(40))).name], ['alice', 'x'.repeat(32) + '…']);
     same('markup in a name stays text', rowOf(row(1, '<img src=x onerror=1>')).name, '<img src=x onerror=1>');

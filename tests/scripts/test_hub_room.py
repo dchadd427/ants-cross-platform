@@ -638,7 +638,7 @@ class TheBusiestChat(unittest.TestCase):
         self.addCleanup(room.close)
         accepted = collections.Counter()
         real = room.store.add_line
-        room.store.add_line = lambda account, name, text, mod: accepted.update([account]) or real(account, name, text, mod)
+        room.store.add_line = lambda account, name, text, mod, **more: accepted.update([account]) or real(account, name, text, mod, **more)
         busy = [room.person(n) for n in range(1, 13)]
         quiet = [room.person(100 + n) for n in range(20)]
         biggest = 0

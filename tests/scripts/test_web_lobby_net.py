@@ -42,11 +42,12 @@ def run_node(*args):
 
 
 class TheFiles(unittest.TestCase):
-    def test_the_script_is_a_plain_script_with_no_dependency(self):
+    def test_the_script_is_a_plain_script_whose_one_dependency_is_the_global_of_the_letters(self):
         with open(MODULE, encoding="utf-8") as f:
             text = f.read()
         self.assertNotRegex(text, r"(?m)^\s*(import|export)\s", "a page loads it with a script tag: no module syntax")
-        self.assertNotRegex(text, r"\brequire\(", "no dependency")
+        self.assertNotRegex(text, r"\brequire\(", "no dependency that a page cannot have: the letters of a name are a global of front/name_letters.js, a script tag before this one")
+        self.assertIn("self.AntsNameLetters", text)
         self.assertIn("module.exports", text)                                  # (node loads it for the checks; a page gets the global)
         self.assertIn("root.AntsLobbyNet = api", text)
 
@@ -101,7 +102,7 @@ class TheBudgetChecksAreNotVacuous(unittest.TestCase):
     (a command that exits non-zero), and the copy with nothing changed must pass, so that a failure is the change's. The chat's own are in lobby_chat_mutants.json (test_web_lobby_chat.py)."""
 
     FILES = ("web/front/lobby_net.js", "web/rejoin_key.js", "web/alert_core.js", "tests/scripts/web_lobby_client_check.js", "tests/data/lobby_messages.txt", "include/ants_net/flood.hpp",      # (the check reads the golden messages and, from the header, the server's limits)
-             "web/lobby.html", "web/shell.html", "web/front/lobby_rules.js", "web/front/player_name.js", "web/front/lobby_chat.js", "web/front/rematch.js", "web/front/game_modes.js", "web/front/game_type.js", "web/front/room_fog.js", "web/front/room_sheet.js", "web/front/seat_menu.js", "web/shapes.js", "tests/scripts/web_name_check.js", "tests/scripts/web_page_harness.js", "web/home/home.js", "web/home/games.js", "web/home/alerts.js", "web/home/alerts.css")      # (and the page in a fake browser: a team press that the page's pace refuses)
+             "web/lobby.html", "web/shell.html", "web/front/lobby_rules.js", "web/front/name_letters.js", "web/front/player_name.js", "web/front/lobby_chat.js", "web/front/rematch.js", "web/front/game_modes.js", "web/front/game_type.js", "web/front/room_fog.js", "web/front/room_sheet.js", "web/front/seat_menu.js", "web/shapes.js", "tests/scripts/web_name_check.js", "tests/scripts/web_page_harness.js", "web/home/home.js", "web/home/games.js", "web/home/alerts.js", "web/home/alerts.css")      # (and the page in a fake browser: a team press that the page's pace refuses)
 
     @classmethod
     def setUpClass(cls):

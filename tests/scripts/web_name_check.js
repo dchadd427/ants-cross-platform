@@ -16,6 +16,7 @@
 // tests/scripts/test_web_name.py runs this with node (the quick tier). usage: node web_name_check.js web/shell.html web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
 const fs = require('fs');
+globalThis.AntsNameLetters = require(require('path').resolve(__dirname, '..', '..', 'web', 'front', 'name_letters.js'));       // (the pages' name block reads the letters of a name: front/name_letters.js, a script tag of the page)
 // the pages load web/shapes.js (the one table of the shapes) before their own code: it is the global AntsShapes of the code that is run here
 globalThis.AntsShapes = require(require('path').resolve(__dirname, '..', '..', 'web', 'shapes.js'));
 
@@ -67,7 +68,7 @@ const NAME_TABLE = [
     ['x'.repeat(100), false],
     ['Bot (Medium)', false], ['bot (x)', false], ['BOT(HARD)', false], ['  Bot (', false], ['B o t (', false], ['b  o  t  (', false], ['bot(x', false],
     ['Bot', true, 'Bot'], ['Botany', true, 'Botany'], ['Bot Bob', true, 'Bot Bob'], ['Robot (x)', true, 'Robot (x)'], ['bot )', true, 'bot )'], ['The Bot (x)', true, 'The Bot (x)'],
-    ['Zoë', false], ['名前', false], ['café', false], ['🐜', false], [' Bob', false], ['Bob​', false],
+    ['Zoë', true, 'Zoë'], ['Ёжик', true, 'Ёжик'], ['名前', false], ['café', true, 'café'], ['aβc', false], ['🐜', false], [' Bob', false], ['Bob​', false],
     ['a\tb', true, 'ab'], ['a\nb', true, 'ab'], ['a\r\nb', true, 'ab'], ['\u0001x', false], ['x\u007f', false], ['x\u0000', false],
     ['<script>alert(1)</script>', true, '<script>alert(1)</script>'], ['a&b', true, 'a&b'], ['"q" \'q\' <b>', true, '"q" \'q\' <b>'], ['100%', true, '100%'], ['..\\/', true, '..\\/'],
     [null, true, ''], [undefined, true, ''], [42, true, ''], [{}, true, ''],
@@ -80,7 +81,7 @@ for (const [text, ok, name] of NAME_TABLE) {
     else check('nameCheck(' + String(shown).slice(0, 40) + ') says why, in a short line', typeof got.why === 'string' && got.why.length > 8 && got.why.length < 120, JSON.stringify(got));
 }
 check('the refusal of a Bot ( name says what it is for', /computer players/.test(nameCheck('Bot (x)').why));
-check('the refusal of a non-ASCII name says ASCII', /ASCII/.test(nameCheck('Zoë').why));
+check('the refusal of a letter that the game cannot draw says which letters it can', /Latin and Cyrillic/.test(nameCheck('名前').why));
 check('the refusal of a long name says 32', /32/.test(nameCheck('a'.repeat(33)).why));
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -100,14 +101,15 @@ function fakeUi() {
 // The person of a page as the card sees it (front/player_name.js): ready(fn) waits until answer(name, kind, swap, how) is called (a question on its way), or answers at once when `now` is given
 function fakePerson(now) {
     const waiting = [];
-    return { asked: 0, ready(fn) { this.asked++; if (now) fn(now[0], now[1], now[2], now[3]); else waiting.push(fn); }, answer(name, kind, swap, how) { waiting.splice(0).forEach((fn) => fn(name, kind, swap, how)); } };
+    return { asked: 0, ready(fn) { this.asked++; if (now) fn(now[0], now[1], now[2], now[3], now[4]); else waiting.push(fn); }, answer(name, kind, swap, how, pass) { waiting.splice(0).forEach((fn) => fn(name, kind, swap, how, pass)); } };
 }
 const HINT_LOGIN = 'This is your Discord name. The other players see it.';
 const HINT_SWAP = ' The chat menu switches it between your display name and your username.';
 const HINT_OTHER = ' Your display name has characters that the game cannot show, so your username is used.';
-const HINT_GUEST = 'You play as a guest. Log in with Discord to play under your own name.';
-same('the words under the name: a login, the switch that the hub says exists, the username that is used because the display name did not fit, a guest', [names.HINT.login, names.HINT.swap, names.HINT.other, names.HINT.guest], [HINT_LOGIN, HINT_SWAP, HINT_OTHER, HINT_GUEST]);
-check('the words are plain text of the page\'s characters, short, and none of them is a name that nameCheck takes (they are hints, not names)', Object.values(names.HINT).every((w) => /^[\x20-\x7e]+$/.test(w) && w.length < 90 && !/[<>&]/.test(w)));
+const HINT_NICK = 'This is your nickname. The other players see it.';
+const HINT_GUEST = 'A guest cannot chat in the lobby or get messages. Log in with Discord to play under your own name.';
+same('the words under the name: a login, a nickname, the switch that the hub says exists, the username that is used because the display name did not fit, a guest', [names.HINT.login, names.HINT.nick, names.HINT.swap, names.HINT.other, names.HINT.guest], [HINT_LOGIN, HINT_NICK, HINT_SWAP, HINT_OTHER, HINT_GUEST]);
+check('the words are plain text of the page\'s characters, short, and none of them is a name that nameCheck takes (they are hints, not names)', Object.values(names.HINT).every((w) => /^[\x20-\x7e]+$/.test(w) && w.length < 110 && !/[<>&]/.test(w)));
 {
     const ui = fakeUi();
     const person = fakePerson();
@@ -175,7 +177,7 @@ for (const [what, answer, link] of [['a guest whom the hub could log in', ['Gues
     const ui = fakeUi();
     const done = [];
     names.runNameStep(ui, fakePerson(['Guest 550000', 'guest', false]), function (n) { done.push(n); });
-    same('a guest: the guest name and the words that a login gives a name of one\'s own', [ui.input.value, ui.hints], ['Guest 550000', [HINT_GUEST]]);
+    same('a guest: the guest name and the words that a login gives a name of one\'s own', [ui.input.value, ui.hints], ['Guest 550000', ['You join as Guest 550000. ' + HINT_GUEST]]);
     ui.input.listeners.keydown({ key: 'a', preventDefault() {} });
     check('another key does not go on', done.length === 0);
     let prevented = false;
@@ -189,8 +191,8 @@ for (const [what, answer, link] of [['a guest whom the hub could log in', ['Gues
     names.runNameStep(ui, person, function (n) { done.push(n); });
     ui.button.listeners.click();
     check('the button before the name is known waits: nothing is done and the card stays', done.length === 0 && ui.hidden === 0);
-    person.answer('Jose', 'login', false);
-    same('... and goes on by itself when the name is there, with that name', [done, ui.hidden, ui.input.value], [['Jose'], 1, 'Jose']);
+    person.answer('José', 'login', false);
+    same('... and goes on by itself when the name is there, with that name', [done, ui.hidden, ui.input.value], [['José'], 1, 'José']);
     person.answer('Other', 'login', false);
     check('... once', done.length === 1);
 }
@@ -394,6 +396,40 @@ same('a game here asks for the person\'s own name (nameless) when its address na
     person.answer('Guest 550000', 'guest', false);
     check('... the game starts when the name is there, under it (a guest name is a name: --name)', started === 1 && !gate.pending() && args.join(' ') === '--join-url ws://h/ws --name Guest 550000', args.join(' '));
 }
+{   // the pass of the name (protocol 29, docs/HUB_NICKNAMES.md "The pass"): the card hands it on with the name, a guest has none, and the gate puts it into the game's arguments after the name
+    const PASS = '1700000120.' + 'a1b2c3d4'.repeat(4);
+    const ui = fakeUi();
+    const person = fakePerson();
+    const done = [];
+    names.runNameStep(ui, person, function (n, pass) { done.push([n, pass]); });
+    person.answer('[ANT] Zoe', 'login', false, '', PASS);
+    ui.button.listeners.click();
+    same('the card of a login goes on with the name and the pass that the person has', done, [['[ANT] Zoe', PASS]]);
+    const guestUi = fakeUi();
+    const guestDone = [];
+    names.runNameStep(guestUi, fakePerson(['Wren (Guest)', 'guest', false, '', undefined]), function (n, pass) { guestDone.push([n, pass]); });
+    guestUi.button.listeners.click();
+    same('the card of a guest goes on with the name and no pass', guestDone, [['Wren (Guest)', '']]);
+    const args = ['--join-url', 'ws://h/ws', '--room', 'ABC'];
+    const link = shell.makeNameGate(true, args, fakeUi(), fakePerson(['[ANT] Zoe', 'login', false, '', PASS]));
+    let started = 0;
+    link.when(function () { started++; });
+    check('a shared link: the name and its pass are in the game\'s arguments when the button has been pressed', started === 0);
+    const ui2 = fakeUi();
+    const person2 = fakePerson(['[ANT] Zoe', 'login', false, '', PASS]);
+    const args2 = ['--join-url', 'ws://h/ws', '--room', 'ABC'];
+    const gate2 = shell.makeNameGate(true, args2, ui2, person2);
+    gate2.when(function () { started++; });
+    ui2.button.listeners.click();
+    same('... the pass follows the name', args2, ['--join-url', 'ws://h/ws', '--room', 'ABC', '--name', '[ANT] Zoe', '--name-pass', PASS]);
+    const args3 = ['--map', 'Original-Ants/Maps/TINY.LVL', '--play', '--alone'];
+    const gate3 = shell.makeNameGate(false, args3, fakeUi(), fakePerson(['Wren (Guest)', 'guest', false, '', undefined]), true);
+    gate3.when(function () { started++; });
+    same('a game here: the name of a guest goes in as --name and there is no pass', args3, ['--map', 'Original-Ants/Maps/TINY.LVL', '--play', '--alone', '--name', 'Wren (Guest)']);
+    const args4 = ['--map', 'Original-Ants/Maps/TINY.LVL', '--play', '--alone'];
+    shell.makeNameGate(false, args4, fakeUi(), fakePerson(['[ANT] Zoe', 'login', false, '', PASS]), true);
+    same('a game here: the pass of a login goes in after its name', args4, ['--map', 'Original-Ants/Maps/TINY.LVL', '--play', '--alone', '--name', '[ANT] Zoe', '--name-pass', PASS]);
+}
 {   // a game on this computer with no name in its address: no card, the start waits for the person's name (the login's, else a guest's) and puts it in
     const ui = fakeUi();
     const args = ['--map', 'Original-Ants/Maps/TINY.LVL', '--play', '--alone'];
@@ -494,7 +530,7 @@ const assignedNone = (e) => e.assigned.length === 0;
 const linkOf = (e) => { e.$('share').click(); return e.copied[e.copied.length - 1]; };       // (the link that Share gives: there is no field of it on the page)
 const { lobbyDir, lobbyMarkup, lobbyScripts, lobbyScript, RULES0, NET0, CHAT0, GUEST, hex, E, C, str8, KEY, welcome, reject, roomMessage, helloBytes, helloName, helloRoom, CODE, grouped, BLOCK_PARAMS, blockText, noBlockOf, THROWS, runLobby } = H;
 {
-    same('the page loads its scripts (the alerts, the seat-key reader, the update notice, the direct-connection switch, the rules, the network client, the chat box, the rematch\'s strip, the Rules sheet, the color\'s menu, the map list, the shapes, the file fetcher, the Home screen) and then runs its own', lobbyScripts.map((m) => { const s = /src="([^"]*)"/.exec(m[1]); return s ? s[1] : 'inline'; }), ['alert_core.js', 'rejoin_key.js', 'update_notice.js', 'front/lobby_direct.js', 'front/map_maker_link.js', 'front/lobby_rules.js', 'front/lobby_net.js', 'front/player_name.js', 'front/lobby_chat.js', 'front/rematch.js', 'front/game_modes.js', 'front/game_type.js', 'front/room_fog.js', 'front/room_sheet.js', 'front/seat_menu.js', 'front/map_picker.js', 'shapes.js', 'map_files.js', 'home/home.js', 'inline']);
+    same('the page loads its scripts (the alerts, the seat-key reader, the update notice, the direct-connection switch, the rules, the network client, the chat box, the rematch\'s strip, the Rules sheet, the color\'s menu, the map list, the shapes, the file fetcher, the Home screen) and then runs its own', lobbyScripts.map((m) => { const s = /src="([^"]*)"/.exec(m[1]); return s ? s[1] : 'inline'; }), ['alert_core.js', 'rejoin_key.js', 'update_notice.js', 'front/lobby_direct.js', 'front/map_maker_link.js', 'front/lobby_rules.js', 'front/name_letters.js', 'front/lobby_net.js', 'front/player_name.js', 'front/lobby_chat.js', 'front/rematch.js', 'front/game_modes.js', 'front/game_type.js', 'front/room_fog.js', 'front/room_sheet.js', 'front/seat_menu.js', 'front/map_picker.js', 'shapes.js', 'map_files.js', 'home/home.js', 'inline']);
     const markupIds = [...lobbyMarkup.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
     check('no id is used twice in the markup', new Set(markupIds).size === markupIds.length, markupIds.filter((id, i) => markupIds.indexOf(id) !== i).join(','));
     const asked = new Set([...lobbyScript.matchAll(/\$\('([\w-]+)'\)/g), ...lobbyScript.matchAll(/freshNode\('([\w-]+)'\)/g), ...lobbyScript.matchAll(/getElementById\('([\w-]+)'\)/g)].map((m) => m[1]));
@@ -518,10 +554,10 @@ const { lobbyDir, lobbyMarkup, lobbyScripts, lobbyScript, RULES0, NET0, CHAT0, G
     check('the front page\'s card field looks read-only: the cursor of the page, not of a text field', /\.name-step input \{[^}]*cursor: default; \}/.test(lobbyText));
     check('nobody types a name and nobody is given a made-up one: no suggestion, no picked name, no remembered name, no pencil, no rename, no key of a name in the storage', !/suggestion|pickName|savedName|NAME_KEY|editName|data-edit|\.rename\(|'ants\.name'/.test(lobbyScript) && !/\.edit\b/.test(lobbyText) && !/\u270e/.test(lobbyText));
     check('the person of the page (front/player_name.js) is made once, with the page\'s own rules of a name and its own clock and generator, and asks when the page opens; the page names no address of the hub', (lobbyScript.match(/PlayerName\.forWindow\(/g) || []).length === 1 && /var person = PlayerName\.forWindow\(window, nameCheck, \{ later: setTimeout, cancel: clearTimeout, random: Math\.random \}\);\s*person\.ask\(\);/.test(lobbyScript) && lobbyText.split('href="/hub/login?next=home"').join('').indexOf('/hub') === -1);
-    check('the name for a new seat is the person\'s sure one, and a seat connects only through open(): at once with a name, else when the person is known (one call of connect() on a client in the whole script)', /function myName\(\) \{ return person\.known\(\); \}/.test(lobbyScript) && /function open\(c, name\) \{ if \(name\) c\.connect\(\); else person\.ready\(function \(own\) \{ c\.name = own; c\.connect\(\); \}\); \}/.test(lobbyScript) && (lobbyScript.match(/\.connect\(\)/g) || []).length === 2 && /open\(c, p\.name\);/.test(lobbyScript) && /open\(p, name\);/.test(lobbyScript));
+    check('the name for a new seat is the person\'s sure one, and a seat connects only through open(): at once with a name, else when the person is known (one call of connect() on a client in the whole script)', /function myName\(\) \{ return person\.known\(\); \}/.test(lobbyScript) && /function open\(c, name\) \{ if \(name\) c\.connect\(\); else person\.ready\(function \(own, kind, swap, how, pass\) \{ c\.name = own; c\.setPass\(pass\); c\.connect\(\); \}\); \}/.test(lobbyScript) && (lobbyScript.match(/\.connect\(\)/g) || []).length === 2 && /open\(c, p\.name\);/.test(lobbyScript) && /open\(p, name\);/.test(lobbyScript));
     check('a match for one is played under the seat\'s own name, and the Rejoin button sends none (the key takes the seat)', /soloAddress\(model, client\.name, pickedShape\)/.test(lobbyScript) && /rejoinQuery\(rejoinOffered, '', pickedShape\)/.test(lobbyScript));
     // What the page does with a name: nothing is put into markup. A name is set as text (el() sets textContent), through a value or an attribute, and goes into an address only through encodeURIComponent
-    check('el() makes an element with its text as textContent, and a person\'s name goes onto a card through it', /function el\(tag, cls, text\) \{[^}]*e\.textContent = text;[^}]*\}/.test(lobbyScript) && /card\.who\.forEach\(function \(w\) \{ who\.appendChild\(el\('span', w\.cls, w\.text\)\); \}\);/.test(lobbyScript));
+    check('el() makes an element with its text as textContent, and a person\'s name goes onto a card through it', /function el\(tag, cls, text\) \{[^}]*e\.textContent = text;[^}]*\}/.test(lobbyScript) && /card\.who\.forEach\(function \(w\) \{ var part = el\('span', w\.cls, w\.text\); if \(w\.cls === 'nm'\) AntsNameLetters\.paint\(document, part, w\.text\); who\.appendChild\(part\); \}\);/.test(lobbyScript));
     check('the toast, the strip\'s sentence and the removal question are text too', /t\.textContent = text; t\.hidden = false;/.test(lobbyScript) && /\$\('banner-text'\)\.textContent = b\.text;/.test(lobbyScript) && /ask\.appendChild\(el\('span', '', 'Remove ' \+ card\.who\[0\]\.text \+ ' from the room\?'\)\);/.test(lobbyScript));
     check('nothing in the script makes markup from text', !/\.innerHTML\s*[+]?=|\.outerHTML|insertAdjacentHTML|document\.write/.test(lobbyScript));
     // What goes into an address: a link that is made for somebody else carries the room and no name; the addresses of this page's own games and the way back carry the name that this page's person chose
@@ -749,7 +785,7 @@ const afterIt = () => new Promise((resolve) => setImmediate(resolve));
     check('a visitor who is logged in plays under the login\'s name: the Hello has it', helloName(hello) === 'maya' && hex(hello) === hex(helloBytes('maya', helloRoom(hello))), hex(hello));
     check('... and no guest name is made or kept for a person who never needs one', Object.keys(env.storage.data).length === 0);
 }
-for (const [what, you, want] of [['an accent', { name: 'José', other: 'jose_1' }, 'Jose'], ['a display name that cannot fit and a username that does', { name: '名前', other: 'user_name' }, 'user_name'], ['today\'s shape of the answer, a username', { name: 'user_name' }, 'user_name'], ['a name that cannot fit and no other name', { name: '名前' }, GUEST]]) {
+for (const [what, you, want] of [['an accent (a letter of the table stays)', { name: 'José', other: 'jose_1' }, 'José'], ['a display name that cannot fit and a username that does', { name: '名前', other: 'user_name' }, 'user_name'], ['today\'s shape of the answer, a username', { name: 'user_name' }, 'user_name'], ['a name that cannot fit and no other name', { name: '名前' }, GUEST]]) {
     const env = runLobby('', {}, { me: { login: true, you: Object.assign({ mod: false }, you) } });
     check('the room of a login with ' + what + ': the Hello has ' + JSON.stringify(want), helloName(env.last().open().sent[0]) === want);
 }
@@ -788,6 +824,36 @@ for (const [what, me] of [['a hub where nobody is logged in', 'guest'], ['a site
     env.makeRoom();
     check('... a login that came without a reload (in another tab) is asked for at the next room: the room is the login\'s, not the cached guest\'s', env.meFetches.length === asked + 1 && helloName(env.last().open().sent[0]) === 'maya');
 }
+{   // the pass of the name (protocol 29, docs/HUB_NICKNAMES.md "The pass"): the Hello of a login carries the hub's pass for the name, the page asks the hub again every 90 seconds and the client keeps the fresh one
+    // (a Hello that goes later, for a room that is made again, is signed); a guest's Hello carries none
+    const PASS1 = '1700000120.' + 'a1b2c3d4'.repeat(4), PASS2 = '1700000210.' + 'b1c2d3e4'.repeat(4);
+    const passOfHello = (b) => { let at = 4 + b[3] + 3; at += 1 + b[at]; at += 1 + b[at]; at += 16 + 4 + 1 + 1; return String.fromCharCode(...b.slice(at + 1, at + 1 + b[at])); };
+    const withPass = (pass) => ({ login: true, you: { name: 'maya', mod: false }, play: { name: 'maya', pass } });
+    const options = { me: withPass(PASS1), stayHome: true };
+    const env = runLobby('', {}, options);
+    env.makeRoom();
+    const first = env.arrive();
+    same('the first Hello of a login has the hub\'s pass for its name', [helloName(first.sent[0]), passOfHello(first.sent[0])], ['maya', PASS1]);
+    const asked = env.meFetches.length;
+    options.me = withPass(PASS2);
+    env.advance(89000);
+    check('the page does not ask the hub again before 90 seconds are over', env.meFetches.length === asked);
+    env.advance(2000);
+    check('... and asks once when they are', env.meFetches.length === asked + 1);
+    for (let i = 0; i < 400; i++) await new Promise((resolve) => setImmediate(resolve));
+    first.drop();
+    env.advance(60000);
+    const again = env.last();
+    same('a Hello that goes later (the link was lost) has the fresh pass, not the first one', [again !== first, passOfHello(again.open().sent[0])], [true, PASS2]);
+    const guestOptions = { me: 'guest', stayHome: true };
+    const guestEnv = runLobby('', {}, guestOptions);
+    guestEnv.makeRoom();
+    const guestHello = guestEnv.arrive().sent[0];
+    same('a guest\'s Hello has no pass', passOfHello(guestHello), '');
+    const askedGuest = guestEnv.meFetches.length;
+    guestEnv.advance(200000);
+    check('a page of a guest asks the hub for no pass: nothing comes of the clock', guestEnv.meFetches.length === askedGuest);
+}
 {   // the page opened while nobody was logged in, the person logged in without a reload (the chat says so): the next room (Quick host makes it) is the login's, never the cached guest's
     const options = { me: 'guest', stayHome: true };
     const env = runLobby('', {}, options);
@@ -809,7 +875,7 @@ for (const [what, me] of [['a hub where nobody is logged in', 'guest'], ['a site
     await afterIt();
     check('a room made after a long idle is the login\'s', helloName(env.last().open().sent[0]) === 'maya');
 }
-check('takeBack plays under the login\'s name when the person is logged in now, and under the saved seat name only for a guest (the question is asked first)', /function takeBack\(\) \{[\s\S]{0,700}person\.ready\(function \(own, kind\) \{[\s\S]{0,300}name: kind !== 'login' && s && s\.name \? s\.name : own/.test(lobbyScript));
+check('takeBack plays under the login\'s name when the person is logged in now, and under the saved seat name only for a guest (the question is asked first)', /function takeBack\(\) \{[\s\S]{0,700}person\.ready\(function \(own, kind, swap, how, pass\) \{[\s\S]{0,300}name: kind !== 'login' && s && s\.name \? s\.name : own/.test(lobbyScript));
 {   // a seat that is held keeps its name: a reload of the tab takes it back under the name that the room showed, and does not ask for a login first
     const entry = { 'ants.lobby': JSON.stringify({ c: 'k7m2xq', k: hex(KEY), n: 'Sam', o: 1 }) };
     const env = runLobby('', {}, { me: MAYA, session: entry });
@@ -885,7 +951,7 @@ for (const [what, me, shown] of [['a hub where nobody is logged in', 'guest', tr
     check('the card of a link offers "Log in with Discord" for ' + what + ' only: ' + shown, env.$('name-step-login').hidden === !shown, String(env.$('name-step-login').hidden));
 }
 {   // a login whose display name did not fit: the card says why the username is the name
-    const env = runLobby('?room=k7m2xq', {}, { me: { login: true, you: { name: 'S\u00f8ren', mod: false, pick: 'display', other: 'soren_k', key: 'k' } } });
+    const env = runLobby('?room=k7m2xq', {}, { me: { login: true, you: { name: 'S\u03c3ren', mod: false, pick: 'display', other: 'soren_k', key: 'k' } } });
     await afterIt();
     same('the card of a login whose display name would lose a letter: the username in the field, and the words that say why (not the chat menu\'s switch)', [env.$('name-step-input').value, env.$('name-step-hint').textContent, env.$('name-step-login').hidden], ['soren_k', HINT_LOGIN + HINT_OTHER, true]);
     const fits = runLobby('?room=k7m2xq', {}, { me: { login: true, you: { name: 'Maya', mod: false, pick: 'display', other: 'maya_99', key: 'k' } } });
@@ -1033,7 +1099,7 @@ for (const [what, me, shown] of [['a hub where nobody is logged in', 'guest', tr
     const env = runLobby('?room=k7m2xq', { 'ants.name': 'Maya' });
     check('a link to a room asks first, every time (a name that this browser remembers from earlier typing changes nothing): the card is up over the page', !env.$('name-step').hidden && env.$('name-step').getAttribute('role') === 'dialog' && env.$('name-step').getAttribute('aria-modal') === 'true');
     same('... titled with the room as a screen shows it (two groups of three), a Join button, the guest name in the field', [env.$('name-step-title').textContent, env.$('name-step-go').textContent, env.$('name-step-input').value], ['Join the room k7m 2xq', 'Join', GUEST]);
-    same('... the words say that it is a guest name and what a login gives; the way out is a button', [env.$('name-step-hint').textContent, env.$('name-step-own').textContent], [HINT_GUEST, 'Start a room of my own instead']);
+    same('... the words say that it is a guest name and what a login gives; the way out is a button', [env.$('name-step-hint').textContent, env.$('name-step-own').textContent], ['You join as Guest 550000. ' + HINT_GUEST, 'Start a room of my own instead']);
     check('... the field has no placeholder and no length (nothing to type: the markup makes it read-only, as section 4 reads) and the button has the focus', !env.$('name-step-input').hasAttribute('placeholder') && !env.$('name-step-input').hasAttribute('maxlength') && env.focused === env.$('name-step-go'));
     check('... the notice that online matches are recorded is shown, and there is no message yet', !env.$('who-notice').hidden && env.$('name-step-msg').textContent === '');
     check('nothing connects before the button: no socket, the address is not rewritten, and the page behind the card is "Joining a room" with START off and the colors greyed', env.sockets.length === 0 && env.replaced.length === 0 && env.$('room-h').textContent === 'Joining a room' && env.$('start').disabled === true && env.body.classList.contains('offline') && env.body.classList.contains('joining'));
@@ -1052,7 +1118,7 @@ for (const [what, me, shown] of [['a hub where nobody is logged in', 'guest', tr
 }
 {
     const env = runLobby('?room=k7m2xq', {}, { me: { login: true, you: { name: 'Jos\u00e9', mod: false, pick: 'display', other: 'jose_77', key: 'k1' } } });
-    same('a login whose name has an accent: the field shows it made to fit, and the words say where the other name is changed (the hub says that there is one)', [env.$('name-step-input').value, env.$('name-step-hint').textContent], ['Jose', HINT_LOGIN + HINT_SWAP]);
+    same('a login whose name has an accent: the field shows it made to fit, and the words say where the other name is changed (the hub says that there is one)', [env.$('name-step-input').value, env.$('name-step-hint').textContent], ['Jos\u00e9', HINT_LOGIN + HINT_SWAP]);
     const env2 = runLobby('?room=k7m2xq', {}, { me: { login: true, you: { name: '\u540d\u524d', mod: false, pick: 'display', other: 'user_name', key: 'k1' } } });
     same('a login whose display name cannot fit: the username that does', env2.$('name-step-input').value, 'user_name');
 }
@@ -1512,8 +1578,8 @@ async function codeBox(env) {
 
 // ---- 5.8 a name that the game would not take never reaches a room, whichever way it was asked for: a login's name is made to fit, and when it cannot be, the other name (the username) is used, else the guest name
 for (const [what, you, want] of [['a computer player\'s name as the display name', { name: 'Bot (Medium)', other: 'maya_99' }, 'maya_99'], ['the same with blanks and capitals', { name: ' bOt(x', other: 'maya_99' }, 'maya_99'],
-                                 ['an accent (made to fit)', { name: 'Zo\u00eb', other: 'zoe_1' }, 'Zoe'], ['a name in another script', { name: '\u540d\u524d', other: 'user_name' }, 'user_name'],
-                                 ['a name of 33 characters', { name: 'x'.repeat(33), other: 'maya_99' }, 'maya_99'], ['a control character in it (dropped)', { name: 'a\u0001b', other: 'maya_99' }, 'ab'],
+                                 ['an accent (a letter of the table stays)', { name: 'Zo\u00eb', other: 'zoe_1' }, 'Zo\u00eb'], ['a letter that the game cannot draw (the name is refused as a whole: the other name is used)', { name: 'Zo\u03c3', other: 'zoe_1' }, 'zoe_1'], ['a name in another script', { name: '\u540d\u524d', other: 'user_name' }, 'user_name'],
+                                 ['a name of 33 characters', { name: 'x'.repeat(33), other: 'maya_99' }, 'maya_99'], ['a control character in it (refused as a whole)', { name: 'a\u0001b', other: 'maya_99' }, 'maya_99'],
                                  ['a name that cannot fit and no other name', { name: '\u540d\u524d' }, GUEST]]) {
     const me = { login: true, you: Object.assign({ mod: false }, you) };
     const link = runLobby('?room=k7m2xq', {}, { me });

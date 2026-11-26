@@ -184,6 +184,7 @@ REGISTRY = (
     Command("unmute", 1, "NAME", "let a muted person write again", GROUPS[1], None, parse_staff, run_staff),
     Command("del", 1, "NUMBER", "take one line off every screen", GROUPS[1], None, parse_staff, run_staff),
     Command("kick", 1, "NAME", "remove a person from the chat", GROUPS[1], None, parse_staff, run_staff),
+    Command("rename", 1, "NAME", "reset a person's nickname and tag", GROUPS[1], None, parse_staff, run_staff),
     Command("mutes", 1, "", "list the people who are muted", GROUPS[1], None, parse_staff, run_staff),
     Command("ban", 2, "NAME [purge]", "ban a person from writing", GROUPS[2], None, parse_staff, run_staff),
     Command("unban", 2, "NAME", "lift a ban", GROUPS[2], None, parse_staff, run_staff),

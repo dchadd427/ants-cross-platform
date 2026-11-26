@@ -1162,7 +1162,7 @@
 
     <div class="toast" id="toast" role="status" hidden></div>
 
-    <script src="site_nav.js"></script><script src="game_bar.js"></script><script src="update_notice.js" data-window="no"></script><script src="rejoin_key.js"></script><script src="hub_here.js"></script><script src="shapes.js"></script><script src="shape_picker.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="replay_activity.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="alert_core.js"></script><script src="hud_fullscreen.js"></script><script src="wake_lock.js"></script><script src="p2p.js"></script><script src="touch_keys.js"></script><script src="front/lobby_net.js"></script><script src="front/player_name.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
+    <script src="site_nav.js"></script><script src="game_bar.js"></script><script src="update_notice.js" data-window="no"></script><script src="rejoin_key.js"></script><script src="hub_here.js"></script><script src="shapes.js"></script><script src="shape_picker.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="replay_activity.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="alert_core.js"></script><script src="hud_fullscreen.js"></script><script src="wake_lock.js"></script><script src="p2p.js"></script><script src="touch_keys.js"></script><script src="front/name_letters.js"></script><script src="front/lobby_net.js"></script><script src="front/player_name.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
     <script>
         var ANTS_BUILD_VER = '@@BUILD_TIMESTAMP@@';
         if (!ANTS_BUILD_VER || ANTS_BUILD_VER.indexOf('@') !== -1) {
@@ -1460,7 +1460,7 @@
                     if (teams) out.args.push('--teams', teams);
                     if (start) out.args.push('--start-when', start);
                     if (name) {
-                        name = name.replace(/[^\x20-\x7e]/g, '').trim().substring(0, 32);
+                        name = AntsNameLetters.wireOnly(name, 32).trim();                      // (the letters of a name: front/name_letters.js)
                         if (name) out.args.push('--name', name);
                     }
                 }
@@ -1511,7 +1511,7 @@
                 }
                 var name = q.has('name') ? q.get('name') : '';
                 out.nameless = !q.has('name') && !!(q.has('map') || q.has('mapfile') || q.has('bots') || test);       // (a game here with no name in its address: the gate puts the person's own name in)
-                name = typeof name === 'string' ? name.replace(/[^\x20-\x7e]/g, '').trim().substring(0, 32) : '';
+                name = typeof name === 'string' ? AntsNameLetters.wireOnly(name, 32).trim() : '';
                 if (name) {
                     out.name = name;
                     out.args.push('--name', name);
@@ -1708,11 +1708,13 @@
         if (window.AntsRematch) AntsRematch.gamePage({ win: window, doc: document, Net: window.AntsLobbyNet, host: document.getElementById('rematch') });      // the rematch: when the match of a lobby room is over (window.antsMatchOver), the strip under the picture (web/front/rematch.js)
         if (window.AntsHubHere) AntsHubHere.begin({ win: window, args: ANTS_ARGS, replay: ANTS_REPLAY_MODE, test: !!ANTS_TEST });      // (web/hub_here.js: tells the chat hub that this visitor is in a match, for the players list; nothing for a recording, a live match or a test map)
         // NAME_BEGIN (tests/scripts/web_name_check.js runs this block; web/lobby.html and web/shell.html carry the same text)
-        // THE PLAYER'S NAME is not typed on the web: a person who is logged in with Discord plays under the login's name, anybody else under a guest name (front/player_name.js). The game takes printable ASCII only, the blanks at
-        // both ends cut off, at most 32 characters, and nothing that reads as a computer player's label: "Bot (...)", "Pip (bot)", "Pip (bot, Hard)" (blanks, signs between the letters and case ignored: a computer player is always shown as one, and a person never): the rules of the desktop game's
-        // start menu (check_player_name in src/ants_app/start_menu.cpp). nameCheck(text) is { ok: true, name } or { ok: false, why }. A name is only ever shown as text and put into a link with encodeURIComponent, never markup.
+        // THE PLAYER'S NAME is not typed in the game: a person who is logged in with Discord plays under the name that the hub says (the nickname and its tag, or the name of the login: front/player_name.js, docs/HUB_NICKNAMES.md),
+        // anybody else under the name that this browser keeps as a guest ("Wren (Guest)") or a number. The game takes UTF-8 of printable ASCII and the letters of a name (front/name_letters.js: the Latin and Cyrillic letters that the
+        // game's font draws), the blanks at both ends cut off, at most 32 characters, and nothing that reads as a computer player's label: "Bot (...)", "Pip (bot)", "Pip (bot, Hard)" (blanks, signs between the letters and case
+        // ignored: a computer player is always shown as one, and a person never): the rules of the desktop game's start menu (check_player_name in src/ants_app/start_menu.cpp). nameCheck(text) is { ok: true, name } or
+        // { ok: false, why }. A name is only ever shown as text and put into a link with encodeURIComponent, never markup.
         var NAME_MAX = 32;
-        // A name that reads as a computer player's label (ai::is_reserved_bot_name; the name is printable ASCII here): the word bot first and a bracket after it ("Bot (Hard)"), or a bracket, the word bot and then a sign or a blank
+        // A name that reads as a computer player's label (ai::is_reserved_bot_name; this one reads the ASCII letters only: the server's decoder reads every letter that is drawn like a b, an o or a t, and refuses what it reads): the word bot first and a bracket after it ("Bot (Hard)"), or a bracket, the word bot and then a sign or a blank
         // ("Pip (bot, Hard)", "Pip [bot]", "Pip (bot) x"); case, blanks and signs between the letters are looked through, and 0 reads as o; the letters are one after the other or each pair parted ("b o t", not "Bo T"), and a word that is parted is one only when no letter follows its blanks ("(b o t h)" is a name).
         function readsAsBot(name) {
             var s = name.toLowerCase().replace(/0/g, 'o');
@@ -1720,23 +1722,26 @@
         }
         function nameCheck(text) {
             var raw = typeof text === 'string' ? text.replace(/[\t\r\n]/g, '') : '';
-            if (/[^\x20-\x7e]/.test(raw)) return { ok: false, why: 'A name can hold printable ASCII characters only: letters, digits and signs without accents.' };
+            var points = AntsNameLetters.codePoints(raw), i;
+            for (i = 0; points && i < points.length; i++) { if (!AntsNameLetters.isWireCodePoint(points[i])) points = null; }
+            if (!points) return { ok: false, why: 'A name can hold Latin and Cyrillic letters, digits and signs: the game cannot draw other letters yet.' };
             var name = raw.replace(/^ +/, '').replace(/ +$/, '');
-            if (name.length > NAME_MAX) return { ok: false, why: 'A name has at most ' + NAME_MAX + ' characters.' };
+            if (AntsNameLetters.codePoints(name).length > NAME_MAX) return { ok: false, why: 'A name has at most ' + NAME_MAX + ' characters.' };
             if (readsAsBot(name)) return { ok: false, why: 'A name like "Bot (...)" or "Pip (bot)" is for computer players. Please choose another name.' };
             return { ok: true, name: name };
         }
-        // THE WORDS under the name on the card: whose name it is; where a login changes it (the chat menu's switch, when the hub says that there is another name); why a login plays under the username (its shown name did not fit)
-        var NAME_HINT = { login: 'This is your Discord name. The other players see it.', swap: ' The chat menu switches it between your display name and your username.', other: ' Your display name has characters that the game cannot show, so your username is used.', guest: 'You play as a guest. Log in with Discord to play under your own name.' };
+        // THE WORDS under the name on the card: whose name it is; where a login changes it (the chat menu's switch, when the hub says that there is another name); why a login plays under another name (its shown name did not fit); what a guest is
+        var NAME_HINT = { login: 'This is your Discord name. The other players see it.', nick: 'This is your nickname. The other players see it.', swap: ' The chat menu switches it between your display name and your username.', other: ' Your display name has characters that the game cannot show, so your username is used.', guest: 'A guest cannot chat in the lobby or get messages. Log in with Discord to play under your own name.' };
         // THE NAME STEP of a link that somebody else shared (the card asks first, so that the person knows that they join): the field shows the name that the person plays under (person.ready, front/player_name.js) and cannot
-        // be typed in; the button (or Enter) goes on once that name is there, and onDone(name) is called once with it, unless anybody hid the card meanwhile (the way out). ui is { input, button, message, said(text, login), show(), hide() }.
+        // be typed in; the button (or Enter) goes on once that name is there, and onDone(name, pass) is called once with it and the hub's pass for it (a guest has none), unless anybody hid the card meanwhile (the way out). ui is
+        // { input, button, message, said(text, login), show(), hide() }.
         function runNameStep(ui, person, onDone) {
-            var done = false, pressed = false, chosen = null, hide = ui.hide;
+            var done = false, pressed = false, chosen = null, chosenPass = '', hide = ui.hide;
             ui.hide = function () { done = true; hide.apply(ui, arguments); };
-            function go() { if (done || !pressed || chosen === null) return; ui.message.textContent = ''; ui.hide(); onDone(chosen); }
+            function go() { if (done || !pressed || chosen === null) return; ui.message.textContent = ''; ui.hide(); onDone(chosen, chosenPass); }
             ui.input.value = '';
             ui.show();
-            person.ready(function (name, kind, swap, how) { chosen = name; ui.input.value = name; ui.said(NAME_HINT[kind] + (kind !== 'login' ? '' : how === 'other' ? NAME_HINT.other : swap ? NAME_HINT.swap : ''), how === 'login'); go(); });
+            person.ready(function (name, kind, swap, how, pass) { chosen = name; chosenPass = pass || ''; ui.input.value = name; ui.said(kind === 'guest' ? 'You join as ' + name + '. ' + NAME_HINT.guest : NAME_HINT[kind] + (kind !== 'login' ? '' : how === 'other' ? NAME_HINT.other : swap ? NAME_HINT.swap : ''), how === 'login'); go(); });
             function confirm() { pressed = true; go(); }
             ui.button.addEventListener('click', confirm);
             ui.input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { if (e.preventDefault) e.preventDefault(); confirm(); } });
@@ -1761,11 +1766,12 @@
                 open: function () { open = true; var run = waiting; waiting = []; run.forEach(function (fn) { fn(); }); }
             };
             if (pending) {
-                runNameStep(ui, person, function (name) {
+                runNameStep(ui, person, function (name, pass) {
                     args.push('--name', name);
+                    if (pass) args.push('--name-pass', pass);                  // (the hub's pass for the name: a server that has the hub's key takes the name as it is only with it)
                     gate.open();
                 });
-            } else if (own) person.ready(function (name) { args.push('--name', name); gate.open(); });
+            } else if (own) person.ready(function (name, kind, swap, how, pass) { args.push('--name', name); if (pass) args.push('--name-pass', pass); gate.open(); });
             return gate;
         }
         // A reload of a game that this browser is playing is no shared link: the page takes the name out of the address bar itself (below), so the address that a reload opens looks like one that somebody
@@ -2533,7 +2539,7 @@
         // --name, and a name can read "--aspect": the scan steps over the value of every --name.
         function antsAspectOption() {
             for (var i = 0; i < ANTS_ARGS.length; i++) {
-                if (ANTS_ARGS[i] === '--name') { i++; continue; }
+                if (ANTS_ARGS[i] === '--name' || ANTS_ARGS[i] === '--name-pass') { i++; continue; }
                 if (ANTS_ARGS[i] === '--aspect') return i;
             }
             return -1;

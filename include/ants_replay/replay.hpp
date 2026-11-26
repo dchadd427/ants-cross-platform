@@ -189,7 +189,7 @@ struct Header {
     bool fog{false};
     uint8_t heavy_orders{0};                           // head field 18, written only when it is not 0: the seats (a bit for each) that went over the budget of orders (net::Sequencer::Config::order_burst) at some time of the match: their orders beyond it were not sealed, so they are not in the file. Information only: nothing plays differently
     uint8_t mode{0};                                   // sim::GameMode as a byte (head field 17, written only when it is not 0): the rules the match was played by; set_mode() keeps it and sim_rules together
-    std::array<std::string, sim::MAX_PLAYERS> names;   // printable ASCII, at most 32 characters (the game makes a '?' of any other); empty: the color word
+    std::array<std::string, sim::MAX_PLAYERS> names;   // UTF-8 as a name travels (protocol 29: net::valid_wire_name: printable ASCII and the letters of a name, at most 32 characters and 96 bytes); empty: the color word
     sim::StartTeams teams;                             // the teams that the match started with (applied before the first tick)
     uint8_t recorder_seat{kNoSeat};                    // the seat of the machine that wrote the file (kNoSeat: none)
     uint32_t hash_period{kHashPeriodTurns};

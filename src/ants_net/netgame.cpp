@@ -298,6 +298,7 @@ bool NetGame::join_url(const std::string& url, const std::string& name, uint8_t 
 ClientLobby::Config NetGame::lobby_config(const SeatKey& key, uint8_t want_seat) const {
     ClientLobby::Config cfg;
     cfg.name = target_.name;
+    cfg.name_pass = name_pass_;
     cfg.listen_port = peer_port_;
     cfg.want_seat = want_seat;
     cfg.room = target_.room;
@@ -909,7 +910,8 @@ std::function<void()> NetGame::wake_function() {
 
 HelloMsg NetGame::way_back_hello() const {
     HelloMsg h;
-    h.name = target_.name;                                                // (the encoder of the Hello keeps printable ASCII and at most kMaxNameChars, as the lobby's does)
+    h.name = target_.name;                                                // (the encoder of the Hello keeps the characters of a name and at most kMaxNameChars, as the lobby's does)
+    h.name_pass = name_pass_;
     h.room = target_.room;
     h.token = target_.token;
     h.want_seat = seat_;                                                  // (the key decides the seat: this is only what the server would be told by anybody)

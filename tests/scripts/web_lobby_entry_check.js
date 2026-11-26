@@ -6,6 +6,7 @@
 // usage: node web_lobby_entry_check.js web/front/lobby_net.js web/shell.html       exit 0: every check holds; the failures are printed
 'use strict';
 const fs = require('fs');
+globalThis.AntsNameLetters = require(require('path').resolve(__dirname, '..', '..', 'web', 'front', 'name_letters.js'));       // (the pages' name block reads the letters of a name: front/name_letters.js, a script tag of the page)
 const path = require('path');
 // the pages load web/shapes.js (the one table of the shapes) before their own code: it is the global AntsShapes of the code that is run here
 globalThis.AntsShapes = require(path.resolve(__dirname, '..', '..', 'web', 'shapes.js'));

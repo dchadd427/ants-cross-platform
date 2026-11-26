@@ -132,6 +132,8 @@ Podium podium_at(const PodiumInput& in, int32_t dy, int32_t& bottom) {
     const int32_t aw = std::max(1, in.winner_ants) * (kAntW * 2 + 2);
     p.name_x = wx + 16 + aw;
     p.name_base = wy + 48;
+    p.name_pair_base[0] = wy + 35;
+    p.name_pair_base[1] = wy + 55;
     p.name_w = std::max(0, wx + ww - 8 - p.name_x);
     p.score_base = wy + 86;
     p.tile_count = static_cast<size_t>((in.is_187 ? 2 : 3) + (in.report ? 1 : 0));
@@ -167,6 +169,10 @@ Podium podium_at(const PodiumInput& in, int32_t dy, int32_t& bottom) {
             r.score_base = t + 18;
             r.bar = LayoutRect{r.name_x, t + 22, std::max(1, ox + ow - 10 - r.name_x), 3};
             r.small_base = t + 36;
+            r.pair_base[0] = t + 12;
+            r.pair_base[1] = t + 23;
+            r.pair_bar = LayoutRect{r.name_x, t + 27, std::max(1, ox + ow - 10 - r.name_x), 3};
+            r.pair_small_base = t + 38;
         }
         others_bottom = oy + others * rh + 4;
     }

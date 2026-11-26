@@ -266,6 +266,7 @@ void Application::pump_menu_connection() {
             if (!config_.net_extra_ca_pem.empty()) net_->set_extra_trusted_ca_pem(config_.net_extra_ca_pem);
             // An encrypted door (the default) joins by its wss URL with the address that the lookup gave; the certificate is checked for the name. A plain TCP server joins by that address.
             const uint8_t seat = menu_conn_.rejoin ? menu_conn_.seat : uint8_t{255};
+            net_->set_name_pass(menu_conn_.name == config_.player_name ? config_.name_pass : std::string());        // (protocol 29: the hub's pass belongs to the name that --name gave; a name typed in the menu has none)
             const bool joined = menu_conn_.server.tcp ? net_->join(host_lookup_.address(), menu_conn_.server.port, menu_conn_.name, seat, menu_conn_.room, std::string(), menu_conn_.key)
                                                       : net_->join_url(server_url(menu_conn_.server), menu_conn_.name, seat, menu_conn_.room, std::string(), menu_conn_.key, host_lookup_.address());
             if (!joined) {

@@ -1096,7 +1096,7 @@ void run_way_back_tests() {
         ASSERT_TRUE(w.run_until([&]() { return w.server.scripted == 1; }, 5000));
         ASSERT_EQ(w.server.scripted_hellos.size(), size_t{1});                           // (a Hello that does not decode is not in the list: a real server would say BadRequest to it)
         const net::HelloMsg hello = w.server.scripted_hellos[0];
-        ASSERT_EQ(hello.name, "Bb " + std::string(29, 'x'));                             // what the lobby's Hello said: printable, 32 characters
+        ASSERT_EQ(hello.name, "B\xC3\xA9" "b " + std::string(28, 'x'));                  // what the lobby's Hello said (protocol 29): the letters of a name kept (the e with an acute), the control byte left out, 32 characters
         ASSERT_EQ(hello.room, std::string("RJ-14"));
         ASSERT_EQ(hello.token, std::string("tok-14"));
         ASSERT_EQ(hello.platform, bobs_platform);                                        // (protocol 15: what the machine runs on goes with it on the way back, as it went the first time)

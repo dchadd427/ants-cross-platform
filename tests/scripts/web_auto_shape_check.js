@@ -10,6 +10,7 @@
 const fs = require('fs');
 const nodePath = require('path');
 globalThis.AntsShapes = require(nodePath.resolve(__dirname, '..', '..', 'web', 'shapes.js'));
+globalThis.AntsNameLetters = require(nodePath.resolve(__dirname, '..', '..', 'web', 'front', 'name_letters.js'));       // (the page's name block reads the letters of a name: front/name_letters.js, a script tag of the page)
 
 const KEY = 'ants.aspect.v3';
 const P = (shape, way) => JSON.stringify({ [way || 'sideways']: shape });

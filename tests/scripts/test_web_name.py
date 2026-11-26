@@ -62,7 +62,7 @@ class TheMarkup(unittest.TestCase):
                 if "ants.guest" in text:
                     guest.add(rel)
         self.assertEqual(found, {}, "a name that an earlier version remembered is read by nothing and written by nothing: the game on this computer takes the person's own name from the gate")
-        self.assertEqual(guest, {"web/front/player_name.js"}, "the guest name's key is the one script's own")
+        self.assertEqual(guest, {"web/front/player_name.js", "web/home/names.js"}, "the guest name's keys are the person script's own, and the note's key (ants.guestnote) is the sheet's")
 
     def test_the_login_link_of_the_card_is_a_plain_link_in_the_two_cards_and_goes_back_to_a_word_that_the_hub_has(self):
         link = '<div class="name-step-hint" id="name-step-login" hidden><a href="/hub/login?next=home">Log in with Discord</a></div>'

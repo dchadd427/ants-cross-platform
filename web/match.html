@@ -27,6 +27,7 @@
         :root { --clay: #db4b13; --ink: #0c0805; --teal: #2b6357; --teal-hi: #2f6f5a; --teal-lo: #17382f; --edge: #050a08; --cream: #f4ece2; --inset: #070b0f; }
         :root { --frame: #2b6b4f; --frame-hi: #3b976f; --frame-lo: #13634b; --shadow: #9d0d17; --gold: #f6d058; --bad-bg: #3b0d10; --bad-ink: #ffe4de; --bad-edge: #ff7a6b; }
     </style>
+    <link rel="stylesheet" href="front/name_parts.css">
     <link rel="stylesheet" href="matches.css">
     <link rel="stylesheet" href="match_stats.css">
     <link rel="stylesheet" href="death_map.css">
@@ -47,6 +48,7 @@
 
 </div>
 
+<script src="front/name_letters.js"></script>
 <script src="update_notice.js"></script>
 <script src="replay_likes.js"></script>
 <script src="site_nav.js"></script>
@@ -77,7 +79,7 @@
         return s;
     }
     function who(seat, side, rec) {
-        var w = el('span', 'who'), sq = el('i', 'sq'); sq.setAttribute('data-c', H.colorOf(seat)); w.appendChild(sq); w.appendChild(el('span', '', H.seatLabel(seat)));
+        var w = el('span', 'who'), sq = el('i', 'sq'); sq.setAttribute('data-c', H.colorOf(seat)); w.appendChild(sq); w.appendChild(H.paintLabel(document, el('span', ''), H.seatLabel(seat)));
         if (side.winner && rec.draw !== true) w.appendChild(el('span', 'won', 'Won'));
         if (seat.left === true) w.appendChild(el('span', 'left', 'Left early'));
         return w;
@@ -104,7 +106,7 @@
         top.appendChild(el('p', 'meta', R.whenText(rec.ended, new Date()) + ' · ' + R.lengthText(rec.seconds) + ' long'));
         s.appendChild(top);
         var rest = el('div', 'rest'), v = el('div', 'verdict'), w = el('span', 'who'), win = H.winnerSide(rec, ctx.sides);
-        if (win) { w.appendChild(el('em', '', H.sideName(win))); w.appendChild(document.createTextNode(' won')); }
+        if (win) { w.appendChild(H.paintSide(document, el('em', ''), win)); w.appendChild(document.createTextNode(' won')); }
         else w.textContent = H.noWinnerText(rec);
         v.appendChild(w);
         var ranked = H.rankedOf(ctx.sides);

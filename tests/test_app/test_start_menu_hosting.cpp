@@ -380,7 +380,8 @@ void run_start_menu_hosting_tests() {
         ASSERT_TRUE(check_player_name(std::string(31, 'a') + " tail", clean, why) && clean == std::string(31, 'a'));      // cut at 32, and the blank that the cut leaves at its end goes
         ASSERT_FALSE(check_player_name("   ", clean, why));
         ASSERT_TRUE(why.find("name") != std::string::npos);
-        ASSERT_TRUE(check_player_name("caf\xc3\xa9", clean, why) && clean == "caf");        // only printable ASCII is kept
+        ASSERT_TRUE(check_player_name("caf\xc3\xa9", clean, why) && clean == "caf\xc3\xa9");        // the letters of a name are kept (protocol 29: a name that a page gives with --name; the field itself takes what a keyboard types)
+        ASSERT_TRUE(check_player_name("a\xce\xb1" "b\xe9\xbe\x8d", clean, why) && clean == "ab");   // a letter that the game's font does not draw (Greek, CJK) and a byte that is no letter are left out
         ASSERT_FALSE(check_player_name("", clean, why));
         ASSERT_FALSE(check_player_name("\x01\x02", clean, why));
         ASSERT_FALSE(check_player_name("Bot (x)", clean, why));

@@ -1,0 +1,169 @@
+{
+ "note": "Mutants of the sheet 'Your name', the guest's chip and its note (web/home/names.js; docs/HUB_NICKNAMES.md 'The page') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_home_names_check.js: the note that a guest closes or answers by a name and never sees again, who has the chip, when the hub is asked (after the last key, a guest check or both fields), what Save sends and when it is on, an answer that is not the last question's, what is said under a field (the name that was taken, the two dates of a wait, a word that the page does not know), the preview with the tag, a name that the person keeps, the sheet that goes with the login; every one must be caught (tools/mutate.py tests/data/home_names_mutants.json --keep-going --jobs 1).",
+ "baseline": {
+  "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+ },
+ "mutants": [
+  {
+   "id": "note_comes_back_after_it_was_closed",
+   "file": "web/home/names.js",
+   "old": "try { var s = storage(); if (s) s.setItem(NOTE_KEY, '1'); }",
+   "new": "try { var s = storage(); if (s) s.getItem(NOTE_KEY); }",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "note_shows_for_a_guest_who_set_a_name",
+   "file": "web/home/names.js",
+   "old": "if (!typed && !noteClosed() && !sheet) showNote();",
+   "new": "if (!noteClosed() && !sheet) showNote();",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "chip_for_a_person_who_is_logged_in",
+   "file": "web/home/names.js",
+   "old": "function guestHere() { return live() && !you() && !!login && !login.hidden; }",
+   "new": "function guestHere() { return live() && !!login && !login.hidden; }",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "chip_for_a_site_with_no_login",
+   "file": "web/home/names.js",
+   "old": "function guestHere() { return live() && !you() && !!login && !login.hidden; }",
+   "new": "function guestHere() { return live() && !you(); }",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "check_asks_before_the_typing_stops",
+   "file": "web/home/names.js",
+   "old": "var CHECK_MS = 350;",
+   "new": "var CHECK_MS = 0;",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "guest_check_is_a_login_check",
+   "file": "web/home/names.js",
+   "old": "{ t: 'name', r: ++seq, nick: s.typed.nick, guest: true }",
+   "new": "{ t: 'name', r: ++seq, nick: s.typed.nick, tag: '', save: false }",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "login_check_saves_at_once",
+   "file": "web/home/names.js",
+   "old": "tag: s.typed.tag, save: !!save }",
+   "new": "tag: s.typed.tag, save: true }",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "save_never_saves",
+   "file": "web/home/names.js",
+   "old": "tag: s.typed.tag, save: !!save }",
+   "new": "tag: s.typed.tag, save: false }",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "save_on_after_a_refusal",
+   "file": "web/home/names.js",
+   "old": "s.save.disabled = !(m.ok === true && !m.offline) || unchanged;",
+   "new": "s.save.disabled = unchanged;",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "save_on_for_the_name_that_is_the_persons_now",
+   "file": "web/home/names.js",
+   "old": "s.save.disabled = !(m.ok === true && !m.offline) || unchanged;",
+   "new": "s.save.disabled = !(m.ok === true && !m.offline);",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "an_old_answer_is_heard",
+   "file": "web/home/names.js",
+   "old": "if (!s || !m || typeof m !== 'object' || m.r !== pending) return;",
+   "new": "if (!s || !m || typeof m !== 'object') return;",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "taken_does_not_name_the_name",
+   "file": "web/home/names.js",
+   "old": "if (why === 'taken') return { text: asked + ' is taken. Pick another one.', tone: 'bad' };",
+   "new": "if (why === 'taken') return { text: 'That name is taken. Pick another one.', tone: 'bad' };",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "soon_says_the_wrong_day",
+   "file": "web/home/names.js",
+   "old": "time.date(field.until - 30 * 86400)",
+   "new": "time.date(field.until - 29 * 86400)",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "a_wait_is_not_a_lock",
+   "file": "web/home/names.js",
+   "old": "' + time.date(field.until) + '.', tone: 'lock' };",
+   "new": "' + time.date(field.until) + '.', tone: 'bad' };",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "a_word_that_is_not_known_is_said_as_it_is",
+   "file": "web/home/names.js",
+   "old": "return { text: Object.prototype.hasOwnProperty.call(table, why) ? table[why] : TEXT.offline, tone: 'bad' };",
+   "new": "return { text: why, tone: 'bad' };",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "a_login_that_ends_leaves_the_sheet_open",
+   "file": "web/home/names.js",
+   "old": "if (sheet && sheet.mode === 'login' && !you()) close();",
+   "new": "if (false) close();",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "the_preview_has_no_tag",
+   "file": "web/home/names.js",
+   "old": "name = shown || (me && me.nick ? (me.tag ? '[' + me.tag + '] ' : '') + me.nick : me ? me.name : '');",
+   "new": "name = shown || (me && me.nick ? me.nick : me ? me.name : '');",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "a_guest_name_is_kept_without_the_person",
+   "file": "web/home/names.js",
+   "old": "if (!person.setTyped(name)) return;",
+   "new": "person.setTyped(name);",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "the_guest_note_is_not_closed_by_a_name",
+   "file": "web/home/names.js",
+   "old": "closeNote(); close(); paintChip(); notify();",
+   "new": "close(); paintChip(); notify();",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "a_login_may_open_a_guest_sheet",
+   "file": "web/home/names.js",
+   "old": "if (mode === 'guest' && !guestHere()) return;",
+   "new": "if (false) return;",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "the_sheet_opens_twice",
+   "file": "web/home/names.js",
+   "old": "function open() {\n            if (sheet) return;",
+   "new": "function open() {\n            if (false) return;",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "a_rate_answer_is_a_name_answer",
+   "file": "web/home/names.js",
+   "old": "if (m.why === 'rate') { paintMessages({ offline: true, rate: true }); return; }",
+   "new": "if (false) { paintMessages({ offline: true, rate: true }); return; }",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "no_connection_is_not_said",
+   "file": "web/home/names.js",
+   "old": "if (!dock || !dock.send || dock.send(f) === false) { pending = 0; paintMessages({ offline: true }); }",
+   "new": "if (!dock || !dock.send) { pending = 0; paintMessages({ offline: true }); }",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  }
+ ]
+}

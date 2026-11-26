@@ -406,8 +406,8 @@
   {
    "id": "moderators_not_marked",
    "file": "hub/login.py",
-   "old": "\"you\": self.hub.chat.you_of(who) if who else None",
-   "new": "\"you\": {\"name\": who.name, \"mod\": False} if who else None",
+   "old": "body[\"you\"] = self.hub.chat.you_of(who)",
+   "new": "body[\"you\"] = {\"name\": who.name, \"mod\": False}",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheMeOfAModerator"
   },
   {
@@ -700,8 +700,8 @@
   {
    "id": "me_database_trouble_is_a_crash",
    "file": "hub/login.py",
-   "old": "        try:\n            who = self.who_of(request.headers)\n        except StoreError:\n            return self.fail(503, \"busy\")\n        return http.response(200, {\"login\": True",
-   "new": "        who = self.who_of(request.headers)\n        return http.response(200, {\"login\": True",
+   "old": "        try:\n            who = self.who_of(request.headers)\n        except StoreError:\n            return self.fail(503, \"busy\")\n        body = {\"login\": True",
+   "new": "        who = self.who_of(request.headers)\n        body = {\"login\": True",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDatabaseThatCannotBeUsed"
   },
   {
@@ -1792,8 +1792,8 @@
   {
    "id": "me_says_no_key",
    "file": "hub/login.py",
-   "old": "\"you\": self.hub.chat.you_of(who) if who else None",
-   "new": "\"you\": {\"name\": who.name, \"mod\": False} if who else None",
+   "old": "body[\"you\"] = self.hub.chat.you_of(who)",
+   "new": "body[\"you\"] = {\"name\": who.name, \"mod\": False}",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDisplayName tests.scripts.test_hub_login.TheTwoNamesAndTheModerators tests.scripts.test_hub_login.ThePickOnTheWire"
   },
   {

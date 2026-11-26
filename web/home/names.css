@@ -1,0 +1,72 @@
+/* The sheet "Your name", the guest's name chip and its note (web/home/names.js; docs/HUB_NICKNAMES.md). The colors are the page's own tokens (front/classic.css and the dock's own style: .gc-slot is the chip's menu); the sheet is the
+   Rules sheet's card (front/room_sheet.css: .rs, .rs-top, .rs-x), a sheet from the bottom on a phone. A tag and "(Guest)" in a name are dimmer than the name: front/name_parts.css, which every page that shows a name has. */
+
+/* the menu's line and button (the dock's own style has the menu itself) */
+.gc-nl { margin: 8px 0 0; font-size: 13px; line-height: 17px; color: #a8cfc0; }
+.gc-nl b { font-weight: 500; color: var(--cream); }
+.gc-nl[hidden], .gc-nb[hidden] { display: none; }
+.gc-nb { width: 100%; margin-top: 10px; }
+
+/* the sheet */
+.nm-sheet { gap: 10px; padding-bottom: 0; }
+.nm-prev { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 2px 12px; padding: 10px 12px; background: #0b1218; border: 1px solid #16302a; border-radius: 6px; }
+.nm-prev .nm-pl { grid-column: 1 / -1; font-size: 12px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.nm-av { display: grid; place-items: center; width: 36px; height: 36px; font-size: 17px; color: var(--gold); background: #0b1b16; border: 2px solid #2f6f5a; border-radius: 50%; }
+.nm-av.nm-gav { border-style: dashed; border-color: #4d8a76; color: #cfe3da; }
+.nm-pn { font-size: 22px; line-height: 1.2; font-weight: 500; color: var(--cream); overflow-wrap: anywhere; }
+.nm-ps { grid-column: 2; font-size: 13px; line-height: 17px; color: var(--muted); }
+.nm-f { display: flex; flex-direction: column; gap: 5px; padding-top: 10px; border-top: 1px solid #16302a; }
+.nm-f > label { display: flex; align-items: baseline; justify-content: space-between; font-size: 17px; font-weight: 500; }
+.nm-f > label small { font-size: 13px; font-weight: 400; color: var(--muted); }
+.nm-in { position: relative; display: flex; align-items: center; }
+.nm-in input { flex: 1 1 auto; min-width: 0; min-height: 44px; padding: 8px 64px 8px 14px; font: inherit; font-size: 17px; color: var(--cream); background: var(--inset); border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); }
+.nm-in input::placeholder { color: #5f7f74; }
+.nm-in input:focus { outline: none; border-color: var(--gold); }
+.nm-in.err input { border-color: var(--bad-edge); }
+.nm-in.ok input { border-color: #4fbf8a; }
+.nm-in.off input { color: #7e988e; background: #0a1013; border-color: #1b3b32; }
+.nm-cnt { position: absolute; right: 12px; font-size: 13px; color: var(--muted); pointer-events: none; }
+.nm-in.err .nm-cnt { color: #ffb4a8; }
+.nm-h { margin: 0; font-size: 13px; line-height: 17px; color: var(--muted); }
+.nm-h[hidden], .nm-msg[hidden] { display: none; }
+.nm-msg { margin: 0; padding: 6px 10px; font-size: 14px; line-height: 1.3; color: var(--bad-ink); background: var(--bad-bg); border: 2px solid var(--edge); border-left: 6px solid var(--bad-edge); border-radius: 3px; }
+.nm-msg.ok { color: #d6f6e6; background: #0d2a1f; border-left-color: #4fbf8a; }
+.nm-msg.lock { color: #f1e6c6; background: #2a2208; border-left-color: #c9a62a; }
+.nm-rules { margin: 0; padding: 10px 0 0; list-style: none; border-top: 1px solid #16302a; display: flex; flex-direction: column; gap: 3px; }
+.nm-rules li { position: relative; padding-left: 14px; font-size: 13px; line-height: 17px; color: #8fb3a6; }
+.nm-rules li::before { content: ""; position: absolute; left: 3px; top: 7px; width: 4px; height: 4px; background: #4d8a76; border-radius: 50%; }
+.nm-foot { position: sticky; bottom: 0; display: flex; justify-content: flex-end; margin: 0 -18px; padding: 10px 18px 16px; background: var(--inset); border-top: 1px solid #16302a; }
+.nm-save[disabled] { opacity: .45; cursor: default; }
+.nm-gbox { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 10px 12px; background: #0b1218; border: 1px solid #16302a; border-radius: 6px; }
+.nm-gbox p { flex: 1 1 140px; margin: 0; font-size: 13px; line-height: 17px; color: #a8cfc0; }
+.nm-gbox .btn { flex: none; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 4px 12px; font-size: 15px; }
+.nm-gbox .btn .gc-dc { width: 20px; height: 20px; }
+/* with the keyboard up (a phone): the preview's note, the helper lines and the rules fold away, so that the fields, the message and Save stay in view */
+.nm-sheet.nm-kbd .nm-ps, .nm-sheet.nm-kbd .nm-pl, .nm-sheet.nm-kbd .nm-rules, .nm-sheet.nm-kbd .nm-h, .nm-sheet.nm-kbd .nm-f > label small { display: none; }
+.nm-sheet.nm-kbd .nm-prev { padding: 8px 12px; } .nm-sheet.nm-kbd { gap: 8px; } .nm-sheet.nm-kbd .nm-f { padding-top: 8px; gap: 4px; }
+@media (max-width: 700px) {
+    .nm-foot { margin: 0 -16px; padding: 10px 16px calc(14px + env(safe-area-inset-bottom, 0px)); } .nm-foot .btn { width: 100%; }
+    .nm-pn { font-size: 20px; }
+    .nm-gbox .btn { width: 100%; justify-content: center; min-height: 46px; }
+}
+
+/* the guest's name chip (a button in the top bar: the badge is a dashed ring, as the "guests, not logged in" mark of the Players list; the name beside it where there is room, as the page's own named chip) */
+.hbar .nm-gchip { min-width: 46px; padding: 0 14px 0 8px; gap: 8px; }
+.nm-gchip[hidden] { display: none; }
+.nm-gchip .gc-av { border-style: dashed; border-color: #4d8a76; color: #cfe3da; }
+.nm-gchip .gc-cn { max-width: 11em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 1279px), (max-height: 500px) { .hbar .nm-gchip { padding: 0; } .hbar .nm-gchip .gc-cn { display: none; } }        /* (the page's rule for its own chip: the badge alone where the bar is narrow) */
+@media (max-width: 720px) and (orientation: portrait) {
+    .hbar .nm-gchip { order: 3; flex: none; margin-left: auto; padding: 0; min-width: 46px; }
+    .hbar .nm-gchip + .hlogin { margin-left: 0; }
+}
+/* a phone narrower than 375 px: the first row has no room for the chip beside the Discord mark, so the chip takes the mark's place (Log in with Discord stays in the guest's sheet and in the chat box) */
+@media (max-width: 374px) and (orientation: portrait) { .hbar .nm-gchip:not([hidden]) + .hlogin { display: none; } }
+
+/* the note ("Please set a name"): a small box under the chip with a point at the chip; gold edge, as the page's warning toast */
+.nm-pop { position: fixed; z-index: 61; box-sizing: border-box; width: 268px; max-width: calc(100vw - 20px); padding: 8px 44px 9px 14px; color: var(--cream); background: #0b1117; border: 2px solid var(--gold); border-radius: 6px; box-shadow: 3px 4px 0 var(--shadow); cursor: pointer; }
+.nm-pop::before { content: ""; position: absolute; top: -9px; left: var(--ax, 120px); width: 14px; height: 14px; margin-left: -7px; background: #0b1117; border-left: 2px solid var(--gold); border-top: 2px solid var(--gold); transform: rotate(45deg); }
+.nm-pop-t { display: block; font-size: 17px; line-height: 21px; font-weight: 500; }
+.nm-pop-s { display: block; margin-top: 2px; font-size: 13px; line-height: 17px; color: #a8cfc0; }
+.nm-pop .rs-x { position: absolute; top: 3px; right: 3px; width: 36px; height: 36px; }
+@media (max-width: 700px) { .nm-pop .rs-x { width: 40px; height: 40px; margin: 0; } .nm-pop .rs-x::before, .nm-pop .rs-x::after { left: 11px; top: 19px; } .nm-pop { width: 280px; } }

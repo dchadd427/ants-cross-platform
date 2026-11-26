@@ -408,7 +408,12 @@ void draw_podium(const Ctx& c) {
     c.sheet.well(p.winner_well);
     c.sheet.lettering(is_187 && c.m.result().standing < sim::MAX_PLAYERS ? "sc_k_colony" : "sc_k_winner", p.winner_label_x, p.winner_label_base);
     draw_team(c, win, p.ants_x, p.ants_y, 2.0, false);
-    c.pen.draw(fit_pen(c, win.name, c.W(p.name_w), 17.0), c.X(p.name_x), c.Y(p.name_base), kCream, 17.0, 0);
+    if (win.has_second()) {                                        // an alliance: the two names on two lines, the first ends in " &", each cut with dots when it is long (two long names never fit one line)
+        c.pen.draw(fit_pen(c, win.name_first + " &", c.W(p.name_w), 17.0), c.X(p.name_x), c.Y(p.name_pair_base[0]), kCream, 17.0, 0);
+        c.pen.draw(fit_pen(c, win.name_second, c.W(p.name_w), 17.0), c.X(p.name_x), c.Y(p.name_pair_base[1]), kCream, 17.0, 0);
+    } else {
+        c.pen.draw(fit_pen(c, win.name, c.W(p.name_w), 17.0), c.X(p.name_x), c.Y(p.name_base), kCream, 17.0, 0);
+    }
     const double score_em = std::min(34.0, 34.0 * static_cast<double>(c.W(p.name_w) - c.W(44)) / std::max<double>(1.0, c.pen.width(win.numbers[0], 34.0)));
     c.pen.draw(win.numbers[0], c.X(p.name_x), c.Y(p.score_base), kGold, score_em, 0);
     c.pen.draw(is_187 ? "kills" : "score", c.X(p.name_x) + c.pen.width(win.numbers[0], score_em) + c.W(6), c.Y(p.score_base), kDim, 10.0, 0);
@@ -447,14 +452,21 @@ void draw_podium(const Ctx& c) {
             const int32_t score_w = c.pen.width(r.numbers[0], 16.0);
             const bool you = c.m.viewer_rank() == static_cast<int>(i) + 1;
             const std::string name = r.name + (you ? " (you)" : "");
+            const int32_t name_room = c.X(o.name_right) - c.X(o.name_x) - score_w;
+            const bool pair = r.has_second() && c.pen.width(name, 14.0) > name_room;       // (an alliance whose two names do not fit one line takes two: "A &" over "B", a little smaller, with the bar and the little numbers a little lower)
             c.pen.draw(r.numbers[0], c.X(o.score_right), c.Y(o.score_base), kCream, 16.0, 2);
-            c.pen.draw(fit_pen(c, name, c.X(o.name_right) - c.X(o.name_x) - score_w, 14.0), c.X(o.name_x), c.Y(o.name_base), kCream, 14.0, 0);
-            draw_bar(c, o.bar, top > 0 ? static_cast<double>(std::max(0, r.score_value)) / static_cast<double>(top) : 0.0, r);
+            if (pair) {
+                c.pen.draw(fit_pen(c, r.name_first + " &", name_room, 12.0), c.X(o.name_x), c.Y(o.pair_base[0]), kCream, 12.0, 0);
+                c.pen.draw(fit_pen(c, r.name_second + (you ? " (you)" : ""), name_room, 12.0), c.X(o.name_x), c.Y(o.pair_base[1]), kCream, 12.0, 0);
+            } else {
+                c.pen.draw(fit_pen(c, name, name_room, 14.0), c.X(o.name_x), c.Y(o.name_base), kCream, 14.0, 0);
+            }
+            draw_bar(c, pair ? o.pair_bar : o.bar, top > 0 ? static_cast<double>(std::max(0, r.score_value)) / static_cast<double>(top) : 0.0, r);
             const std::string small_numbers = is_187 ? "Lost " + r.numbers[1] + "   Left " + r.numbers[2]
                                                      : "Killed " + r.numbers[2] + "   Lost " + r.numbers[1] + "   Hatched " + r.numbers[3];
             std::string small = small_numbers;
             if (counted) small += "   Damage " + grouped(static_cast<int64_t>(damage_of(rep, r)));
-            c.pen.draw(fit_pen(c, small, c.X(o.score_right) - c.X(o.name_x), 8.6), c.X(o.name_x), c.Y(o.small_base), kDim, 8.6, 0);
+            c.pen.draw(fit_pen(c, small, c.X(o.score_right) - c.X(o.name_x), 8.6), c.X(o.name_x), c.Y(pair ? o.pair_small_base : o.small_base), kDim, 8.6, 0);
         }
     }
     if (counted && rep.play.present && p.play.w > 0) draw_play(c, p);

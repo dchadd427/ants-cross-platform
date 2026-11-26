@@ -177,6 +177,7 @@ std::unique_ptr<Room> RoomManager::build_room(RoomSpec spec, uint32_t now_ms, Cr
     const bool wants_replay = spec.record_replay;
     const bool visitor_made = spec.public_room;                   // (a room that a visitor's create block made, the games of the front page: the "demo rooms" of --replay-demo)
     const bool test_map = MapStore::is_test_map_name(spec.map);
+    spec.name_gate = name_gate_;                                  // (protocol 29: every room that is built takes the names that the server has the hub's key for)
     auto room = std::make_unique<Room>(std::move(spec), std::move(entry), std::move(level), seed, now_ms, &log_budget_);
     if (restart_ != nullptr && restart_->enabled()) room->set_restart_store(restart_.get());       // (a room that holds seats keeps a record from the start of its match: room.hpp)
     if (test_map) room->set_replay_store(nullptr, "unlisted test map");

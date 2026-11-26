@@ -1017,8 +1017,9 @@ void run_replay_tests() {
             {"Q\"x\\y", "Q\"x\\y"}, {"<b>&'</b>", "<b>&'</b>"}, {"\\", "\\"}, {"\"", "\""}, {"a,b;c", "a,b;c"}, {"=SUM(1+1)", "=SUM(1+1)"},
             // at most 32 characters
             {c32, c32}, {c32 + "w", c32}, {c32 + std::string(20, 'z'), c32}, {" " + c32.substr(0, 31), c32.substr(0, 31)},
-            // anything but the space to the tilde becomes a '?' (a letter with an accent is two bytes of UTF-8, a tab and a line end are control characters, DEL is one too)
-            {"Zo\xC3\xAB", "Zo??"}, {"Ann\tBob", "Ann?Bob"}, {"Ann\nBob", "Ann?Bob"}, {std::string("a\0b", 3), "a?b"}, {"\x7F", "?"}, {"\x1F", "?"}, {"\x80\xFF", "??"}, {" \xC3\xAB ", "??"},
+            // the letters of a name stay (protocol 29: UTF-8 of the table of net::valid_wire_name); a control character (a tab, a line end, DEL), a letter that the game's font does not draw and a byte that is no part of a letter are left out
+            {"Zo\xC3\xAB", "Zo\xC3\xAB"}, {"Ann\tBob", "AnnBob"}, {"Ann\nBob", "AnnBob"}, {std::string("a\0b", 3), "ab"}, {"\x7F", ""}, {"\x1F", ""}, {"\x80\xFF", ""}, {" \xC3\xAB ", "\xC3\xAB"},
+            {"[\xC3\x84NT] Zo\xC3\xAB", "[\xC3\x84NT] Zo\xC3\xAB"}, {"\xCE\x91\xCE\xBB x", "x"}, {"\xE9\xBE\x8D" "x", "x"}, {"a\xE2\x80\xAE" "b", "ab"}, {"Zo\xC3", "Zo"},
         };
         for (const auto& row : table) ASSERT_MSG(replay_person_name(row.first) == row.second, "'" + row.first + "' gave '" + replay_person_name(row.first) + "', not '" + row.second + "'");
         // the display names that a computer player can have ("Bot (Easy)", "Bot (Idle)" ...) are plain ASCII, short, with no blank at an end and none of the words of the game: the rule for a person's name leaves them as they
@@ -1041,8 +1042,8 @@ void run_replay_tests() {
             for (uint32_t i = 0; i < length; ++i) raw.push_back(next() % 5 == 0 ? ' ' : static_cast<char>(next() % 256));
             if (round % 7 == 0) raw = "Player " + std::string(1, static_cast<char>('0' + next() % 8)) + std::string(next() % 3, ' ');
             const std::string name = replay_person_name(raw);
-            ASSERT_TRUE(name.size() <= 32 && name == replay_person_name(name));                               // (and it is its own fixed point)
-            for (const char ch : name) ASSERT_TRUE(ch >= 0x20 && ch <= 0x7E);
+            ASSERT_TRUE(net::utf8_length(name) <= 32 && name == replay_person_name(name));                    // (at most 32 characters, and it is its own fixed point)
+            ASSERT_TRUE(net::valid_wire_name(name));                                                          // (protocol 29: UTF-8 of printable ASCII and the letters of a name, nothing else)
             ASSERT_TRUE(name.empty() || (name.front() != ' ' && name.back() != ' '));
             ASSERT_TRUE(name != "Player" && name != "Player 1" && name != "Player 2" && name != "Player 3" && name != "Player 4");
             if (round % 50 == 0) {

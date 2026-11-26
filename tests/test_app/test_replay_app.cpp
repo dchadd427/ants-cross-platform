@@ -610,19 +610,19 @@ int main(int argc, char* argv[]) {
             ASSERT_TRUE(app.recorder()->replay().head.names[2].empty());               // (a seat that does not play has none)
             app.shutdown();
         }
-        {                                                                              // a name that holds a letter outside ASCII, a delete and a tab: the file keeps printable ASCII only (every other byte becomes a '?')
+        {                                                                              // a name that holds a letter of the table, a Greek letter, a delete and a tab: the file keeps the letters of a name and printable ASCII (protocol 29), and nothing else
             Application app;
             ApplicationConfig cfg = local_config(0x02);
-            cfg.player_name = "Zo\xC3\xAB\x7F\tx";
+            cfg.player_name = "Zo\xC3\xAB\xCE\xB1\x7F\tx";
             ASSERT_TRUE(app.init(cfg));
-            ASSERT_EQ(app.recorder()->replay().head.names[0], "Zo????x");
+            ASSERT_EQ(app.recorder()->replay().head.names[0], "Zo\xC3\xABx");
             app.hud().dismiss_match_start_modal();
             for (int i = 0; i < 60; ++i) app.update_simulation(0.05f);
             quit_match(app);
             replay::Replay rep;
             std::string why;
             ASSERT_TRUE(read_back(app, rep, why));                                     // (and the file reads back)
-            ASSERT_EQ(rep.head.names[0], "Zo????x");
+            ASSERT_EQ(rep.head.names[0], "Zo\xC3\xABx");
             app.shutdown();
         }
     } TEST_END();

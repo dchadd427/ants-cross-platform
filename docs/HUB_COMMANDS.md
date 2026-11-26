@@ -9,7 +9,7 @@ A line that starts with a single `/` is a command, and **a command is never a li
 | Who | Commands |
 |---|---|
 | everybody who is logged in | `/help`, `/invite NAME`, `/msg NAME`, `/follow NAME`, `/unfollow NAME`, `/ignore NAME`, `/unignore NAME` |
-| a moderator (the role comes from Discord: [Roles](HUB_ROLES.md#roles)), and the above | `/mute NAME MINUTES`, `/unmute NAME`, `/del NUMBER`, `/kick NAME`, `/mutes` |
+| a moderator (the role comes from Discord: [Roles](HUB_ROLES.md#roles)), and the above | `/mute NAME MINUTES`, `/unmute NAME`, `/del NUMBER`, `/kick NAME`, `/rename NAME`, `/mutes` |
 | an administrator (the role, or the operator's account), and all the above | `/ban NAME [purge]`, `/unban NAME`, `/bans`, `/nopic NAME`, `/pic NAME`, `/noimages NAME`, `/images NAME`, `/bots ...` |
 | a reader | none: it cannot write, and it is sent no list |
 
@@ -132,6 +132,7 @@ In the chat, an account whose role is `mod` or `admin` ([Roles](HUB_ROLES.md#rol
 | `/unmute username` | mod, admin | lifts the mute (`bad` if there is none) |
 | `/del id` | mod, admin | takes a line off every screen and out of the history (a line with an image takes its files with it, and the log says `del_img`: [HUB_IMAGES.md](HUB_IMAGES.md#moderation-and-the-log)); a line of one's own always may go (it is no power over a person and no entry of the log); a line of the hub's own may not |
 | `/kick username` | mod, admin | closes the person's sockets and ends their login ([Kick](#kick)); the person must be in the chat |
+| `/rename username` | mod, admin | takes the person's nickname and tag away ([HUB_NICKNAMES.md](HUB_NICKNAMES.md#the-rules)): the person is shown by the login's name again and may choose at once, with no wait of 30 days and no hold on the old name; the same power check as `/kick` (a moderator has no power over a moderator, nobody over themselves); the row `rename` of the log; `bad` if the person has no nickname; the person need not be here |
 | `/ban username` | admin | the hub's ban ([Ban](#ban)); `bad` if the person is banned already |
 | `/unban username` | admin | lifts a ban: by the username, or by the name that the ban was made with when the person's profile is gone (the names that `/bans` shows) |
 | `/bans` | admin | the newest 50 bans, in a private `bans` frame |

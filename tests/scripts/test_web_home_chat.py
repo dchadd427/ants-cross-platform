@@ -103,7 +103,7 @@ class TheLoaderInHome(unittest.TestCase):
 
     def test_the_dock_is_mounted_when_both_files_are_there_and_whatever_goes_wrong_stays_in_it(self):
         self.assertIn("var parts = 2;", self.js)
-        self.assertIn("function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; }, load: lazy }); inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); wantMessages(); } } catch (e) { dock = null; } }", self.js)
+        self.assertIn("function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; }, load: lazy }); inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); wantMessages(); wantNames(); } } catch (e) { dock = null; } }", self.js)
         self.assertIn("[bar, racts, tabs, dock && dock.root, players && players.root].forEach(function (n) { if (n) {", self.js, "a dialog over the page, or a hand-off, takes the dock's keys and presses too: the focus does not go behind the modal")
         self.assertIn("css.onload = mountDock;", self.js)
         self.assertIn("js.src = CHAT.script; js.async = true; js.onload = mountDock;", self.js, "async: the script never holds the page")
@@ -155,7 +155,7 @@ class TheFolderAndTheScript(unittest.TestCase):
         self.assertEqual(len(admin_address.findall(self.code)), 1, "one statement sets the address of the line Admin page, and it is a constant")
         self.assertNotRegex(admin_address.sub("", link_address.sub("", picture_address.sub("", self.code))), r"\.href\b|\.src\b|setAttribute\(\s*['\"](href|src|style|on\w+|srcdoc)")
         made = sorted(set(re.findall(r"\bel\('(\w+)'", self.code)))
-        self.assertEqual(made, ["a", "bdi", "button", "div", "form", "h2", "i", "input", "label", "p", "section", "span", "textarea"], "no script, iframe, style or link element: the dock makes text, boxes, the switch and the checked links of a line (the picture's img is made by one helper)")
+        self.assertEqual(made, ["a", "b", "bdi", "button", "div", "form", "h2", "i", "input", "label", "p", "section", "span", "textarea"], "no script, iframe, style or link element: the dock makes text, boxes, the switch and the checked links of a line (the picture's img is made by one helper)")
         self.assertEqual(sorted(set(re.findall(r"\bmake\('(\w+)'", self.code))), ["img"])
         self.assertEqual(self.code.count("createElement"), 1, "one place makes elements")
         self.assertIn("if (text !== undefined) e.textContent = text;", self.js)
@@ -552,7 +552,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_chat_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
-    FILES = (["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/alert_core.js", "web/hub_here.js", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/talk.css", "web/home/players.css", "web/home/players.js", "web/home/cmds.js", "web/home/cmds.css", "web/home/pics.js", "web/home/pics.css", "web/home/post.js", "web/home/post.css", "tests/scripts/test_web_home_chat.py", "tests/scripts/test_hub_text.py", "tests/scripts/web_home_chat_check.js",
+    FILES = (["tools/size_limits.py", "web/lobby.html", "web/front/name_letters.js", "web/home/names.js", "web/home/names.css", "web/rejoin_key.js", "web/alert_core.js", "web/hub_here.js", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/talk.css", "web/home/players.css", "web/home/players.js", "web/home/cmds.js", "web/home/cmds.css", "web/home/pics.js", "web/home/pics.css", "web/home/post.js", "web/home/post.css", "tests/scripts/test_web_home_chat.py", "tests/scripts/test_hub_text.py", "tests/scripts/web_home_chat_check.js",
               "tests/scripts/web_home_chat_hub_check.js", "tests/scripts/web_page_harness.js", "tests/scripts/fake_hub.js", "tests/scripts/mini_websocket.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
               "docs/HOME_SCREEN.md", "docs/HOME_CHAT.md", "hub/__init__.py", "hub/text.py", "web/matches.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html", "web/admin_page.js"]
              + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "room_fog.js", "room_sheet.js", "seat_menu.js", "map_picker.js", "map_maker_link.js", "mapmaker_ai.js")])

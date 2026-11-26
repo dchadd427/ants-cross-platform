@@ -118,6 +118,8 @@ struct RoomSpec {
     uint32_t start_wait_ms{net::kLobbyStartWaitMs};
     uint32_t silence_ms{net::kLobbySilenceMs};
     uint32_t empty_close_ms{60u * 1000u};
+    /// Protocol 29: set by the server that has the hub's key (RoomManager::set_name_gate; HostLobby::Config::name_gate): a name is taken as it is only with a good pass, else it is a guest's. Unset: names are only checked by the wire.
+    std::function<bool(const std::string& name, const std::string& pass)> name_gate;
     uint32_t reserve_ms{net::kLobbyReserveMs};      // the rematch: a lobby room that was opened again after its match holds the seat of a person of the match this long at the most (HostLobby::Config::reserve_ms)
     bool has_seed{false};
     uint32_t seed{1};                       // the match's random seed (the server draws one when the spec has none)

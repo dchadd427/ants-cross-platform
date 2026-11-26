@@ -393,13 +393,7 @@ net::CreateBlock make_create_block(const MenuMap& map, int players, const LocalT
 }
 
 std::string clean_player_name(const std::string& raw) {
-    std::string printable;
-    for (char c : raw) {
-        if (printable_char(c)) printable.push_back(c);
-    }
-    std::string name = trim_blanks(printable);
-    if (name.size() > StartMenu::kNameMax) name = trim_blanks(name.substr(0, StartMenu::kNameMax));
-    return name;
+    return trim_blanks(net::clip_wire_name(raw, StartMenu::kNameMax));          // (printable ASCII and the letters that a name may hold, protocol 29: the field itself takes what a keyboard types; a name that a page passes keeps its letters)
 }
 
 bool looks_like_bot_name(const std::string& name) { return ai::is_reserved_bot_name(name); }

@@ -9,13 +9,14 @@ import re
 
 from ..limits import Limits
 
-Line = collections.namedtuple("Line", "id at account name text mod img", defaults=(None,))        # img: None, or the Image of the line (docs/HUB_IMAGES.md)
+Line = collections.namedtuple("Line", "id at account name text mod img tag", defaults=(None, ""))        # img: None, or the Image of the line (docs/HUB_IMAGES.md); tag: the tag that its author had when it wrote the line (docs/HUB_NICKNAMES.md)
 Line.__repr__ = lambda self: "<Line %d>" % self.id                 # (the default shows the account's Discord id: that is like a password and is in no representation)
 Image = collections.namedtuple("Image", "name x w h tw th anim")     # a posted image: its public name (32 random hex digits), its type (`jpg`, `png` or `gif`), the size of the image and of its thumbnail, and whether it is animated
 Image.__repr__ = lambda self: "<Image>"
 Action = collections.namedtuple("Action", "id at actor action target detail")         # a row of the moderators' log (see StoreBase.actions)
 Usage = collections.namedtuple("Usage", "bytes free lines oldest log")         # (see StoreBase.usage)
 Profile = collections.namedtuple("Profile", "username display pick")
+Nick = collections.namedtuple("Nick", "nick key nick_at tag tag_at")      # an account's nickname (docs/HUB_NICKNAMES.md): the text, its lookalike key (text.squash), when it was set, the tag ('' for none) and when the tag was set (0 for never)
 Alert = collections.namedtuple("Alert", "id at kind body line unread")         # a row of an account's list of alerts (docs/HUB_PEOPLE.md): `body` is the small JSON text that hub/people.py made, `line` the chat line that a mention is of (or None)
 ALERT_KINDS = ("invite", "mention", "join", "over", "room", "msg")
 ALERT_BODY_MAX = 600                        # the longest body that is kept (bytes): hub/people.py writes a few short fields, never more
@@ -33,7 +34,7 @@ PICKS = ("display", "username")
 MAX_LINES = 200                                # the store keeps the newest this many chat lines (every line counts, a moderator's and a deleted one too), and no line older than `retention`: whichever limit is smaller deletes first
 MODLOG_DAYS = 30                        # the moderators' log keeps an action this long ...
 MODLOG_ROWS = 10000                     # ... and at most this many rows (the newest)
-ACTIONS = ("mute", "unmute", "del", "kick", "ban", "unban", "nopic", "pic", "noimages", "images", "del_img", "bots_start", "bots_stop", "report", "report_read", "report_close")     # what the log can say was done
+ACTIONS = ("mute", "unmute", "del", "kick", "ban", "unban", "nopic", "pic", "noimages", "images", "rename", "del_img", "bots_start", "bots_stop", "report", "report_read", "report_close")     # what the log can say was done
 BOTS_DETAILS = {"bots_start": re.compile(r"[0-9]{1,6} every [0-9]{1,5}s\Z"), "bots_stop": re.compile(r"stopped [0-9]{1,6} dropped [0-9]{1,6}\Z")}      # the detail of a `/bots` row: numbers and fixed words, each number short of an id's length
 TERMINAL = "terminal"                   # the actor of an action that the command line did
 REFERENCE = re.compile(r"[0-9a-f]{16}\Z")      # the pseudonymous reference of an account (hub/pseudo.py)
@@ -82,7 +83,7 @@ class StoreBase:
 
     # ---- lines ----
 
-    def add_line(self, account, name, text, mod, image=None):
+    def add_line(self, account, name, text, mod, image=None, tag=""):
         """(`image`: the public name of an upload that waits for this account: the line carries it, in the same step, or ImageGone is raised and nothing is written.) Keep a line and return it as a Line. `mod` is the role that its author had when it wrote it: 0 (none), 1 (a moderator) or 2 (an administrator); a bool is 0 or 1. It is a mark for the pages, never a reason to allow anything. The lines past the newest `max_lines` are deleted in the same step, so the store never holds more."""
         raise NotImplementedError
 
@@ -244,6 +245,25 @@ class StoreBase:
 
     def ignore_remove(self, ref, other):
         """The account `ref` does not ignore `other` any more. False when it did not."""
+        raise NotImplementedError
+
+    # ---- nicknames and tags (hub/nicknames.py): one row per account that has a nickname, by the account's id as the profiles are; the old nickname of an account is held for it for a while ----
+
+    def nick_row(self, account):
+        """The account's Nick, or None. The tables are made by the first nickname."""
+        raise NotImplementedError
+
+    def nick_owner(self, key):
+        """(account, the folded nickname) of the account that has a nickname with this lookalike key (text.squash) or holds one that it gave up (the hold has not ended), or None."""
+        raise NotImplementedError
+
+    def nick_put(self, account, nick, folded, key, nick_at, tag, tag_at, hold_until):
+        """Give the account this nickname and tag in one step. None when it is done; else the folded nickname of the OTHER account that has the key (its nickname, or one that it holds): nothing is changed then. A nickname
+        that replaces another is held for the account until `hold_until`, so that nobody takes it (a name that the account holds itself is its own again when it takes it back)."""
+        raise NotImplementedError
+
+    def nick_drop(self, account, note=None):
+        """Take the nickname and the tag of the account away, and what it holds: True when there was something (and the note, if any, is in the moderators' log). The account may choose again at once."""
         raise NotImplementedError
 
     # ---- the people that an account follows (hub/follows.py): by the references of both, never by an id; nobody is told, and the list is nobody's but its owner's ----

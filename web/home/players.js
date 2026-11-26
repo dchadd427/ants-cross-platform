@@ -45,7 +45,7 @@
         if (!raw || typeof raw !== 'object' || !whole(raw.i, 0, LIMIT.ids) || typeof raw.name !== 'string' || SHOWN.indexOf(raw.at) === -1) return null;
         var name = Chat.clip(Chat.plain(raw.name.slice(0, LIMIT.name * 4), true), LIMIT.name);
         if (!name) return null;
-        var row = { id: raw.i, name: name, at: raw.at, mod: raw.mod === true, role: roleOf(raw.role, raw.mod), pic: Chat.picOf(raw.pic), pub: false, priv: false, solo: false, map: '', mapName: '', guess: '', n: -1, of: -1, code: '' };
+        var row = { id: raw.i, name: name, tag: Chat.tagOf(raw.tag), at: raw.at, mod: raw.mod === true, role: roleOf(raw.role, raw.mod), pic: Chat.picOf(raw.pic), pub: false, priv: false, solo: false, map: '', mapName: '', guess: '', n: -1, of: -1, code: '' };
         if (raw.at === 'away') return row;                                 // (an Away row is a name and the word: whatever else a frame holds is not drawn)
         if (raw.pub !== true && raw.at !== 'look') {                       // a private room or match is a fact (no map, seats or code are kept); a game against the computer is a match with a map at most
             if (raw.priv === true) row.priv = true;
@@ -279,8 +279,9 @@
             li.setAttribute('data-s', row.at);
             if (!o.you) li.setAttribute('data-i', String(row.id));       // (the hub's number of the row: the moderation sheet names the person by it, `row:<n>`, never by the name; a person who is not here has a number from 900,000,000 and the hub's handle instead: `h:<handle>`)
             av.setAttribute('aria-hidden', 'true'); Chat.picture(el, av, row.pic, 32);
-            var nm = el('bdi', 'pl-nm', row.name), word = row.role === 'admin' ? TEXT.administrator : TEXT.moderator;
+            var nm = el('bdi', 'pl-nm', row.tag ? '' : row.name), word = row.role === 'admin' ? TEXT.administrator : TEXT.moderator;
             if (row.mod) { li.className += row.role === 'admin' ? ' r-admin' : ' r-mod'; nm.setAttribute('title', word); name.appendChild(el('span', 'pl-sr', word + ' ')); }       // (the name is red or yellow: the word is in the accessible name and the title as well, so that color is never the only sign)
+            if (row.tag) { nm.appendChild(el('span', 'nm-tag', '[' + row.tag + ']')); nm.appendChild(doc.createTextNode(' ' + row.name)); }       // (a tag: dimmer than the name, brackets included)
             name.appendChild(nm);
             if (o.star) { var star = el('i', 'pl-star'); star.setAttribute('aria-hidden', 'true'); put(name, [star, el('span', 'pl-sr', ' (' + TEXT.follows + ')')]); }
             if (o.you) name.appendChild(el('span', 'pl-tag', TEXT.you));
@@ -342,7 +343,7 @@
         function paintBody() {                                           // the part under the header: made again only when what it shows changed (the scroll and the focus stay where they were)
             var own = ownCode(), shown = listOf(model, me), people = 0, onFollowing = tab === 'following' && !!you;
             GROUPS.forEach(function (x) { shown[x[0]] = shown[x[0]].map(named); people += shown[x[0]].length; });
-            var empty = model.n <= 1 && model.more === 0 && people === 0, mine = you ? { name: you.name, mod: you.mod, role: you.role, pic: you.pic, doing: doing, elsewhere: playingElsewhere() } : null;
+            var empty = model.n <= 1 && model.more === 0 && people === 0, mine = you ? { name: you.name, tag: you.tag, mod: you.mod, role: you.role, pic: you.pic, doing: doing, elsewhere: playingElsewhere() } : null;
             var sig = JSON.stringify([phase, mine, own, model.n, model.g, model.more, onFollowing, follows, GROUPS.map(function (x) { return shown[x[0]].map(function (r) { return [r.id, r.name, r.at, r.mod, r.role, r.pic, r.pub, r.priv, r.solo, r.mapName, r.n, r.of, r.code, r.listed, r.following]; }); })]);
             if (sig === painted) return;
             var active = doc.activeElement, focused = active && active.getAttribute ? active.getAttribute('data-code') : null, scroll = list.scrollTop;
@@ -351,7 +352,7 @@
             if (phase === 'off') { put(offBox, [el('p', '', TEXT.off), el('p', 'small', TEXT.offNote)]); body.appendChild(offBox); told(); return; }
             if (you) { paintTabs(); body.appendChild(tabs); }
             if (you && !onFollowing) {                                   // the visitor, first, as the page knows it (not as the hub last said)
-                var away = playingElsewhere(), row = rowOf(away ? { i: 0, name: you.name, at: 'play', mod: you.mod, role: you.role, pic: you.pic, pub: away.pub, priv: away.priv, solo: away.solo, map: away.map, n: away.n, of: away.of } : { i: 0, name: you.name, at: doing ? doing.at : 'look', mod: you.mod, role: you.role, pic: you.pic, pub: !!(doing && doing.pub), map: doing && doing.map, n: doing && doing.n, of: doing && doing.of }, Chat, rules);
+                var away = playingElsewhere(), row = rowOf(away ? { i: 0, name: you.name, tag: you.tag, at: 'play', mod: you.mod, role: you.role, pic: you.pic, pub: away.pub, priv: away.priv, solo: away.solo, map: away.map, n: away.n, of: away.of } : { i: 0, name: you.name, at: doing ? doing.at : 'look', mod: you.mod, role: you.role, pic: you.pic, pub: !!(doing && doing.pub), map: doing && doing.map, n: doing && doing.n, of: doing && doing.of }, Chat, rules);
                 if (row) { row.mapName = row.mapName || row.guess; youList.appendChild(card(row, { you: true, label: true, join: false })); put(body, [youBox, rule]); }       // (the page's own room: its map's name is its own word)
             }
             body.appendChild(status);
@@ -460,14 +461,14 @@
                 supported = !!m && m.presence === true; live = true; asked = false; sentSig = null; lastSent = null; model = fresh(); follows = []; indexFollows();
                 me = whole(m && m.me, 0, LIMIT.ids) ? m.me : null;
                 var yo = Chat.youOf(m && m.you);                   // (the dock's one rule for who the visitor is and what role they hold)
-                you = yo ? { name: yo.name, mod: yo.mod, role: yo.role, pic: yo.pic } : null;
+                you = yo ? { name: yo.name, tag: yo.tag, mod: yo.mod, role: yo.role, pic: yo.pic } : null;
                 if (!supported) phase = 'none'; else { doing = look(); keep(); tell(); ask(); }
             } else if (kind === 'you') {                                   // the role changed (the chat dock's `you` frame): the visitor's own row follows at once
                 var y = m && m.you && typeof m.you === 'object' ? m.you : null;
                 if (!you || !y) return;
                 var yn = Chat.youOf(y);
                 if (!yn) return;
-                you.role = yn.role; you.mod = yn.mod; you.pic = yn.pic;
+                you.role = yn.role; you.mod = yn.mod; you.pic = yn.pic; you.name = yn.name; you.tag = yn.tag;       // (a new nickname or tag: the visitor's own row says it at once)
             } else if (kind === 'follows') {
                 var fs = live && supported ? followsOf(m, Chat) : null;
                 if (!fs) return;

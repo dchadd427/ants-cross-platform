@@ -333,7 +333,7 @@
             if (asked) return;
             asked = true;
             var parts = 2;
-            function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; }, load: lazy }); inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); wantMessages(); } } catch (e) { dock = null; } }
+            function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; }, load: lazy }); inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); wantMessages(); wantNames(); } } catch (e) { dock = null; } }
             function load() {
                 try {
                     var tail = doc.head || doc.body, css = el('link'), js = el('script');
@@ -405,6 +405,12 @@
             askedMod = true;
             dock.tap(function (kind) { if (kind === 'live' || kind === 'you') wantSheet(); });
             wantSheet();
+        }
+        var askedNames = false;
+        function wantNames() {                              // the sheet "Your name", the guest's chip and its note (names.js, names.css), after the dock: a guest names themselves there, a person who is logged in chooses a nickname and a tag
+            if (askedNames || !dock || !dock.tap || !page.person) return;
+            askedNames = true;
+            lazy('home/names', function () { if (win.AntsHomeNames) win.AntsHomeNames.mount({ doc: doc, win: win, dock: dock, bar: right, login: login, person: page.person, letters: win.AntsNameLetters, changed: function () { if (page.nameChanged) page.nameChanged(); } }); });
         }
         function wantTalk() {                               // the emoji and microphone buttons (talk.js, talk.css), after the dock: they stand in its form
             if (askedTalk || !dock) return;

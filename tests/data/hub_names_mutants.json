@@ -1,0 +1,416 @@
+{
+ "note": "Mutants of the rules of nicknames, tags and guests' names and of the pass for the game server (hub/nickrules.py, hub/nicknames.py, hub/namepass.py, the nickname tables of hub/store/sqlite.py; docs/HUB_NICKNAMES.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/test_hub_names.py: the length of a nickname and a tag, one alphabet, the signs, reserved words and the lookalikes of them, the rude words as they are written and as a lookalike writes them, the labels of computer players, the nickname that is unique (taken, a lookalike, the own name), the waits (30 days, a day) and the holds, a guest that may not copy a nickname, the rates, both fields or none, the name that a login plays under, the words of the pass and its time, and what Forget me takes. Run from the checkout: python3 tools/mutate.py tests/data/hub_names_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught.",
+ "defaults": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest -f tests.scripts.test_hub_names"
+ },
+ "mutants": [
+  {
+   "id": "nick_min_2",
+   "file": "hub/nickrules.py",
+   "old": "NICK_MIN, NICK_MAX = 3, 16",
+   "new": "NICK_MIN, NICK_MAX = 2, 16"
+  },
+  {
+   "id": "nick_max_17",
+   "file": "hub/nickrules.py",
+   "old": "NICK_MIN, NICK_MAX = 3, 16",
+   "new": "NICK_MIN, NICK_MAX = 3, 17"
+  },
+  {
+   "id": "tag_min_1",
+   "file": "hub/nickrules.py",
+   "old": "TAG_MIN, TAG_MAX = 2, 5",
+   "new": "TAG_MIN, TAG_MAX = 1, 5"
+  },
+  {
+   "id": "tag_max_6",
+   "file": "hub/nickrules.py",
+   "old": "TAG_MIN, TAG_MAX = 2, 5",
+   "new": "TAG_MIN, TAG_MAX = 2, 6"
+  },
+  {
+   "id": "curly_apostrophes_are_signs_of_their_own",
+   "file": "hub/nickrules.py",
+   "old": "out = unicodedata.normalize(\"NFC\", raw).translate(FOLDED)",
+   "new": "out = unicodedata.normalize(\"NFC\", raw)"
+  },
+  {
+   "id": "a_name_is_not_trimmed",
+   "file": "hub/nickrules.py",
+   "old": "return BLANKS.sub(\" \", out).strip(\" \")",
+   "new": "return BLANKS.sub(\" \", out)"
+  },
+  {
+   "id": "blanks_stay_as_they_are",
+   "file": "hub/nickrules.py",
+   "old": "return BLANKS.sub(\" \", out).strip(\" \")",
+   "new": "return out.strip(\" \")"
+  },
+  {
+   "id": "a_letter_of_another_script_is_a_sign",
+   "file": "hub/nickrules.py",
+   "old": "if unicodedata.category(ch)[0] == \"L\":\n            return \"script\"",
+   "new": "if unicodedata.category(ch)[0] == \"L\":\n            return \"chars\""
+  },
+  {
+   "id": "two_alphabets_in_one_name",
+   "file": "hub/nickrules.py",
+   "old": "if len(alphabets_of(name)) > 1:\n        return None, \"alphabets\"",
+   "new": "if len(alphabets_of(name)) > 2:\n        return None, \"alphabets\""
+  },
+  {
+   "id": "a_name_may_end_in_a_sign",
+   "file": "hub/nickrules.py",
+   "old": "if not (name_letters.is_letter(name[0]) or name_letters.is_digit(name[0])) or not (name_letters.is_letter(name[-1]) or name_letters.is_digit(name[-1])):",
+   "new": "if not (name_letters.is_letter(name[0]) or name_letters.is_digit(name[0])):"
+  },
+  {
+   "id": "a_name_may_have_no_letter",
+   "file": "hub/nickrules.py",
+   "old": "if not any(name_letters.is_letter(c) for c in name) or any(a in SIGNS and b in SIGNS for a, b in zip(name, name[1:])):",
+   "new": "if any(a in SIGNS and b in SIGNS for a, b in zip(name, name[1:])):"
+  },
+  {
+   "id": "two_signs_in_a_row",
+   "file": "hub/nickrules.py",
+   "old": "if not any(name_letters.is_letter(c) for c in name) or any(a in SIGNS and b in SIGNS for a, b in zip(name, name[1:])):",
+   "new": "if not any(name_letters.is_letter(c) for c in name):"
+  },
+  {
+   "id": "a_reserved_word_is_a_name",
+   "file": "hub/nickrules.py",
+   "old": "if text.reserved(name) or text.squash(name) in NICK_RESERVED_SQUASHED or GUEST_PLACEHOLDER.match(re.sub(r\"[ ._'-]\", \"\", name.lower())):\n        return None, \"reserved\"",
+   "new": "if False:\n        return None, \"reserved\""
+  },
+  {
+   "id": "a_lookalike_of_a_reserved_word_is_a_name",
+   "file": "hub/nickrules.py",
+   "old": "if text.reserved(name) or text.squash(name) in NICK_RESERVED_SQUASHED or GUEST_PLACEHOLDER.match(re.sub(r\"[ ._'-]\", \"\", name.lower())):",
+   "new": "if text.reserved(name) or GUEST_PLACEHOLDER.match(re.sub(r\"[ ._'-]\", \"\", name.lower())):"
+  },
+  {
+   "id": "the_number_of_a_guest_is_a_name",
+   "file": "hub/nickrules.py",
+   "old": "if text.reserved(name) or text.squash(name) in NICK_RESERVED_SQUASHED or GUEST_PLACEHOLDER.match(re.sub(r\"[ ._'-]\", \"\", name.lower())):",
+   "new": "if text.reserved(name) or text.squash(name) in NICK_RESERVED_SQUASHED:"
+  },
+  {
+   "id": "a_rude_name_is_a_name",
+   "file": "hub/nickrules.py",
+   "old": "if is_rude(name):\n        return None, \"rude\"\n    return name, None",
+   "new": "return name, None"
+  },
+  {
+   "id": "a_rude_tag_is_a_tag",
+   "file": "hub/nickrules.py",
+   "old": "if is_rude(tag):\n        return None, \"rude\"",
+   "new": ""
+  },
+  {
+   "id": "a_tag_in_lower_case",
+   "file": "hub/nickrules.py",
+   "old": "up = ch.upper()",
+   "new": "up = ch"
+  },
+  {
+   "id": "a_tag_of_two_alphabets",
+   "file": "hub/nickrules.py",
+   "old": "if len(alphabets_of(tag)) > 1:\n        return None, \"alphabets\"",
+   "new": ""
+  },
+  {
+   "id": "a_reserved_tag",
+   "file": "hub/nickrules.py",
+   "old": "if tag.lower() in TAG_RESERVED_EXACT:\n        return None, \"reserved\"",
+   "new": ""
+  },
+  {
+   "id": "a_tag_like_a_staff_badge",
+   "file": "hub/nickrules.py",
+   "old": "if text.squash(tag) in TAG_RESERVED_SQUASHED:\n        return None, \"staff\"",
+   "new": ""
+  },
+  {
+   "id": "a_tag_that_makes_a_bot_label",
+   "file": "hub/nickrules.py",
+   "old": "if reads_as_bot(\"[%s] %s\" % (tag, nickname or \"Name\")):\n        return None, \"bot\"",
+   "new": ""
+  },
+  {
+   "id": "a_rude_word_in_the_squashed_form_only",
+   "file": "hub/nickrules.py",
+   "old": "forms = {_written(name), text.squash(name)}",
+   "new": "forms = {_written(name)}"
+  },
+  {
+   "id": "a_rude_word_in_the_written_form_only",
+   "file": "hub/nickrules.py",
+   "old": "forms = {_written(name), text.squash(name)}",
+   "new": "forms = {text.squash(name)}"
+  },
+  {
+   "id": "a_rude_word_inside_a_name_is_fine",
+   "file": "hub/nickrules.py",
+   "old": "if form in WHOLE_WORDS or any(word in form for word in INSIDE_WORDS):",
+   "new": "if form in WHOLE_WORDS:"
+  },
+  {
+   "id": "a_rude_name_that_is_a_whole_word_is_fine",
+   "file": "hub/nickrules.py",
+   "old": "if form in WHOLE_WORDS or any(word in form for word in INSIDE_WORDS):",
+   "new": "if any(word in form for word in INSIDE_WORDS):"
+  },
+  {
+   "id": "the_own_name_is_asked_for_its_wait",
+   "file": "hub/nicknames.py",
+   "old": "if row is not None and row.nick == nick:\n            return field(True), nick                           # (what it has: nothing changes, and no limit is asked)",
+   "new": ""
+  },
+  {
+   "id": "the_own_name_is_taken",
+   "file": "hub/nicknames.py",
+   "old": "if found is not None and found[0] != account:\n            return field(False, \"taken\" if found[1] == nick.casefold() else \"lookalike\"), None",
+   "new": "if found is not None:\n            return field(False, \"taken\" if found[1] == nick.casefold() else \"lookalike\"), None"
+  },
+  {
+   "id": "a_lookalike_is_called_taken",
+   "file": "hub/nicknames.py",
+   "old": "\"taken\" if found[1] == nick.casefold() else \"lookalike\"), None",
+   "new": "\"taken\"), None"
+  },
+  {
+   "id": "a_taken_name_is_called_a_lookalike",
+   "file": "hub/nicknames.py",
+   "old": "\"taken\" if found[1] == nick.casefold() else \"lookalike\"), None",
+   "new": "\"lookalike\"), None"
+  },
+  {
+   "id": "a_nickname_changes_at_once",
+   "file": "hub/nicknames.py",
+   "old": "if account and row is not None and row.nick_at + NICK_WAIT_SECONDS > now:\n            return field(False, \"soon\", row.nick_at + NICK_WAIT_SECONDS), None",
+   "new": ""
+  },
+  {
+   "id": "a_nickname_waits_29_days",
+   "file": "hub/nicknames.py",
+   "old": "NICK_WAIT_SECONDS = 30 * 86400",
+   "new": "NICK_WAIT_SECONDS = 29 * 86400"
+  },
+  {
+   "id": "an_old_nickname_is_held_29_days",
+   "file": "hub/nicknames.py",
+   "old": "HOLD_SECONDS = 30 * 86400",
+   "new": "HOLD_SECONDS = 29 * 86400"
+  },
+  {
+   "id": "a_tag_waits_an_hour",
+   "file": "hub/nicknames.py",
+   "old": "TAG_WAIT_SECONDS = 86400",
+   "new": "TAG_WAIT_SECONDS = 3600"
+  },
+  {
+   "id": "a_tag_changes_at_once",
+   "file": "hub/nicknames.py",
+   "old": "if row is not None and row.tag_at and row.tag_at + TAG_WAIT_SECONDS > now:\n            return field(False, \"soon\", row.tag_at + TAG_WAIT_SECONDS), None",
+   "new": ""
+  },
+  {
+   "id": "a_guest_may_copy_a_nickname",
+   "file": "hub/nicknames.py",
+   "old": "if found is not None:\n            return field(False, \"lookalike\"), None\n        return field(True), name",
+   "new": "return field(True), name"
+  },
+  {
+   "id": "a_guest_saves_a_name_in_the_hub",
+   "file": "hub/nicknames.py",
+   "old": "if guest and save:\n            return self.chat.mistake(peer, \"bad\")",
+   "new": ""
+  },
+  {
+   "id": "a_reader_saves_a_name",
+   "file": "hub/nicknames.py",
+   "old": "if not guest and who is None:\n            return self.chat.mistake(peer, \"login\")",
+   "new": ""
+  },
+  {
+   "id": "saves_are_not_limited",
+   "file": "hub/nicknames.py",
+   "old": "if save and not self.saves.take(account, mono):",
+   "new": "if False:"
+  },
+  {
+   "id": "checks_are_not_limited",
+   "file": "hub/nicknames.py",
+   "old": "if not self.bucket(peer).take(mono):",
+   "new": "if False:"
+  },
+  {
+   "id": "the_tag_is_saved_when_the_nickname_is_refused",
+   "file": "hub/nicknames.py",
+   "old": "ok = nick_field[\"ok\"] and tag_field[\"ok\"]",
+   "new": "ok = nick_field[\"ok\"] or tag_field[\"ok\"]"
+  },
+  {
+   "id": "a_tag_without_a_nickname",
+   "file": "hub/nicknames.py",
+   "old": "tag_field = field(True) if not tag else field(False, \"nick\")",
+   "new": "tag_field = field(True)"
+  },
+  {
+   "id": "the_shown_name_has_no_tag",
+   "file": "hub/nicknames.py",
+   "old": "shown = nickrules.shown(new_nick, new_tag or \"\") if ok else None",
+   "new": "shown = nickrules.shown(new_nick, \"\") if ok else None"
+  },
+  {
+   "id": "a_name_taken_in_the_meantime_is_saved",
+   "file": "hub/nicknames.py",
+   "old": "if conflict is not None:\n            return False, field(False, \"taken\" if conflict == nick.casefold() else \"lookalike\")",
+   "new": ""
+  },
+  {
+   "id": "the_old_name_is_not_held",
+   "file": "hub/nicknames.py",
+   "old": "int(now) + HOLD_SECONDS)",
+   "new": "int(now))"
+  },
+  {
+   "id": "the_nickname_is_not_the_shown_name",
+   "file": "hub/nicknames.py",
+   "old": "return who._replace(name=row.nick, pick=\"\", other=\"\", nick=row.nick, tag=row.tag)",
+   "new": "return who._replace(nick=row.nick, tag=row.tag)"
+  },
+  {
+   "id": "a_login_name_that_looks_like_a_nickname_is_shown",
+   "file": "hub/nicknames.py",
+   "old": "if who.name != who.username and self.owner_of(who.name, who.account_id) is not None:",
+   "new": "if False:"
+  },
+  {
+   "id": "the_game_plays_a_login_name_that_is_a_lookalike",
+   "file": "hub/nicknames.py",
+   "old": "return self.owner_of(name, account) is None",
+   "new": "return True"
+  },
+  {
+   "id": "the_game_plays_a_reserved_login_name",
+   "file": "hub/nicknames.py",
+   "old": "if name != name.strip(\" \") or text.reserved(name) or",
+   "new": "if name != name.strip(\" \") or"
+  },
+  {
+   "id": "the_game_plays_a_login_name_of_one_letter",
+   "file": "hub/nicknames.py",
+   "old": "not 2 <= len(name) <= 24",
+   "new": "not 1 <= len(name) <= 24"
+  },
+  {
+   "id": "the_nickname_is_not_what_the_game_plays",
+   "file": "hub/nicknames.py",
+   "old": "return nickrules.shown(row.nick, row.tag)",
+   "new": "return who.name"
+  },
+  {
+   "id": "a_pass_is_made_without_the_key_too",
+   "file": "hub/nicknames.py",
+   "old": "if name and self.pass_maker is not None:",
+   "new": "if name:"
+  },
+  {
+   "id": "a_pass_is_made_for_no_name",
+   "file": "hub/nicknames.py",
+   "old": "if name and self.pass_maker is not None:",
+   "new": "if self.pass_maker is not None:"
+  },
+  {
+   "id": "pass_label_is_another",
+   "file": "hub/namepass.py",
+   "old": "LABEL = b\"ants-name-pass-v1\"",
+   "new": "LABEL = b\"ants-admin-pass-v1\""
+  },
+  {
+   "id": "pass_mac_of_31_digits",
+   "file": "hub/namepass.py",
+   "old": "MAC_CHARS = 32",
+   "new": "MAC_CHARS = 31"
+  },
+  {
+   "id": "pass_lasts_150_seconds",
+   "file": "hub/namepass.py",
+   "old": "SECONDS = 120",
+   "new": "SECONDS = 150"
+  },
+  {
+   "id": "pass_has_no_word_in_its_message",
+   "file": "hub/namepass.py",
+   "old": "message = b\"name1\\0\" + exp_text.encode(\"ascii\") + b\"\\0\" + name.encode(\"utf-8\")",
+   "new": "message = exp_text.encode(\"ascii\") + b\"\\0\" + name.encode(\"utf-8\")"
+  },
+  {
+   "id": "pass_good_for_every_name",
+   "file": "hub/namepass.py",
+   "old": "if not hmac.compare_digest(mac, self.mac(exp, name)):",
+   "new": "if not hmac.compare_digest(mac, self.mac(exp, \"\")):"
+  },
+  {
+   "id": "pass_good_after_it_ends",
+   "file": "hub/namepass.py",
+   "old": "return now < int(exp) <= now + SECONDS + 30",
+   "new": "return int(exp) <= now + SECONDS + 30"
+  },
+  {
+   "id": "pass_good_for_a_year",
+   "file": "hub/namepass.py",
+   "old": "return now < int(exp) <= now + SECONDS + 30",
+   "new": "return now < int(exp)"
+  },
+  {
+   "id": "pass_good_for_nobody_to_name",
+   "file": "hub/namepass.py",
+   "old": "or not name or text.count(\".\") != 1:",
+   "new": "or text.count(\".\") != 1:"
+  },
+  {
+   "id": "forget_keeps_the_nickname",
+   "file": "hub/store/sqlite.py",
+   "old": "                self.db.execute(\"DELETE FROM nicknames WHERE account = ?\", (account,))",
+   "new": "                pass"
+  },
+  {
+   "id": "forget_keeps_what_the_nickname_holds",
+   "file": "hub/store/sqlite.py",
+   "old": "                self.db.execute(\"DELETE FROM nick_hold WHERE account = ?\", (account,))",
+   "new": "                pass"
+  },
+  {
+   "id": "rename_does_nothing",
+   "file": "hub/chat.py",
+   "old": "if not self.nicknames.reset(target, note=(by, \"rename\", whom, \"\")):\n                return self.mistake(peer, \"bad\")",
+   "new": "self.nicknames.reset(target, note=None) if False else None"
+  },
+  {
+   "id": "rename_of_nobody_is_done",
+   "file": "hub/chat.py",
+   "old": "if not self.nicknames.reset(target, note=(by, \"rename\", whom, \"\")):\n                return self.mistake(peer, \"bad\")",
+   "new": "self.nicknames.reset(target, note=(by, \"rename\", whom, \"\"))"
+  },
+  {
+   "id": "rename_is_not_logged",
+   "file": "hub/chat.py",
+   "old": "if not self.nicknames.reset(target, note=(by, \"rename\", whom, \"\")):",
+   "new": "if not self.nicknames.reset(target):"
+  },
+  {
+   "id": "rename_for_everybody",
+   "file": "hub/commands.py",
+   "old": "Command(\"rename\", 1,",
+   "new": "Command(\"rename\", 0,"
+  },
+  {
+   "id": "rename_for_administrators_only",
+   "file": "hub/commands.py",
+   "old": "Command(\"rename\", 1,",
+   "new": "Command(\"rename\", 2,"
+  }
+ ]
+}

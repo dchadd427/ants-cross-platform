@@ -5,6 +5,7 @@
 #include <set>
 #include <unordered_map>
 
+#include "ants_net/name_rules.hpp"
 #include "ants_replay/replay.hpp"
 #include "ants_server/control.hpp"
 
@@ -45,7 +46,7 @@ Recording recording_of(const ReplayStore* replays, const std::string& id) {
 
 bool all_digits_up_to(const std::string& text, size_t max_chars) { return !text.empty() && text.size() <= max_chars && text.find_first_not_of("0123456789") == std::string::npos; }
 
-// A value of the query as the browser sent it: percent escapes and '+' for a space. False for an escape that is not one or a character that no search text holds (the names are printable ASCII).
+// A value of the query as the browser sent it: percent escapes and '+' for a space. False for an escape that is not one or a text that no search holds (a player's name is UTF-8 of net::valid_wire_name since protocol 29).
 bool decode_query_value(const std::string& raw, std::string& out) {
     out.clear();
     for (size_t i = 0; i < raw.size(); ++i) {
@@ -61,10 +62,10 @@ bool decode_query_value(const std::string& raw, std::string& out) {
         } else if (c == '+') {
             c = ' ';
         }
-        if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) > 0x7E) return false;
+        if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) == 0x7F) return false;
         out.push_back(c);
     }
-    return true;
+    return net::valid_wire_name(out, out.size(), out.size());                    // (protocol 29: a name holds the letters of the table, as UTF-8; anything else is no search text)
 }
 
 }  // namespace

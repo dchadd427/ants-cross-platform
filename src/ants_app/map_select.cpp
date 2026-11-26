@@ -405,8 +405,7 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
             draw_row_light(renderer, r);
             draw_portrait(static_cast<uint8_t>(seat), row);
             std::string name = room_.seats[seat].name.empty() ? std::string("Player") : room_.seats[seat].name;
-            if (name.size() > 16) name.resize(16);
-            renderer.draw_text(fit_text(renderer, name, PLAYER_NAME_W, FontSize::Px18), PLAYER_NAME_X, PLAYER_THUMB_Y + row, label_color, FontSize::Px18);      // the label (415, 95 + 50 * row) 120 x 20
+            renderer.draw_text(fit_name(renderer, name, PLAYER_NAME_W, FontSize::Px18), PLAYER_NAME_X, PLAYER_THUMB_Y + row, label_color, FontSize::Px18);      // the label (415, 95 + 50 * row) 120 x 20
             static const char* const kThumbs[4] = {"thumb1.bmp", "thumb2.bmp", "thumb3.bmp", "thumb4.bmp"};   // netgood, netok, netbad, netunk
             const size_t thumb = seat == room_.my_seat ? 0u : (static_cast<size_t>(room_.seats[seat].thumb) & 3u);
             renderer.draw_named_sprite(kThumbs[thumb], PLAYER_THUMB_X, PLAYER_THUMB_Y + row);
@@ -414,7 +413,7 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
     } else {
         const std::string display_user = player_name_.empty() ? "Player" : player_name_;
         draw_portrait(player_team_, 0);
-        renderer.draw_text(fit_text(renderer, display_user, PLAYER_NAME_W, FontSize::Px18), PLAYER_NAME_X, PLAYER_THUMB_Y, label_color, FontSize::Px18);
+        renderer.draw_text(fit_name(renderer, display_user, PLAYER_NAME_W, FontSize::Px18), PLAYER_NAME_X, PLAYER_THUMB_Y, label_color, FontSize::Px18);
         renderer.draw_named_sprite("thumb1.bmp", PLAYER_THUMB_X, PLAYER_THUMB_Y);
     }
 }

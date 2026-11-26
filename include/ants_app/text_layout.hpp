@@ -12,6 +12,12 @@
 
 namespace ants::app {
 
+/// UTF-8 for the text of a label (names hold letters of two and three bytes since protocol 29): how many bytes the character at `at` takes (1 - 4; a byte that starts nothing, or a sequence that is cut, counts as far as it
+/// goes; 0 at the end), and the two cuts of a line that are made one character at a time: the last character off, the first character off. A plain ASCII text is cut as it always was.
+std::string::size_type utf8_char_bytes(const std::string& text, std::string::size_type at);
+void pop_back_char(std::string& text);
+void erase_front_char(std::string& text);
+
 /// How wide a line is, in pixels, in whatever face the caller draws it in
 using WidthFn = std::function<int32_t(const std::string&)>;
 
@@ -26,6 +32,10 @@ std::vector<std::string> wrap_label_text(const IRenderer& renderer, const std::s
 /// A one-line label's text cut to its box: characters are dropped from the end while the text is wider than `width` (the original draws into a surface
 /// of the label's size, so what does not fit is not seen); at least one character stays.
 std::string fit_text(const IRenderer& renderer, std::string text, int32_t width, FontSize size);
+
+/// A player's name cut to its label: the whole name when it fits `width`, else whole characters (a name holds letters of two and three bytes) and three dots, so that a cut shows (a tag and a long nickname,
+/// "[ANTS1] Wolfgang Amadeus", do not fit the setup screen's label of 120 px)
+std::string fit_name(const IRenderer& renderer, std::string text, int32_t width, FontSize size);
 
 /// A multi-line label as the original draws it (FUN_0102b36a): the text is wrapped at `width`, every line is drawn from the top of the box at (x, y), one
 /// cell height below the line before, centred in the box when `center` (DT_CENTER) and left aligned otherwise. Returns the label's height.

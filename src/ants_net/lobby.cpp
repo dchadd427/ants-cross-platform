@@ -32,7 +32,7 @@ std::string trimmed(const std::string& s) {
 
 // A person's name may not look like a bot's: the bots of a room are shown as bots, and a person is never shown as one. Replaced by `fallback`.
 std::string human_name(const std::string& raw, const std::string& fallback) {
-    const std::string name = trimmed(printable(raw, kMaxNameChars));
+    const std::string name = trimmed(clip_wire_name(raw));
     return bot_like(name) ? fallback : name;
 }
 
@@ -59,7 +59,7 @@ std::string names_notice(const std::vector<std::string>& names, const char* one,
         for (size_t i = 0; i < shown; ++i) list += std::string(i == 0 ? "" : i + 1 == shown && more == 0 ? " and " : ", ") + names[i];
         if (more > 0) list += " and " + std::to_string(more) + " more";
         text = std::string(many) + list + ".";
-        if (text.size() <= kMaxChatChars) break;
+        if (utf8_length(text) <= kMaxChatChars && text.size() <= kMaxNoticeBytes) break;
     }
     return text;
 }
@@ -556,7 +556,7 @@ void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32
     guests_[seat].heard_ms = now_ms;
     guests_[seat].forgive_at_ms = now_ms + cfg_.forgive_ms;
     room_.slots[seat].state = SlotState::Client;
-    room_.slots[seat].name = human_name(hello.name, "Player " + std::to_string(static_cast<unsigned>(seat) + 1u));
+    room_.slots[seat].name = accepted_name(hello.name, hello.name_pass, "Player " + std::to_string(static_cast<unsigned>(seat) + 1u), true);
     room_.slots[seat].platform = hello.platform;
     elect_leader();                                              // the first guest to be welcomed leads (a server's room that allows an early start)
     WelcomeMsg welcome;
@@ -675,7 +675,7 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
             // violation; one beyond the budget is dropped, and a connection that goes on beyond it is flooding.
             if (phase_ == Phase::Room && !starting_.active) {
                 switch (guests_[seat].names.take(now_ms, kNameBurst, kNamesPerSecond, kNameExcessBurst)) {
-                    case ChatBudget::Verdict::Relay: rename(seat, m.name); return;
+                    case ChatBudget::Verdict::Relay: rename(seat, m.name, m.pass); return;
                     case ChatBudget::Verdict::Drop: return;
                     case ChatBudget::Verdict::Offence: return violation(seat);
                 }
@@ -1123,9 +1123,20 @@ void HostLobby::apply_ready(uint8_t seat, bool want_ready) {
     broadcast_room();
 }
 
+// The name that a person is given for what they said (protocol 29, name_rules.hpp). A room whose server has the hub's key (Config::name_gate) takes a name as it is only with a good pass for exactly that name;
+// any other name is a guest's (guest_name: "Wren (Guest)"). A Hello that leaves nothing of its name is `fallback` ("Player 3", with the suffix); a rename that leaves nothing keeps the name that the person has.
+// A room without the key (a LAN or direct host, a server that has none) takes every name that the wire takes. Whatever is taken, a name that reads as a computer player's is not.
+std::string HostLobby::accepted_name(const std::string& raw, const std::string& pass, const std::string& fallback, bool is_hello) const {
+    const std::string name = trimmed(clip_wire_name(raw));
+    if (!cfg_.name_gate || (!name.empty() && cfg_.name_gate(name, pass))) return human_name(name, fallback);
+    const std::string guest = guest_name(name, is_hello ? fallback : std::string());
+    if (!is_hello && guest == kGuestSuffix) return fallback;
+    return human_name(guest, fallback);
+}
+
 // A new name of a person (already heard: an open room, within the budget): the room is shown to everybody when the name changed
-void HostLobby::rename(uint8_t seat, const std::string& raw) {
-    const std::string name = human_name(raw, room_.slots[seat].name);       // (a name that looks like a bot's is not taken: the person keeps the name they have)
+void HostLobby::rename(uint8_t seat, const std::string& raw, const std::string& pass) {
+    const std::string name = accepted_name(raw, pass, room_.slots[seat].name, false);       // (a name that looks like a bot's is not taken: the person keeps the name they have)
     if (name == room_.slots[seat].name) return;
     room_.slots[seat].name = name;
     ++renames_;
@@ -1292,10 +1303,11 @@ bool ClientLobby::request_plan(const PlanMsg& plan) {
     return conn_->send(encode(plan));
 }
 
-bool ClientLobby::request_name(const std::string& name) {
+bool ClientLobby::request_name(const std::string& name, const std::string& pass) {
     if (conn_ == nullptr || phase_ != Phase::InRoom || !room_.lobby() || !conn_->is_open()) return false;
     NameMsg m;
-    m.name = trimmed(printable(name, kMaxNameChars));
+    m.name = trimmed(clip_wire_name(name));
+    m.pass = valid_pass_shape(pass) ? pass : std::string();
     if (m.name.empty() || ai::is_reserved_bot_name(m.name)) return false;                 // (protocol 20: the server's decoder refuses such a name and counts a violation; a client never sends one)
     return conn_->send(encode(m));
 }
@@ -1331,7 +1343,8 @@ void ClientLobby::send_hello() {
     if (conn_ == nullptr || phase_ != Phase::Connecting || !conn_->is_open()) return;
     was_open_ = true;
     HelloMsg h;
-    h.name = printable(cfg_.name, kMaxNameChars);
+    h.name = clip_wire_name(cfg_.name);
+    h.name_pass = cfg_.name_pass;
     h.listen_port = cfg_.listen_port;
     h.want_seat = cfg_.want_seat;
     h.room = cfg_.room;

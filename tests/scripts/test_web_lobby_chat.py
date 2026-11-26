@@ -102,7 +102,7 @@ class ThePage(unittest.TestCase):
             self.assertLess(self.page.index(tag), self.page.index("</head>"), name)
 
     def test_the_script_is_loaded_after_the_client_and_before_the_map_list_and_the_pages_own_code(self):
-        self.assertIn('<script src="front/lobby_rules.js"></script>\n<script src="front/lobby_net.js"></script><script src="front/player_name.js"></script>\n<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script><script src="front/room_fog.js"></script><script src="front/room_sheet.js"></script><script src="front/seat_menu.js"></script>\n<script src="front/map_picker.js"></script>', self.page)      # (the rematch's strip after it)
+        self.assertIn('<script src="front/lobby_rules.js"></script>\n<script src="front/name_letters.js"></script><script src="front/lobby_net.js"></script><script src="front/player_name.js"></script>\n<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script><script src="front/room_fog.js"></script><script src="front/room_sheet.js"></script><script src="front/seat_menu.js"></script>\n<script src="front/map_picker.js"></script>', self.page)      # (the rematch's strip after it)
         self.assertLess(self.page.index("front/lobby_chat.js"), self.page.index("AntsLobbyChat"), "loaded before the page's own code uses it")
 
     def test_the_page_stops_with_its_line_when_the_script_did_not_come(self):
@@ -274,7 +274,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/lobby_chat_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make a check
     fail (a command that exits non-zero), and the copy with nothing changed must pass, so that a failure is the change's"""
 
-    FILES = ("web/home/home.css", "web/home/home.js", "web/home/talk.js", "web/front/lobby_chat.js", "web/front/lobby_chat.css", "web/front/lobby_rules.js", "web/front/player_name.js", "web/front/lobby_net.js", "web/front/map_picker.css", "web/front/game_modes.js", "web/front/game_type.js", "web/front/room_fog.js", "web/front/room_sheet.js", "web/front/seat_menu.js", "web/front/game_type.css", "web/front/room_sheet.css", "web/lobby.html", "web/home/room.css", "web/home/roomchat.js", "web/rejoin_key.js", "tests/scripts/web_lobby_chat_check.js",
+    FILES = ("web/home/home.css", "web/home/home.js", "web/home/talk.js", "web/front/lobby_chat.js", "web/front/lobby_chat.css", "web/front/lobby_rules.js", "web/front/name_letters.js", "web/front/player_name.js", "web/front/lobby_net.js", "web/front/map_picker.css", "web/front/game_modes.js", "web/front/game_type.js", "web/front/room_fog.js", "web/front/room_sheet.js", "web/front/seat_menu.js", "web/front/game_type.css", "web/front/room_sheet.css", "web/lobby.html", "web/home/room.css", "web/home/roomchat.js", "web/rejoin_key.js", "tests/scripts/web_lobby_chat_check.js",
              "tests/scripts/web_lobby_client_check.js", "tests/scripts/web_lobby_net_check.js", "tests/scripts/test_web_lobby_chat.py", "tests/data/lobby_messages.txt",
              "include/ants_net/flood.hpp")      # (the client check reads the server's limits from the header)
 

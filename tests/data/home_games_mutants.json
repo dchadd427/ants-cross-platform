@@ -326,7 +326,7 @@
   {
    "id": "host_as_markup",
    "file": "web/home/games.js",
-   "old": "top.appendChild(el('span', 'gname', row.host));",
+   "old": "top.appendChild(paintName(el('span', 'gname'), row.host));",
    "new": "var hn = el('span', 'gname'); hn.innerHTML = row.host; top.appendChild(hn);",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
@@ -2195,8 +2195,8 @@
   {
    "id": "qj_best_tag_is_before_the_name",
    "file": "web/home/games.js",
-   "old": "top.appendChild(el('span', 'gname', row.host)); top.appendChild(el('span', 'gmapname', row.mapName));",
-   "new": "if (best) top.appendChild(el('span', 'gbest', TEXT.best)); top.appendChild(el('span', 'gname', row.host)); top.appendChild(el('span', 'gmapname', row.mapName));",
+   "old": "top.appendChild(paintName(el('span', 'gname'), row.host)); top.appendChild(el('span', 'gmapname', row.mapName));",
+   "new": "if (best) top.appendChild(el('span', 'gbest', TEXT.best)); top.appendChild(paintName(el('span', 'gname'), row.host)); top.appendChild(el('span', 'gmapname', row.mapName));",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {

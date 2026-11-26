@@ -7,6 +7,7 @@
 // usage: node web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
 const fs = require('fs');
+globalThis.AntsNameLetters = require(require('path').resolve(__dirname, '..', '..', 'web', 'front', 'name_letters.js'));       // (the letters of a name: front/name_letters.js, a script tag of the page before the script that is checked)
 const path = require('path');
 
 const [rematchPath, netPath, goldenPath, lobbyPath] = process.argv.slice(2);

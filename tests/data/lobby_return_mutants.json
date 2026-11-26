@@ -88,7 +88,7 @@
   {
    "id": "net_seat_memory_name_not_checked",
    "file": "web/front/lobby_net.js",
-   "old": "if (!printable(v.n, MAX_NAME) || (v.o !== 0",
+   "old": "if (!NL.isWireName(v.n, MAX_NAME) || (v.o !== 0",
    "new": "if ((v.o !== 0",
    "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
   },

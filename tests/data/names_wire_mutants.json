@@ -1,0 +1,165 @@
+{
+ "note": "Mutants of the names on the wire and in a room (protocol 29: src/ants_net/name_rules.cpp, the names of src/ants_net/lobby.cpp; docs/HUB_NICKNAMES.md 'The wire', 'Guest names in a room') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against N4.70 - N4.75 of tests/test_net/test_lobby_names.cpp: strict UTF-8 (no overlong form, no surrogate, nothing above U+10FFFF, no cut sequence), the letters of the table and printable ASCII only, 32 characters and 96 bytes, the notice's room for names, a guest's name (the letters that stay, 16 characters, the suffix once, the number of a visitor, the fallback), and the room that has the hub's key (a name is taken only with its pass, every other is a guest's, a rename that leaves nothing keeps the name). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/names_wire_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught.",
+ "defaults": {
+  "build": "test_lobby",
+  "test": "ANTS_TEST_FILTER=N4.7 timeout 900 ./build/tests/test_net/test_lobby"
+ },
+ "mutants": [
+  {
+   "id": "utf8_overlong_forms_allowed",
+   "file": "src/ants_net/name_rules.cpp",
+   "old": "if (c < minimum || c > 0x10FFFF || (c >= 0xD800 && c <= 0xDFFF)) { out.clear(); return false; }",
+   "new": "if (c < minimum / 2 || c > 0x10FFFF || (c >= 0xD800 && c <= 0xDFFF)) { out.clear(); return false; }"
+  },
+  {
+   "id": "utf8_surrogates_allowed",
+   "file": "src/ants_net/name_rules.cpp",
+   "old": "if (c < minimum || c > 0x10FFFF || (c >= 0xD800 && c <= 0xDFFF)) { out.clear(); return false; }",
+   "new": "if (c < minimum || c > 0x10FFFF) { out.clear(); return false; }"
+  },
+  {
+   "id": "utf8_above_the_last_code_point_allowed",
+   "file": "src/ants_net/name_rules.cpp",
+   "old": "if (c < minimum || c > 0x10FFFF || (c >= 0xD800 && c <= 0xDFFF)) { out.clear(); return false; }",
+   "new": "if (c < minimum || (c >= 0xD800 && c <= 0xDFFF)) { out.clear(); return false; }"
+  },
+  {
+   "id": "utf8_continuation_not_checked",
+   "file": "src/ants_net/name_rules.cpp",
+   "old": "if ((next & 0xC0u) != 0x80u) { out.clear(); return false; }",
+   "new": "(void)next;"
+  },
+  {
+   "id": "name_of_33_characters",
+   "file": "src/ants_net/name_rules.cpp",
+   "old": "if (!decode_utf8(text, points) || points.size() > max_chars) return false;",
+   "new": "if (!decode_utf8(text, points) || points.size() > max_chars + 1) return false;"
+  },
+  {
+   "id": "name_of_any_bytes",
+   "file": "src/ants_net/name_rules.cpp",
+   "old": "if (text.size() > max_bytes) return false;",
+   "new": "if (text.size() > max_bytes * 2) return false;"
+  },
+  {
+   "id": "name_of_any_letter",
+   "file": "src/ants_net/name_rules.cpp",
+   "old": "return std::all_of(points.begin(), points.end(), [](uint32_t c) { return is_name_code_point(c); });",
+   "new": "return true;"
+  },
+  {
+   "id": "a_control_character_is_a_name_code_point",
+   "file": "src/ants_net/name_rules.cpp",
+   "old": "bool is_name_code_point(uint32_t code_point) noexcept { return (code_point >= 0x20 && code_point <= 0x7E) || name_alphabet(code_point) >= 0; }",
+   "new": "bool is_name_code_point(uint32_t code_point) noexcept { return (code_point >= 0x1F && code_point <= 0x7F) || name_alphabet(code_point) >= 0; }"
+  },
+  {
+   "id": "clip_may_cut_a_letter_in_two",
+   "file": "src/ants_net/name_rules.cpp",
+   "old": "if (out.size() + len > max_bytes) break;",
+   "new": "if (out.size() + len > max_bytes + 2) break;"
+  },
+  {
+   "id": "clip_takes_a_letter_that_is_not_drawn",
+   "file": "src/ants_net/name_rules.cpp",
+   "old": "&& one.size() == 1 && is_name_code_point(one[0])) {",
+   "new": "&& one.size() == 1) {"
+  },
+  {
+   "id": "guest_name_has_no_suffix",
+   "file": "src/ants_net/name_rules.cpp",
+   "old": "return core + suffix;",
+   "new": "return core;"
+  },
+  {
+   "id": "guest_name_cut_at_32",
+   "file": "src/ants_net/name_rules.cpp",
+   "old": "if (kept.size() > kMaxNicknameChars) kept.resize(kMaxNicknameChars);",
+   "new": "if (kept.size() > kMaxNameChars) kept.resize(kMaxNameChars);"
+  },
+  {
+   "id": "guest_number_is_changed",
+   "file": "src/ants_net/name_rules.cpp",
+   "old": "if (is_guest_number(clipped)) return clipped;",
+   "new": ""
+  },
+  {
+   "id": "guest_suffix_not_taken_off",
+   "file": "src/ants_net/name_rules.cpp",
+   "old": "if (clipped.size() >= suffix.size() && clipped.compare(clipped.size() - suffix.size(), suffix.size(), suffix) == 0) clipped.resize(clipped.size() - suffix.size());",
+   "new": ""
+  },
+  {
+   "id": "guest_keeps_a_bracket",
+   "file": "src/ants_net/name_rules.cpp",
+   "old": "if (name_alphabet(c) < 0 && !is_digit(c) && !is_guest_sign(c)) continue;",
+   "new": "if (name_alphabet(c) < 0 && !is_digit(c) && !is_guest_sign(c) && c != '[' && c != ']') continue;"
+  },
+  {
+   "id": "guest_keeps_two_spaces_in_a_row",
+   "file": "src/ants_net/name_rules.cpp",
+   "old": "if (c == ' ' && (kept.empty() || kept.back() == ' ')) continue;",
+   "new": ""
+  },
+  {
+   "id": "guest_nothing_left_is_nothing",
+   "file": "src/ants_net/name_rules.cpp",
+   "old": "if (core.empty()) core = std::string(fallback);",
+   "new": "if (core.empty()) core = std::string(fallback) + \"x\";"
+  },
+  {
+   "id": "guest_number_must_not_start_with_0",
+   "file": "src/ants_net/name_rules.cpp",
+   "old": "if (text[6] < '1' || text[6] > '9') return false;",
+   "new": "if (text[6] < '0' || text[6] > '9') return false;"
+  },
+  {
+   "id": "pass_shape_any_digits",
+   "file": "src/ants_net/name_rules.cpp",
+   "old": "if (dot == std::string_view::npos || dot == 0 || dot > 12 || pass.size() - dot - 1 != 32) return false;",
+   "new": "if (dot == std::string_view::npos || dot == 0 || pass.size() - dot - 1 != 32) return false;"
+  },
+  {
+   "id": "pass_shape_any_hex",
+   "file": "src/ants_net/name_rules.cpp",
+   "old": "if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;",
+   "new": "if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) return false;"
+  },
+  {
+   "id": "room_takes_every_name_without_a_pass",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "if (!cfg_.name_gate || (!name.empty() && cfg_.name_gate(name, pass))) return human_name(name, fallback);",
+   "new": "if (!cfg_.name_gate || true || (!name.empty() && cfg_.name_gate(name, pass))) return human_name(name, fallback);"
+  },
+  {
+   "id": "room_takes_a_pass_for_nobody",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "if (!cfg_.name_gate || (!name.empty() && cfg_.name_gate(name, pass))) return human_name(name, fallback);",
+   "new": "if (!cfg_.name_gate || cfg_.name_gate(name, pass)) return human_name(name, fallback);"
+  },
+  {
+   "id": "room_ignores_the_pass",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "(!name.empty() && cfg_.name_gate(name, pass))) return human_name(name, fallback);",
+   "new": "(!name.empty() && cfg_.name_gate(name, pass.substr(0, 0)))) return human_name(name, fallback);"
+  },
+  {
+   "id": "room_with_a_gate_takes_no_name",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "if (!cfg_.name_gate || (!name.empty() && cfg_.name_gate(name, pass))) return human_name(name, fallback);",
+   "new": "if (!cfg_.name_gate || (!name.empty() && cfg_.name_gate(name, pass) && false)) return human_name(name, fallback);"
+  },
+  {
+   "id": "hello_without_a_name_has_no_fallback",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "const std::string guest = guest_name(name, is_hello ? fallback : std::string());",
+   "new": "const std::string guest = guest_name(name, std::string());"
+  },
+  {
+   "id": "rename_to_nothing_is_a_name",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "if (!is_hello && guest == kGuestSuffix) return fallback;",
+   "new": ""
+  }
+ ]
+}

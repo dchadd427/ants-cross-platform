@@ -1094,8 +1094,13 @@ void run_protocol11_tests() {
             }
             if (is_chat) {
                 ++accepted_chat;
-                ASSERT_TRUE(encode(chat) == buf && chat.text.size() <= kMaxChatChars);
-                for (const char c : chat.text) ASSERT_TRUE(c >= 0x20 && c <= 0x7E);
+                ASSERT_TRUE(encode(chat) == buf);
+                if (chat.sender == kRoomSender) {                                                  // (protocol 29: the room's own notices name people, so they may hold the letters of a name)
+                    ASSERT_TRUE(valid_wire_name(chat.text, kMaxChatChars, kMaxNoticeBytes));
+                } else {
+                    ASSERT_TRUE(chat.text.size() <= kMaxChatChars);
+                    for (const char c : chat.text) ASSERT_TRUE(c >= 0x20 && c <= 0x7E);
+                }
             }
             if (!buf.empty() && (buf[0] == 24 || buf[0] == 9)) ASSERT_EQ(any_decodes(buf), is_request || is_chat);     // no other decoder takes either type
         }

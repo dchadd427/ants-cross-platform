@@ -1125,6 +1125,7 @@ void run_protocol15_tests() {
             std::vector<uint8_t> want = hello_prefix("k7m2xq");
             want.push_back(0x13);
             want.push_back(0);
+            want.push_back(0);                                                                         // (protocol 29: the pass of the name, none)
             ASSERT_TRUE(encode(h) == want);
             HelloMsg back;
             ASSERT_TRUE(decode(want, back) && back.platform == 0x13 && !back.create && back.room == "k7m2xq" && back.name == "Ann" && back.have_turns == 5 && back.version == kProtocolVersion && back.client_kind == kClientGame);
@@ -1143,6 +1144,7 @@ void run_protocol15_tests() {
             std::vector<uint8_t> want = hello_prefix("k7m2xq");
             want.push_back(1);
             want.push_back(0);
+            want.push_back(0);                                                                         // (protocol 29: the pass of the name, none; the create block follows it)
             want.push_back(12);
             for (const char c : std::string("TREASURE.LVL")) want.push_back(static_cast<uint8_t>(c));
             for (const uint8_t b : {uint8_t{3}, uint8_t{0}, uint8_t{2}, uint8_t{1}}) want.push_back(b);
@@ -1152,7 +1154,7 @@ void run_protocol15_tests() {
             ASSERT_TRUE(encode(back) == want);
             ASSERT_TRUE(back.create->leader_starts() && back.create->teams() == sim::StartTeams({true, 0, 2}));
             // every strict prefix of the whole message is refused except the one that ends after the client kind (a Hello without a block); one byte more is refused
-            const size_t without_block = hello_prefix("k7m2xq").size() + 2;
+            const size_t without_block = hello_prefix("k7m2xq").size() + 3;
             for (size_t cut = 0; cut < want.size(); ++cut) {
                 HelloMsg keep;
                 keep.name = "keep";
@@ -1173,6 +1175,7 @@ void run_protocol15_tests() {
                 std::vector<uint8_t> bytes = hello_prefix("ROOM-1");
                 bytes.push_back(static_cast<uint8_t>(value));
                 bytes.push_back(0);
+                bytes.push_back(0);                                                                       // (the pass of the name, none)
                 HelloMsg back;
                 const bool ok = decode(bytes, back);
                 ASSERT_EQ(ok, valid_platform(static_cast<uint8_t>(value)));
@@ -1191,6 +1194,7 @@ void run_protocol15_tests() {
                 std::vector<uint8_t> bytes = hello_prefix("ROOM-1");
                 bytes.push_back(0);
                 bytes.push_back(0);
+                bytes.push_back(0);                                                                       // (the pass of the name, none)
                 bytes.push_back(static_cast<uint8_t>(map.size()));
                 bytes.insert(bytes.end(), map.begin(), map.end());
                 for (const uint8_t v : {seats, a, b, flags}) bytes.push_back(v);
@@ -1230,10 +1234,12 @@ void run_protocol15_tests() {
                 std::vector<uint8_t> bytes = hello_prefix(ok);
                 bytes.push_back(0);
                 bytes.push_back(0);
+                bytes.push_back(0);                                                                       // (the pass of the name, none)
                 ASSERT_TRUE(decode(bytes, back) && back.room == ok);
             }
             for (const std::string& bad : {std::string("k7m 2xq"), std::string("k7m2.xq"), std::string(33, 'z'), std::string("k7m2/xq")}) {
                 std::vector<uint8_t> bytes = hello_prefix(bad);
+                bytes.push_back(0);
                 bytes.push_back(0);
                 bytes.push_back(0);
                 ASSERT_FALSE(decode(bytes, back));
@@ -1252,6 +1258,8 @@ void run_protocol15_tests() {
             ASSERT_FALSE(decode(as_17, back));                                                                   // (the number of the protocol does not make it a Hello of 17: the platform byte and the client kind are missing)
             as_17.push_back(0);
             ASSERT_FALSE(decode(as_17, back));                                                                   // (the layout of protocol 15, with its platform byte and no client kind: not a Hello of 17 either)
+            as_17.push_back(0);
+            ASSERT_FALSE(decode(as_17, back));                                                                   // (the layout of protocol 28: the pass of the name is missing)
             as_17.push_back(0);
             ASSERT_TRUE(decode(as_17, back) && back.version == 17 && back.client_kind == kClientGame);
         }
@@ -1526,6 +1534,7 @@ void run_protocol16_tests() {
         want.insert(want.end(), size_t{16 + 4}, uint8_t{0});                                           // the key and the turns: a new player has neither
         want.push_back(static_cast<uint8_t>(kOsMacos | kPlatformBrowser));
         want.push_back(1);                                                                              // the client kind: a lobby page
+        want.push_back(0);                                                                              // (protocol 29: the pass of the name, none; the create block follows it)
         want.push_back(12);
         for (const char c : std::string("TREASURE.LVL")) want.push_back(static_cast<uint8_t>(c));
         for (const uint8_t b : {uint8_t{4}, uint8_t{255}, uint8_t{255}, uint8_t{3}}) want.push_back(b);
@@ -1546,19 +1555,19 @@ void run_protocol16_tests() {
         // the kind, of 256 values: a game and a page; every other byte is no Hello, with a block and without one
         for (unsigned kind = 0; kind < 256; ++kind) {
             std::vector<uint8_t> with_block = want;
-            with_block[want.size() - 18] = static_cast<uint8_t>(kind);
+            with_block[want.size() - 19] = static_cast<uint8_t>(kind);
             ASSERT_EQ(decode(with_block, back), kind <= 1);
             std::vector<uint8_t> without_block = want;
-            without_block.resize(want.size() - 18 + 1);                                                 // (the kind is the last byte)
-            ASSERT_EQ(without_block.back(), 1);
-            without_block.back() = static_cast<uint8_t>(kind);
+            without_block.resize(want.size() - 19 + 2);                                                 // (the kind and the length of the pass, none, are the last two bytes)
+            ASSERT_EQ(without_block[without_block.size() - 2], 1);
+            without_block[without_block.size() - 2] = static_cast<uint8_t>(kind);
             ASSERT_EQ(decode(without_block, back), kind <= 1);
             if (kind <= 1) ASSERT_TRUE(static_cast<unsigned>(back.client_kind) == kind);
         }
         // the layout of protocol 15 (no client kind) is no Hello of this protocol: without a block the byte is missing, with one the block's map length is read as the kind
         {
             std::vector<uint8_t> v15(want.begin(), want.end());
-            v15.erase(v15.begin() + static_cast<std::ptrdiff_t>(want.size() - 18));                     // the kind goes
+            v15.erase(v15.begin() + static_cast<std::ptrdiff_t>(want.size() - 19), v15.begin() + static_cast<std::ptrdiff_t>(want.size() - 17));     // the kind and the pass go
             ASSERT_FALSE(decode(v15, back));
             v15.resize(v15.size() - 17);                                                                // ... and so does the block: protocol 15's Hello without one
             ASSERT_FALSE(decode(v15, back));
@@ -1566,7 +1575,7 @@ void run_protocol16_tests() {
         }
         // every strict prefix is refused except the two Hellos without a block: a prefix that ends after the client kind (the block is optional)
         {
-            const size_t without_block = want.size() - 18 + 1;
+            const size_t without_block = want.size() - 19 + 2;
             for (size_t cut = 0; cut < want.size(); ++cut) {
                 HelloMsg keep;
                 keep.name = "keep";
@@ -1832,7 +1841,7 @@ void run_protocol16_tests() {
     TEST_CASE("N2.108 Protocol 16, The Name: NameMsg Is The Type 33, A Length Byte And A Name Of 1 .. 32 Printable Characters (0x20 .. 0x7E) That Neither Starts Nor Ends With A Space; Every Other Name, Every Truncation, Every Extra Byte And Every Other Type Is Refused And Leaves Its Target Alone; The Encoder Cuts A Longer Name To 32 Characters And Drops The Characters That Do Not Travel") {
         ASSERT_TRUE(static_cast<int>(MsgType::Name) == 33 && static_cast<int>(MsgType::Last) == static_cast<int>(MsgType::Ready) && kMaxNameChars == 32);
         // the layout, byte by byte
-        const std::vector<uint8_t> want = {33, 3, 'A', 'n', 'n'};
+        const std::vector<uint8_t> want = {33, 3, 'A', 'n', 'n', 0};                                   // (protocol 29: the length of the pass, none, comes last)
         {
             NameMsg m;
             m.name = "Ann";
@@ -1849,18 +1858,18 @@ void run_protocol16_tests() {
                 NameMsg m;
                 m.name = name;
                 const std::vector<uint8_t> bytes = encode(m);
-                ASSERT_TRUE(bytes.size() == 2 + name.size() && bytes[0] == 33 && bytes[1] == name.size());
+                ASSERT_TRUE(bytes.size() == 3 + name.size() && bytes[0] == 33 && bytes[1] == name.size());
                 ASSERT_TRUE(decode(bytes, back) && back.name == name);
             }
             for (unsigned c = 0x20; c <= 0x7E; ++c) {
-                const std::vector<uint8_t> bytes = {33, 3, 'a', static_cast<uint8_t>(c), 'b'};
+                const std::vector<uint8_t> bytes = {33, 3, 'a', static_cast<uint8_t>(c), 'b', 0};
                 ASSERT_TRUE(decode(bytes, back));
                 ASSERT_EQ(back.name.size(), 3u);
             }
             for (unsigned c = 0; c < 256; ++c) {                                                        // a character outside the table is refused wherever it stands
                 if (c >= 0x20 && c <= 0x7E) continue;
-                ASSERT_FALSE(decode(std::vector<uint8_t>{33, 3, 'a', static_cast<uint8_t>(c), 'b'}, back));
-                ASSERT_FALSE(decode(std::vector<uint8_t>{33, 1, static_cast<uint8_t>(c)}, back));
+                ASSERT_FALSE(decode(std::vector<uint8_t>{33, 3, 'a', static_cast<uint8_t>(c), 'b', 0}, back));
+                ASSERT_FALSE(decode(std::vector<uint8_t>{33, 1, static_cast<uint8_t>(c), 0}, back));
             }
         }
         // the names that are refused: none, a space at an end (a name has one spelling), spaces only, one character too many; each leaves its target alone
@@ -1868,9 +1877,9 @@ void run_protocol16_tests() {
             NameMsg keep;
             keep.name = "keep";
             const std::vector<std::vector<uint8_t>> refused = {
-                {33, 0},                                                                                // nothing
-                {33, 4, ' ', 'A', 'n', 'n'}, {33, 4, 'A', 'n', 'n', ' '}, {33, 1, ' '}, {33, 3, ' ', ' ', ' '},
-                {33, 2, ' ', 'a'}, {33, 2, 'a', ' '},
+                {33, 0, 0},                                                                             // nothing
+                {33, 4, ' ', 'A', 'n', 'n', 0}, {33, 4, 'A', 'n', 'n', ' ', 0}, {33, 1, ' ', 0}, {33, 3, ' ', ' ', ' ', 0},
+                {33, 2, ' ', 'a', 0}, {33, 2, 'a', ' ', 0},
             };
             for (const std::vector<uint8_t>& bytes : refused) {
                 ASSERT_FALSE(decode(bytes, keep));
@@ -1878,6 +1887,7 @@ void run_protocol16_tests() {
             }
             std::vector<uint8_t> too_long = {33, static_cast<uint8_t>(kMaxNameChars + 1)};
             too_long.insert(too_long.end(), kMaxNameChars + 1, 'x');
+            too_long.push_back(0);
             ASSERT_FALSE(decode(too_long, keep));
             ASSERT_TRUE(keep.name == "keep");
             for (unsigned len = 0; len < 256; ++len) {                                                  // a length that is not the name's: the message is refused whatever it says
@@ -1892,8 +1902,8 @@ void run_protocol16_tests() {
             NameMsg m;
             m.name = std::string(40, 'y');
             const std::vector<uint8_t> cut = encode(m);
-            ASSERT_TRUE(cut.size() == 2 + kMaxNameChars && cut[1] == kMaxNameChars);
-            m.name = std::string("A\tn\xC3\xA9n");
+            ASSERT_TRUE(cut.size() == 3 + kMaxNameChars && cut[1] == kMaxNameChars);
+            m.name = std::string("A\tn\xCE\xB1n");                                                       // (a tab and a Greek letter: the game's font draws none of it)
             ASSERT_TRUE(encode(m) == want);
             NameMsg back;
             ASSERT_TRUE(decode(encode(m), back) && back.name == "Ann");
@@ -2040,6 +2050,9 @@ void run_protocol16_tests() {
             HelloMsg g;
             g.name = "Bob"; g.room = "p_q-9"; g.client_kind = kClientGame;
             add("hello", "game-joins", encode(g));
+            HelloMsg u;     // protocol 29: a name in UTF-8 and the hub's pass for it
+            u.name = "[\xC3\x84NT] Zo\xC3\xAB"; u.name_pass = "1700000000.58ab4380a2403bd62cf97b71020684ad"; u.room = "k7m2xq"; u.client_kind = kClientPage; u.create = CreateBlock{"TREASURE.LVL", 4, kNoTeam, kNoTeam, lobby_block};
+            add("hello", "page-utf8-with-pass", encode(u));
         }
         add("leave", "leave", encode_leave());
         add("pong", "pong", encode_pong(PingMsg{0x01020304u, 0x0A0B0C0Du}));
@@ -2066,6 +2079,8 @@ void run_protocol16_tests() {
         add("name", "name-plain", encode(NameMsg{"Priya"}));
         add("name", "name-32-chars-with-spaces", encode(NameMsg{"Sam the Great, 3rd of his name!!"}));
         add("name", "name-one-char", encode(NameMsg{"Z"}));
+        add("name", "name-utf8-with-pass", encode(NameMsg{"[\xD0\xA0\xD0\xA3\xD0\xA1] \xD0\x81\xD0\xB6\xD0\xB8\xD0\xBA", "1700000000.a847a6f3c846156fcbe82c2943c6c912"}));
+        add("name", "name-guest", encode(NameMsg{"Wren (Guest)", std::string()}));
         add("remove", "remove-2", encode(RemoveMsg{2, 1u}));
         add("remove", "remove-0", encode(RemoveMsg{0, 0xFFFFFFFFu}));
         add("visibility", "visibility-public", encode(VisibilityMsg{true}));           // (protocol 22)
@@ -2128,9 +2143,15 @@ void run_protocol16_tests() {
             f.slots[0] = seat(SlotState::Client, "Priya", 12, 0); f.slots[1] = seat(SlotState::Client, "Sam", 40, 0); f.slots[2] = seat(SlotState::Empty, "", kRttUnknown, 0); f.slots[3] = seat(SlotState::Empty, "", kRttUnknown, 0);
             f.map_name = "TINY.LVL"; f.you = 1; f.leader = 0; f.flags = kRoomLeaderStarts | kRoomLobby; f.plan = {PlanKind::Open, PlanKind::Open, PlanKind::Nobody, PlanKind::Open}; f.fog = true;       // (protocol 28: the plan has fog, so no bot)
             rooms.emplace_back("room-lobby-fog", f);
+            RoomMsg w;      // protocol 29: names in UTF-8, a tag, a guest, a name of three-byte letters (the hash of the seats is made of the bytes of the names)
+            w.slots[0] = seat(SlotState::Client, "[\xC3\x84NT] Zo\xC3\xAB", 12, 0); w.slots[1] = seat(SlotState::Client, "[\xD0\xA0\xD0\xA3\xD0\xA1] \xD0\x81\xD0\xB6\xD0\xB8\xD0\xBA", 40, kPlatformBrowser | kOsMacos);
+            w.slots[2] = seat(SlotState::Client, "Wren (Guest)", 9, 0); w.slots[3] = seat(SlotState::Client, "Nguy\xE1\xBB\x85n \xC4\x90\xE1\xBA\xB7ng", kRttUnknown, 0);
+            w.map_name = "TINY.LVL"; w.you = 2; w.leader = 0; w.flags = kRoomLeaderStarts | kRoomLobby; w.plan = {PlanKind::Open, PlanKind::Open, PlanKind::Open, PlanKind::Open};
+            rooms.emplace_back("room-lobby-utf8-names", w);
         }
         for (const auto& r : rooms) add("room", r.first.c_str(), encode(r.second));
         add("chat", "chat-notice-from-room", encode(ChatMsg{kRoomSender, false, "Priya's game did not come in time."}));
+        add("chat", "chat-notice-with-letters", encode(ChatMsg{kRoomSender, false, "[\xC3\x84NT] Zo\xC3\xAB's game did not come in time."}));
         add("chat", "chat-notice-fits", encode(ChatMsg{kRoomSender, false, std::string(kNoticeStartsFailed)}));
         add("other", "begin", encode_begin());                                // (protocol 21: the byte of the seconds follows the type; 0 is the 5 s dialog)
         add("other", "begin-countdown", encode_begin(kMatchCountdownSeconds));

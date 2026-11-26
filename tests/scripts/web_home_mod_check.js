@@ -128,7 +128,7 @@ function rig(o) {
     const html = new El(env, 'html', '');
     html.style.setProperty = (k, v) => { html.style[k] = v; }; html.style.removeProperty = (k) => { delete html.style[k]; };
     const body = new El(env, 'body', '');
-    const doc = { hidden: false, listeners: {}, capturing: {}, documentElement: html, body, createElement: (t) => new El(env, t), addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); }, activeElement: null };
+    const doc = { hidden: false, listeners: {}, capturing: {}, documentElement: html, body, createElement: (t) => new El(env, t), createTextNode: (t) => ({ isText: true, textContent: String(t), parent: null }), addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); }, activeElement: null };
     env.doc = doc; env.root = body;
     const buzzes = [];
     const win = { innerWidth: o.size ? o.size[0] : 1280, innerHeight: o.size ? o.size[1] : 800, location: { protocol: 'https:', host: 'play.test' }, listeners: {}, addEventListener(t, fn) { (win.listeners[t] = win.listeners[t] || []).push(fn); }, navigator: { language: 'en-US' } };

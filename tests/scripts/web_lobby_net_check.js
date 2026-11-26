@@ -5,6 +5,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+globalThis.AntsNameLetters = require(path.resolve(__dirname, '..', '..', 'web', 'front', 'name_letters.js'));       // (the letters of a name: front/name_letters.js, a script tag of the page before the script that is checked)
 
 const modulePath = process.argv[2];
 const goldenPath = process.argv[3];
@@ -61,6 +62,8 @@ const sends = {
     'name-plain': () => N.encodeName('Priya'),
     'name-32-chars-with-spaces': () => N.encodeName('Sam the Great, 3rd of his name!!'),
     'name-one-char': () => N.encodeName('Z'),
+    'name-utf8-with-pass': () => N.encodeName('[\u0420\u0423\u0421] \u0401\u0436\u0438\u043a', '1700000000.a847a6f3c846156fcbe82c2943c6c912'),
+    'name-guest': () => N.encodeName('Wren (Guest)'),
     'remove-2': () => N.encodeRemove(2, 1),
     'remove-0': () => N.encodeRemove(0, 0xFFFFFFFF),
     'visibility-public': () => N.encodeVisibility(true),
@@ -70,6 +73,7 @@ const sends = {
     'start-teams': () => N.encodeStartRequest([N.FILL.None, N.FILL.Easy, N.FILL.Medium, N.FILL.Hard], 0, 1),
     'start-ffa-nobody': () => N.encodeStartRequest([0, 0, 0, 0], 255, 255),
     'chat-plain': () => N.encodeChat(0, false, 'hello there'),
+    'page-utf8-with-pass': () => N.encodeHello({ name: '[\u00c4NT] Zo\u00eb', pass: '1700000000.58ab4380a2403bd62cf97b71020684ad', room: 'k7m2xq', create: { map: 'TREASURE.LVL' } }),
     'game-joins': () => N.encodeHello({ name: 'Bob', room: 'p_q-9', kind: 'game' })                  // (the rematch: the game page's results screen says a game's Hello, web/front/rematch.js)
 };
 for (const name of Object.keys(sends)) {
@@ -84,7 +88,7 @@ same('fillOfPlan', N.fillOfPlan([N.PLAN.Open, N.PLAN.Easy, N.PLAN.Medium, N.PLAN
 same('fillOfPlan nobody', N.fillOfPlan([N.PLAN.Nobody, N.PLAN.Open, N.PLAN.Nobody, N.PLAN.Hard]), [0, 0, 0, 3]);
 
 // a long name is cut to the byte that str8 holds, a name with a character beyond Latin-1 never reaches the wire as a wrong byte count
-check('encodeName cuts at 255 bytes at most', N.encodeName('x'.repeat(300)).length === 2 + 255);
+check('encodeName cuts a name at 32 characters (and 96 bytes), and ends with the length of the pass (none)', N.encodeName('x'.repeat(300)).length === 2 + 32 + 1 && N.encodeName('\u1ea0'.repeat(300)).length === 2 + 96 + 1);
 
 // a line of chat: made from its fields it is the C++ bytes (the golden file above); a character outside printable ASCII is never put on the wire as a wrong byte (str8 writes the low byte of a code:
 // an accent is 0xE9, a byte that the server's decoder refuses and counts as a violation, and eight of them put the sender out of the room)
@@ -303,7 +307,7 @@ check('map names', N.validMapName('TREASURE.LVL') && N.validMapName('a b!.lvl') 
 check('room codes', N.validRoomCode('') && N.validRoomCode('k7m2xq') && N.validRoomCode('A_b-9') && !N.validRoomCode('k7m 2xq') && !N.validRoomCode('a'.repeat(33)) && N.validRoomCode('a'.repeat(32)) && !N.validRoomCode('a.b'));
 check('public room codes have no capital', N.publicRoomCode('k7m2xq') && !N.publicRoomCode('K7m2xq') && !N.publicRoomCode('') && !N.publicRoomCode('a b'));
 check('person names', N.validPersonName('Priya') && N.validPersonName('A b') && N.validPersonName('x'.repeat(32)) && !N.validPersonName('x'.repeat(33)) && !N.validPersonName('') && !N.validPersonName(' Sam') && !N.validPersonName('Sam ')
-    && !N.validPersonName('Samé') && !N.validPersonName('S\tm'));
+    && N.validPersonName('Samé') && N.validPersonName('[ÄNT] Zoë') && N.validPersonName('Ёжик (Guest)') && !N.validPersonName('Sam\u03b1') && !N.validPersonName('S\tm') && !N.validPersonName('\u9f8d'));
 check('teams', N.validTeams(255, 255) && N.validTeams(0, 1) && N.validTeams(2, 3) && !N.validTeams(1, 0) && !N.validTeams(0, 0) && !N.validTeams(0, 4) && !N.validTeams(0, 255) && !N.validTeams(255, 1));
 check('platforms', N.validPlatform(0) && N.validPlatform(0x16) && N.validPlatform(0x10) && !N.validPlatform(7) && !N.validPlatform(0x20) && !N.validPlatform(0x17));
 check('teams are whole numbers (a number that is none, a string, null and NaN are refused)', !N.validTeams(-1, 2) && !N.validTeams('0', '2') && !N.validTeams(null, 2) && !N.validTeams(0.5, 2) && !N.validTeams(0, 2.5)
@@ -317,12 +321,12 @@ check('a platform is one byte that is a whole number (1.5, a string, NaN, -1, 25
 {
     const hello = (h) => N.hexOf(N.encodeHello(Object.assign({ name: 'Priya', room: 'k7m2xq', create: { map: 'TREASURE.LVL' } }, h)));
     const zero = hello({});
-    check('the name of a Hello is printable ASCII: the other characters are left out, as the game\'s own client leaves them out', hello({ name: 'José' }) === hello({ name: 'Jos' }) && hello({ name: 'Łukasz' }) === hello({ name: 'ukasz' })
-        && hello({ name: '你好' }) === hello({ name: '' }) && hello({ name: 'a\tb' }) === hello({ name: 'ab' }) && hello({ name: 'a\u007fb' }) === hello({ name: 'ab' }) && hello({ name: 'a\u{1F600}b' }) === hello({ name: 'ab' }));
-    check('... at most 32 of them, counted after the others were left out', hello({ name: 'x'.repeat(40) }) === hello({ name: 'x'.repeat(32) }) && hello({ name: '\u00e9'.repeat(5) + 'y'.repeat(40) }) === hello({ name: 'y'.repeat(32) }));
+    check('the name of a Hello is UTF-8 of printable ASCII and the letters of a name: the other characters are left out, as the game\'s own client leaves them out', hello({ name: 'José' }) !== hello({ name: 'Jos' }) && hello({ name: 'Jos\u00e9' }) === hello({ name: 'José' }) && hello({ name: 'Łukasz' }) !== hello({ name: 'ukasz' })
+        && hello({ name: '你好' }) === hello({ name: '' }) && hello({ name: 'Αλέξης' }) === hello({ name: '' }) && hello({ name: 'a\tb' }) === hello({ name: 'ab' }) && hello({ name: 'a\u007fb' }) === hello({ name: 'ab' }) && hello({ name: 'a\u{1F600}b' }) === hello({ name: 'ab' }));
+    check('... at most 32 of them, counted after the others were left out', hello({ name: 'x'.repeat(40) }) === hello({ name: 'x'.repeat(32) }) && hello({ name: '\u00e9'.repeat(5) + 'y'.repeat(40) }) === hello({ name: '\u00e9'.repeat(5) + 'y'.repeat(27) }) && hello({ name: 'Ạ'.repeat(40) }) === hello({ name: 'Ạ'.repeat(32) }) && hello({ name: '\u03b1'.repeat(5) + 'y'.repeat(40) }) === hello({ name: 'y'.repeat(32) }));
     check('... and a name with spaces at its ends is left as it is (the server trims what it takes)', hello({ name: '  Pri  ' }) !== hello({ name: 'Pri' }) && hello({ name: '' }) !== zero && hello({ name: 5 }) === hello({ name: '' }) && hello({ name: null }) === hello({ name: '' }));
     const bytes = N.encodeHello({ name: 'Jos\u00e9\u00e9 and 40 more', room: 'k7m2xq' });
-    check('(the name length byte is the length of the name that was written)', bytes[3] === 'Jos and 40 more'.length && Array.from(bytes.slice(4, 4 + bytes[3])).every((b) => b >= 0x20 && b <= 0x7e));
+    check('(the name length byte is the length in BYTES of the name that was written, in UTF-8)', bytes[3] === 'Jos\u00e9\u00e9 and 40 more'.length + 2 && Array.from(bytes.slice(4, 4 + bytes[3])).join() === Array.from(Buffer.from('Jos\u00e9\u00e9 and 40 more', 'utf8')).join());
     check('a map that is no map name is left out of the block: the room is made with the server\'s own map', hello({ create: { map: 'tiny' } }) === hello({ create: { map: '' } }) && hello({ create: { map: 'caf\u00e9.LVL' } }) === hello({ create: { map: '' } })
         && hello({ create: { map: '../x.LVL' } }) === hello({ create: { map: '' } }) && hello({ create: { map: 5 } }) === hello({ create: { map: '' } }) && hello({ create: { map: 'ISLANDS.LVL' } }) !== hello({ create: { map: '' } }));
     check('a platform that is none is "not told"; one that fits is kept', hello({ platform: 7 }) === hello({ platform: 0 }) && hello({ platform: 1.5 }) === hello({ platform: 0 }) && hello({ platform: '3' }) === hello({ platform: 0 }) && hello({ platform: NaN }) === hello({ platform: 0 })
