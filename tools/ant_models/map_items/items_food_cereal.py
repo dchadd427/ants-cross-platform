@@ -294,7 +294,7 @@ def _mini_frootloops(name: str, count: int) -> List[MeshPart]:
     loops: List[MeshPart] = []
     for k, (lx, ly, lz) in enumerate(coords[:count]):
         col = palette[k % len(palette)]
-        ring = torus_arc(0.032, 0.014, u_segs=14, v_segs=8, plane="xz", name=f"{name}_fl_{k}", material="item_cream_white")
+        ring = torus_arc(0.032, 0.014, u_segs=18, v_segs=10, plane="xz", name=f"{name}_fl_{k}", material="item_cereal_matte")
         ring = tint_part(ring, _const_tint(col)).rotate_xyz(rx=(k * 13 % 20) - 10, rz=(k * 19 % 20) - 10, degrees=True).translate(lx, ly, lz)
         loops.append(ring)
     return loops
@@ -348,17 +348,17 @@ def _build_pez_brick(
     body_rgb: Tuple[float, float, float],
     dish_rgb: Tuple[float, float, float],
     yaw_deg: float,
-    aspect_x: float = 0.44,
-    aspect_z: float = 0.24,
+    aspect_x: float = 0.46,
+    aspect_z: float = 0.25,
 ) -> SceneBuilder:
-    """Chamfered rectangular Pez pressed-sugar candy brick with recessed frosted top oval dish (`340..343`)."""
+    """Crisp pressed-sugar rectangular Pez candy brick with tight tablet bevel & recessed rectangular dish (`340..343`)."""
     register_item_materials()
     sc = SceneBuilder(name=name)
 
-    # Subdivided rectangular brick so top oval dish recesses cleanly with crisp raised rim!
-    nx, nz = 18, 12
+    # Higher-resolution rectangular brick so outer tablet edges & rectangular top dish step down crisply (not soap-bar puffy!)
+    nx, nz = 24, 16
     hx, hz = aspect_x * 0.5, aspect_z * 0.5
-    thick = 0.135  # Guaranteed normalized size_y >= 0.14!
+    thick = 0.140  # Guaranteed normalized size_y >= 0.14!
     verts, uvs, tris = [], [], []
     for is_top in (True, False):
         for iz in range(nz + 1):
@@ -367,18 +367,23 @@ def _build_pez_brick(
             for ix in range(nx + 1):
                 ux = ix / float(nx)
                 x = -hx + 2.0 * hx * ux
-                # Smooth chamfer on outer rectangular corners & edges
                 ex = abs(x) / hx
                 ez = abs(z) / hz
+                # Tight crisp pressed-tablet chamfer ONLY on outer 9% margin (rectangular brick, not soap bar!)
                 edge = max(ex, ez)
-                cham = 0.022 * max(0.0, (edge - 0.84) / 0.16) ** 1.5
+                cham = 0.013 * max(0.0, (edge - 0.91) / 0.09) ** 1.6
                 if is_top:
-                    # Iconic recessed Pez oval dish on top face!
-                    dish_r = ((x / (hx * 0.68)) ** 2) + ((z / (hz * 0.56)) ** 2)
-                    recess = 0.022 * max(0.0, 1.0 - dish_r) ** 0.7 if dish_r < 1.0 else 0.0
+                    # Crisp rounded-rectangle indented top PEZ tablet dish (`340..343`)!
+                    rx_d = abs(x) / (hx * 0.72)
+                    rz_d = abs(z) / (hz * 0.64)
+                    # Superellipse distance for crisp rectangular well with slightly rounded corners
+                    rect_d = (rx_d ** 6 + rz_d ** 6) ** (1.0 / 6.0)
+                    well = max(0.0, min(1.0, (1.04 - rect_d) / 0.24))
+                    well = well * well * (3.0 - 2.0 * well)
+                    recess = 0.022 * well
                     y = thick - cham - recess
                 else:
-                    y = 0.004 + cham * 0.7
+                    y = 0.004 + cham * 0.6
                 verts.append((x, y, z))
                 uvs.append((ux, vz))
     stride = nx + 1
@@ -389,7 +394,7 @@ def _build_pez_brick(
             tris.extend(((a, b, c), (a, c, d)))
             a2, b2, c2, d2 = off + a, off + b, off + c, off + d
             tris.extend(((a2, c2, b2), (a2, d2, c2)))
-    # Stitch 4 side walls cleanly
+    # Stitch 4 flat rectangular tablet walls cleanly
     for i in range(nx):
         t0, t1, b0, b1 = i, i + 1, off + i, off + i + 1
         tris.extend(((t0, t1, b1), (t0, b1, b0)))
@@ -406,11 +411,14 @@ def _build_pez_brick(
     idx = np.asarray(tris, dtype=np.uint32).reshape(-1)
     brick = MeshPart(f"{name}_brick", mat, pos, recompute_smooth_normals(pos, idx), idx, uvs=np.asarray(uvs, dtype=np.float32))
 
-    # Bright frosted-sugar sheen inside the recessed top dish matching `#340..343`!
+    # Crisp frosty-white recessed rectangular well contrasting with pastel pressed-sugar rim (`340..343`)!
     def _pez_color(p: np.ndarray, _n: np.ndarray) -> np.ndarray:
-        dish = np.clip(1.0 - (((p[:, 0] / (hx * 0.72)) ** 2) + ((p[:, 2] / (hz * 0.60)) ** 2)), 0.0, 1.0)
-        top_w = np.clip((p[:, 1] - thick * 0.65) / (thick * 0.25), 0.0, 1.0)
-        w = (dish ** 0.5) * top_w
+        rx_d = np.abs(p[:, 0]) / (hx * 0.74)
+        rz_d = np.abs(p[:, 2]) / (hz * 0.66)
+        rect_d = (rx_d ** 6 + rz_d ** 6) ** (1.0 / 6.0)
+        dish = np.clip((1.04 - rect_d) / 0.18, 0.0, 1.0)
+        top_w = np.clip((p[:, 1] - thick * 0.55) / (thick * 0.20), 0.0, 1.0)
+        w = dish * top_w
         b_c = np.asarray(body_rgb, dtype=np.float64)[None, :]
         d_c = np.asarray(dish_rgb, dtype=np.float64)[None, :]
         return np.clip(b_c * (1.0 - w[:, None]) + d_c * w[:, None], 0.08, 1.0)

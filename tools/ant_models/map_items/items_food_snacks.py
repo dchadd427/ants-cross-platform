@@ -121,41 +121,37 @@ def _build_twinkie(name: str, stage: int) -> SceneBuilder:
         pc[left_mask, 0] = np.maximum(pc[left_mask, 0], bite_curve)
     cake.positions = pc.astype(np.float32)
     cake.normals = recompute_smooth_normals(cake.positions, cake.indices)
-    # Warm baked golden top dome -> pale creamy-gold underside & bright airy yellow sponge crumb on bitten face!
-    def _twinkie_tint(pos: np.ndarray, _n: np.ndarray) -> np.ndarray:
+    # Bright appetizing golden-baked Twinkie sponge cake: sunny butter-gold belly & softly toasted warm-amber dome!
+    def _twinkie_tint(pos: np.ndarray, nrm: np.ndarray) -> np.ndarray:
         bitten_w = np.clip(((x_lo + 0.085) - pos[:, 0]) / 0.055, 0.0, 1.0) if stage >= 2 else np.zeros(len(pos))
-        r_c = (0.92 + 0.08 * np.clip(pos[:, 1] / 0.18, 0.0, 1.0)) * (1.0 - 0.02 * bitten_w) + 1.00 * (0.02 * bitten_w)
-        g_c = (0.76 + 0.16 * np.clip(pos[:, 1] / 0.18, 0.0, 1.0) - 0.12 * np.clip((pos[:, 1] - 0.13) / 0.06, 0.0, 1.0)) * (1.0 - 0.35 * bitten_w) + 0.94 * (0.35 * bitten_w)
-        b_c = (0.28 + 0.24 * (1.0 - np.clip(pos[:, 1] / 0.16, 0.0, 1.0))) * (1.0 - 0.45 * bitten_w) + 0.56 * (0.45 * bitten_w)
-        return np.clip(np.column_stack([r_c, g_c, b_c]), 0.16, 1.0)
+        top_toast = np.clip((pos[:, 1] - 0.115) / 0.070, 0.0, 1.0) * np.clip(nrm[:, 1], 0.0, 1.0)
+        front_glaze = np.clip(nrm[:, 2], 0.0, 1.0)
+        r_c = (0.98 + 0.02 * front_glaze - 0.05 * top_toast) * (1.0 - 0.02 * bitten_w) + 1.00 * (0.02 * bitten_w)
+        g_c = (0.86 + 0.10 * front_glaze - 0.16 * top_toast) * (1.0 - 0.35 * bitten_w) + 0.96 * (0.35 * bitten_w)
+        b_c = (0.38 + 0.16 * front_glaze - 0.14 * top_toast) * (1.0 - 0.45 * bitten_w) + 0.66 * (0.45 * bitten_w)
+        return np.clip(np.column_stack([r_c, g_c, b_c]), 0.24, 1.0)
 
     parts.append(tint_part(cake, _twinkie_tint))
 
-    # Iconic 3 white cream injection dimples along the lower-front belly (+Z)!
+    # Iconic 3 flush white vanilla cream injection spots along the lower-front belly (+Z)!
     hole_xs = (-0.21, +0.02, +0.23) if stage == 1 else ((+0.02, +0.23) if stage == 2 else (+0.16,))
     for k, hx in enumerate(hole_xs):
-        dot = ellipsoid(0.036, 0.022, 0.022, u_segs=14, v_segs=10, name=f"{name}_dot_{k}", material="item_cream_white").translate(hx, 0.046, +0.136)
+        dot = ellipsoid(0.034, 0.018, 0.016, u_segs=14, v_segs=10, name=f"{name}_dot_{k}", material="item_cream_white").translate(hx, 0.044, +0.138)
         parts.append(dot)
 
     if stage == 1:
-        # Fluffy ridged whipped cream squirting out bottom-left injection hole onto ground (`382:fdtwink1`)!
-        ooze_neck = extrude_star_piped_ribbon(
-            [(-0.21, 0.054, +0.125), (-0.21, 0.046, +0.190), (-0.22, 0.034, +0.262)],
-            [0.024, 0.028, 0.032],
-            n_flutes=8,
-            flute_depth=0.28,
-            width_ratio=1.18,
-            height_ratio=0.82,
-            samples_per_seg=6,
-            radial_segs=32,
-            valley_rgb=(0.82, 0.84, 0.89),
-            mid_rgb=(0.94, 0.95, 0.96),
-            crest_rgb=(1.00, 1.00, 0.99),
+        # Smooth glossy whipped-vanilla cream ribbon oozing naturally out bottom-left filling hole onto ground (`382:fdtwink1`)!
+        ooze_neck = curved_tube(
+            [(-0.21, 0.048, +0.128), (-0.21, 0.040, +0.188), (-0.215, 0.032, +0.255)],
+            [0.021, 0.018, 0.026],
+            samples_per_seg=5,
+            radial_segs=16,
+            cap_rings=3,
             name=f"{name}_ooze_neck",
             material="item_cream_white",
         )
-        parts.append(ooze_neck)
-        parts.extend(_cream_splat(f"{name}_splat", -0.22, +0.278, scale=0.88))
+        parts.append(gradient_y_tint(ooze_neck, (0.90, 0.91, 0.94), (1.00, 1.00, 0.99)))
+        parts.extend(_cream_splat(f"{name}_splat", -0.22, +0.272, scale=0.84))
     elif stage == 2:
         # Exposed porous yellow sponge-crumb collar + fluffy whipped cream bursting out bitten LEFT end (`383:fdtwink2`)!
         crumb = ellipsoid(0.042, 0.098, 0.126, u_segs=18, v_segs=12, name=f"{name}_crumb_face", material="item_corndog_crumb").translate(x_lo + 0.032, 0.094, 0.0)
@@ -569,60 +565,96 @@ def _cracker_flake(
     return disc.rotate_xyz(ry=rot_y, degrees=True).translate(cx, 0.0, cz)
 
 
+def _closed_pretzel_ring(name: str, pts: Sequence[Tuple[float, float, float]], rad: float = 0.042, n_rad: int = 18) -> MeshPart:
+    """Seam-free periodically closed pretzel dough ring (ZERO crack/break on the side!)."""
+    arr = np.asarray(pts, dtype=np.float64)
+    n = len(arr)
+    verts, uvs, tris = [], [], []
+    up = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+    for i in range(n):
+        p = arr[i]
+        tan = arr[(i + 1) % n] - arr[(i - 1) % n]
+        tan /= max(1e-8, float(np.linalg.norm(tan)))
+        side = np.cross(tan, up)
+        sn = float(np.linalg.norm(side))
+        side = side / sn if sn > 1e-6 else np.array([1.0, 0.0, 0.0])
+        u_v = np.cross(side, tan)
+        u_v /= max(1e-8, float(np.linalg.norm(u_v)))
+        for j in range(n_rad):
+            ang = 2.0 * math.pi * j / float(n_rad)
+            vtx = p + side * (rad * math.cos(ang)) + u_v * (rad * 0.92 * math.sin(ang))
+            verts.append((float(vtx[0]), float(vtx[1]), float(vtx[2])))
+            uvs.append((i / float(n) * 4.0, j / float(n_rad)))
+    for i in range(n):
+        inext = (i + 1) % n
+        for j in range(n_rad):
+            jn = (j + 1) % n_rad
+            a, b = i * n_rad + j, inext * n_rad + j
+            c, d = inext * n_rad + jn, i * n_rad + jn
+            tris.extend(((a, b, c), (a, c, d)))
+    pos = np.asarray(verts, dtype=np.float32)
+    idx = np.asarray(tris, dtype=np.uint32).reshape(-1)
+    return MeshPart(name, "item_pretzel_crust", pos, recompute_smooth_normals(pos, idx), idx, uvs=np.asarray(uvs, dtype=np.float32))
+
+
 def _build_pretzel(name: str, stage: int) -> SceneBuilder:
-    """Glossy golden-amber lye-glazed twisted hard pretzel with coarse salt & pale snapped interiors (`264..266`)."""
+    """Warm golden-tan toasted Bavarian twisted pretzel with continuous closed loop & pale dough snaps (`264..266`)."""
     register_item_materials()
     sc = SceneBuilder(name=name)
     parts: List[MeshPart] = []
+    # Authentic warm golden-tan toasted pretzel hue (matching `focus_fdpretz1.png` — NOT red/orange terracotta!)
+    pretz_lo, pretz_hi = (0.86, 0.72, 0.56), (1.00, 0.96, 0.86)
 
     if stage == 1:
+        # Seam-free periodically closed plump Bavarian heart-shaped pretzel loop (`focus_fdpretz1.png` 1:1!)
         outer_pts: List[Tuple[float, float, float]] = []
-        n = 40
-        for i in range(n + 1):
+        n = 72
+        for i in range(n):
             a = 2.0 * math.pi * i / n
-            w = 0.34 - 0.045 * math.sin(a)
-            x = w * math.cos(a)
-            z = 0.255 * math.sin(a) + 0.042 * math.cos(2.0 * a)
-            y = 0.046 + 0.006 * math.sin(a * 2.0)
+            # Classic pinched bottom heart-dip at `a = pi/2 (+Z)` & plump rounded side lobes!
+            bottom_dip = 0.072 * math.exp(-(((math.atan2(math.sin(a - math.pi * 0.5), math.cos(a - math.pi * 0.5))) / 0.36) ** 2))
+            x = (0.345 - 0.040 * math.sin(a)) * math.cos(a)
+            z = (0.265 - bottom_dip) * math.sin(a) + 0.032 * math.cos(2.0 * a)
+            y = 0.044 + 0.005 * math.sin(a * 2.0)
             outer_pts.append((x, y, z))
-        outer = curved_tube(outer_pts, [0.044] * len(outer_pts), samples_per_seg=2, radial_segs=16, cap_start=False, cap_end=False, name=f"{name}_outer", material="item_pretzel_crust")
+        outer = _closed_pretzel_ring(f"{name}_outer", outer_pts, rad=0.042, n_rad=18)
+        # Authentic braided center twist arms starting flush inside the bottom heart-dip (`z=+0.160`) up to upper shoulders!
         arm1 = curved_tube(
-            [(-0.06, 0.046, +0.22), (-0.03, 0.044, +0.10), (0.00, 0.044, -0.02), (+0.11, 0.066, -0.14), (+0.19, 0.058, -0.19)],
-            [0.038, 0.038, 0.038, 0.038, 0.036],
-            samples_per_seg=4,
-            radial_segs=16,
+            [(-0.042, 0.044, +0.160), (-0.015, 0.044, +0.075), (+0.005, 0.046, -0.025), (+0.105, 0.062, -0.135), (+0.185, 0.050, -0.200)],
+            [0.036, 0.037, 0.038, 0.037, 0.036],
+            samples_per_seg=5,
+            radial_segs=18,
             cap_rings=2,
             name=f"{name}_arm1",
             material="item_pretzel_crust",
         )
         arm2 = curved_tube(
-            [(+0.06, 0.046, +0.22), (+0.03, 0.066, +0.10), (0.00, 0.080, -0.02), (-0.11, 0.070, -0.14), (-0.19, 0.058, -0.19)],
-            [0.038, 0.038, 0.040, 0.038, 0.036],
-            samples_per_seg=4,
-            radial_segs=16,
+            [(+0.042, 0.044, +0.160), (+0.020, 0.066, +0.075), (-0.005, 0.078, -0.025), (-0.105, 0.064, -0.135), (-0.185, 0.050, -0.200)],
+            [0.036, 0.038, 0.039, 0.037, 0.036],
+            samples_per_seg=5,
+            radial_segs=18,
             cap_rings=2,
             name=f"{name}_arm2",
             material="item_pretzel_crust",
         )
         for p in (outer, arm1, arm2):
-            parts.append(gradient_y_tint(p, (0.78, 0.62, 0.44), (1.00, 0.94, 0.80), noise_amp=0.04))
+            parts.append(gradient_y_tint(p, pretz_lo, pretz_hi, noise_amp=0.04))
         parts.extend(
             _salt_crystals(
                 name,
                 (
-                    (-0.27, 0.090, -0.08),
-                    (-0.18, 0.096, -0.19),
+                    (-0.27, 0.086, -0.08),
+                    (-0.18, 0.092, -0.19),
                     (0.00, 0.118, -0.02),
-                    (+0.18, 0.096, -0.18),
-                    (+0.29, 0.088, +0.02),
-                    (+0.14, 0.088, +0.21),
-                    (-0.15, 0.088, +0.20),
-                    (-0.29, 0.088, +0.06),
+                    (+0.18, 0.092, -0.18),
+                    (+0.29, 0.084, +0.02),
+                    (+0.14, 0.084, +0.21),
+                    (-0.15, 0.084, +0.20),
+                    (-0.29, 0.084, +0.06),
                 ),
             )
         )
     elif stage == 2:
-        # Three broken curved pretzel shards with exposed pale-dough snapped ends (`265:fdpretz2`)!
         segs = [
             ([(-0.28, 0.044, +0.08), (-0.25, 0.046, -0.06), (-0.14, 0.046, -0.18)], [0.040, 0.042, 0.038], "s1"),
             ([(-0.04, 0.044, +0.16), (-0.01, 0.052, +0.02), (+0.08, 0.048, -0.12)], [0.040, 0.044, 0.038], "s2"),
@@ -630,18 +662,17 @@ def _build_pretzel(name: str, stage: int) -> SceneBuilder:
             ([(+0.08, 0.044, +0.21), (+0.22, 0.046, +0.18), (+0.26, 0.046, +0.02), (+0.25, 0.044, -0.10)], [0.038, 0.042, 0.042, 0.036], "s3"),
         ]
         for pts, rads, tag in segs:
-            sh = curved_tube(pts, rads, samples_per_seg=4, radial_segs=14, cap_start=False, cap_end=False, name=f"{name}_{tag}", material="item_pretzel_crust")
-            parts.append(gradient_y_tint(sh, (0.78, 0.62, 0.44), (1.00, 0.94, 0.80), noise_amp=0.04))
+            sh = curved_tube(pts, rads, samples_per_seg=5, radial_segs=16, cap_start=False, cap_end=False, name=f"{name}_{tag}", material="item_pretzel_crust")
+            parts.append(gradient_y_tint(sh, pretz_lo, pretz_hi, noise_amp=0.04))
             parts.append(_pretzel_snap_cap(f"{name}_{tag}_c0", pts[0], pts[1], rads[0]))
             parts.append(_pretzel_snap_cap(f"{name}_{tag}_c1", pts[-1], pts[-2], rads[-1]))
         parts.extend(_salt_crystals(name, ((-0.25, 0.088, -0.05), (-0.01, 0.094, +0.02), (+0.24, 0.088, +0.12))))
     else:
-        # Stage 3 (`266:fdpretz3`): central Y-knot fragment with exposed pale dough snaps + jagged broken pretzel chips!
         y1_pts = [(-0.09, 0.046, +0.18), (-0.03, 0.052, +0.02), (+0.07, 0.048, -0.16)]
         y2_pts = [(-0.03, 0.050, +0.02), (-0.06, 0.048, -0.035), (-0.09, 0.046, -0.09)]
-        y1 = curved_tube(y1_pts, [0.046, 0.050, 0.042], samples_per_seg=4, radial_segs=14, cap_start=False, cap_end=False, name=f"{name}_y1", material="item_pretzel_crust")
-        y2 = curved_tube(y2_pts, [0.042, 0.039, 0.036], samples_per_seg=3, radial_segs=12, cap_start=True, cap_end=False, name=f"{name}_y2", material="item_pretzel_crust")
-        parts.extend([gradient_y_tint(p, (0.78, 0.62, 0.44), (1.00, 0.94, 0.80), noise_amp=0.04) for p in (y1, y2)])
+        y1 = curved_tube(y1_pts, [0.046, 0.050, 0.042], samples_per_seg=5, radial_segs=16, cap_start=False, cap_end=False, name=f"{name}_y1", material="item_pretzel_crust")
+        y2 = curved_tube(y2_pts, [0.042, 0.039, 0.036], samples_per_seg=4, radial_segs=14, cap_start=True, cap_end=False, name=f"{name}_y2", material="item_pretzel_crust")
+        parts.extend([gradient_y_tint(p, pretz_lo, pretz_hi, noise_amp=0.04) for p in (y1, y2)])
         parts.append(_pretzel_snap_cap(f"{name}_y1_c0", y1_pts[0], y1_pts[1], 0.046))
         parts.append(_pretzel_snap_cap(f"{name}_y1_c1", y1_pts[-1], y1_pts[-2], 0.042))
         parts.append(_pretzel_snap_cap(f"{name}_y2_c1", y2_pts[-1], y2_pts[-2], 0.036))
@@ -651,7 +682,7 @@ def _build_pretzel(name: str, stage: int) -> SceneBuilder:
             (+0.18, +0.12, 0.038, 0.026, 48.0),
             (+0.10, +0.19, 0.030, 0.022, -16.0),
         )):
-            parts.append(_cracker_flake(f"{name}_chip_{k}", cx, cz, rx, rz, 0.024, seed=4.0 + k * 1.7, rgb_lo=(0.56, 0.34, 0.16), rgb_hi=(0.86, 0.60, 0.34), rot_y=ry))
+            parts.append(_cracker_flake(f"{name}_chip_{k}", cx, cz, rx, rz, 0.024, seed=4.0 + k * 1.7, rgb_lo=(0.68, 0.48, 0.28), rgb_hi=(0.94, 0.76, 0.52), rot_y=ry))
         parts.extend(_salt_crystals(name, ((-0.03, 0.100, +0.02), (+0.05, 0.090, -0.12))))
 
     sc.add("pretzel", parts)
@@ -745,32 +776,36 @@ def _saltine_slab(name: str, *, bite_notches: Sequence[Tuple[float, float, float
 
     pos = np.asarray(verts, dtype=np.float32)
     idx = np.asarray(tris, dtype=np.uint32).reshape(-1)
-    slab = MeshPart(f"{name}_slab", "item_cracker_gold", pos, recompute_smooth_normals(pos, idx), idx, uvs=np.asarray(uvs, dtype=np.float32))
+    slab = MeshPart(f"{name}_slab", "item_saltine_pale", pos, recompute_smooth_normals(pos, idx), idx, uvs=np.asarray(uvs, dtype=np.float32))
 
-    # Authentic crisp toasted ivory-tan saltine with brown-toasted puffy blister crests & deep dark docker holes!
+    # Crisp pale buttermilk-ivory Saltine cracker (NOT brown graham cracker!) with subtle golden-toasted puffs & dark pinholes!
     def _saltine_color(p: np.ndarray, _n: np.ndarray) -> np.ndarray:
         dimp = np.zeros(len(p), dtype=np.float64)
         for hx, hz in holes:
-            dimp = np.maximum(dimp, np.exp(-(((p[:, 0] - hx) ** 2 + (p[:, 2] - hz) ** 2) / (0.016 ** 2))))
+            dimp = np.maximum(dimp, np.exp(-(((p[:, 0] - hx) ** 2 + (p[:, 2] - hz) ** 2) / (0.015 ** 2))))
         top_w = np.clip((p[:, 1] - 0.022) / 0.024, 0.0, 1.0)
         dk = dimp * top_w
-        r_f = np.clip(np.hypot(p[:, 0], p[:, 2]) / 0.34, 0.0, 1.0)
-        toast_spot = np.clip(np.sin(p[:, 0] * 26.0 + 0.5) * np.cos(p[:, 2] * 28.0 - 0.3), 0.0, 1.0)
+        r_f = np.clip(np.hypot(p[:, 0], p[:, 2]) / 0.36, 0.0, 1.0)
+        toast_spot = np.clip(np.sin(p[:, 0] * 24.0 + 0.5) * np.cos(p[:, 2] * 26.0 - 0.3), 0.0, 1.0)
         return np.clip(
             np.column_stack([
-                (1.00 - 0.14 * r_f - 0.08 * toast_spot) * (1.0 - 0.58 * dk),
-                (0.92 - 0.22 * r_f - 0.12 * toast_spot) * (1.0 - 0.68 * dk),
-                (0.70 - 0.22 * r_f - 0.14 * toast_spot) * (1.0 - 0.78 * dk),
+                (0.99 - 0.08 * r_f - 0.04 * toast_spot) * (1.0 - 0.52 * dk),
+                (0.95 - 0.14 * r_f - 0.10 * toast_spot) * (1.0 - 0.62 * dk),
+                (0.84 - 0.22 * r_f - 0.18 * toast_spot) * (1.0 - 0.72 * dk),
             ]),
-            0.10,
+            0.16,
             1.0,
         )
 
     parts.append(tint_part(slab, _saltine_color))
-    for k, (sx, sz) in enumerate(((-0.09, -0.04), (+0.11, -0.08), (+0.03, +0.10), (-0.12, +0.09), (+0.00, -0.11), (+0.14, +0.06))):
+    for k, (sx, sz) in enumerate((
+        (-0.15, -0.06), (-0.09, -0.04), (+0.11, -0.08), (+0.03, +0.10),
+        (-0.12, +0.09), (+0.00, -0.11), (+0.14, +0.06), (-0.04, +0.16),
+        (+0.16, -0.15), (-0.16, +0.16),
+    )):
         if any(math.hypot(sx - bx, sz - bz) < br * 0.96 for bx, bz, br in bite_notches):
             continue
-        parts.append(rounded_box(0.013, 0.008, 0.013, bevel=0.002, segs=1, name=f"{name}_salt_{k}", material="item_candy_white").rotate_xyz(ry=k * 29.0, degrees=True).translate(sx, 0.062, sz))
+        parts.append(rounded_box(0.013, 0.007, 0.013, bevel=0.002, segs=1, name=f"{name}_salt_{k}", material="item_candy_white").rotate_xyz(ry=k * 29.0, degrees=True).translate(sx, 0.062, sz))
     return parts
 
 

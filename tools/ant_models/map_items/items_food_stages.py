@@ -30,11 +30,21 @@ if np is not None:
             superellipsoid,
         )
         from .item_materials import gradient_y_tint, register_item_materials, tint_part
-        from .items_food import _build_banana_coin, _split_mesh_by_mask
+        from .items_food import (
+            _build_banana_coin,
+            _build_fried_chicken_drumstick,
+            _sculpt_corndog_wood_stick,
+            _split_mesh_by_mask,
+        )
         from .items_toys import _finalize_item
     except ImportError:
         from map_items.item_materials import gradient_y_tint, register_item_materials, tint_part  # type: ignore
-        from map_items.items_food import _build_banana_coin, _split_mesh_by_mask  # type: ignore
+        from map_items.items_food import (  # type: ignore
+            _build_banana_coin,
+            _build_fried_chicken_drumstick,
+            _sculpt_corndog_wood_stick,
+            _split_mesh_by_mask,
+        )
         from map_items.items_toys import _finalize_item  # type: ignore
         from mesh_core import (  # type: ignore
             AnimationChannel,
@@ -139,15 +149,7 @@ def _build_corndog_stage(stage: int) -> SceneBuilder:
     yc = 0.096
 
     if stage == 5:
-        stick = curved_tube(
-            [(0.0, 0.036, -0.44), (0.008, 0.042, -0.14), (-0.006, 0.048, +0.16), (0.0, 0.056, +0.44)],
-            [0.028, 0.027, 0.026, 0.024],
-            samples_per_seg=4,
-            radial_segs=14,
-            cap_rings=3,
-            name="corndog5_stick",
-            material="item_wood_stick",
-        )
+        stick = _sculpt_corndog_wood_stick("corndog5_stick", -0.44, +0.44, y_base=0.044, radius=0.026, stain_end=+1.0)
         sc.add("corndog", stick.rotate_xyz(ry=-135.0, degrees=True))
         return _finalize_item(sc, target_span=0.90)
 
@@ -203,7 +205,7 @@ def _build_corndog_stage(stage: int) -> SceneBuilder:
     dog, d_mask = _slice_bite(raw_dog, z_offset=+0.052, jitter=0.0)
     sc.add("corndog", _split_mesh_by_mask(dog, d_mask, "item_hotdog_inside", "_meat"))
 
-    stick = cylinder(0.015, 0.014, 0.34, radial_segs=14, bevel=0.003, axis="z", name=f"corndog{stage}_stick", material="item_wood_stick").translate(0.0, yc - 0.006, -0.495)
+    stick = _sculpt_corndog_wood_stick(f"corndog{stage}_stick", -0.665, -0.320, y_base=yc - 0.006, radius=0.0155, stain_end=+1.0)
     sc.add("corndog", stick)
 
     m_pts: List[Tuple[float, float, float]] = []
@@ -275,18 +277,18 @@ def _build_jello_eaten(stage: int) -> SceneBuilder:
         p[:, 2] *= 1.0 - bite
         return p
 
-    # Recessed lower inner garnet core so ALL creamy banana slices shine vividly right through the translucent ruby dome!
-    core_prof = [(r * 0.66, y * 0.58 + 0.008) for r, y in prof]
+    # Dense rich garnet inner mass hugging snugly inside the ruby dome + subtle grounded jiggle!
+    core_prof = [(r * 0.84, y * 0.78 + 0.006) for r, y in prof]
     core = lathe(core_prof, radial_segs=52, cap_bottom=True, cap_top=True, axis="y", name=f"jelo{stage}_core", material="item_jello_core").deform(_ruffle)
     sc.add("jello_body", core)
     for idx, (bx, by, bz, rad, rx, rz, spin) in enumerate(bananas):
-        coin = _build_banana_coin(f"jelo{stage}_ban_{idx}", radius=rad, thickness=0.028, spin_rad=math.radians(spin)).rotate_xyz(rx=rx, rz=rz, degrees=True).translate(bx, by, bz)
+        coin = _build_banana_coin(f"jelo{stage}_ban_{idx}", radius=rad, thickness=0.026, spin_rad=math.radians(spin)).rotate_xyz(rx=rx, rz=rz, degrees=True).translate(bx, by, bz)
         sc.add("jello_body", coin)
-    shell = lathe(prof, radial_segs=64, cap_bottom=False, cap_top=False, axis="y", name=f"jelo{stage}_dome", material="item_jello_ruby").deform(_ruffle)
+    shell = lathe(prof, radial_segs=64, cap_bottom=True, cap_top=False, axis="y", name=f"jelo{stage}_dome", material="item_jello_ruby").deform(_ruffle)
     sc.add("jello_body", shell)
 
     times = [0.00, 0.25, 0.50, 0.75, 1.05]
-    scales = [(1.0, 1.0, 1.0), (1.05, 0.91, 1.05), (0.97, 1.06, 0.97), (1.03, 0.95, 1.03), (1.0, 1.0, 1.0)]
+    scales = [(1.0, 1.0, 1.0), (1.028, 0.958, 1.024), (0.986, 1.026, 0.988), (1.018, 0.972, 1.016), (1.0, 1.0, 1.0)]
     sc.add_animation("Idle", [AnimationChannel("jello_body", "scale", times, scales)])
     return _finalize_item(sc, target_span=span)
 
@@ -299,112 +301,17 @@ def build_fdjelo3() -> SceneBuilder:
     return _build_jello_eaten(3)
 
 
-def _ivory_bone_tint(pos: np.ndarray, nrm: np.ndarray) -> np.ndarray:
-    return np.clip(
-        np.column_stack([
-            0.88 + 0.12 * nrm[:, 1],
-            0.83 + 0.14 * nrm[:, 1],
-            0.78 + 0.15 * nrm[:, 1],
-        ]),
-        0.62,
-        1.0,
-    )
-
-
-def _sculpt_full_drumstick_bone(prefix: str, *, full_top_joint: bool) -> List[MeshPart]:
-    """Anatomically realistic glossy ivory chicken tibia bone (matching condyles & shaft material!)."""
-    z_hi = +0.345 if full_top_joint else +0.18
-    shaft = tint_part(
-        curved_tube(
-            [(0.0, 0.078, -0.365), (0.0, 0.079, -0.260), (+0.008, 0.082, 0.0), (0.0, 0.084, z_hi * 0.72), (0.0, 0.086, z_hi)],
-            [(0.026, 0.024), (0.019, 0.018), (0.021, 0.020), (0.028, 0.024), (0.044 if full_top_joint else 0.026, 0.036 if full_top_joint else 0.024)],
-            samples_per_seg=5,
-            radial_segs=18,
-            cap_rings=4,
-            name=f"{prefix}_shaft",
-            material="item_candy_white",
-        ),
-        _ivory_bone_tint,
-    )
-    parts: List[MeshPart] = [shaft]
-    for sgn, tag in ((-1.0, "l"), (+1.0, "r")):
-        parts.append(tint_part(ellipsoid(0.021, 0.024, 0.025, u_segs=14, v_segs=10, name=f"{prefix}_ank_{tag}", material="item_candy_white").translate(sgn * 0.016, 0.078, -0.362), _ivory_bone_tint))
-    if full_top_joint:
-        parts.append(tint_part(ellipsoid(0.037, 0.035, 0.039, u_segs=16, v_segs=10, name=f"{prefix}_knee_a", material="item_candy_white").translate(-0.025, 0.092, +0.348), _ivory_bone_tint))
-        parts.append(tint_part(ellipsoid(0.035, 0.031, 0.037, u_segs=16, v_segs=10, name=f"{prefix}_knee_b", material="item_candy_white").translate(+0.026, 0.086, +0.340), _ivory_bone_tint))
-    return parts
-
-
-def _build_chicken_stage(stage: int) -> SceneBuilder:
-    """Progressive eaten fried chicken drumstick stages (`400..403:fdchick2..5`)."""
-    register_item_materials()
-    sc = SceneBuilder(name=f"item_fdchick{stage}")
-
-    if stage == 5:
-        parts = _sculpt_full_drumstick_bone("chick5_bone", full_top_joint=True)
-        sc.add("chicken", [p.rotate_xyz(ry=136.0, degrees=True) for p in parts])
-        return _finalize_item(sc, target_span=0.90)
-
-    parts = _sculpt_full_drumstick_bone(f"chick{stage}_bone", full_top_joint=(stage >= 4))
-
-    # Authentic 1998 silhouettes: slimmer crispy crust in stage 2, small pale-meat bite notch on upper ridge in stage 3,
-    # ragged solid crispy crust wrapping mid-shaft with BOTH gleaming white bone ends exposed in stage 4!
-    if stage == 2:
-        pts = [(0.0, 0.082, -0.255), (0.004, 0.095, -0.14), (0.010, 0.112, 0.0), (0.014, 0.126, +0.15), (0.004, 0.116, +0.29), (-0.004, 0.100, +0.360)]
-        rads = [(0.042, 0.040), (0.062, 0.056), (0.094, 0.084), (0.128, 0.110), (0.114, 0.098), (0.054, 0.048)]
-        n_flakes = 68
-    elif stage == 3:
-        pts = [(0.0, 0.082, -0.250), (0.004, 0.092, -0.12), (0.008, 0.098, +0.02), (0.012, 0.114, +0.16), (0.004, 0.108, +0.29), (-0.002, 0.096, +0.345)]
-        rads = [(0.040, 0.038), (0.058, 0.052), (0.072, 0.064), (0.110, 0.092), (0.102, 0.086), (0.048, 0.044)]
-        n_flakes = 58
-    else:
-        pts = [(0.0, 0.082, -0.215), (0.006, 0.090, -0.07), (0.008, 0.098, +0.08), (0.004, 0.092, +0.220)]
-        rads = [(0.038, 0.036), (0.076, 0.066), (0.082, 0.070), (0.044, 0.040)]
-        n_flakes = 50
-
-    meat = curved_tube(pts, rads, samples_per_seg=6, radial_segs=30, cap_rings=5, name=f"chick{stage}_meat", material="item_chicken_crust").deform(
-        lambda p: p + 0.014 * np.sin(p * 42.0) * np.cos(np.roll(p, 1, axis=1) * 38.0)
-    )
-    parts.append(meat)
-
-    if stage == 3:
-        # Modest exposed pale-pink bitten meat patch on the upper-middle ridge matching `401:fdchick3`!
-        bite_patch = tint_part(
-            ellipsoid(0.034, 0.026, 0.064, u_segs=14, v_segs=10, name="chick3_bite_meat", material="item_bone_white")
-            .rotate_xyz(ry=-0.22, rz=+0.38)
-            .translate(+0.042, 0.132, +0.045),
-            lambda pos, _n: np.tile(np.array([[0.96, 0.84, 0.80]]), (len(pos), 1)),
-        )
-        parts.append(bite_patch)
-
-    z_k = np.array([pt[2] for pt in pts], dtype=np.float64)
-    rx_k = np.array([r[0] for r in rads], dtype=np.float64)
-    ry_k = np.array([r[1] for r in rads], dtype=np.float64)
-    y_k = np.array([pt[1] for pt in pts], dtype=np.float64)
-    for k in range(n_flakes):
-        u = (k + 0.5) / n_flakes
-        fz = z_k[0] + (z_k[-1] - z_k[0]) * u
-        ang = k * 2.39996323
-        fx = float(np.interp(fz, z_k, rx_k)) * 0.94 * math.cos(ang)
-        fy = max(0.025, float(np.interp(fz, z_k, y_k)) + float(np.interp(fz, z_k, ry_k)) * 0.94 * math.sin(ang))
-        fl = superellipsoid(0.034, 0.014, 0.040, e1=0.40, e2=0.50, u_segs=8, v_segs=6, name=f"chick{stage}_fl_{k}", material="item_chicken_crust").rotate_xyz(rx=k * 0.5, ry=k * 0.8, rz=ang).translate(fx, fy, fz)
-        parts.append(fl)
-
-    sc.add("chicken", [pt.rotate_xyz(ry=136.0, degrees=True) for pt in parts])
-    return _finalize_item(sc, target_span=0.92 if stage <= 3 else 0.90)
-
-
 def build_fdchick2() -> SceneBuilder:
-    return _build_chicken_stage(2)
+    return _build_fried_chicken_drumstick(2)
 
 
 def build_fdchick3() -> SceneBuilder:
-    return _build_chicken_stage(3)
+    return _build_fried_chicken_drumstick(3)
 
 
 def build_fdchick4() -> SceneBuilder:
-    return _build_chicken_stage(4)
+    return _build_fried_chicken_drumstick(4)
 
 
 def build_fdchick5() -> SceneBuilder:
-    return _build_chicken_stage(5)
+    return _build_fried_chicken_drumstick(5)

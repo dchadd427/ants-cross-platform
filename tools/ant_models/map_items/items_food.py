@@ -596,6 +596,48 @@ def build_fdburgr3() -> SceneBuilder:
     return _build_burger(3)
 
 
+def _sculpt_corndog_wood_stick(name: str, z0: float, z1: float, *, y_base: float = 0.090, radius: float = 0.015, stain_end: float = +1.0) -> MeshPart:
+    """Realistic pale raw-birch wooden skewer stick with longitudinal wood-fiber grain & warm fryer-oil stain (`361..365`)."""
+    n_z = 22
+    pts = [
+        (
+            0.003 * math.sin(i / float(n_z) * math.pi * 1.4),
+            y_base + 0.003 * math.cos(i / float(n_z) * math.pi),
+            z0 + (z1 - z0) * (i / float(n_z)),
+        )
+        for i in range(n_z + 1)
+    ]
+    stick = curved_tube(
+        pts,
+        [radius * (0.94 if i in (0, n_z) else 1.0) for i in range(n_z + 1)],
+        samples_per_seg=2,
+        radial_segs=18,
+        cap_rings=3,
+        name=name,
+        material="item_wood_stick",
+    )
+    # Slightly subtle hexagonal/natural birch-dowel grain flattening + warm pale wood fiber & toasted fryer-oil stain near batter!
+    z_lo, z_hi = min(z0, z1), max(z0, z1)
+    z_span = max(1e-4, z_hi - z_lo)
+
+    def _birch_wood_tint(pos: np.ndarray, nrm: np.ndarray) -> np.ndarray:
+        ang = np.arctan2(pos[:, 1] - y_base, pos[:, 0])
+        # Fine longitudinal wood fibers + faint growth-ring streaks along the stick!
+        fiber = 0.5 + 0.5 * np.sin(ang * 14.0 + pos[:, 2] * 7.5 + 0.8 * np.sin(pos[:, 2] * 28.0))
+        ring = 0.5 + 0.5 * np.cos(pos[:, 2] * 16.0 + 2.2 * np.sin(ang * 3.0))
+        # Subtle warm toasted fryer-oil darkening near the end that sat inside the corn dog!
+        t_z = np.clip((pos[:, 2] - z_lo) / z_span, 0.0, 1.0)
+        oil = np.clip((t_z - 0.35) / 0.65, 0.0, 1.0) if stain_end > 0 else np.clip((0.65 - t_z) / 0.65, 0.0, 1.0)
+        top_hi = np.clip(0.55 + 0.45 * nrm[:, 1], 0.35, 1.0)
+        # Pale raw birch cream-tan wood (`#D6B486`) -> warm golden-brown oiled wood (`#9A6A3A`)!
+        r_c = (0.92 + 0.08 * fiber - 0.06 * ring - 0.16 * oil) * top_hi
+        g_c = (0.82 + 0.08 * fiber - 0.07 * ring - 0.22 * oil) * top_hi
+        b_c = (0.64 + 0.06 * fiber - 0.07 * ring - 0.26 * oil) * top_hi
+        return np.clip(np.column_stack([r_c, g_c, b_c]), 0.26, 1.0)
+
+    return tint_part(stick, _birch_wood_tint)
+
+
 def build_fdcornd1() -> SceneBuilder:
     """Classic full-length golden fried corn dog on a stick with one clean top bite slicing cleanly through BOTH batter AND hot dog (`361:fdcornd1`)."""
     register_item_materials()
@@ -678,8 +720,8 @@ def build_fdcornd1() -> SceneBuilder:
             ]))
     sc.add("corndog", dog_parts)
 
-    # 3. Slim beveled wooden skewer stick protruding cleanly from the tapered stick end (`-Z`).
-    stick = cylinder(0.0145, 0.0135, 0.34, radial_segs=14, bevel=0.003, axis="z", name="corndog_stick", material="item_wood_stick").translate(0.0, yc - 0.006, -0.495)
+    # 3. Natural fibrous birch wooden skewer stick protruding cleanly from the tapered stick end (`-Z`).
+    stick = _sculpt_corndog_wood_stick("corndog_stick", -0.665, -0.320, y_base=yc - 0.006, radius=0.0155, stain_end=+1.0)
     sc.add("corndog", stick)
 
     # 4. Glossy bright yellow 5-loop squeezed mustard zigzag running smoothly along the full top of the batter behind the bite!
@@ -789,15 +831,15 @@ def build_fdjelo1() -> SceneBuilder:
             return p
         return _deform
 
-    # 1. Deep translucent-looking garnet inner core recessed cleanly behind all banana coins (rich ruby glow all the way to the wavy skirt!).
-    core_prof = [(r * (0.68 - 0.10 * min(1.0, y / mold_h)), y * 0.88 + 0.010) for r, y in outer_prof]
+    # 1. Dense rich ruby-garnet inner gelatin mass filling snugly inside the fluted mold (ZERO hollow jellyfish skirt gap!).
+    core_prof = [(r * (0.85 - 0.04 * min(1.0, y / mold_h)), y * 0.94 + 0.006) for r, y in outer_prof]
     inner_core = tint_part(
         lathe(core_prof, radial_segs=80, cap_bottom=True, cap_top=False, axis="y", name="jello_inner_core", material="item_jello_core")
-        .deform(_flute_mold(strength=0.95)),
+        .deform(_flute_mold(strength=0.96)),
         lambda pos, _n: np.column_stack([
-            0.46 + 0.54 * _lobe_arch(np.arctan2(pos[:, 2], pos[:, 0])) * (0.72 + 0.28 * np.clip(pos[:, 1] / mold_h, 0.0, 1.0)),
-            0.14 + 0.28 * _lobe_arch(np.arctan2(pos[:, 2], pos[:, 0])),
-            0.20 + 0.30 * _lobe_arch(np.arctan2(pos[:, 2], pos[:, 0])),
+            0.52 + 0.48 * _lobe_arch(np.arctan2(pos[:, 2], pos[:, 0])) * (0.76 + 0.24 * np.clip(pos[:, 1] / mold_h, 0.0, 1.0)),
+            0.10 + 0.24 * _lobe_arch(np.arctan2(pos[:, 2], pos[:, 0])),
+            0.16 + 0.26 * _lobe_arch(np.arctan2(pos[:, 2], pos[:, 0])),
         ]),
     )
     sc.add("jello_body", inner_core)
@@ -831,56 +873,125 @@ def build_fdjelo1() -> SceneBuilder:
     for idx, (ang_deg, by, rad, tilt_deg, roll_deg, spin_deg) in enumerate(banana_specs):
         ang = 0.5 * math.pi + math.radians(ang_deg)
         r_wall = _outer_radius_at(by, ang)
-        # Seat coin center cleanly inside the outer wall, then verify EVERY vertex stays strictly inside the jelly!
-        r_pos = max(0.04, r_wall - 0.076)
+        # Seat coin snugly right behind the glossy ruby outer skin so banana slices glow vividly right through the Jell-O!
+        r_pos = max(0.04, r_wall - 0.046)
         bx, bz = r_pos * math.cos(ang), r_pos * math.sin(ang)
         yaw_out = math.atan2(bx, bz)
         sl = (
-            _build_banana_coin(f"jello_banana_{idx}", radius=rad, thickness=0.026, spin_rad=math.radians(spin_deg))
+            _build_banana_coin(f"jello_banana_{idx}", radius=rad, thickness=0.024, spin_rad=math.radians(spin_deg))
             .rotate_xyz(rx=tilt_deg, rz=roll_deg, degrees=True)
             .rotate_xyz(ry=yaw_out)
             .translate(bx, by, bz)
         )
-        # Exact vertex-level radial containment check: gently pull coin inward along its radial axis if ANY rim vertex approaches outer shell!
         vp = sl.positions.astype(np.float64)
         v_ang = np.arctan2(vp[:, 2], vp[:, 0])
         v_r = np.hypot(vp[:, 0], vp[:, 2])
         v_rb = np.interp(np.clip(vp[:, 1], 0.0, mold_h), ys_prof, rs_prof)
-        v_lim = v_rb * _flute_scale(v_ang, np.clip(vp[:, 1] / mold_h, 0.0, 1.0), 1.0) - 0.015
+        v_lim = v_rb * _flute_scale(v_ang, np.clip(vp[:, 1] / mold_h, 0.0, 1.0), 1.0) - 0.012
         excess = float(np.max(v_r - v_lim))
         if excess > 0.0:
             sl = sl.translate(-excess * math.cos(ang), 0.0, -excess * math.sin(ang))
         sc.add("jello_body", sl)
 
     # 3. Crystal-glossy translucent outer 10-lobe ruby gelatin skin (high-res 96 radial segs for liquid-smooth wet flutes!).
-    jelly_dome = lathe(outer_prof, radial_segs=96, cap_bottom=False, cap_top=False, axis="y", name="jello_dome", material="item_jello_ruby").deform(_flute_mold(strength=1.0))
+    jelly_dome = lathe(outer_prof, radial_segs=96, cap_bottom=True, cap_top=False, axis="y", name="jello_dome", material="item_jello_ruby").deform(_flute_mold(strength=1.0))
     sc.add("jello_body", jelly_dome)
 
-    # Exact 1998 7-frame (7 x 150ms = 1.050s) grounded volume-conserving elastic squash-and-rebound clip (`366:fdjelo1`)!
+    # Authentic 1998 7-frame (1.05s) subtle grounded gelatinous Jell-O jiggle (gentle ±4.5% settle + delicate lateral wobble —
+    # NO wild pulsing jellyfish umbrella bounce!).
     times = [0.00, 0.15, 0.30, 0.45, 0.60, 0.75, 0.90, 1.05]
     scales = [
-        (1.000, 1.000, 1.000),  # F0 (sp 529): neutral tall dome
-        (1.022, 0.958, 1.022),  # F1 (sp 530): begins settling downward
-        (1.060, 0.892, 1.060),  # F2 (sp 531): drops deeper & widens
-        (1.084, 0.854, 1.084),  # F3 (sp 532): deepest squash
-        (0.954, 1.072, 0.954),  # F4 (sp 533): snappy elastic rebound upward & narrow
-        (0.974, 1.098, 0.974),  # F5 (sp 534): peak tall overshoot
-        (1.055, 0.920, 1.055),  # F6 (sp 535): secondary wide settle bounce
-        (1.000, 1.000, 1.000),  # Loop seamlessly into F0
+        (1.000, 1.000, 1.000),  # F0: upright settled dome
+        (1.018, 0.968, 1.012),  # F1: gentle jiggle dip
+        (1.036, 0.946, 1.030),  # F2: soft settle
+        (1.028, 0.958, 1.034),  # F3: slight counter-shift
+        (0.980, 1.034, 0.984),  # F4: light gelatin rebound
+        (0.986, 1.026, 0.988),  # F5: crest quiver
+        (1.022, 0.966, 1.018),  # F6: damped secondary jiggle
+        (1.000, 1.000, 1.000),  # seamless loop
+    ]
+    def _q_tilt(rx_deg: float, rz_deg: float) -> Tuple[float, float, float, float]:
+        hx, hz = math.radians(rx_deg) * 0.5, math.radians(rz_deg) * 0.5
+        cx, sx, cz, sz = math.cos(hx), math.sin(hx), math.cos(hz), math.sin(hz)
+        return (sx * cz, -sx * sz, cx * sz, cx * cz)
+
+    rots = [
+        _q_tilt(0.0, 0.0),
+        _q_tilt(+1.4, -2.2),
+        _q_tilt(+2.0, -3.0),
+        _q_tilt(-1.2, +2.8),
+        _q_tilt(-1.8, +2.2),
+        _q_tilt(+0.8, -1.6),
+        _q_tilt(-0.6, +1.2),
+        _q_tilt(0.0, 0.0),
     ]
     sc.add_animation(
         "Idle",
-        [AnimationChannel("jello_body", "scale", times, scales)],
+        [
+            AnimationChannel("jello_body", "scale", times, scales),
+            AnimationChannel("jello_body", "rotation", times, rots),
+        ],
     )
     return _finalize_item(sc, target_span=0.88)
 
 
-def build_fdchick1() -> SceneBuilder:
-    """Authentic crispy Southern fried chicken drumstick with jagged 3D batter flakes, Maillard crust & short roasted ankle bone (`399:fdchick1`)."""
+def _build_fried_chicken_drumstick(stage: int) -> SceneBuilder:
+    """Unified authentic fried chicken drumstick progressively eaten from identical crispy geometry (`399..403:fdchick1..5`)."""
     register_item_materials()
-    sc = SceneBuilder(name="item_fdchick1")
+    sc = SceneBuilder(name=f"item_fdchick{stage}")
 
-    # Anatomical drumstick spine: thick crispy-breaded ankle neck running almost to the bone tip -> asymmetric bulbous gastrocnemius meat head!
+    # Shared anatomical drumstick tibia bone (exact same silhouette across ALL 5 stages `fdchick1..5`!).
+    def _sculpt_tibia_bone(pos: np.ndarray) -> np.ndarray:
+        p = pos.copy()
+        t_ank = np.clip((-p[:, 2] - 0.244) / 0.121, 0.0, 1.0)
+        dy = p[:, 1] - 0.078
+        joint_flare = np.clip((t_ank - 0.58) / 0.42, 0.0, 1.0) ** 1.35
+        condyle_w = 1.0 + 0.48 * joint_flare
+        notch = -0.0085 * joint_flare * np.exp(-((p[:, 0] / 0.014) ** 2))
+        p[:, 0] *= condyle_w
+        p[:, 1] = 0.078 + dy * (0.88 + 0.22 * joint_flare) + notch * np.sign(dy + 1e-5)
+        p[:, 2] += -notch * 0.85
+        return p
+
+    def _bone_tint(pos: np.ndarray, nrm: np.ndarray) -> np.ndarray:
+        end_w = np.clip((np.abs(pos[:, 2]) - 0.20) / 0.14, 0.0, 1.0)
+        return np.clip(
+            np.column_stack([
+                0.80 + 0.18 * end_w + 0.05 * nrm[:, 1],
+                0.73 + 0.22 * end_w + 0.06 * nrm[:, 1],
+                0.70 + 0.22 * end_w + 0.06 * nrm[:, 1],
+            ]),
+            0.48,
+            1.0,
+        )
+
+    bone_parts: List[MeshPart] = []
+    full_top_bone = stage >= 4
+    z_bone_hi = +0.340 if full_top_bone else +0.160
+    bone_shaft = tint_part(
+        curved_tube(
+            [(0.0, 0.078, -0.365), (0.0, 0.078, -0.340), (0.0, 0.079, -0.285), (0.004, 0.082, 0.0), (0.0, 0.084, z_bone_hi)],
+            [(0.024, 0.022), (0.022, 0.020), (0.019, 0.017), (0.021, 0.019), (0.036 if full_top_bone else 0.024, 0.030 if full_top_bone else 0.022)],
+            samples_per_seg=6,
+            radial_segs=20,
+            cap_rings=5,
+            name=f"chick{stage}_bone_shaft",
+            material="item_bone_white",
+        ).deform(_sculpt_tibia_bone),
+        _bone_tint,
+    )
+    condyle_l = tint_part(ellipsoid(0.018, 0.022, 0.022, u_segs=14, v_segs=10, name=f"chick{stage}_cond_l", material="item_bone_white").rotate_xyz(ry=0.18).translate(+0.015, 0.078, -0.356), _bone_tint)
+    condyle_r = tint_part(ellipsoid(0.017, 0.021, 0.021, u_segs=14, v_segs=10, name=f"chick{stage}_cond_r", material="item_bone_white").rotate_xyz(ry=-0.18).translate(-0.014, 0.077, -0.355), _bone_tint)
+    bone_parts.extend([bone_shaft, condyle_l, condyle_r])
+    if full_top_bone:
+        bone_parts.append(tint_part(ellipsoid(0.034, 0.030, 0.036, u_segs=16, v_segs=10, name=f"chick{stage}_knee_a", material="item_bone_white").translate(-0.022, 0.090, +0.342), _bone_tint))
+        bone_parts.append(tint_part(ellipsoid(0.032, 0.028, 0.034, u_segs=16, v_segs=10, name=f"chick{stage}_knee_b", material="item_bone_white").translate(+0.022, 0.085, +0.335), _bone_tint))
+
+    if stage == 5:
+        sc.add("chicken", [p.rotate_xyz(ry=136.0, degrees=True) for p in bone_parts])
+        return _finalize_item(sc, target_span=0.88)
+
+    # Identical drumstick spine & Maillard crispy crust geometry across stages 1..4 — progressively bitten from upper-right!
     spine_pts = [
         (0.000, 0.082, -0.255),
         (0.004, 0.098, -0.150),
@@ -889,14 +1000,23 @@ def build_fdchick1() -> SceneBuilder:
         (0.008, 0.140, +0.285),
         (-0.006, 0.118, +0.382),
     ]
-    spine_rads = [
-        (0.044, 0.042),
-        (0.068, 0.062),
-        (0.114, 0.100),
-        (0.168, 0.144),
-        (0.152, 0.132),
-        (0.066, 0.060),
-    ]
+    if stage == 1:
+        spine_rads = [(0.044, 0.042), (0.068, 0.062), (0.114, 0.100), (0.168, 0.144), (0.152, 0.132), (0.066, 0.060)]
+        z_flake_hi, n_flakes = +0.370, 92
+    elif stage == 2:
+        # Stage 2 (`fdchick2`): first generous bite scooped cleanly off the upper-left meat lobe!
+        spine_rads = [(0.044, 0.042), (0.066, 0.060), (0.106, 0.092), (0.138, 0.116), (0.128, 0.110), (0.060, 0.054)]
+        z_flake_hi, n_flakes = +0.355, 76
+    elif stage == 3:
+        # Stage 3 (`fdchick3`): half-eaten — upper crest bitten deep showing pale cooked chicken meat patch!
+        spine_rads = [(0.042, 0.040), (0.064, 0.058), (0.092, 0.078), (0.114, 0.094), (0.104, 0.088), (0.050, 0.044)]
+        z_flake_hi, n_flakes = +0.335, 62
+    else:
+        # Stage 4 (`fdchick4`): almost gone — crispy crust remnant clinging around middle shaft with upper bone knuckle exposed!
+        spine_pts = [(0.000, 0.082, -0.240), (0.006, 0.094, -0.105), (0.010, 0.102, +0.055), (0.006, 0.094, +0.195), (0.002, 0.086, +0.250)]
+        spine_rads = [(0.040, 0.038), (0.066, 0.058), (0.084, 0.072), (0.062, 0.054), (0.032, 0.030)]
+        z_flake_hi, n_flakes = +0.235, 42
+
     z_knots = np.array([pt[2] for pt in spine_pts], dtype=np.float64)
     x_knots = np.array([pt[0] for pt in spine_pts], dtype=np.float64)
     y_knots = np.array([pt[1] for pt in spine_pts], dtype=np.float64)
@@ -910,17 +1030,23 @@ def build_fdchick1() -> SceneBuilder:
         dx, dy = p[:, 0] - cx, p[:, 1] - cy
         r = np.maximum(1e-5, np.hypot(dx, dy))
         ang = np.arctan2(dy, dx)
-        # Organic chicken-leg asymmetry: slightly fuller meat lobe on upper-left & gentle resting belly underneath
         meat_env = np.clip((p[:, 2] + 0.22) / 0.45, 0.0, 1.0)
         asymm = 1.0 + 0.10 * meat_env * np.cos(ang - 1.1) - 0.06 * meat_env * np.sin(ang * 2.0 + 0.4)
-        # Deep jagged fried-skin folds + crisp angular flour-dredge crags (NOT smooth sine ripples!)
-        fold = 0.018 * meat_env * np.sin(p[:, 2] * 24.0 + ang * 2.0 + 0.6 * np.cos(p[:, 2] * 14.0))
-        crunch1 = 0.016 * np.abs(np.sin(p[:, 0] * 38.0 + p[:, 2] * 34.0 + 0.8 * np.cos(p[:, 1] * 32.0))) - 0.008
-        crunch2 = 0.011 * np.abs(np.cos(p[:, 2] * 62.0 - p[:, 0] * 48.0 + p[:, 1] * 54.0)) - 0.0055
+        fold = 0.017 * meat_env * np.sin(p[:, 2] * 24.0 + ang * 2.0 + 0.6 * np.cos(p[:, 2] * 14.0))
+        crunch1 = 0.015 * np.abs(np.sin(p[:, 0] * 38.0 + p[:, 2] * 34.0 + 0.8 * np.cos(p[:, 1] * 32.0))) - 0.0075
+        crunch2 = 0.010 * np.abs(np.cos(p[:, 2] * 62.0 - p[:, 0] * 48.0 + p[:, 1] * 54.0)) - 0.005
         disp = (asymm - 1.0) * r + fold + crunch1 + crunch2
         p[:, 0] += disp * (dx / r)
         p[:, 1] += disp * (dy / r)
-        # Gently flatten underside so the crispy drumstick rests solidly on the surface
+        # Concave bite scoop on upper-front-left ridge for stages 2 & 3 matching `strip_chicken.png`!
+        if stage in (2, 3):
+            b_ctr = np.array([+0.095, 0.185 if stage == 2 else 0.160, +0.105], dtype=np.float64)
+            b_rad = np.array([0.105, 0.090, 0.135 if stage == 2 else 0.155], dtype=np.float64)
+            rel = (p - b_ctr[None, :]) / b_rad[None, :]
+            d_b = np.linalg.norm(rel, axis=1)
+            hit = d_b < 1.0
+            if np.any(hit):
+                p[hit] = b_ctr[None, :] + (rel[hit] / np.maximum(1e-5, d_b[hit])[:, None]) * b_rad[None, :]
         p[:, 1] = np.where(p[:, 1] < 0.018, 0.018 + 0.35 * (p[:, 1] - 0.018), p[:, 1])
         return p
 
@@ -928,16 +1054,18 @@ def build_fdchick1() -> SceneBuilder:
         up = np.clip(0.55 + 0.45 * nrm[:, 1], 0.0, 1.0)
         crag = np.sin(pos[:, 2] * 36.0 + pos[:, 0] * 42.0) * np.cos(pos[:, 1] * 38.0 - pos[:, 2] * 24.0)
         dark_patch = np.clip(0.5 - 0.5 * crag, 0.0, 1.0)
-        # Deep toasted chestnut crevices -> warm roasted amber -> sizzling golden-honey highlights
-        return np.clip(
-            np.column_stack([
-                0.76 + 0.28 * up - 0.14 * dark_patch,
-                0.66 + 0.34 * up - 0.20 * dark_patch,
-                0.52 + 0.36 * up - 0.22 * dark_patch,
-            ]),
-            0.34,
-            1.0,
-        )
+        base = np.column_stack([
+            0.76 + 0.28 * up - 0.14 * dark_patch,
+            0.66 + 0.34 * up - 0.20 * dark_patch,
+            0.52 + 0.36 * up - 0.22 * dark_patch,
+        ])
+        if stage == 3:
+            # Pale-pink tender cooked chicken meat exposed right inside the bitten upper ridge (`401:fdchick3`)!
+            bite_d = np.hypot((pos[:, 0] - 0.040) / 0.068, (pos[:, 2] - 0.085) / 0.088)
+            meat_w = np.clip(1.0 - bite_d, 0.0, 1.0) * np.clip((pos[:, 1] - 0.105) / 0.035, 0.0, 1.0)
+            pale = np.array([[0.96, 0.84, 0.80]], dtype=np.float64)
+            base = base * (1.0 - 0.85 * meat_w[:, None]) + pale * (0.85 * meat_w[:, None])
+        return np.clip(base, 0.34, 1.0)
 
     meat = tint_part(
         curved_tube(
@@ -946,79 +1074,54 @@ def build_fdchick1() -> SceneBuilder:
             samples_per_seg=8,
             radial_segs=36,
             cap_rings=6,
-            name="chicken_meat",
+            name=f"chick{stage}_meat",
             material="item_chicken_crust",
         ).deform(_crispy_drumstick_sculpt),
         _maillard_tint,
     )
     parts: List[MeshPart] = [meat]
 
-    # 98 bold sculpted overlapping 3D crispy fried-batter shards, crinkled dredge plates & crunchy flour ruffles breaking up the ENTIRE silhouette!
+    # Subtle authentic overlapping crispy fried-batter crags hugging the EXACT same drumstick surface (zero blocky cubes!).
     golden_ang = 2.39996323
-    for k in range(98):
-        u = (k + 0.35) / 98.0
-        fz = -0.250 + 0.620 * (u ** 0.85)
+    for k in range(n_flakes):
+        u = (k + 0.35) / float(n_flakes)
+        fz = z_knots[0] + (z_flake_hi - z_knots[0]) * (u ** 0.86)
         ang = k * golden_ang + 0.42 * math.sin(k * 2.1)
+        # Skip placing crust flakes over the exposed pale-meat bite notch in stage 3!
+        if stage == 3 and 0.01 < fz < 0.16 and math.sin(ang) > 0.35 and math.cos(ang) > 0.0:
+            continue
         cx = float(np.interp(fz, z_knots, x_knots))
         cy = float(np.interp(fz, z_knots, y_knots))
         rx_s = float(np.interp(fz, z_knots, rx_knots))
         ry_s = float(np.interp(fz, z_knots, ry_knots))
         ca, sa = math.cos(ang), math.sin(ang)
-        # Seat boldly right at the outer surface (`embed = 0.94..1.03`) so jagged crispy flakes erupt off EVERY edge of the drumstick!
-        embed = 0.94 + 0.08 * math.sin(k * 3.7)
+        embed = 0.88 + 0.06 * math.sin(k * 3.7)
         fx = cx + rx_s * embed * ca
         fy = max(0.022, cy + ry_s * embed * sa)
-        meat_scale = 0.62 + 0.66 * min(1.0, max(0.0, (fz + 0.25) / 0.45))
+        meat_scale = 0.56 + 0.52 * min(1.0, max(0.0, (fz + 0.24) / 0.45))
+        fw = (0.030 + 0.018 * (0.5 + 0.5 * math.sin(k * 2.7))) * meat_scale
+        fh = (0.011 + 0.008 * (0.5 + 0.5 * math.cos(k * 4.1))) * meat_scale
+        fl = (0.036 + 0.022 * (0.5 + 0.5 * math.sin(k * 5.3))) * meat_scale
+        flake = (
+            superellipsoid(fw, fh, fl, e1=0.45, e2=0.55, u_segs=8, v_segs=6, name=f"chick{stage}_flake_{k}", material="item_chicken_crust")
+            .deform(lambda p, s=k: p + 0.006 * np.sin(p * 62.0 + s * 1.7) * np.cos(np.roll(p, 1, axis=1) * 48.0 - s))
+            .rotate_xyz(rx=0.40 * math.sin(k * 2.1), ry=0.50 * math.cos(k * 3.3), rz=ang - 0.5 * math.pi + 0.30 * math.sin(k))
+            .translate(fx, fy, fz)
+        )
+        tint_part(
+            flake,
+            lambda pos, nrm, s=k: np.clip(
+                np.column_stack([
+                    0.76 + 0.28 * np.clip(0.4 + 0.6 * nrm[:, 1], 0.0, 1.0) + 0.07 * math.sin(s * 1.3),
+                    0.64 + 0.34 * np.clip(0.4 + 0.6 * nrm[:, 1], 0.0, 1.0) + 0.06 * math.cos(s * 1.7),
+                    0.48 + 0.38 * np.clip(0.4 + 0.6 * nrm[:, 1], 0.0, 1.0),
+                ]),
+                0.32,
+                1.0,
+            ),
+        )
+        parts.append(flake)
 
-        if k % 3 != 0:
-            # Broad, jagged, crinkled fried-batter flake/ruffle ("shatter-crisp scale" angled slightly outward!)
-            fw = (0.036 + 0.024 * (0.5 + 0.5 * math.sin(k * 2.7))) * meat_scale
-            fh = (0.013 + 0.011 * (0.5 + 0.5 * math.cos(k * 4.1))) * meat_scale
-            fl = (0.044 + 0.028 * (0.5 + 0.5 * math.sin(k * 5.3))) * meat_scale
-            flake = (
-                superellipsoid(fw, fh, fl, e1=0.38, e2=0.48, u_segs=10, v_segs=8, name=f"chicken_flake_{k}", material="item_chicken_crust")
-                .deform(lambda p, s=k: p + 0.0085 * np.sin(p * 62.0 + s * 1.7) * np.cos(np.roll(p, 1, axis=1) * 48.0 - s))
-                .rotate_xyz(rx=0.45 * math.sin(k * 2.1), ry=0.55 * math.cos(k * 3.3), rz=ang - 0.5 * math.pi + 0.35 * math.sin(k))
-                .translate(fx, fy, fz)
-            )
-            # Rich crispy golden-honey highlights on protruding flake ridges, dark toasted chestnut underneath
-            tint_part(
-                flake,
-                lambda pos, nrm, s=k: np.clip(
-                    np.column_stack([
-                        0.78 + 0.28 * np.clip(0.4 + 0.6 * nrm[:, 1], 0.0, 1.0) + 0.08 * math.sin(s * 1.3),
-                        0.68 + 0.34 * np.clip(0.4 + 0.6 * nrm[:, 1], 0.0, 1.0) + 0.07 * math.cos(s * 1.7),
-                        0.50 + 0.40 * np.clip(0.4 + 0.6 * nrm[:, 1], 0.0, 1.0),
-                    ]),
-                    0.34,
-                    1.0,
-                ),
-            )
-            parts.append(flake)
-        else:
-            # Craggy deep-fried flour-dredge blister cluster & dark toasted crumb pocket
-            br = (0.022 + 0.018 * (0.5 + 0.5 * math.cos(k * 3.1))) * meat_scale
-            blister = (
-                superellipsoid(br * 1.25, br * 0.80, br * 1.35, e1=0.50, e2=0.62, u_segs=10, v_segs=8, name=f"chicken_blister_{k}", material="item_chicken_crust")
-                .deform(lambda p, s=k: p + 0.007 * np.sin(p * 68.0 - s * 1.4) * np.cos(np.roll(p, 2, axis=1) * 52.0))
-                .rotate_xyz(rx=k * 0.8, ry=k * 1.2, rz=k * 0.6)
-                .translate(fx, fy, fz)
-            )
-            tint_part(
-                blister,
-                lambda pos, nrm, s=k: np.clip(
-                    np.column_stack([
-                        0.64 + 0.34 * np.clip(0.5 + 0.5 * nrm[:, 1], 0.0, 1.0),
-                        0.52 + 0.38 * np.clip(0.5 + 0.5 * nrm[:, 1], 0.0, 1.0),
-                        0.38 + 0.36 * np.clip(0.5 + 0.5 * nrm[:, 1], 0.0, 1.0),
-                    ]),
-                    0.30,
-                    1.0,
-                ),
-            )
-            parts.append(blister)
-
-    # Dark seared shrunken crispy-skin tendon sleeve gripping tightly onto the narrow bone neck (`399:fdchick1`, zero smooth torus ring!).
     tendon_cuff = tint_part(
         curved_tube(
             [(0.0, 0.082, -0.228), (0.0, 0.081, -0.252), (0.0, 0.080, -0.278), (0.0, 0.079, -0.296)],
@@ -1026,9 +1129,9 @@ def build_fdchick1() -> SceneBuilder:
             samples_per_seg=4,
             radial_segs=18,
             cap_rings=2,
-            name="chicken_tendon_cuff",
+            name=f"chick{stage}_tendon_cuff",
             material="item_chicken_crust",
-        ).deform(lambda p: p + 0.0055 * np.sin(p * 78.0) * np.cos(np.roll(p, 1, axis=1) * 64.0)),
+        ).deform(lambda p: p + 0.005 * np.sin(p * 78.0) * np.cos(np.roll(p, 1, axis=1) * 64.0)),
         lambda pos, nrm: np.clip(
             np.column_stack([
                 0.42 + 0.14 * np.clip(nrm[:, 1] + 0.4, 0.0, 1.0),
@@ -1039,90 +1142,14 @@ def build_fdchick1() -> SceneBuilder:
             0.64,
         ),
     )
-    parts.append(tendon_cuff)
+    parts.extend([tendon_cuff, *bone_parts])
+    sc.add("chicken", [p.rotate_xyz(ry=136.0, degrees=True) for p in parts])
+    return _finalize_item(sc, target_span=0.95 if stage <= 2 else (0.92 if stage == 3 else 0.88))
 
-    # Anatomically authentic chicken drumstick tibia ankle joint (`399:fdchick1`): slender fluted ivory bone shaft,
-    # realistic subtle double-condyle ankle epiphysis with shallow central trochlear groove, and seared tendon strips!
-    def _sculpt_tibia_bone(pos: np.ndarray) -> np.ndarray:
-        p = pos.copy()
-        # t=0 at meat collar (-0.244), t=1 at ankle joint tip (-0.365)
-        t = np.clip((-p[:, 2] - 0.244) / 0.121, 0.0, 1.0)
-        dy = p[:, 1] - 0.078
-        # Subtle realistic double-condyle flare right at the ankle joint (`t > 0.65`) with anatomical central pulley groove!
-        joint_flare = np.clip((t - 0.58) / 0.42, 0.0, 1.0) ** 1.35
-        # Slight horizontal widening into left/right condyle ridges + subtle central notch along x=0
-        condyle_w = 1.0 + 0.48 * joint_flare
-        notch = -0.0085 * joint_flare * np.exp(-((p[:, 0] / 0.014) ** 2))
-        # Subtle longitudinal bone shaft ridges & natural slight vertical compression
-        p[:, 0] *= condyle_w
-        p[:, 1] = 0.078 + dy * (0.88 + 0.22 * joint_flare) + notch * np.sign(dy + 1e-5)
-        p[:, 2] += -notch * 0.85
-        return p
 
-    bone_shaft = tint_part(
-        curved_tube(
-            [(0.0, 0.080, -0.242), (0.0, 0.079, -0.295), (0.0, 0.078, -0.342), (0.0, 0.078, -0.365)],
-            [(0.025, 0.023), (0.019, 0.017), (0.022, 0.020), (0.024, 0.022)],
-            samples_per_seg=6,
-            radial_segs=20,
-            cap_rings=5,
-            name="chicken_bone_stub",
-            material="item_bone_white",
-        ).deform(_sculpt_tibia_bone),
-        lambda pos, nrm: np.clip(
-            np.column_stack([
-                # Roasted warm rosy-tan shaft near meat -> clean pale pearly bone-ivory ankle condyles (darker in central groove!)
-                0.76 + 0.26 * np.clip((-pos[:, 2] - 0.245) / 0.105, 0.0, 1.0) - 0.12 * np.exp(-((pos[:, 0] / 0.011) ** 2)) * np.clip((-pos[:, 2] - 0.325) / 0.04, 0.0, 1.0),
-                0.68 + 0.30 * np.clip((-pos[:, 2] - 0.245) / 0.105, 0.0, 1.0) - 0.14 * np.exp(-((pos[:, 0] / 0.011) ** 2)) * np.clip((-pos[:, 2] - 0.325) / 0.04, 0.0, 1.0),
-                0.66 + 0.30 * np.clip((-pos[:, 2] - 0.245) / 0.105, 0.0, 1.0) - 0.14 * np.exp(-((pos[:, 0] / 0.011) ** 2)) * np.clip((-pos[:, 2] - 0.325) / 0.04, 0.0, 1.0),
-            ]) + 0.05 * nrm[:, 1:2],
-            0.46,
-            1.0,
-        ),
-    )
-    # Pair of crisp subtle anatomical ankle condyle knuckles + delicate seared roasted tendon fibers hugging the shaft (`399:fdchick1`)!
-    condyle_l = tint_part(
-        ellipsoid(0.018, 0.022, 0.022, u_segs=14, v_segs=10, name="chicken_condyle_l", material="item_bone_white")
-        .rotate_xyz(ry=0.18)
-        .translate(+0.015, 0.078, -0.356),
-        lambda pos, nrm: np.clip(np.column_stack([0.94 + 0.06 * nrm[:, 1], 0.90 + 0.07 * nrm[:, 1], 0.86 + 0.08 * nrm[:, 1]]), 0.72, 1.0),
-    )
-    condyle_r = tint_part(
-        ellipsoid(0.017, 0.021, 0.021, u_segs=14, v_segs=10, name="chicken_condyle_r", material="item_bone_white")
-        .rotate_xyz(ry=-0.18)
-        .translate(-0.014, 0.077, -0.355),
-        lambda pos, nrm: np.clip(np.column_stack([0.94 + 0.06 * nrm[:, 1], 0.90 + 0.07 * nrm[:, 1], 0.86 + 0.08 * nrm[:, 1]]), 0.72, 1.0),
-    )
-    tendon_strip_a = tint_part(
-        curved_tube(
-            [(+0.020, 0.088, -0.248), (+0.017, 0.086, -0.292), (+0.014, 0.084, -0.330)],
-            [0.009, 0.006, 0.003],
-            samples_per_seg=3,
-            radial_segs=8,
-            cap_rings=2,
-            name="chicken_tendon_a",
-            material="item_chicken_crust",
-        ),
-        lambda pos, _n: np.column_stack([np.full(len(pos), 0.42), np.full(len(pos), 0.24), np.full(len(pos), 0.16)]),
-    )
-    tendon_strip_b = tint_part(
-        curved_tube(
-            [(-0.018, 0.084, -0.248), (-0.015, 0.082, -0.288), (-0.012, 0.080, -0.322)],
-            [0.008, 0.0055, 0.0028],
-            samples_per_seg=3,
-            radial_segs=8,
-            cap_rings=2,
-            name="chicken_tendon_b",
-            material="item_chicken_crust",
-        ),
-        lambda pos, _n: np.column_stack([np.full(len(pos), 0.38), np.full(len(pos), 0.22), np.full(len(pos), 0.15)]),
-    )
-    parts.extend([bone_shaft, condyle_l, condyle_r, tendon_strip_a, tendon_strip_b])
-    sc.add("chicken", parts)
-
-    # Orient short roasted bone stub bottom-left -> plump crispy fried drumstick head top-right matching `399:fdchick1`!
-    sc.nodes["chicken"] = [p.rotate_xyz(ry=136.0, degrees=True) for p in sc.nodes["chicken"]]
-    return _finalize_item(sc, target_span=0.95)
+def build_fdchick1() -> SceneBuilder:
+    """Authentic crispy Southern fried chicken drumstick (`399:fdchick1`)."""
+    return _build_fried_chicken_drumstick(1)
 
 
 def build_fdsuckr1() -> SceneBuilder:

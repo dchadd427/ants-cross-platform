@@ -197,12 +197,10 @@ def _rainbow_worm_tint(pos: np.ndarray, _n: np.ndarray) -> np.ndarray:
 
 
 def _ribbed_gummy_segment(name: str, pts: Sequence[Tuple[float, float, float]], rads: Sequence[float]) -> MeshPart:
-    seg = curved_tube(list(pts), list(rads), samples_per_seg=5, radial_segs=14, cap_rings=3, name=name, material="item_candy_white")
-    # Add tactile gummy worm transverse ring-ribs along X!
+    """Silky-smooth glossy rainbow gummy worm body matching `#272..275` (no jagged accordion ribs!)."""
+    seg = curved_tube(list(pts), list(rads), samples_per_seg=10, radial_segs=26, cap_rings=5, name=name, material="item_candy_white")
     p = seg.positions.astype(np.float64)
-    nrm = seg.normals.astype(np.float64)
-    rib = 0.0055 * np.sin(p[:, 0] * 115.0)
-    p = p + nrm * rib[:, None]
+    # Barely-perceptible organic gelatin pillow softness (smooth sleek tube, zero jagged ridges!)
     p[:, 1] = np.maximum(p[:, 1], 0.003)
     seg.positions = p.astype(np.float32)
     seg.normals = recompute_smooth_normals(seg.positions, seg.indices)
@@ -210,50 +208,51 @@ def _ribbed_gummy_segment(name: str, pts: Sequence[Tuple[float, float, float]], 
 
 
 def _build_gummy_worm(name: str, stage: int) -> SceneBuilder:
-    """Neon rainbow glossy ribbed gummy worm through 4 authentic stages (`272..275`)."""
+    """Smooth glossy neon rainbow gummy worm through 4 authentic stages (`272..275`)."""
     register_item_materials()
     sc = SceneBuilder(name=name)
     parts: List[MeshPart] = []
 
     if stage == 1:
+        # Smooth, gently curved horizontal rainbow worm (`272:fdgumw1`)
         pts = [
-            (-0.46, 0.048, +0.025),
-            (-0.32, 0.056, -0.020),
-            (-0.16, 0.052, -0.010),
-            (0.00, 0.056, +0.015),
-            (+0.18, 0.052, +0.030),
-            (+0.34, 0.058, -0.015),
-            (+0.46, 0.048, -0.005),
+            (-0.46, 0.048, +0.016),
+            (-0.30, 0.049, -0.014),
+            (-0.14, 0.049, -0.006),
+            (+0.02, 0.049, +0.014),
+            (+0.18, 0.049, +0.024),
+            (+0.34, 0.049, -0.008),
+            (+0.46, 0.047, +0.002),
         ]
-        rads = [0.046, 0.048, 0.046, 0.048, 0.046, 0.048, 0.044]
+        rads = [0.046, 0.047, 0.047, 0.047, 0.047, 0.046, 0.043]
         parts.append(_ribbed_gummy_segment(f"{name}_worm", pts, rads))
     elif stage == 2:
-        # Pinched/chewed bite notches along middle of the gummy worm (`273:fdgumw2`)
+        # Smooth worm with 2 clean bitten notches along the middle (`273:fdgumw2`)
         pts = [
-            (-0.46, 0.048, +0.025),
-            (-0.32, 0.056, -0.020),
-            (-0.18, 0.042, -0.008),
-            (-0.04, 0.054, +0.014),
-            (+0.12, 0.040, +0.026),
-            (+0.28, 0.056, -0.010),
-            (+0.44, 0.048, -0.004),
+            (-0.46, 0.048, +0.016),
+            (-0.30, 0.049, -0.014),
+            (-0.16, 0.044, -0.006),
+            (-0.02, 0.049, +0.012),
+            (+0.14, 0.043, +0.022),
+            (+0.30, 0.049, -0.008),
+            (+0.45, 0.047, +0.002),
         ]
-        rads = [0.046, 0.048, 0.024, 0.046, 0.022, 0.046, 0.042]
+        rads = [0.046, 0.047, 0.026, 0.047, 0.024, 0.046, 0.042]
         parts.append(_ribbed_gummy_segment(f"{name}_worm", pts, rads))
     elif stage == 3:
-        # 4 separated chewed rainbow segments (`274:fdgumw3`)
+        # 4 smooth separated bitten rainbow segments (`274:fdgumw3`)
         segs = (
-            ([(-0.45, 0.046, +0.022), (-0.40, 0.050, +0.010), (-0.34, 0.046, -0.006)], [0.044, 0.046, 0.036]),
-            ([(-0.24, 0.048, -0.018), (-0.16, 0.052, -0.010), (-0.08, 0.046, +0.006)], [0.038, 0.046, 0.036]),
-            ([(+0.04, 0.048, +0.018), (+0.16, 0.052, +0.024), (+0.28, 0.046, +0.002)], [0.036, 0.046, 0.038]),
-            ([(+0.37, 0.044, -0.010), (+0.41, 0.046, -0.006), (+0.45, 0.042, -0.002)], [0.034, 0.040, 0.032]),
+            ([(-0.45, 0.047, +0.016), (-0.40, 0.048, +0.008), (-0.34, 0.046, -0.004)], [0.044, 0.046, 0.036]),
+            ([(-0.24, 0.047, -0.012), (-0.16, 0.048, -0.006), (-0.08, 0.046, +0.006)], [0.038, 0.046, 0.036]),
+            ([(+0.04, 0.047, +0.014), (+0.16, 0.048, +0.020), (+0.28, 0.046, +0.002)], [0.036, 0.046, 0.038]),
+            ([(+0.37, 0.045, -0.006), (+0.41, 0.046, -0.004), (+0.45, 0.043, +0.000)], [0.034, 0.040, 0.032]),
         )
         for k, (pts, rads) in enumerate(segs):
             parts.append(_ribbed_gummy_segment(f"{name}_seg_{k}", pts, rads))
     else:
-        # Stage 4 (`275:fdgumw4`): 3 tiny separated rainbow gummy scraps!
-        for k, (cx, cz, rx) in enumerate(((-0.34, +0.018, 0.042), (-0.08, -0.010, 0.056), (+0.24, +0.014, 0.064))):
-            bit = ellipsoid(rx, 0.046, 0.038, u_segs=14, v_segs=10, name=f"{name}_bit_{k}", material="item_candy_white").translate(cx, 0.044, cz)
+        # Stage 4 (`275:fdgumw4`): 3 smooth separated rainbow gummy scraps!
+        for k, (cx, cz, rx) in enumerate(((-0.34, +0.014, 0.044), (-0.08, -0.008, 0.056), (+0.24, +0.010, 0.064))):
+            bit = ellipsoid(rx, 0.046, 0.040, u_segs=22, v_segs=14, name=f"{name}_bit_{k}", material="item_candy_white").translate(cx, 0.044, cz)
             parts.append(tint_part(bit, _rainbow_worm_tint))
 
     sc.add("gummy_worm", parts)
@@ -280,41 +279,92 @@ def build_fdgumw4() -> SceneBuilder:
 # 3. FIZZY SPILLED COLA PUDDLES (`276..279:fdcola1..4`, `1..3` ANIMATED FIZZ!)
 # ---------------------------------------------------------------------------
 
-def _cola_puddle_mesh(name: str, lobes: Sequence[Tuple[float, float, float]], *, thick: float = 0.056) -> MeshPart:
-    """Glossy caramel-amber cola spill with crisp luminous surface-tension meniscus & organic multi-lobe splash (`276..278`)."""
-    n_r, n_a = 18, 72
+# Exact 36-angle silhouettes measured from the 1998 sprites `#276..278` (angle 0 = +X, pi/2 = +Z/screen-down).
+_COLA1_RADS36: Tuple[float, ...] = (
+    0.950, 0.988, 0.925, 0.750, 0.712, 0.662, 0.638, 0.612, 0.575,
+    0.550, 0.538, 0.562, 0.650, 0.862, 1.125, 1.188, 1.062, 0.900,
+    0.750, 0.700, 0.762, 0.825, 0.812, 0.688, 0.638, 0.625, 0.675,
+    0.725, 0.738, 0.775, 0.788, 0.788, 0.825, 0.988, 1.012, 0.950,
+)
+_COLA2_RADS36: Tuple[float, ...] = (
+    0.688, 0.672, 0.672, 0.688, 0.688, 0.640, 0.608, 0.544, 0.464,
+    0.400, 0.352, 0.368, 0.592, 0.944, 1.088, 1.088, 1.008, 0.848,
+    0.704, 0.640, 0.608, 0.608, 0.656, 0.640, 0.576, 0.368, 0.288,
+    0.304, 0.752, 0.784, 0.736, 0.752, 0.912, 1.168, 0.992, 0.736,
+)
+_COLA3_RADS36: Tuple[float, ...] = (
+    0.791, 0.767, 0.744, 0.744, 0.674, 0.581, 0.419, 0.326, 0.279,
+    0.256, 0.279, 0.372, 0.698, 0.907, 1.116, 1.163, 1.116, 0.930,
+    0.767, 0.674, 0.674, 0.674, 0.628, 0.558, 0.279, 0.279, 0.302,
+    0.372, 0.419, 0.488, 0.837, 0.977, 1.070, 1.116, 0.977, 0.860,
+)
+
+
+def _sample_periodic_catmull(samples: Sequence[float], ang: float) -> float:
+    """Smooth periodic Catmull-Rom interpolation through N uniformly spaced radial samples."""
+    n = len(samples)
+    u = ((ang % (2.0 * math.pi)) / (2.0 * math.pi)) * n
+    i1 = int(math.floor(u)) % n
+    t = u - math.floor(u)
+    p0 = samples[(i1 - 1) % n]
+    p1 = samples[i1]
+    p2 = samples[(i1 + 1) % n]
+    p3 = samples[(i1 + 2) % n]
+    t2 = t * t
+    t3 = t2 * t
+    val = 0.5 * (
+        (2.0 * p1)
+        + (-p0 + p2) * t
+        + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2
+        + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3
+    )
+    return max(0.18, val)
+
+
+def _cola_puddle_mesh(
+    name: str,
+    rads36: Sequence[float],
+    *,
+    scale_r: float = 0.44,
+    thick: float = 0.145,
+    z_stretch: float = 1.18,
+) -> MeshPart:
+    """Plump 3D caramel-amber cola liquid dome matching exact 1998 sprite silhouette & glossy meniscus (`276..278`)."""
+    # Lightly smooth the 36-ray measured profile so the liquid contour has silky surface-tension curvature!
+    n0 = len(rads36)
+    sm = [
+        0.18 * rads36[(i - 1) % n0] + 0.64 * rads36[i] + 0.18 * rads36[(i + 1) % n0]
+        for i in range(n0)
+    ]
+    n_r, n_a = 20, 96
     verts, uvs, cols, tris = [], [], [], []
-
-    def _lobe_r(ang: float) -> float:
-        r = 0.145
-        for la, lw, amp in lobes:
-            da = math.atan2(math.sin(ang - la), math.cos(ang - la))
-            r += amp * math.exp(-((da / lw) ** 2))
-        return r
-
+    # Smooth curved top dome -> rounded meniscus roll -> flat underside seated flush on ground!
     ring_specs = [(ir / float(n_r), True) for ir in range(n_r + 1)] + [(1.0 - ir / float(n_r), False) for ir in range(n_r + 1)]
     for rf, is_top in ring_specs:
         for j in range(n_a + 1):
             ang = 2.0 * math.pi * j / float(n_a)
-            rad = _lobe_r(ang) * rf
+            rad = _sample_periodic_catmull(sm, ang) * scale_r * rf
             x = rad * math.cos(ang)
-            z = rad * math.sin(ang) * 0.80
+            z = rad * math.sin(ang) * z_stretch
             if is_top:
-                # Realistic surface-tension liquid pool: glossy flat center curving into crisp luminous meniscus rim!
-                meniscus = (1.0 - (rf ** 4.8)) ** 0.36 if rf < 0.999 else 0.0
-                rim_lip = 0.0055 * math.exp(-(((rf - 0.88) / 0.08) ** 2))
-                y = 0.007 + thick * meniscus + rim_lip
-                # Deep glowing golden-caramel cola center -> bright translucent honey-gold meniscus ring (`276..279`)!
-                rim_glow = math.exp(-(((rf - 0.91) / 0.09) ** 2))
-                r_c = 0.92 + 0.08 * rim_glow
-                g_c = 0.82 + 0.18 * rim_glow
-                b_c = 0.48 + 0.42 * rim_glow
+                # Plump pillowy 3D liquid dome with thick rounded meniscus shoulder (never flat!)
+                dome = (1.0 - (rf ** 2.6)) ** 0.48 if rf < 0.999 else 0.0
+                shoulder = 0.012 * math.exp(-(((rf - 0.80) / 0.12) ** 2))
+                y = 0.008 + thick * dome + shoulder
+                # Authentic 1998 caramel-cola shading: rich deep amber pool, bright creamy-gold left meniscus gleam,
+                # and warm deep reddish-brown surface-tension base rim!
+                left_gleam = max(0.0, -math.cos(ang - 0.35)) ** 1.4
+                band = math.exp(-(((rf - 0.84) / 0.11) ** 2)) * (0.28 + 0.72 * left_gleam)
+                outer_rim = max(0.0, (rf - 0.91) / 0.09)
+                r_c = 0.90 + 0.10 * band - 0.16 * outer_rim
+                g_c = 0.72 + 0.28 * band - 0.28 * outer_rim
+                b_c = 0.24 + 0.56 * band - 0.14 * outer_rim
             else:
-                y = 0.004 if rf > 0.96 else 0.001
-                r_c, g_c, b_c = 0.68, 0.50, 0.22
+                y = 0.006 if rf > 0.95 else 0.001
+                r_c, g_c, b_c = 0.62, 0.34, 0.10
             verts.append((x, y, z))
             uvs.append((0.5 + x, 0.5 + z))
-            cols.append((r_c, g_c, b_c))
+            cols.append((max(0.05, min(1.0, r_c)), max(0.04, min(1.0, g_c)), max(0.03, min(1.0, b_c))))
     stride = n_a + 1
     for ir in range(len(ring_specs) - 1):
         for j in range(n_a):
@@ -334,85 +384,78 @@ def _cola_puddle_mesh(name: str, lobes: Sequence[Tuple[float, float, float]], *,
 
 
 def _build_cola_spill(name: str, stage: int) -> SceneBuilder:
-    """Spilled fizzy caramel-amber cola puddles (`276..279`; stages 1..3 have animated sparkling micro-fizz!)."""
+    """Plump 3D fizzy caramel-amber cola puddles matching exact 1998 shapes & sizes (`276..279`; `1..3` animated fizz!)."""
     register_item_materials()
     sc = SceneBuilder(name=name)
     base_parts: List[MeshPart] = []
 
     if stage == 1:
-        # Exact `#276:fdcola1`: broad amber pool with sweeping lower-left tongue, upper-left bulge & full right body!
-        base_parts.append(
-            _cola_puddle_mesh(
-                f"{name}_pool",
-                (
-                    (-0.25, 0.82, 0.30),
-                    (+0.55, 0.68, 0.18),
-                    (+2.38, 0.56, 0.34),
-                    (-2.35, 0.55, 0.22),
-                    (-1.35, 0.60, 0.18),
-                ),
-                thick=0.062,
-            )
+        # Exact `#276:fdcola1` (161x118px): huge plump caramel puddle with long sweeping lower-left tongue!
+        base_parts.append(_cola_puddle_mesh(f"{name}_pool", _COLA1_RADS36, scale_r=0.45, thick=0.155, z_stretch=1.18))
+        bub_coords = (
+            (-0.14, +0.08, 0.022, 0.142),
+            (+0.11, -0.08, 0.026, 0.144),
+            (+0.01, +0.02, 0.020, 0.158),
+            (-0.22, +0.17, 0.018, 0.116),
+            (+0.22, -0.02, 0.022, 0.132),
+            (-0.04, -0.11, 0.018, 0.146),
+            (+0.15, +0.10, 0.018, 0.136),
+            (+0.06, -0.18, 0.016, 0.126),
         )
-        bub_coords = ((-0.14, +0.08, 0.024), (+0.10, -0.07, 0.028), (+0.02, +0.01, 0.022), (-0.24, +0.16, 0.020), (+0.21, -0.02, 0.024), (-0.05, -0.10, 0.018), (+0.15, +0.09, 0.018))
     elif stage == 2:
-        # Exact `#277:fdcola2`: dynamic 3-lobe splash (long lower-left lobe, upper-left lobe, sleek upper-right tongue)!
-        base_parts.append(
-            _cola_puddle_mesh(
-                f"{name}_pool",
-                (
-                    (-0.42, 0.44, 0.26),
-                    (+2.28, 0.48, 0.28),
-                    (-1.95, 0.42, 0.18),
-                    (+0.85, 0.46, 0.12),
-                ),
-                thick=0.056,
-            )
+        # Exact `#277:fdcola2` (126x94px): sweeping diagonal butterfly/forked-crest cola splash!
+        base_parts.append(_cola_puddle_mesh(f"{name}_pool", _COLA2_RADS36, scale_r=0.38, thick=0.135, z_stretch=1.18))
+        bub_coords = (
+            (-0.12, +0.10, 0.020, 0.118),
+            (+0.10, -0.06, 0.022, 0.124),
+            (-0.01, +0.02, 0.018, 0.136),
+            (+0.17, -0.08, 0.016, 0.112),
+            (-0.20, +0.19, 0.016, 0.096),
         )
-        bub_coords = ((-0.12, +0.08, 0.022), (+0.09, -0.05, 0.024), (-0.01, +0.01, 0.020), (+0.16, -0.04, 0.018))
     elif stage == 3:
-        # Exact `#278:fdcola3`: plump curved peanut/boot puddle (lower-left heel, mid-right belly, upper-right head) + thin teardrop splash!
-        base_parts.append(
-            _cola_puddle_mesh(
-                f"{name}_pool",
-                (
-                    (-0.48, 0.62, 0.26),
-                    (+0.62, 0.52, 0.14),
-                    (+2.34, 0.58, 0.28),
-                    (-2.22, 0.44, 0.14),
-                ),
-                thick=0.056,
-            )
+        # Exact `#278:fdcola3` (87x76px): steep SW-NE peanut puddle + plump floating upper teardrop!
+        base_parts.append(_cola_puddle_mesh(f"{name}_pool", _COLA3_RADS36, scale_r=0.31, thick=0.115, z_stretch=1.20))
+        drop = ellipsoid(0.036, 0.056, 0.064, u_segs=22, v_segs=14, name=f"{name}_drop", material="item_cola_spill").translate(+0.066, 0.036, -0.320)
+        p = drop.positions.astype(np.float64)
+        p[:, 1] = np.maximum(p[:, 1], 0.002)
+        drop.positions = p.astype(np.float32)
+        drop.normals = recompute_smooth_normals(drop.positions, drop.indices)
+        base_parts.append(gradient_y_tint(drop, (0.76, 0.44, 0.12), (1.00, 0.90, 0.56)))
+        bub_coords = (
+            (-0.10, +0.09, 0.018, 0.102),
+            (+0.09, -0.07, 0.020, 0.106),
+            (-0.01, +0.01, 0.016, 0.116),
         )
-        drop = ellipsoid(0.036, 0.024, 0.058, u_segs=16, v_segs=10, name=f"{name}_drop", material="item_cola_spill").translate(+0.03, 0.016, -0.28)
-        base_parts.append(gradient_y_tint(drop, (0.86, 0.72, 0.36), (1.00, 0.96, 0.74)))
-        bub_coords = ((-0.12, +0.08, 0.020), (+0.08, -0.06, 0.022), (-0.02, +0.01, 0.018))
     else:
-        # Exact `#279:fdcola4`: 3 kissing diagonal amber droplets + small bottom-right teardrop splash!
-        for k, (cx, cz, rx, rz) in enumerate((
-            (-0.18, +0.06, 0.108, 0.092),
-            (-0.01, +0.02, 0.076, 0.074),
-            (+0.14, -0.10, 0.102, 0.096),
-            (+0.16, +0.16, 0.046, 0.056),
+        # Exact `#279:fdcola4` (55x43px): 3 plump kissing diagonal droplets + tiny SW drip & SE teardrop!
+        for k, (cx, cz, rx, ry, rz, yaw) in enumerate((
+            (-0.17, +0.09, 0.098, 0.068, 0.088, 22.0),
+            (-0.24, +0.16, 0.036, 0.038, 0.050, 35.0),
+            (-0.01, +0.02, 0.072, 0.062, 0.078, -18.0),
+            (+0.13, -0.09, 0.096, 0.070, 0.092, 24.0),
+            (+0.15, +0.14, 0.044, 0.046, 0.058, -12.0),
         )):
-            d = ellipsoid(rx, 0.050, rz, u_segs=18, v_segs=12, name=f"{name}_drop_{k}", material="item_cola_spill").translate(cx, 0.026, cz)
+            d = ellipsoid(rx, ry, rz, u_segs=22, v_segs=14, name=f"{name}_drop_{k}", material="item_cola_spill").rotate_xyz(ry=yaw, degrees=True).translate(cx, ry * 0.62, cz)
             p = d.positions.astype(np.float64)
             p[:, 1] = np.maximum(p[:, 1], 0.002)
             d.positions = p.astype(np.float32)
             d.normals = recompute_smooth_normals(d.positions, d.indices)
-            base_parts.append(gradient_y_tint(d, (0.86, 0.72, 0.36), (1.00, 0.96, 0.74)))
+            base_parts.append(gradient_y_tint(d, (0.76, 0.44, 0.12), (1.00, 0.92, 0.60)))
         bub_coords = ()
 
     sc.add("cola", base_parts)
 
-    # Delicate translucent golden-champagne effervescent fizz micro-bubbles matching `#276..278`!
+    # Delicate sparkling champagne-gold effervescent fizz bubbles & micro-foam rings (`276..278`)!
     if bub_coords:
         group_a: List[MeshPart] = []
         group_b: List[MeshPart] = []
-        for k, (bx, bz, br) in enumerate(bub_coords):
-            b = sphere(br * 0.44, u_segs=10, v_segs=8, name=f"{name}_fizz_{k}", material="item_cola_spill").translate(bx, 0.066, bz)
-            b = tint_part(b, _const_tint((1.00, 0.88, 0.54)))
-            (group_a if k % 2 == 0 else group_b).append(b)
+        for k, (bx, bz, br, by) in enumerate(bub_coords):
+            b = sphere(br * 0.34, u_segs=10, v_segs=8, name=f"{name}_fizz_{k}", material="item_candy_white").translate(bx, by + 0.002, bz)
+            b = tint_part(b, _const_tint((1.00, 0.90, 0.62)))
+            ring = torus_arc(br * 0.56, br * 0.11, u_segs=14, v_segs=6, plane="xz", name=f"{name}_ring_{k}", material="item_candy_white").translate(bx, by - 0.002, bz)
+            ring = tint_part(ring, _const_tint((1.00, 0.82, 0.44)))
+            target = group_a if k % 2 == 0 else group_b
+            target.extend((b, ring))
         sc.add("fizz_a", group_a, parent="cola")
         sc.add("fizz_b", group_b, parent="cola")
         n_kf = 13
@@ -421,12 +464,12 @@ def _build_cola_spill(name: str, stage: int) -> SceneBuilder:
         ta, tb = [], []
         for t in times:
             ph = float(t) / 1.4 * 2.0 * math.pi
-            fa = 0.70 + 0.45 * (0.5 + 0.5 * math.sin(ph))
-            fb = 0.70 + 0.45 * (0.5 + 0.5 * math.sin(ph + math.pi))
+            fa = 0.55 + 0.65 * (0.5 + 0.5 * math.sin(ph))
+            fb = 0.55 + 0.65 * (0.5 + 0.5 * math.sin(ph + math.pi))
             sa.append([fa, fa, fa])
             sb.append([fb, fb, fb])
-            ta.append([0.0, 0.012 * (0.5 + 0.5 * math.sin(ph)), 0.0])
-            tb.append([0.0, 0.012 * (0.5 + 0.5 * math.sin(ph + math.pi)), 0.0])
+            ta.append([0.0, 0.014 * (0.5 + 0.5 * math.sin(ph)), 0.0])
+            tb.append([0.0, 0.014 * (0.5 + 0.5 * math.sin(ph + math.pi)), 0.0])
         sc.add_animation(
             "Idle",
             [
@@ -437,7 +480,8 @@ def _build_cola_spill(name: str, stage: int) -> SceneBuilder:
             ],
         )
 
-    return _finalize_item(sc, target_span=0.94 if stage == 1 else (0.82 if stage == 2 else (0.68 if stage == 3 else 0.56)))
+    # Authentic relative sizing matching 1998 sprites (`161px`, `126px`, `87px`, `55px`)!
+    return _finalize_item(sc, target_span=0.96 if stage == 1 else (0.78 if stage == 2 else (0.60 if stage == 3 else 0.44)))
 
 
 def build_fdcola1() -> SceneBuilder:
@@ -473,12 +517,12 @@ def _fruit_loop_ring(
     end_ang: float = 2.0 * math.pi,
     speckle_rgb: Optional[Tuple[float, float, float]] = None,
 ) -> MeshPart:
-    """Puffed frosted Fruit Loops cereal ring (full torus or bitten C-arc) with organic puffed cereal grain!"""
+    """Real matte puffed-corn Fruit Loops cereal ring (smooth circular torus, subtle sugar-frosted crunch!)."""
     is_closed = abs((end_ang - start_ang) - 2.0 * math.pi) < 1e-3
     if is_closed:
-        ring = torus_arc(major_r, minor_r, u_segs=34, v_segs=16, plane="xz", name=name, material="item_cream_white")
+        ring = torus_arc(major_r, minor_r, u_segs=44, v_segs=22, plane="xz", name=name, material="item_cereal_matte")
     else:
-        n_pts = 11
+        n_pts = 15
         pts = [
             (
                 major_r * oval_x * math.cos(start_ang + (end_ang - start_ang) * i / (n_pts - 1)),
@@ -487,30 +531,33 @@ def _fruit_loop_ring(
             )
             for i in range(n_pts)
         ]
-        rads = [minor_r * (0.88 if i in (0, n_pts - 1) else 1.0) for i in range(n_pts)]
-        ring = curved_tube(pts, rads, samples_per_seg=3, radial_segs=14, cap_rings=3, name=name, material="item_cream_white")
+        rads = [minor_r * (0.90 if i in (0, n_pts - 1) else 1.0) for i in range(n_pts)]
+        ring = curved_tube(pts, rads, samples_per_seg=4, radial_segs=20, cap_rings=4, name=name, material="item_cereal_matte")
 
     p = ring.positions.astype(np.float64)
     if is_closed:
         p[:, 0] *= oval_x
         p[:, 2] *= oval_z
         p[:, 1] += minor_r
-    # Subtle puffed extruded corn-cereal bumpiness!
-    bump = 0.008 * np.sin(p[:, 0] * 36.0 + p[:, 2] * 32.0) * np.cos(p[:, 1] * 40.0)
+    # Very gentle natural puffed-cereal softness (never wavy/lumpy plastic!)
+    bump = 0.0018 * np.sin(p[:, 0] * 26.0 + p[:, 2] * 22.0) * np.cos(p[:, 1] * 28.0)
     p += ring.normals.astype(np.float64) * bump[:, None]
     p[:, 1] = np.maximum(p[:, 1], 0.002)
     ring.positions = p.astype(np.float32)
     ring.normals = recompute_smooth_normals(ring.positions, ring.indices)
 
-    def _cereal_color(pos: np.ndarray, _n: np.ndarray) -> np.ndarray:
-        hi = np.clip((pos[:, 1] - 0.02) / (minor_r * 1.8), 0.0, 1.0)[:, None]
+    def _cereal_color(pos: np.ndarray, nrm: np.ndarray) -> np.ndarray:
+        hi = np.clip((pos[:, 1] - 0.015) / (minor_r * 1.85), 0.0, 1.0)[:, None]
+        # Subtle dry sugar-frosted dusting highlight on top crest while keeping vibrant Fruit Loops pigment!
+        frost = (np.clip(nrm[:, 1], 0.0, 1.0) ** 3.2)[:, None] * 0.09
         lo_c = np.asarray(base_rgb, dtype=np.float64)[None, :]
         hi_c = np.asarray(glaze_rgb, dtype=np.float64)[None, :]
         c = lo_c * (1.0 - hi) + hi_c * hi
+        c = c * (1.0 - frost) + np.array([[0.99, 0.97, 0.94]]) * frost
         if speckle_rgb is not None:
             sp = (np.sin(pos[:, 0] * 58.0 + pos[:, 2] * 44.0) * np.cos(pos[:, 2] * 62.0 - pos[:, 1] * 48.0) > 0.35).astype(np.float64)[:, None]
-            c = c * (1.0 - 0.78 * sp) + np.asarray(speckle_rgb, dtype=np.float64)[None, :] * (0.78 * sp)
-        return np.clip(c, 0.04, 1.0)
+            c = c * (1.0 - 0.82 * sp) + np.asarray(speckle_rgb, dtype=np.float64)[None, :] * (0.82 * sp)
+        return np.clip(c, 0.05, 1.0)
 
     return tint_part(ring, _cereal_color)
 
@@ -519,7 +566,7 @@ def build_fdfrl1() -> SceneBuilder:
     """Coral-pink frosted Fruit Loop cereal ring (`280:fdfrl1`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_fdfrl1")
-    sc.add("frootloop", [_fruit_loop_ring("fdfrl1_ring", (0.72, 0.24, 0.18), (0.94, 0.44, 0.36))])
+    sc.add("frootloop", [_fruit_loop_ring("fdfrl1_ring", (0.76, 0.22, 0.16), (0.96, 0.42, 0.34))])
     return _finalize_item(sc, target_span=0.52)
 
 
@@ -527,7 +574,7 @@ def build_fdfrl2() -> SceneBuilder:
     """Periwinkle purple-blue berry Fruit Loop with hot-pink speckles (`281:fdfrl2`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_fdfrl2")
-    sc.add("frootloop", [_fruit_loop_ring("fdfrl2_ring", (0.24, 0.18, 0.80), (0.48, 0.42, 0.96), speckle_rgb=(0.98, 0.16, 0.56))])
+    sc.add("frootloop", [_fruit_loop_ring("fdfrl2_ring", (0.26, 0.18, 0.84), (0.50, 0.40, 0.98), speckle_rgb=(0.98, 0.14, 0.56))])
     return _finalize_item(sc, target_span=0.52)
 
 
@@ -560,7 +607,7 @@ def build_fdfrl6() -> SceneBuilder:
     register_item_materials()
     sc = SceneBuilder(name="item_fdfrl6")
     arc = _fruit_loop_ring("fdfrl6_arc", (0.24, 0.22, 0.86), (0.96, 0.24, 0.68), start_ang=-1.75, end_ang=+0.95, speckle_rgb=(0.98, 0.16, 0.62))
-    chunk = ellipsoid(0.088, 0.072, 0.125, u_segs=14, v_segs=10, name="fdfrl6_chunk", material="item_cream_white").rotate_xyz(ry=28.0, degrees=True).translate(-0.15, 0.068, +0.16)
+    chunk = ellipsoid(0.088, 0.072, 0.125, u_segs=20, v_segs=14, name="fdfrl6_chunk", material="item_cereal_matte").rotate_xyz(ry=28.0, degrees=True).translate(-0.15, 0.068, +0.16)
     chunk = tint_part(chunk, _const_tint((0.68, 0.24, 0.82)))
     sc.add("frootloop", [arc, chunk])
     return _finalize_item(sc, target_span=0.52)

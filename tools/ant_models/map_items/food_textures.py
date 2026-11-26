@@ -48,11 +48,11 @@ FOOD_TEXTURE_SIZES: Dict[str, int] = {
     "choco_fishy": 128,
     "potted_meat": 128,
     "choc_bar": 128,
-    "skittle_a": 64,
-    "skittle_n": 64,
-    "skittle_t": 64,
-    "skittle_s": 64,
-    "skittle_c": 64,
+    "skittle_a": 128,
+    "skittle_n": 128,
+    "skittle_t": 128,
+    "skittle_s": 128,
+    "skittle_c": 128,
 }
 
 
@@ -226,11 +226,38 @@ def _build_choc_bar_pack(size: int):
 
 
 def _build_skittle_pack(family: str, letter: str, bg_rgb: Sequence[float], size: int):
-    """Glossy sugar-shell Skittle candy lentil stamped with crisp white letter (`267..271:fdskit1..5`)."""
+    """Glossy sugar-shell ANTS candy lentil stamped with authentic 1998 SDF white letter (`267..271:fdskit1..5`)."""
+    try:
+        from .. import textures as tx
+    except ImportError:
+        import textures as tx  # type: ignore
+
+    lin = np.linspace(-1.0, 1.0, size, dtype=np.float32)
+    px, py = np.meshgrid(lin, lin)
     bg = np.asarray(bg_rgb, dtype=np.float32)
     white = np.array([0.99, 0.99, 0.99], dtype=np.float32)
     rgb = np.tile(bg[None, None, :], (size, size, 1))
-    m = _blit_text(np.zeros((size, size), np.float32), letter, cx=0.50, cy=0.50, char_w=0.38, char_h=0.48, bold=1)
+    d = np.full_like(px, 10.0)
+    ch = letter.upper()
+    if ch == "A":
+        # Authentic 1998 Ants Candy 'A' (`#271:fdskit5`): tall sharp pointed-apex asymmetrical triangular 'A'
+        # with long diagonal left leg sweeping down-left, crisp vertical right leg & clean mid-low crossbar!
+        d = np.minimum(d, tx._sdf_segment(px, py, +0.06, -0.52, -0.44, +0.44))
+        d = np.minimum(d, tx._sdf_segment(px, py, +0.06, -0.52, +0.16, +0.48))
+        d = np.minimum(d, tx._sdf_segment(px, py, -0.34, +0.14, +0.20, +0.14))
+    elif ch == "N":
+        d = np.minimum(d, tx._sdf_segment(px, py, -0.32, +0.44, -0.32, -0.44))
+        d = np.minimum(d, tx._sdf_segment(px, py, -0.32, -0.44, +0.32, +0.44))
+        d = np.minimum(d, tx._sdf_segment(px, py, +0.32, +0.44, +0.32, -0.44))
+    elif ch == "T":
+        d = np.minimum(d, tx._sdf_segment(px, py, -0.40, -0.42, +0.40, -0.42))
+        d = np.minimum(d, tx._sdf_segment(px, py, 0.00, -0.42, 0.00, +0.46))
+    elif ch == "S":
+        d = np.minimum(d, tx._sdf_ring_arc(px, py, 0.00, -0.20, 0.28, 0.22, 0.42 * math.pi, 1.92 * math.pi))
+        d = np.minimum(d, tx._sdf_ring_arc(px, py, 0.00, +0.22, 0.28, 0.22, -0.58 * math.pi, 0.92 * math.pi))
+    elif ch == "C":
+        d = np.minimum(d, tx._sdf_ring_arc(px, py, +0.04, 0.00, 0.34, 0.44, 0.32 * math.pi, 1.68 * math.pi))
+    m = 1.0 - tx._smoothstep(0.068, 0.112, d)
     rgb = rgb * (1.0 - m[:, :, None]) + white[None, None, :] * m[:, :, None]
     return _pack_from_rgb(family, size, rgb, 0.50 + 0.08 * m, np.full((size, size), 0.12, np.float32))
 

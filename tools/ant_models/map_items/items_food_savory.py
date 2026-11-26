@@ -185,9 +185,9 @@ def extrude_star_piped_ribbon(
 
             flute_scale = 1.0 - flute_depth * (1.0 - fin) * (0.24 + 0.76 * top_w)
             lx = cs * hw * flute_scale
-            ly_base = sn * hh * (0.48 if sn < 0.0 else 1.0)
+            ly_base = sn * hh * (0.58 if sn < 0.0 else 1.0)
             # Carve real vertical V-groove channels downward into top arch so overhead camera sees crisp 3D fins!
-            ly = ly_base * flute_scale - (flute_depth * 0.34 * hh * (1.0 - fin) * top_w)
+            ly = ly_base * flute_scale - (flute_depth * 0.30 * hh * (1.0 - fin) * top_w)
 
             # Slight jagged bite edge if ribbon ends on a chewed bite
             bite_shift = 0.0
@@ -197,6 +197,7 @@ def extrude_star_piped_ribbon(
                 bite_shift = +0.020 * (1.0 - (n_c - 1 - i) / 2.5) * (0.5 + 0.5 * math.cos(th * 5.0 - 0.4))
 
             pt = centers[i] + r_v * lx + u_v * ly + t_v * bite_shift
+            # Keep solid non-degenerate rounded belly cleanly above ground (never squash floor triangles coplanar!)
             pt_y = max(y_floor, float(pt[1]))
             verts.append((float(pt[0]), pt_y, float(pt[2])))
             uvs.append((uf * 2.0, sf * 4.0))
@@ -214,7 +215,7 @@ def extrude_star_piped_ribbon(
             rgb = np.clip(rgb * under * var, 0.08, 1.0)
             cols.append((float(rgb[0]), float(rgb[1]), float(rgb[2])))
 
-    # Outward CCW tube quads: (a, b, c), (a, c, d) verified right-handed with R x U = T!
+    # Outward CCW tube quads: (a, b, c), (a, c, d) verified right-handed!
     for i in range(n_c - 1):
         for j in range(radial_segs):
             a = i * stride + j
@@ -223,26 +224,26 @@ def extrude_star_piped_ribbon(
             d = i * stride + (j + 1)
             tris.extend(((a, b, c), (a, c, d)))
 
-    # Crisp closed end-caps (softly rounded squeezed ends — match warm crest/mid color so tips never go dark!)
+    # Crisp OUTWARD-FACING solid closed end-caps (fixed winding so sides/ends are 100% solid & watertight from EVERY angle!)
     c0_idx = len(verts)
     t0 = tangents[0]
-    p0_tip = centers[0] - t0 * (0.008 if start_pinch else 0.004)
-    verts.append((float(p0_tip[0]), max(y_floor, float(p0_tip[1])), float(p0_tip[2])))
+    p0_tip = centers[0] - t0 * (0.010 if start_pinch else 0.005)
+    verts.append((float(p0_tip[0]), max(y_floor + 0.004, float(p0_tip[1])), float(p0_tip[2])))
     uvs.append((0.5, 0.0))
     cap_c = m_col * 0.55 + c_col * 0.45
     cols.append((float(cap_c[0]), float(cap_c[1]), float(cap_c[2])))
     for j in range(radial_segs):
-        tris.append((c0_idx, j + 1, j))
+        tris.append((c0_idx, j, j + 1))
 
     c1_idx = len(verts)
     t1 = tangents[-1]
-    p1_tip = centers[-1] + t1 * (0.008 if end_pinch else 0.004)
-    verts.append((float(p1_tip[0]), max(y_floor, float(p1_tip[1])), float(p1_tip[2])))
+    p1_tip = centers[-1] + t1 * (0.010 if end_pinch else 0.005)
+    verts.append((float(p1_tip[0]), max(y_floor + 0.004, float(p1_tip[1])), float(p1_tip[2])))
     uvs.append((0.5, 4.0))
     cols.append((float(cap_c[0]), float(cap_c[1]), float(cap_c[2])))
     last_off = (n_c - 1) * stride
     for j in range(radial_segs):
-        tris.append((c1_idx, last_off + j, last_off + j + 1))
+        tris.append((c1_idx, last_off + j + 1, last_off + j))
 
     pos_a = np.asarray(verts, dtype=np.float32)
     idx_a = np.asarray(tris, dtype=np.uint32).reshape(-1)
@@ -691,73 +692,70 @@ def _build_steak_paste(name: str, stage: int) -> SceneBuilder:
     sc = SceneBuilder(name=name)
     parts: List[MeshPart] = []
 
-    # Authentic 1998 Steak/Cheez Whiz wide flat 5-ridge serrated ribbon colors (warm savory crests + deep caramel V-grooves!)
+    # Authentic 1998 Steak Whiz solid thick 5-ridge serrated ribbon — non-intersecting stacked loops, ZERO hollow gaps!
     ribbon_kw = dict(
         n_flutes=10,
-        flute_depth=0.48,
-        width_ratio=1.64,
-        height_ratio=0.64,
+        flute_depth=0.44,
+        width_ratio=1.34,
+        height_ratio=0.76,
         samples_per_seg=8,
         radial_segs=56,
-        valley_rgb=(0.38, 0.24, 0.16),
-        mid_rgb=(0.86, 0.74, 0.64),
-        crest_rgb=(1.00, 0.96, 0.90),
+        valley_rgb=(0.40, 0.25, 0.16),
+        mid_rgb=(0.88, 0.74, 0.62),
+        crest_rgb=(1.00, 0.96, 0.88),
         material="item_steak_paste",
     )
 
     if stage == 1:
-        # Exact `#378:fdsteak1` compact folded Z-ribbon with small dark oval center eye!
+        # Exact `#378:fdsteak1`: solid thick folded oval Z-ribbon with crisp center eye & upper folded bar resting ON TOP (zero Z-fighting!).
         pts = [
-            (+0.22, 0.040, -0.14),
-            (+0.02, 0.042, -0.11),
-            (-0.18, 0.040, -0.08),
-            (-0.26, 0.038, +0.04),
-            (-0.14, 0.040, +0.16),
-            (+0.05, 0.042, +0.16),
-            (+0.23, 0.048, +0.07),
-            (+0.25, 0.064, -0.02),
-            (+0.08, 0.078, +0.00),
-            (-0.15, 0.076, +0.03),
+            (+0.22, 0.046, -0.155),
+            (+0.01, 0.048, -0.135),
+            (-0.20, 0.046, -0.100),
+            (-0.27, 0.046, +0.035),
+            (-0.14, 0.048, +0.165),
+            (+0.07, 0.050, +0.168),
+            (+0.25, 0.062, +0.070),
+            (+0.25, 0.096, -0.025),
+            (+0.07, 0.114, -0.010),
+            (-0.14, 0.106, +0.020),
         ]
-        rads = [0.062, 0.066, 0.066, 0.062, 0.066, 0.068, 0.064, 0.062, 0.064, 0.056]
+        rads = [0.054, 0.058, 0.058, 0.056, 0.058, 0.060, 0.058, 0.056, 0.056, 0.050]
         parts.append(extrude_star_piped_ribbon(pts, rads, start_pinch=True, end_pinch=True, name=f"{name}_coil", **ribbon_kw))
     elif stage == 2:
-        # Exact `#379:fdsteak2`: top-right chewed slightly shorter, tight folded middle bar!
         pts = [
-            (+0.18, 0.040, -0.11),
-            (+0.00, 0.042, -0.09),
-            (-0.19, 0.040, -0.06),
-            (-0.25, 0.038, +0.05),
-            (-0.13, 0.040, +0.15),
-            (+0.06, 0.042, +0.15),
-            (+0.23, 0.048, +0.05),
-            (+0.20, 0.066, -0.01),
-            (-0.02, 0.072, +0.02),
+            (+0.18, 0.046, -0.135),
+            (+0.00, 0.048, -0.120),
+            (-0.20, 0.046, -0.085),
+            (-0.26, 0.046, +0.045),
+            (-0.13, 0.048, +0.158),
+            (+0.07, 0.050, +0.158),
+            (+0.24, 0.064, +0.055),
+            (+0.19, 0.098, -0.018),
+            (-0.02, 0.104, +0.010),
         ]
-        rads = [0.060, 0.064, 0.064, 0.060, 0.064, 0.066, 0.062, 0.060, 0.056]
+        rads = [0.054, 0.058, 0.058, 0.055, 0.058, 0.060, 0.056, 0.054, 0.050]
         parts.append(extrude_star_piped_ribbon(pts, rads, start_pinch=False, end_pinch=True, jagged_start=True, name=f"{name}_coil", **ribbon_kw))
     elif stage == 3:
-        # Exact `#380:fdsteak3`: compact U-fold with short upper-left stub & thick right folded tail (tight center gap!)
         pts = [
-            (-0.02, 0.040, -0.09),
-            (-0.19, 0.038, -0.07),
-            (-0.24, 0.038, +0.04),
-            (-0.12, 0.040, +0.14),
-            (+0.06, 0.042, +0.13),
-            (+0.22, 0.046, +0.03),
-            (+0.10, 0.058, -0.02),
+            (-0.02, 0.046, -0.120),
+            (-0.20, 0.046, -0.090),
+            (-0.25, 0.046, +0.040),
+            (-0.12, 0.048, +0.150),
+            (+0.07, 0.050, +0.145),
+            (+0.23, 0.064, +0.040),
+            (+0.10, 0.094, -0.020),
         ]
-        rads = [0.056, 0.060, 0.060, 0.064, 0.066, 0.062, 0.058]
+        rads = [0.052, 0.056, 0.056, 0.058, 0.060, 0.056, 0.052]
         parts.append(extrude_star_piped_ribbon(pts, rads, start_pinch=False, end_pinch=False, jagged_start=True, jagged_end=True, name=f"{name}_coil", **ribbon_kw))
     else:
-        # Exact `#381:fdsteak4`: single broad diagonal flat serrated star-ribbon strip showing crisp parallel ridges!
         pts = [
-            (-0.26, 0.042, +0.09),
-            (-0.09, 0.046, +0.03),
-            (+0.09, 0.046, -0.03),
-            (+0.26, 0.042, -0.09),
+            (-0.26, 0.050, +0.09),
+            (-0.09, 0.054, +0.03),
+            (+0.09, 0.054, -0.03),
+            (+0.26, 0.050, -0.09),
         ]
-        rads = [0.072, 0.078, 0.078, 0.070]
+        rads = [0.064, 0.068, 0.068, 0.062]
         parts.append(extrude_star_piped_ribbon(pts, rads, start_pinch=False, end_pinch=False, jagged_start=True, jagged_end=True, name=f"{name}_ribbon", **ribbon_kw))
 
     sc.add("steak_paste", parts)
@@ -1060,137 +1058,188 @@ def _fish_wrapper_sleeve(name: str, *, empty: bool = False) -> MeshPart:
     return MeshPart(name, "item_choco_fishy", pos, recompute_smooth_normals(pos, idx), idx, uvs=np.asarray(uvs, dtype=np.float32))
 
 
+def _fish_fan_fin(
+    name: str,
+    *,
+    root_x: float,
+    root_z: float,
+    dir_x: float,
+    dir_z: float,
+    length: float,
+    spread_rad: float,
+    y_mid: float = 0.092,
+    n_rays: int = 7,
+    v_notch: float = 0.16,
+) -> MeshPart:
+    """Authentic ribbed golden-yellow fan-shaped fish fin with crisp dark radial fin rays (`394..395:fdfish1..2`)!"""
+    base_ang = math.atan2(dir_z, dir_x)
+    n_r, n_a = 12, 24
+    verts, cols, tris = [], [], []
+    for is_top in (True, False):
+        for ir in range(n_r + 1):
+            rf = ir / float(n_r)
+            for ia in range(n_a + 1):
+                af = ia / float(n_a)  # 0..1 across fan spread
+                ang = base_ang + (af - 0.5) * spread_rad
+                # V-notch in the middle of tail fin or rounded lobe on pectoral fin!
+                edge_l = length * (1.0 - v_notch * math.exp(-(((af - 0.5) / 0.24) ** 2)))
+                rr = (0.016 + (edge_l - 0.016) * rf)
+                px = root_x + rr * math.cos(ang)
+                pz = root_z + rr * math.sin(ang)
+                # Crisp corrugated radial fin rays!
+                ray_w = 0.5 + 0.5 * math.cos(af * math.pi * 2.0 * n_rays)
+                thick = (0.018 * (1.0 - 0.60 * rf) + 0.005 * ray_w * rf)
+                py = y_mid + (thick if is_top else -thick * 0.7)
+                verts.append((px, max(0.008, py), pz))
+                # Bright sunny golden-yellow fin rays with crisp warm-brown recessed ray valleys!
+                r_c = 0.56 + 0.44 * ray_w
+                g_c = 0.36 + 0.56 * ray_w
+                b_c = 0.08 + 0.16 * ray_w
+                cols.append((r_c, g_c, b_c))
+    st = n_a + 1
+    off = (n_r + 1) * st
+    for ir in range(n_r):
+        for ia in range(n_a):
+            a, b, c, d = ir * st + ia, (ir + 1) * st + ia, (ir + 1) * st + ia + 1, ir * st + ia + 1
+            tris.extend(((a, c, b), (a, d, c)))
+            tris.extend(((off + a, off + b, off + c), (off + a, off + c, off + d)))
+    # Stitch outer fan margin cleanly
+    r_end = n_r * st
+    for ia in range(n_a):
+        t0, t1, b0, b1 = r_end + ia, r_end + ia + 1, off + r_end + ia, off + r_end + ia + 1
+        tris.extend(((t0, t1, b1), (t0, b1, b0)))
+    pos = np.asarray(verts, dtype=np.float32)
+    idx = np.asarray(tris, dtype=np.uint32).reshape(-1)
+    return MeshPart(name, "item_cheese", pos, recompute_smooth_normals(pos, idx), idx, colors=np.asarray(cols, dtype=np.float32))
+
+
 def _fish_tail_fin(name: str, *, nibbled: bool = False) -> List[MeshPart]:
-    """Forked yellow-and-brown striped fish tail fin protruding LEFT (`-X`) from chocolate dip."""
-    parts: List[MeshPart] = []
-    # Upper & lower swept tail lobes
-    scale = 0.72 if nibbled else 1.0
-    for sgn, tag in ((-1.0, "top"), (+1.0, "bot")):
-        lobe = curved_tube(
-            [
-                (-0.22, 0.102, sgn * 0.030),
-                (-0.34 * scale - 0.05, 0.092, sgn * 0.088 * scale),
-                (-0.46 * scale - 0.04, 0.072, sgn * 0.135 * scale),
-            ],
-            [0.048, 0.038 * scale, 0.016],
-            samples_per_seg=4,
-            radial_segs=12,
-            cap_rings=2,
-            name=f"{name}_{tag}",
-            material="item_cheese",
+    """Wide striped golden-yellow fan tail fin protruding LEFT (`-X`) matching `394..395:fdfish1..2`!"""
+    ln = 0.18 if nibbled else 0.255
+    return [
+        _fish_fan_fin(
+            f"{name}_fan",
+            root_x=-0.225,
+            root_z=0.0,
+            dir_x=-1.0,
+            dir_z=0.0,
+            length=ln,
+            spread_rad=1.22,
+            y_mid=0.104,
+            n_rays=7,
+            v_notch=0.22,
         )
-        # Flatten Y slightly into a real fin blade & paint yellow/dark-brown stripes!
-        p = lobe.positions.astype(np.float64)
-        p[:, 1] = 0.086 + (p[:, 1] - 0.086) * 0.45
-        lobe.positions = p.astype(np.float32)
-        lobe.normals = recompute_smooth_normals(lobe.positions, lobe.indices)
-        lobe = tint_part(
-            lobe,
-            lambda pos, _n: np.clip(
-                np.where(
-                    (np.sin(pos[:, 2] * 58.0) > 0.0)[:, None],
-                    np.array([[0.98, 0.86, 0.20]]),
-                    np.array([[0.46, 0.30, 0.12]]),
-                ),
-                0.10,
-                1.0,
-            ),
-        )
-        parts.append(lobe)
-    # Center tail webbing connecting upper & lower lobes
-    web = ellipsoid(0.11 * scale, 0.022, 0.075 * scale, u_segs=14, v_segs=8, name=f"{name}_web", material="item_cheese").translate(-0.32 * scale - 0.05, 0.084, 0.0)
-    parts.append(tint_part(web, _const_tint((0.88, 0.74, 0.22))))
-    return parts
+    ]
 
 
 def _build_choco_fishy(name: str, stage: int) -> SceneBuilder:
-    """'CHOCO-FISHY SNAX' chocolate-dipped scaly green fish through 5 authentic stages (`394..398`)."""
+    """'CHOCO-FISHY SNAX' plump chocolate-dipped scaly green fish with mouth, gill & ribbed fan fins (`394..398`)."""
     register_item_materials()
     sc = SceneBuilder(name=name)
     parts: List[MeshPart] = []
 
     if stage in (1, 2):
-        # Full or slightly bitten green scaly candy fish dipped in glossy brown chocolate + paper sleeve!
-        parts.append(_fish_wrapper_sleeve(f"{name}_wrap", empty=False))
+        # 1. Crisp paper sleeve wrapped tightly around plump fish waist (`394..395`)!
+        parts.append(_fish_wrapper_sleeve(f"{name}_wrap", empty=False).scale(0.92, 1.04, 1.08))
 
-        # Thick glossy milk-chocolate dip protruding out both left & right edges of paper wrapper!
-        choco = ellipsoid(0.246, 0.096, 0.164, u_segs=26, v_segs=14, name=f"{name}_choco", material="item_steak_paste").translate(0.0, 0.114, 0.0)
+        # 2. Rich warm reddish-brown MILK-CHOCOLATE dip bulging plumply out BOTH left & right of the wrapper (`394..395`)!
+        choco = ellipsoid(0.280, 0.114, 0.198, u_segs=32, v_segs=18, name=f"{name}_choco", material="item_candy_white").translate(+0.018, 0.118, 0.0)
         pc = choco.positions.astype(np.float64)
-        # Organic wavy melted chocolate drip scallops at left & right edges
-        drip = np.sin(pc[:, 2] * 26.0 + pc[:, 1] * 14.0) * 0.018
+        drip = np.sin(pc[:, 2] * 22.0 + pc[:, 1] * 12.0) * 0.026
         pc[:, 0] += np.sign(pc[:, 0]) * drip * np.clip(np.abs(pc[:, 0]) / 0.18, 0.0, 1.0)
         choco.positions = pc.astype(np.float32)
         choco.normals = recompute_smooth_normals(choco.positions, choco.indices)
-        parts.append(gradient_y_tint(choco, (0.44, 0.16, 0.09), (0.68, 0.28, 0.16), noise_amp=0.03))
+        parts.append(gradient_y_tint(choco, (0.18, 0.035, 0.020), (0.36, 0.075, 0.042), noise_amp=0.02))
+        # Glossy wavy milk-chocolate drip collar peeking right in front of the wrapper (`x ~ +0.16..+0.23`) matching `#394`!
+        collar = ellipsoid(0.088, 0.108, 0.184, u_segs=24, v_segs=14, name=f"{name}_choco_collar", material="item_candy_white").translate(+0.188, 0.116, 0.0)
+        pcol = collar.positions.astype(np.float64)
+        pcol[:, 0] += 0.024 * np.sin(pcol[:, 2] * 26.0 + 0.6)
+        collar.positions = pcol.astype(np.float32)
+        collar.normals = recompute_smooth_normals(collar.positions, collar.indices)
+        parts.append(gradient_y_tint(collar, (0.18, 0.035, 0.020), (0.38, 0.080, 0.045), noise_amp=0.02))
 
-        # Striped yellow fish tail on LEFT
+        # 3. Wide ribbed golden-yellow fan tail fin on LEFT (`-X`) + bold dorsal fin peeking top-right behind head!
         parts.extend(_fish_tail_fin(f"{name}_tail", nibbled=(stage == 2)))
+        dorsal = _fish_fan_fin(f"{name}_dorsal", root_x=+0.175, root_z=-0.160, dir_x=+0.24, dir_z=-1.0, length=0.102, spread_rad=0.78, y_mid=0.116, n_rays=5, v_notch=0.0)
+        parts.append(dorsal)
 
-        # Scaly bright-green cartoon fish head protruding RIGHT (`+X`)
-        head_x = 0.24 if stage == 1 else 0.21
-        head_len = 0.215 if stage == 1 else 0.175
-        head = ellipsoid(head_len, 0.095, 0.148, u_segs=26, v_segs=16, name=f"{name}_head", material="item_fish_green").translate(head_x, 0.106, 0.0)
+        # 4. Plump vibrant-green SCALY fish head protruding RIGHT (`+X`) with sculpted overlapping scales, gill arch & smiling open mouth!
+        head_x = 0.255 if stage == 1 else 0.225
+        head_len = 0.225 if stage == 1 else 0.175
+        head = ellipsoid(head_len, 0.106, 0.170, u_segs=44, v_segs=24, name=f"{name}_head", material="item_fish_green").translate(head_x, 0.114, 0.0)
         ph = head.positions.astype(np.float64)
-        # Taper snout cleanly toward +X into classic fish profile
-        t_snout = np.clip((ph[:, 0] - 0.16) / max(0.08, head_len * 1.4), 0.0, 1.0)
-        ph[:, 2] *= 1.0 - 0.56 * (t_snout ** 1.35)
-        ph[:, 1] = 0.102 + (ph[:, 1] - 0.102) * (1.0 - 0.42 * (t_snout ** 1.4))
+        t_snout = np.clip((ph[:, 0] - 0.20) / max(0.08, head_len * 1.20), 0.0, 1.0)
+        ph[:, 2] *= 1.0 - 0.46 * (t_snout ** 1.20)
+        ph[:, 1] = 0.112 + (ph[:, 1] - 0.112) * (1.0 - 0.34 * (t_snout ** 1.25))
+        # Sculpt overlapping imbricated fish scales across cheeks/head + prominent wide horizontal mouth cleft!
+        scale_u = ph[:, 0] * 50.0
+        scale_v = ph[:, 2] * 50.0 + 0.5 * np.pi * (np.floor(scale_u / math.pi) % 2.0)
+        scale_bump = 0.0060 * np.clip(np.sin(scale_u) * np.cos(scale_v), -0.4, 1.0) * (1.0 - 0.60 * t_snout)
+        mouth_x = np.clip((ph[:, 0] - 0.345) / 0.12, 0.0, 1.0) if stage == 1 else np.zeros(len(ph))
+        mouth_z = np.exp(-(((ph[:, 2] - 0.032) / 0.022) ** 2))
+        ph[:, 1] += scale_bump - 0.022 * mouth_x * mouth_z
         if stage == 2:
-            # Jagged bite notch out of the nose tip!
-            nose = ph[:, 0] > 0.35
-            ph[nose, 0] = 0.35 + 0.012 * np.sin(ph[nose, 2] * 45.0)
+            nose = ph[:, 0] > 0.365
+            ph[nose, 0] = 0.365 + 0.012 * np.sin(ph[nose, 2] * 45.0)
         head.positions = ph.astype(np.float32)
         head.normals = recompute_smooth_normals(head.positions, head.indices)
-        parts.append(gradient_y_tint(head, (0.18, 0.54, 0.14), (0.58, 0.94, 0.26), noise_amp=0.05))
 
-        # Big expressive cartoon fish eye (yellow iris ring + white sclera + dark pupil) on top-right of head!
-        eye_x = 0.305 if stage == 1 else 0.285
-        iris = sphere(0.036, u_segs=16, v_segs=12, name=f"{name}_eye_iris", material="item_cheese").translate(eye_x, 0.176, -0.022)
-        pupil = sphere(0.022, u_segs=14, v_segs=10, name=f"{name}_eye_pupil", material="item_soil_hole").translate(eye_x + 0.008, 0.194, -0.022)
-        parts.extend([iris, pupil])
+        def _scaly_fish_tint(pos: np.ndarray, nrm: np.ndarray) -> np.ndarray:
+            su = pos[:, 0] * 50.0
+            sv = pos[:, 2] * 50.0 + 0.5 * math.pi * (np.floor(su / math.pi) % 2.0)
+            sc_v = 0.5 + 0.5 * np.sin(su) * np.cos(sv)
+            # Golden-green cheek stripe + crisp dark-green scale edges + bold dark smiling mouth cleft!
+            belly = np.exp(-(((pos[:, 2] - 0.044) / 0.068) ** 2)) * np.clip((pos[:, 0] - 0.24) / 0.18, 0.0, 1.0)
+            m_line = np.exp(-(((pos[:, 2] - 0.032) / 0.015) ** 2)) * np.clip((pos[:, 0] - 0.335) / 0.045, 0.0, 1.0) if stage == 1 else np.zeros(len(pos))
+            hi = np.clip(0.55 + 0.45 * nrm[:, 1], 0.3, 1.0)
+            r_c = (0.26 + 0.36 * sc_v + 0.38 * belly) * hi * (1.0 - 0.85 * m_line)
+            g_c = (0.64 + 0.34 * sc_v + 0.24 * belly) * hi * (1.0 - 0.88 * m_line)
+            b_c = (0.14 + 0.14 * sc_v + 0.12 * belly) * hi * (1.0 - 0.88 * m_line)
+            return np.clip(np.column_stack([r_c, g_c, b_c]), 0.04, 1.0)
 
-        # Striped yellow-gold pectoral fin sweeping down-front (+Z) from behind the gill!
-        pect = curved_tube(
-            [(+0.21, 0.088, +0.105), (+0.16, 0.068, +0.188), (+0.11, 0.044, +0.232)],
-            [0.048, 0.042, 0.020],
-            samples_per_seg=4,
-            radial_segs=12,
-            cap_rings=2,
-            name=f"{name}_pect_fin",
-            material="item_cheese",
-        )
-        parts.append(tint_part(pect, _const_tint((0.96, 0.84, 0.22))))
+        parts.append(tint_part(head, _scaly_fish_tint))
 
-        # Gill crease accent behind head
-        gill = torus_arc(0.075, 0.010, start_ang=-0.9, end_ang=+0.9, u_segs=14, v_segs=6, plane="xz", name=f"{name}_gill", material="item_toy_green_dark").translate(+0.22, 0.168, 0.0)
+        # Sculpted plump fish lips & smiling open mouth cavity right across the lower snout (stage 1)!
+        if stage == 1:
+            mouth_dark = ellipsoid(0.068, 0.022, 0.022, u_segs=16, v_segs=10, name=f"{name}_mouth_cav", material="item_soil_hole").rotate_xyz(ry=-10.0, degrees=True).translate(+0.425, 0.126, +0.032)
+            lip_u = curved_tube([(+0.348, 0.144, +0.016), (+0.415, 0.140, +0.020), (+0.476, 0.126, +0.024)], [0.013, 0.015, 0.012], samples_per_seg=4, radial_segs=12, cap_rings=2, name=f"{name}_lip_u", material="item_fish_green")
+            lip_l = curved_tube([(+0.348, 0.130, +0.050), (+0.412, 0.126, +0.052), (+0.468, 0.116, +0.042)], [0.012, 0.014, 0.011], samples_per_seg=4, radial_segs=12, cap_rings=2, name=f"{name}_lip_l", material="item_fish_green")
+            parts.extend([mouth_dark, gradient_y_tint(lip_u, (0.48, 0.86, 0.24), (0.80, 0.98, 0.44)), gradient_y_tint(lip_l, (0.42, 0.80, 0.20), (0.76, 0.96, 0.40))])
+
+        # Big bold glossy cartoon fish eye (warm orange-amber outer iris + dark pupil + white catchlight!) matching `#394`!
+        eye_x = 0.325 if stage == 1 else 0.305
+        eye_ring = tint_part(sphere(0.058, u_segs=20, v_segs=14, name=f"{name}_eye_ring", material="item_candy_white").translate(eye_x, 0.172, -0.030), _const_tint((0.92, 0.44, 0.10)))
+        pupil = sphere(0.034, u_segs=16, v_segs=10, name=f"{name}_eye_pupil", material="eye_pupil").translate(eye_x + 0.005, 0.202, -0.030)
+        glint = sphere(0.011, u_segs=10, v_segs=8, name=f"{name}_eye_glint", material="eye_catchlight").translate(eye_x - 0.008, 0.228, -0.042)
+        parts.extend([eye_ring, pupil, glint])
+
+        # Broad ribbed golden-yellow FAN pectoral fin sweeping down-front (+Z) matching `394..395:fdfish1..2`!
+        pect = _fish_fan_fin(f"{name}_pect_fin", root_x=+0.205, root_z=+0.115, dir_x=-0.38, dir_z=+0.92, length=0.175, spread_rad=1.08, y_mid=0.072, n_rays=7, v_notch=0.0)
+        parts.append(pect)
+
+        # Curved dark-green gill cover arch behind cheek
+        gill = torus_arc(0.095, 0.011, start_ang=-0.95, end_ang=+0.95, u_segs=18, v_segs=8, plane="xz", name=f"{name}_gill", material="item_toy_green_dark").translate(+0.220, 0.170, 0.0)
         parts.append(gill)
 
         if stage == 2:
-            # Tiny detached chewed green fish nose crumb floating right (`395:fdfish2`)
-            parts.append(ellipsoid(0.030, 0.020, 0.024, u_segs=10, v_segs=8, name=f"{name}_nose_crumb", material="item_fish_green").translate(+0.43, 0.032, +0.02))
+            parts.append(ellipsoid(0.032, 0.020, 0.026, u_segs=12, v_segs=8, name=f"{name}_nose_crumb", material="item_fish_green").translate(+0.455, 0.032, +0.02))
 
     elif stage == 3:
-        # Half-eaten comic fish: chocolate-smeared wrapper + popped eyeball & green fish bones on right (`396:fdfish3`)!
-        parts.append(_fish_wrapper_sleeve(f"{name}_wrap", empty=False))
-        choco = ellipsoid(0.242, 0.092, 0.160, u_segs=24, v_segs=12, name=f"{name}_choco", material="item_steak_paste").translate(+0.01, 0.110, 0.0)
-        parts.append(gradient_y_tint(choco, (0.44, 0.16, 0.09), (0.68, 0.28, 0.16), noise_amp=0.03))
-        # Tiny chewed tail nub on left
-        parts.append(ellipsoid(0.052, 0.026, 0.056, u_segs=12, v_segs=8, name=f"{name}_tail_nub", material="item_cheese").translate(-0.24, 0.068, +0.01))
-        # Chewed green fish rib-bones & lower jaw scrap on right
+        parts.append(_fish_wrapper_sleeve(f"{name}_wrap", empty=False).scale(0.92, 1.04, 1.08))
+        choco = ellipsoid(0.268, 0.108, 0.192, u_segs=28, v_segs=14, name=f"{name}_choco", material="item_candy_white").translate(+0.01, 0.114, 0.0)
+        parts.append(gradient_y_tint(choco, (0.18, 0.035, 0.020), (0.36, 0.075, 0.042), noise_amp=0.02))
+        parts.append(ellipsoid(0.056, 0.028, 0.062, u_segs=12, v_segs=8, name=f"{name}_tail_nub", material="item_cheese").translate(-0.25, 0.072, +0.01))
         for k, (ang_d, z_off, ln) in enumerate(((-22.0, -0.055, 0.14), (0.0, 0.0, 0.16), (+24.0, +0.055, 0.14), (+45.0, +0.095, 0.11))):
-            bone = cylinder(0.010, 0.014, ln, radial_segs=10, bevel=0.003, axis="x", name=f"{name}_rib_{k}", material="item_fish_green").rotate_xyz(ry=ang_d, degrees=True).translate(+0.23, 0.062, z_off)
+            bone = cylinder(0.010, 0.014, ln, radial_segs=10, bevel=0.003, axis="x", name=f"{name}_rib_{k}", material="item_fish_green").rotate_xyz(ry=ang_d, degrees=True).translate(+0.23, 0.064, z_off)
             parts.append(gradient_y_tint(bone, (0.36, 0.78, 0.18), (0.68, 0.96, 0.34)))
-        # Comic popped round fish eyeball facing UP-FRONT toward camera (`396:fdfish3`)!
-        stalk = cylinder(0.018, 0.022, 0.085, radial_segs=12, axis="x", name=f"{name}_stalk", material="item_steak_paste").translate(+0.23, 0.118, -0.042)
+        stalk = cylinder(0.018, 0.022, 0.085, radial_segs=12, axis="x", name=f"{name}_stalk", material="item_chocolate").translate(+0.23, 0.118, -0.042)
         eyeball = sphere(0.062, u_segs=18, v_segs=14, name=f"{name}_pop_eye", material="item_egg_white").translate(+0.305, 0.132, -0.042)
-        iris_ring = sphere(0.046, u_segs=16, v_segs=12, name=f"{name}_pop_iris", material="item_cheese").translate(+0.310, 0.158, -0.018)
-        pupil = sphere(0.026, u_segs=14, v_segs=10, name=f"{name}_pop_pupil", material="item_soil_hole").translate(+0.312, 0.178, -0.004)
-        parts.extend([gradient_y_tint(stalk, (0.44, 0.16, 0.09), (0.68, 0.28, 0.16)), eyeball, iris_ring, pupil])
+        iris_ring = tint_part(sphere(0.046, u_segs=16, v_segs=12, name=f"{name}_pop_iris", material="item_candy_white").translate(+0.310, 0.158, -0.018), _const_tint((0.88, 0.44, 0.14)))
+        pupil = sphere(0.026, u_segs=14, v_segs=10, name=f"{name}_pop_pupil", material="eye_pupil").translate(+0.312, 0.178, -0.004)
+        parts.extend([gradient_y_tint(stalk, (0.68, 0.42, 0.30), (1.00, 0.72, 0.56)), eyeball, iris_ring, pupil])
 
     elif stage == 4:
-        # Chocolate-smeared empty 'CHOCO-FISHY SNAX' wrapper (`397:fdfish4`)
         parts.append(_fish_wrapper_sleeve(f"{name}_wrap", empty=True))
-        # Melted glossy milk-chocolate smears oozing out left, right & underside of wrapper!
         for k, (cx, cz, rx, rz) in enumerate((
             (-0.145, -0.04, 0.062, 0.095),
             (-0.155, +0.07, 0.055, 0.075),
@@ -1199,11 +1248,9 @@ def _build_choco_fishy(name: str, stage: int) -> SceneBuilder:
             (0.000, -0.175, 0.110, 0.046),
             (0.010, +0.172, 0.096, 0.044),
         )):
-            smear = ellipsoid(rx, 0.026, rz, u_segs=14, v_segs=10, name=f"{name}_smear_{k}", material="item_steak_paste").translate(cx, 0.024, cz)
-            parts.append(gradient_y_tint(smear, (0.44, 0.16, 0.09), (0.68, 0.28, 0.16), noise_amp=0.03))
-
+            smear = ellipsoid(rx, 0.026, rz, u_segs=14, v_segs=10, name=f"{name}_smear_{k}", material="item_chocolate").translate(cx, 0.024, cz)
+            parts.append(gradient_y_tint(smear, (0.68, 0.42, 0.30), (1.00, 0.72, 0.56), noise_amp=0.03))
     else:
-        # Clean empty slightly curled 'CHOCO-FISHY SNAX' paper wrapper (`398:fdfish5`)
         parts.append(_fish_wrapper_sleeve(f"{name}_wrap", empty=True))
 
     sc.add("choco_fishy", parts)
