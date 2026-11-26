@@ -69,11 +69,13 @@ MatchReport counted(bool with_play = true) {
     r.food_points = {900, 600, 400, 100};
     r.bombs_set = {2, 1, 0, 0};
     r.fires_lit = {1, 0, 0, 0};
-    r.raids = {3, 0, 1, 0};
-    r.loot = {50, 0, 20, 0};
+    r.raids = {4, 0, 1, 0};
+    r.loot = {150, 0, 20, 0};
+    r.raids_home = {3, 0, 1, 0};                                  // (seat 0 began four raids and got three of them home)
+    r.loot_home = {100, 0, 20, 0};
     r.mvp = MatchReport::Honor{true, 0, 620, 0};
     r.first_blood = MatchReport::Honor{true, 2, 0, 840};
-    r.biggest_raid = MatchReport::Honor{true, 0, 50, 11000};
+    r.top_thief = MatchReport::Honor{true, 0, 3, 0};
     r.last_stand = MatchReport::Honor{true, 3, 0, 2600};
     if (with_play) r.play = MatchReport::Play{true, 1, MatchReport::PlayKind::Bomb, 6, 9220, 10, 20};
     return r;
@@ -105,6 +107,18 @@ std::unique_ptr<ArtSpy> draw(const assets::AssetArchive& arc, ScorecardModal& ca
 size_t count(const ArtSpy& spy, const hud_art::Art& art, const char* name) { return spy.of_sprite(art, name).size(); }
 
 bool has_line(const ArtSpy& spy, const std::string& text) { return spy.face(text) != nullptr; }
+
+/// Is there a line that begins with `raids` and ends with `points` and a unit ("pts" or "point(s)") and is not cut (no three dots): the Top Thief's card in whichever wording fits
+bool fitted_thief_line(const ArtSpy& spy, const std::string& raids, const std::string& points) {
+    for (const ArtSpy::Face& f : spy.face_lines) {
+        if (f.text.rfind(raids, 0) != 0 || f.text.find("...") != std::string::npos) continue;
+        for (const char* unit : {" points", " point", " pts", " pt"}) {
+            const std::string tail = points + unit;
+            if (f.text.size() >= tail.size() && f.text.compare(f.text.size() - tail.size(), tail.size(), tail) == 0) return true;
+        }
+    }
+    return false;
+}
 
 bool has_ink(const ArtSpy& spy, const std::string& text) {
     for (const ArtSpy::Line& line : spy.lines) {
@@ -296,8 +310,8 @@ void test_counted(const assets::AssetArchive& arc, const hud_art::Art& art) {
     check(has_line(*spy, "Damage") && has_line(*spy, "1,840"), "the winner's well has the damage tile (the winner's side: 1,240 and 600, added up, with its thousands grouped)");
     check(spy->face("Killed " + card.rows()[1].numbers[2] + "   Lost " + card.rows()[1].numbers[1] + "   Hatched " + card.rows()[1].numbers[3] + "   Damage 420") != nullptr, "a ranked row's small numbers end with its damage");
     check(count(*spy, art, "sc_sm_m_up") == 1 && count(*spy, art, "sc_sw_allstats_up") == 1 && count(*spy, art, "sc_sw_back_up") == 0, "one link, \"All stats\", and no tabs");
-    check(count(*spy, art, "sc_k_mvp") == 1 && count(*spy, art, "sc_k_blood") == 1 && count(*spy, art, "sc_k_raid") == 1 && count(*spy, art, "sc_k_stand") == 0 && count(*spy, art, "sc_k_play") == 1, "the labels of the three honors and of the Play of the game");
-    check(has_line(*spy, "62% of the play") && has_line(*spy, "at 0:42") && has_line(*spy, "50 points at 9:10"), "the honors' numbers: the MVP's share of the play, First blood's time, the raid's loot and time");
+    check(count(*spy, art, "sc_k_mvp") == 1 && count(*spy, art, "sc_k_blood") == 1 && count(*spy, art, "sc_k_thief") == 1 && count(*spy, art, "sc_k_stand") == 0 && count(*spy, art, "sc_k_play") == 1, "the labels of the three honors and of the Play of the game");
+    check(has_line(*spy, "62% of the play") && has_line(*spy, "at 0:42") && fitted_thief_line(*spy, "3 raids", "100"), "the honors' numbers: the MVP's share of the play, First blood's time, the Top Thief's raids home and their points (the wording that fits the card)");
     check(has_line(*spy, card.seat_name(0)) && has_line(*spy, card.seat_name(2)), "...and who earned them");
     check(has_line(*spy, card.seat_name(1) + "'s bomb takes out") && has_line(*spy, "6 ants") && has_line(*spy, "at 7:41"), "the Play of the game says what happened and when (\"... bomb takes out\", \"6 ants\", \"at 7:41\")");
     check(count(*spy, art, "sc_watch_up") == 1, "Watch is there");
@@ -330,6 +344,25 @@ void test_counted(const assets::AssetArchive& arc, const hud_art::Art& art) {
     ScorecardModal nobody;
     open(nobody, &art, kWide720, sample(), sim::GameMode::HighestScore, true, &none);
     check(has_line(*draw(arc, nobody, kWide720), "nobody"), "an honor that nobody earned says \"nobody\"");
+    // the Top Thief's card says the raids that got home and their points, the longest wording that fits (a number is never cut): all of it where the cards are wide, shorter where they are narrow
+    ScorecardModal wide_cards;
+    open(wide_cards, &art, kUltra, sample(), sim::GameMode::HighestScore, true, &rep);
+    check(has_line(*draw(arc, wide_cards, kUltra), "3 raids home \xC2\xB7 100 points"), "wide cards: \"3 raids home \xC2\xB7 100 points\"");
+    MatchReport single = counted();
+    single.top_thief = MatchReport::Honor{true, 2, 1, 0};
+    single.raids_home = {0, 0, 1, 0};
+    single.loot_home = {0, 0, 1, 0};
+    ScorecardModal one_raid;
+    open(one_raid, &art, kUltra, sample(), sim::GameMode::HighestScore, true, &single);
+    const auto spy_one = draw(arc, one_raid, kUltra);
+    check(has_line(*spy_one, "1 raid home \xC2\xB7 1 point") && has_line(*spy_one, one_raid.seat_name(2)), "one raid home is \"1 raid home\" and one point \"1 point\"");
+    // a match in which none got home has the label over "nobody"
+    MatchReport no_thief = counted();
+    no_thief.top_thief.present = false;
+    ScorecardModal no_raid;
+    open(no_raid, &art, kWide720, sample(), sim::GameMode::HighestScore, true, &no_thief);
+    const auto spy_none = draw(arc, no_raid, kWide720);
+    check(count(*spy_none, art, "sc_k_thief") == 1 && has_line(*spy_none, "nobody") && !fitted_thief_line(*spy_none, "3 raids", "100"), "no raid got home: the Top Thief's label is there and the card says \"nobody\"");
 
     // the second page: the link shows it, every number of every seat, the best of a column in gold
     int jumps = 0;
@@ -347,7 +380,7 @@ void test_counted(const assets::AssetArchive& arc, const hud_art::Art& art) {
     const ArtSpy::Face* second_best = page->face("600");
     check(second_best != nullptr && second_best->color.r == 244, "...the others are cream");
     for (size_t t = 0; t < 4; ++t) check(has_line(*page, card.seat_name(static_cast<uint8_t>(t))), "a row for every player: " + card.seat_name(static_cast<uint8_t>(t)));
-    check(has_line(*page, "900") && has_line(*page, "50") && has_line(*page, "30"), "the food and the special ants of the first seat are in its row");
+    check(has_line(*page, "900") && has_line(*page, "150") && has_line(*page, "30"), "the food and the special ants of the first seat are in its row");
     // back to the results
     click(card, card.link_rect());
     check(card.page() == ScorecardModal::Page::Results && count(*draw(arc, card, kWide720), art, "sc_victory_26") == 1, "a click on \"Back to results\" shows the podium again");
@@ -427,7 +460,7 @@ void test_187(const assets::AssetArchive& arc, const hud_art::Art& art) {
     check(!card.headline().empty() && has_ink(*spy, card.headline() + "   12:40 played"), "the headline is the sentence, and how long it took (\"" + card.headline() + "\")");
     check(count(*spy, art, "sc_k_colony") == 1 && count(*spy, art, "sc_k_winner") == 0, "the winner's label is \"Last colony\"");
     check(has_line(*spy, "Lost") && has_line(*spy, "Left") && !has_line(*spy, "Killed") && !has_line(*spy, "Hatched") && has_line(*spy, "Damage"), "two tiles for the numbers (lost, left) and the damage");
-    check(count(*spy, art, "sc_k_stand") == 1 && count(*spy, art, "sc_k_raid") == 0 && has_line(*spy, "out of ants at 2:10"), "the honors are MVP, First blood and Last stand (no raids)");
+    check(count(*spy, art, "sc_k_stand") == 1 && count(*spy, art, "sc_k_thief") == 0 && has_line(*spy, "out of ants at 2:10"), "the honors are MVP, First blood and Last stand (no Top Thief)");
     check(spy->face("Lost " + card.rows()[1].numbers[1] + "   Left " + card.rows()[1].numbers[2] + "   Damage 420") != nullptr, "a ranked row has its numbers, without the hatched");
     click(card, card.link_rect());
     const auto page = draw(arc, card, kWide720);

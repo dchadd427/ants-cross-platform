@@ -31,6 +31,7 @@ const assets::ColorRGBA kDivider{43, 58, 54, 255};           // the hairline bet
 const assets::ColorRGBA kRowDivider{93, 122, 112, 255};      // the line between two rows of the second page (an alliance's two players have a fainter one)
 const assets::ColorRGBA kTrack{27, 41, 37, 255};             // the track of a score bar
 const assets::ColorRGBA kTeam[4] = {{79, 191, 122, 255}, {224, 86, 79, 255}, {106, 124, 240, 255}, {185, 188, 198, 255}};      // the four colors of the ants: green, red, blue, grey
+constexpr double kHonorDetailEm = 8.2;                       // the small line under an honor's name
 
 /// The art's pieces, placed in units
 class Sheet {
@@ -302,6 +303,20 @@ std::string sentence_of(const Ctx& c, const Podium& p) {
     return fit_dialog(c.r, meter, win.name, std::max(0, room - width(fixed)), em, em_tenths) + fixed;
 }
 
+/// What the Top Thief's card says under the name: the raids whose loot got home and the points of them, the longest of three wordings that fits the card, so that a number is never cut: "3 raids home \xC2\xB7 150 points"
+/// (the middle dot is \xC2\xB7), then "3 raids \xC2\xB7 150 points" (the common 640 x 360 layout has room for this one), then "3 raids \xC2\xB7 150 pts". One is "1 raid", "1 point", "1 pt".
+std::string thief_detail(const Ctx& c, const MatchReport& rep, int32_t room, double em_units) {
+    const int64_t n = rep.top_thief.value;
+    const int64_t points = rep.loot_home[rep.top_thief.seat & 3u];
+    const std::string raids = grouped(n) + (n == 1 ? " raid" : " raids");
+    const std::string loot = " \xC2\xB7 " + grouped(points);
+    const std::string wordings[3] = {raids + " home" + loot + (points == 1 ? " point" : " points"), raids + loot + (points == 1 ? " point" : " points"), raids + loot + (points == 1 ? " pt" : " pts")};
+    for (const std::string& wording : wordings) {
+        if (c.pen.width(wording, em_units) <= room) return wording;
+    }
+    return wordings[2];
+}
+
 void draw_honors(const Ctx& c, const Podium& p) {
     const MatchReport& rep = c.m.report();
     const bool is_187 = c.m.game_mode() == sim::GameMode::Kills187;
@@ -314,7 +329,7 @@ void draw_honors(const Ctx& c, const Podium& p) {
         {"sc_k_mvp", &rep.mvp, std::to_string(rep.mvp.value / 10) + "% of the play"},
         {"sc_k_blood", &rep.first_blood, "at " + clock_of(rep.first_blood.turn)},
         is_187 ? Card{"sc_k_stand", &rep.last_stand, "out of ants at " + clock_of(rep.last_stand.turn)}
-               : Card{"sc_k_raid", &rep.biggest_raid, grouped(rep.biggest_raid.value) + " points at " + clock_of(rep.biggest_raid.turn)},
+               : Card{"sc_k_thief", &rep.top_thief, thief_detail(c, rep, c.W(p.honor[2].w - 6), kHonorDetailEm)},
     };
     for (size_t i = 0; i < 3; ++i) {
         const LayoutRect& w = p.honor[i];
@@ -329,7 +344,7 @@ void draw_honors(const Ctx& c, const Podium& p) {
         const double ant_scale = static_cast<double>(p.honor_ant_h) / static_cast<double>(kAntH);
         draw_ant(c, h.seat, w.x + w.w / 2.0 - kAntW * ant_scale / 2.0, w.y + p.honor_ant_y, ant_scale, false);
         c.pen.draw(name, c.X(w.x + w.w / 2), c.Y(w.y + p.honor_name_base), kCream, 11.5, 1);
-        c.pen.draw(fit_pen(c, cards[i].detail, c.W(w.w - 6), 8.2), c.X(w.x + w.w / 2), c.Y(w.y + p.honor_detail_base), kDim, 8.2, 1);
+        c.pen.draw(fit_pen(c, cards[i].detail, c.W(w.w - 6), kHonorDetailEm), c.X(w.x + w.w / 2), c.Y(w.y + p.honor_detail_base), kDim, kHonorDetailEm, 1);
     }
 }
 
