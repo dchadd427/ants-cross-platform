@@ -895,7 +895,7 @@
    "file": "web/front/name_letters.js",
    "old": "return utf8Of(points).length <= (maxBytes || MAX_NAME_BYTES);",
    "new": "return utf8Of(points).length <= MAX_NAME_BYTES;",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_name_letters"
+   "test": "node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
   }
  ]
 }
