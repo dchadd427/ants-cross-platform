@@ -214,6 +214,7 @@
     sunElev: clamp(Number(params.get("elev") || initLs.elev), 16, 72),
     sunAzim: clamp(Number(params.get("azim") ?? initLs.azim), -180, 180),
     playing: params.get("play") !== "0",
+    dragMode: params.get("drag") === "orbit" ? "orbit" : "pan",
     showGrid: params.get("grid") !== "0",
     castShadows: params.get("shadows") !== "0",
     hiResTiles: params.get("hires") !== "0",
@@ -752,14 +753,29 @@
     return [w, h];
   }
 
-  // --- RTS Map Pan (Left-Drag) & 3D Orbit (Right-Drag / Shift+Drag) + Zoom ---
-  const ptr = { pointers: new Map(), mode: "pan", lastX: 0, lastY: 0, lastPinch: 0 };
+  // --- RTS Map Pan & 360° 3D Orbit (1-Finger Orbit toggle, Right-Drag / Shift+Drag, 2-Finger Twist + Tilt + Pinch Zoom) ---
+  const ptr = {
+    pointers: new Map(), mode: "pan", lastX: 0, lastY: 0,
+    lastPinch: 0, lastAngle: 0, twistAccum: 0, tiltAccum: 0, twoFingerOrbit: false,
+  };
 
   function clampTarget() {
     if (!activeMap) return;
     const { cols, rows } = activeMap.mapData;
     cam.target[0] = clamp(cam.target[0], 1, cols - 1);
     cam.target[2] = clamp(cam.target[2], 1, rows - 1);
+  }
+
+  function applyOrbitDelta(dYawDeg, dPitchDeg) {
+    camGoal = null;
+    if (state.camPreset === "game" && cam.projection === "ortho") {
+      cam.projection = "perspective";
+      cam.pitch = 46;
+    }
+    cam.yaw = wrapAngleDeg(cam.yaw + dYawDeg);
+    cam.pitch = clamp(cam.pitch + dPitchDeg, 12, 86);
+    state.camPreset = "";
+    syncUi();
   }
 
   function panByPixels(dx, dy) {
@@ -783,24 +799,34 @@
   canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
   canvas.addEventListener("pointerdown", (e) => {
-    canvas.setPointerCapture(e.pointerId);
-    ptr.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+    ptr.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, accY: 0 });
     camGoal = null;
     if (ptr.pointers.size === 1) {
-      ptr.mode = (e.button === 2 || e.button === 1 || e.shiftKey) ? "orbit" : "pan";
+      const alt = (e.button === 2 || e.button === 1 || e.shiftKey);
+      const orbitNow = alt ? (state.dragMode !== "orbit") : (state.dragMode === "orbit");
+      ptr.mode = orbitNow ? "orbit" : "pan";
       ptr.lastX = e.clientX;
       ptr.lastY = e.clientY;
     } else if (ptr.pointers.size === 2) {
       const [a, b] = [...ptr.pointers.values()];
+      a.accY = 0; b.accY = 0;
       ptr.lastPinch = Math.hypot(b.x - a.x, b.y - a.y);
+      ptr.lastAngle = Math.atan2(b.y - a.y, b.x - a.x);
+      ptr.twistAccum = 0;
+      ptr.tiltAccum = 0;
+      ptr.twoFingerOrbit = !(state.camPreset === "game" && cam.projection === "ortho");
       ptr.lastX = 0.5 * (a.x + b.x);
       ptr.lastY = 0.5 * (a.y + b.y);
     }
   });
 
   canvas.addEventListener("pointermove", (e) => {
-    if (!ptr.pointers.has(e.pointerId)) return;
-    ptr.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const cur = ptr.pointers.get(e.pointerId);
+    if (!cur) return;
+    const prevY = cur.y;
+    cur.x = e.clientX;
+    cur.y = e.clientY;
     if (ptr.pointers.size === 1) {
       const dx = e.clientX - ptr.lastX;
       const dy = e.clientY - ptr.lastY;
@@ -809,20 +835,59 @@
       if (ptr.mode === "pan") {
         panByPixels(dx, dy);
       } else {
-        cam.yaw = wrapAngleDeg(cam.yaw - dx * 0.34);
-        cam.pitch = clamp(cam.pitch + dy * 0.28, 12, 86);
-        state.camPreset = "";
-        syncCamButtons();
+        applyOrbitDelta(-dx * 0.36, dy * 0.28);
       }
     } else if (ptr.pointers.size === 2) {
+      cur.accY = clamp(cur.accY + (e.clientY - prevY), -36, 36);
       const [a, b] = [...ptr.pointers.values()];
       const cx = 0.5 * (a.x + b.x), cy = 0.5 * (a.y + b.y);
       const dist = Math.hypot(b.x - a.x, b.y - a.y);
+      const ang = Math.atan2(b.y - a.y, b.x - a.x);
       if (ptr.lastPinch > 1 && dist > 1) {
         cam.zoom = clamp(cam.zoom * (ptr.lastPinch / dist), 0.24, 3.0);
       }
-      panByPixels(cx - ptr.lastX, cy - ptr.lastY);
+      let dAng = ang - ptr.lastAngle;
+      while (dAng > Math.PI) dAng -= 2 * Math.PI;
+      while (dAng < -Math.PI) dAng += 2 * Math.PI;
+      // Extract shared parallel vertical motion of both fingers (immune to pure pinch & pure twist).
+      let sharedY = 0;
+      if (a.accY * b.accY > 0) {
+        sharedY = a.accY > 0 ? Math.min(a.accY, b.accY) : Math.max(a.accY, b.accY);
+        a.accY -= sharedY;
+        b.accY -= sharedY;
+      } else if (a.accY * b.accY < 0) {
+        a.accY *= 0.8;
+        b.accY *= 0.8;
+      }
+      const allowTwoFingerTilt = state.dragMode !== "orbit";
+      let dYaw = 0, dPitch = 0;
+      if (dist > 32) {
+        if (!ptr.twoFingerOrbit) {
+          ptr.twistAccum += dAng;
+          if (allowTwoFingerTilt) ptr.tiltAccum += sharedY;
+          if (Math.abs(ptr.twistAccum) > 0.08 || (allowTwoFingerTilt && Math.abs(ptr.tiltAccum) > 12)) {
+            ptr.twoFingerOrbit = true;
+            // Screen +Y is down: clockwise twist has dAng > 0 (+yaw rotates map clockwise 1:1);
+            // sliding both fingers up (sharedY < 0) lowers pitch toward a 3D horizon angle.
+            dYaw = dAng / DEG;
+            dPitch = allowTwoFingerTilt ? sharedY * 0.36 : 0;
+          }
+        } else {
+          if (Math.abs(dAng) > 0.001) dYaw = dAng / DEG;
+          if (allowTwoFingerTilt && Math.abs(sharedY) > 0.01) dPitch = sharedY * 0.36;
+        }
+      }
+      if (dYaw !== 0 || dPitch !== 0) {
+        applyOrbitDelta(dYaw, dPitch);
+      }
+      // In Orbit mode, 2-finger drag pans freely; in Pan mode, keep vertical tilt rock-steady without vertical pan drift.
+      if (state.dragMode === "orbit" || !ptr.twoFingerOrbit) {
+        panByPixels(cx - ptr.lastX, cy - ptr.lastY);
+      } else {
+        panByPixels(cx - ptr.lastX, 0);
+      }
       ptr.lastPinch = dist;
+      ptr.lastAngle = ang;
       ptr.lastX = cx;
       ptr.lastY = cy;
     }
@@ -832,14 +897,23 @@
     ptr.pointers.delete(e.pointerId);
     if (ptr.pointers.size === 1) {
       const [rem] = [...ptr.pointers.values()];
+      rem.accY = 0;
       ptr.lastX = rem.x;
       ptr.lastY = rem.y;
-      ptr.mode = "pan";
+      ptr.mode = state.dragMode;
+    } else if (ptr.pointers.size === 2) {
+      const [a, b] = [...ptr.pointers.values()];
+      a.accY = 0; b.accY = 0;
+      ptr.lastPinch = Math.hypot(b.x - a.x, b.y - a.y);
+      ptr.lastAngle = Math.atan2(b.y - a.y, b.x - a.x);
+      ptr.lastX = 0.5 * (a.x + b.x);
+      ptr.lastY = 0.5 * (a.y + b.y);
     }
   };
   canvas.addEventListener("pointerup", endPtr);
   canvas.addEventListener("pointercancel", endPtr);
   canvas.addEventListener("lostpointercapture", endPtr);
+  canvas.addEventListener("touchmove", (e) => { if (!e.touches || e.touches.length >= 2) e.preventDefault(); }, { passive: false });
 
   canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
@@ -875,6 +949,8 @@
       b.setAttribute("aria-pressed", String(b.dataset.proj === cam.projection));
     });
     $("btn-play").setAttribute("aria-pressed", String(state.playing));
+    const orbitBtn = $("btn-orbit");
+    if (orbitBtn) orbitBtn.setAttribute("aria-pressed", String(state.dragMode === "orbit"));
     $("btn-grid").setAttribute("aria-pressed", String(state.showGrid));
     const lightBtn = $("btn-light-cycle");
     if (lightBtn) {
@@ -931,6 +1007,17 @@
     state.fixedTime = false;
     syncUi();
     setStatus(state.playing ? "Animations playing" : "Animations paused");
+  });
+
+  $("btn-orbit").addEventListener("click", () => {
+    state.dragMode = state.dragMode === "orbit" ? "pan" : "orbit";
+    if (state.dragMode === "orbit" && state.camPreset === "game" && cam.projection === "ortho") {
+      cam.projection = "perspective";
+      setCamGoal(cam.target, cam.yaw || -18, 40, cam.zoom);
+      state.camPreset = "";
+    }
+    syncUi();
+    setStatus(state.dragMode === "orbit" ? "3D Orbit mode on — drag to rotate 360° (2-finger drag to pan)" : "Pan mode on — drag to pan map (2-finger twist or right-drag to orbit)");
   });
 
   $("btn-grid").addEventListener("click", () => {
@@ -1003,6 +1090,15 @@
       if (e.key === " " && tag === "BUTTON") return;
       e.preventDefault();
       $("btn-play").click();
+    } else if (k === "o") {
+      e.preventDefault();
+      $("btn-orbit").click();
+    } else if (k === "q") {
+      e.preventDefault();
+      applyOrbitDelta(-15, 0);
+    } else if (k === "e") {
+      e.preventDefault();
+      applyOrbitDelta(15, 0);
     } else if (k === "g") {
       e.preventDefault();
       $("btn-grid").click();
@@ -1089,6 +1185,7 @@
 
   window.__demoState = {
     get ready() { return Boolean(activeMap && $("demo-loading").hidden); },
+    get cam() { return { yaw: cam.yaw, pitch: cam.pitch, zoom: cam.zoom, projection: cam.projection, dragMode: state.dragMode, camPreset: state.camPreset }; },
     activateMap,
     setLighting: applyLightingScenario,
     setFocus(id) {
