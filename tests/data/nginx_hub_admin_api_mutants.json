@@ -111,7 +111,7 @@
    "id": "the_calls_are_logged",
    "file": "docker/nginx.conf",
    "old": "        access_log off;\n        limit_req zone=ants_admin_api burst=50 nodelay;\n        limit_req_status 429;\n        client_max_body_size 512;",
-   "new": "        access_log /dev/stdout ants_noquery;\n        limit_req zone=ants_admin_api burst=50 nodelay;\n        limit_req_status 429;\n        client_max_body_size 512;"
+   "new": "        access_log /var/log/ants/web.log ants_noquery;\n        limit_req zone=ants_admin_api burst=50 nodelay;\n        limit_req_status 429;\n        client_max_body_size 512;"
   },
   {
    "id": "a_hub_that_is_not_there_is_a_page",

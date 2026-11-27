@@ -29,7 +29,7 @@ Work that is not released yet is written in the same template under a heading th
 ## Next
 
 **For operators:**
-- The web server's logs (access and error, which name the visitor's address) are deleted after 14 days, as the Legal page says: the image keeps them in `/var/log/ants/` (`docker logs ants-beta` shows none; [how](docs/BUILD_AND_RUN.md#what-the-images-nginx-sends-checks-and-logs)).
+- The web server's logs (access and error, which name the visitor's address) are deleted after 14 days, as the Legal page says: nginx writes them in `/var/log/ants/` and the image cuts them (`docker logs ants-beta` shows no request; [how](docs/BUILD_AND_RUN.md#what-the-images-nginx-sends-checks-and-logs)).
 
 ## v0.22.1 - 2026-11-27 - Smoother ants online, fewer freezes, Show ping
 

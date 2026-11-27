@@ -57,6 +57,7 @@ def site_conf(site_port, webroot, hub_port, server_ports, dead_port, cache):
     text = text.replace("/usr/share/nginx/html", webroot).replace("/var/cache/nginx/", cache + "/").replace("/srv/community-maps/", os.path.join(REPO, "Community-Maps") + "/")
     text = text.replace("    resolver 127.0.0.11 valid=10s ipv6=off;", "").replace("        resolver 127.0.0.11 valid=10s ipv6=off;", "")
     text = text.replace("include /etc/nginx/ants-trusted-proxies/*.conf;", "")
+    text = text.replace("/var/log/ants/web.log", cache + "/web.log")                                           # (the image's folder of logs is not here: the one file of the site's logs is in the run's own)
     text = text.replace("set $ants_hub ants-hub:4040;", "set $ants_hub 127.0.0.1:%d;" % hub_port)
     text = re.sub(r"(zone=ants_hub_(?:login|callback|session):1m rate=)\d+r/m", r"\g<1>600r/m", text)           # (the run logs in a dozen times in a minute from one address: the limits are tested in test_nginx_hub_login.py)
     text = re.sub(r"ants-server:(\d+)", lambda m: "127.0.0.1:%d" % server_ports.get(m.group(1), dead_port), text)

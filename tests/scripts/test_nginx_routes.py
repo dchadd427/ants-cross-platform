@@ -178,7 +178,8 @@ class TheRoutesRun(unittest.TestCase):
         cls.port = s.getsockname()[1]
         s.close()
         ran = subprocess.run(["docker", "run", "-d", "--rm", "--name", cls.name, "-p", "127.0.0.1:%d:80" % cls.port, "-v", conf + ":/etc/nginx/conf.d/default.conf:ro",
-                              "-v", html + ":/usr/share/nginx/html:ro", "-v", moved + ":/etc/nginx/ants-map-pages:ro", IMAGE], capture_output=True, text=True)
+                              "-v", html + ":/usr/share/nginx/html:ro", "-v", moved + ":/etc/nginx/ants-map-pages:ro", "-v", os.path.join(REPO, "docker", "web-log.sh") + ":/etc/nginx/ants-web-log.sh:ro", IMAGE,
+                              "sh", "/etc/nginx/ants-web-log.sh", "/docker-entrypoint.sh", "nginx", "-g", "daemon off;"], capture_output=True, text=True)       # (as the image's CMD starts it: the script makes the folder of the logs)
         if ran.returncode != 0:
             cls.why = "the container did not start: " + ran.stderr.strip()[:200]
             return

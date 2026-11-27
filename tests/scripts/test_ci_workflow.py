@@ -1308,7 +1308,7 @@ class TheChecksCanFail(unittest.TestCase):
                 ("          status=0\n          build/map_sweep.exe --selftest", "          build/map_sweep.exe --selftest", "windows_tests: 'Tool self-tests"),
                 ("build/lvl_tool.exe --selftest || status=1\n          exit $status\n", "build/lvl_tool.exe --selftest || status=1\n", "windows_tests: 'Tool self-tests"),
                 ('node tests/scripts/lvl_core_check.js --module lvl_core_from_image --require', 'node tests/scripts/lvl_core_check.js --module lvl_core_from_image --require || true', 'web_image: "Run the map core'),
-                ('docker run --rm ants-beta nginx -t', 'docker run --rm ants-beta nginx -t || true', 'web_image: "Check the image'),
+                ('docker run --rm ants-beta sh /etc/nginx/ants-web-log.sh nginx -t', 'docker run --rm ants-beta sh /etc/nginx/ants-web-log.sh nginx -t || true', 'web_image: "Check the image'),
                 ('docker compose -f docker-compose.stack.yml config --quiet', 'docker compose -f docker-compose.stack.yml config --quiet || :', "web_stack: 'Check the stack file"),
                 ('python3 tests/scripts/web_routes_check.py --web http://127.0.0.1:18080/ || {', 'python3 tests/scripts/web_routes_check.py --web http://127.0.0.1:18080/ || true; {', 'web_image: "Check the routes'),
                 ("      - name: Did both web jobs pass?\n", "      - name: Did both web jobs pass?\n        if: ${{ failure() }}\n", "web: the step 'Did both web jobs pass?' has `if`"),

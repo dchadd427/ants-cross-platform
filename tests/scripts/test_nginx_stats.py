@@ -313,7 +313,7 @@ class Rig:
             return
         cls.front = "ants-stats-front-" + tag
         ran = subprocess.run(["docker", "run", "-d", "--rm", "--name", cls.front, "--network", cls.network, "-p", "127.0.0.1:%d:80" % cls.port, "-v", conf + ":/etc/nginx/conf.d/default.conf:ro",
-                              "-v", html + ":/usr/share/nginx/html:ro", IMAGE] + KEEP, capture_output=True, text=True)
+                              "--tmpfs", "/var/log/ants", "-v", html + ":/usr/share/nginx/html:ro", IMAGE] + KEEP, capture_output=True, text=True)
         if ran.returncode != 0:
             raise RuntimeError("the container of the page did not start: " + ran.stderr.strip()[:300])
         for _ in range(100):

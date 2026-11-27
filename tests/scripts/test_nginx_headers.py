@@ -151,7 +151,7 @@ class TheText(unittest.TestCase):
         self.assertEqual(len(rules), 3)
 
     def test_the_server_logs_every_path_without_its_query(self):
-        self.assertEqual(server_level().count("access_log /dev/stdout ants_noquery;"), 1)
+        self.assertEqual(server_level().count("access_log /var/log/ants/web.log ants_noquery;"), 1)
         fmt = re.search(r"log_format\s+ants_noquery\s+(.+?);", HEAD, re.S).group(1)
         for needed in ("$remote_addr", "$time_local", "$request_method", "$ants_path", "$status", "$body_bytes_sent"):
             self.assertIn(needed, fmt)
@@ -593,8 +593,8 @@ class TheFileRuns(unittest.TestCase):
         text = text.replace("/var/cache/nginx/ants_stats", folder + "/cache_stats").replace("/var/cache/nginx/ants_history", folder + "/cache_history").replace("/var/cache/nginx/ants_hub_pics", folder + "/cache_hub_pics")
         text, n = re.subn(r"set \$(\w+) [a-z-]+:\d+;", lambda m: "set $%s 127.0.0.1:%d;" % (m.group(1), upstream), text)
         assert n >= 10, n
-        assert text.count("access_log /dev/stdout ants_noquery;") >= 5
-        text = text.replace("access_log /dev/stdout ants_noquery;", "access_log %s ants_noquery;" % log).replace("error_log /dev/stderr crit;", "error_log %s/loc.log crit;" % folder)
+        assert text.count("access_log /var/log/ants/web.log ants_noquery;") >= 5
+        text = text.replace("access_log /var/log/ants/web.log ants_noquery;", "access_log %s ants_noquery;" % log).replace("error_log /var/log/ants/web.log", "error_log %s/loc.log" % folder)
         with open(os.path.join(folder, "site.conf"), "w", encoding="utf-8") as f:
             f.write(text)
         # the main file is the image's own, as far as these tests see: the stock log, which the server block must replace

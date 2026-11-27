@@ -177,7 +177,7 @@ class TheText(unittest.TestCase):
         for block in (PAGE_OFF, PAGE_LIMIT):
             self.assertIn("access_log off;", block)                                            # (nginx logs a request with the settings of the place where it ends)
         for name in ("login", "callback"):
-            self.assertIn("error_log /dev/stderr crit;", PAGES[name], name)
+            self.assertIn("error_log /var/log/ants/web.log crit;", PAGES[name], name)
         for block in (LOGIN, CALLBACK):
             self.assertNotRegex(block, r"\$(request|request_uri|args|query_string|arg_\w+)\b")
 
@@ -258,7 +258,8 @@ def mini_conf(tmp, port, hub_port, stand_port, dead_port, error_level="error"):
         text = text.replace("set $ants_hub ants-hub:4040;", "set $ants_hub 127.0.0.1:%d;" % where)
         text = text.replace("set $ants_server ants-server:4002;", "set $ants_server 127.0.0.1:%d;" % stand_port)
         text = text.replace("set $ants_submit ants-server:4030;", "set $ants_submit 127.0.0.1:%d;" % stand_port)
-        text = text.replace("error_log /dev/stderr crit;", "error_log %s/loc%d.log crit;" % (tmp, port))
+        text = text.replace("error_log /var/log/ants/web.log crit;", "error_log %s/loc%d.log crit;" % (tmp, port))
+        text = text.replace("access_log /var/log/ants/web.log ants_noquery;", "access_log %s/doors%d.log ants_noquery;" % (tmp, port))         # (the doors that log the paths of the players' texts: the image's one file is a file of its own folder)
         text = re.sub(r"limit_req zone=ants_(?:hub_req|busy|admin_api) [^;]*;", "", text)         # (the other doors have their own tests, and their zones are not in this small server)
         return "location %s {%s}" % (header[len("location "):].strip(), text)
 

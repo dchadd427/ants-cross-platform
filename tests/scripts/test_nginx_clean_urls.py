@@ -274,7 +274,7 @@ class TheRealPagesRun(unittest.TestCase):
             text = text.replace("/usr/share/nginx/html", docroot).replace("/srv/community-maps", maps).replace("/etc/nginx/ants-map-pages", moved)
             text = text.replace("/var/cache/nginx/ants_stats", folder + "/cache_stats").replace("/var/cache/nginx/ants_history", folder + "/cache_history").replace("/var/cache/nginx/ants_hub_pics", folder + "/cache_hub_pics")
             text = re.sub(r"set \$(\w+) [a-z-]+:\d+;", lambda m: "set $%s 127.0.0.1:%d;" % (m.group(1), dead), text)
-            text = text.replace("access_log /dev/stdout ants_noquery;", "access_log %s/access.log ants_noquery;" % folder).replace("error_log /dev/stderr crit;", "error_log %s/loc.log crit;" % folder)
+            text = text.replace("access_log /var/log/ants/web.log ants_noquery;", "access_log %s/access.log ants_noquery;" % folder).replace("error_log /var/log/ants/web.log", "error_log %s/loc.log" % folder)
             with open(os.path.join(folder, "site.conf"), "w", encoding="utf-8") as f:
                 f.write(text)
             with open(os.path.join(folder, "nginx.conf"), "w", encoding="utf-8") as f:
