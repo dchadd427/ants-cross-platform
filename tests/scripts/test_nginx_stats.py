@@ -854,7 +854,7 @@ class TheRealServerBehindTheFile(unittest.TestCase):
         with open(conf, "w", encoding="utf-8") as f:
             f.write(text)
         cls.front = "ants-stats-real-" + uuid.uuid4().hex[:8]
-        ran = subprocess.run(["docker", "run", "-d", "--rm", "--name", cls.front, "--network", "host", "-v", conf + ":/etc/nginx/conf.d/default.conf:ro", "-v", html + ":/usr/share/nginx/html:ro", IMAGE],
+        ran = subprocess.run(["docker", "run", "-d", "--rm", "--name", cls.front, "--network", "host", "-v", conf + ":/etc/nginx/conf.d/default.conf:ro", "--tmpfs", "/var/log/ants", "-v", html + ":/usr/share/nginx/html:ro", IMAGE],
                              capture_output=True, text=True)
         if ran.returncode != 0:
             cls.front = ""
