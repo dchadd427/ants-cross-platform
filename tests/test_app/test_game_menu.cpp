@@ -2,7 +2,7 @@
 //   * the one table of rows: ids and names are unique, every text is plain (no markup), the JSON that the page gets is valid for a match and for a recording, in the browser and in the desktop build,
 //     and a recording has no Game section;
 //   * Leave game: what it does in every state (a forfeit with one opponent left, a drop out with more, the match held, a recording) and the words that ask;
-//   * the new settings (Master volume, Mute, the ant health marks): read with the original's reader, written under their own names, the old hit point numbers read once as Off, and the gain they make;
+//   * the new settings (Master volume, Mute, the ant health marks, Show ping): read with the original's reader, written under their own names, the old hit point numbers read once as Off, and the gain they make;
 //   * Esc: it cancels what is open or selected first, and asks for the menu only when there was nothing, only on a first press, never over a dialog that needs its answer;
 //   * what the panel changes is what the original's options window shows (the same state, stored under the original's names), and a change of Ctrl+L is remembered;
 //   * while the panel is up the game takes no key, text or click, does not scroll at the edges and sees no finger; closing gives the input back after the events that were queued;
@@ -119,7 +119,7 @@ void test_table() {
     std::printf("[table] the one list of rows\n");
     size_t count = 0;
     const gm::Row* rows = gm::rows(count);
-    check(count == 17, "seventeen rows");
+    check(count == 18, "eighteen rows");
     for (size_t i = 0; i < count; ++i) {
         const gm::Row& row = rows[i];
         check(gm::find_row(row.id) == &row, std::string("row ") + row.key + " is found by its id");
@@ -141,9 +141,9 @@ void test_table() {
               "the picture row has one word for each row of the shape table, in its order, and the web's default shape as its default");
         check(picture != nullptr && std::string(picture->hint) == "The shape of the picture; the match goes on", "the picture row's hint says what the dropdown does (the page lists the shapes, from its own copy of the table)");
     }
-    check(gm::find_row(0) == nullptr && gm::find_row(18) == nullptr && gm::find_row(-1) == nullptr, "no other id is a row");
+    check(gm::find_row(0) == nullptr && gm::find_row(19) == nullptr && gm::find_row(-1) == nullptr, "no other id is a row");
     check(gm::find_row(gm::kMaster)->def == 100 && gm::find_row(gm::kMusic)->def == 65 && gm::find_row(gm::kEffects)->def == 100 && gm::find_row(gm::kScroll)->def == 50, "the defaults are the original's (Master 100: nothing changes)");
-    check((gm::find_row(gm::kMaster)->show & gm::kShowNew) && (gm::find_row(gm::kMute)->show & gm::kShowNew) && (gm::find_row(gm::kAntHealth)->show & gm::kShowNew) && (gm::find_row(gm::kHealthStyle)->show & gm::kShowNew) && (gm::find_row(gm::kHealthChanges)->show & gm::kShowNew) && (gm::find_row(gm::kHudArt)->show & gm::kShowNew) && !(gm::find_row(gm::kMusic)->show & gm::kShowNew), "exactly the five new rows carry the new tag");
+    check((gm::find_row(gm::kMaster)->show & gm::kShowNew) && (gm::find_row(gm::kMute)->show & gm::kShowNew) && (gm::find_row(gm::kAntHealth)->show & gm::kShowNew) && (gm::find_row(gm::kHealthStyle)->show & gm::kShowNew) && (gm::find_row(gm::kHealthChanges)->show & gm::kShowNew) && (gm::find_row(gm::kShowPing)->show & gm::kShowNew) && (gm::find_row(gm::kHudArt)->show & gm::kShowNew) && !(gm::find_row(gm::kMusic)->show & gm::kShowNew), "exactly the five new rows carry the new tag");
     {   // Damage & heal numbers: one On / Off row in Video right after "Show health as", on by default, in a match and while watching, in both skins
         const gm::Row* row = gm::find_row(gm::kHealthChanges);
         check(row != nullptr && std::string(row->key) == "health_changes" && std::string(row->label) == "Damage & heal numbers" && row->section == gm::Section::Video && row->kind == gm::Kind::Switch &&
@@ -158,19 +158,34 @@ void test_table() {
         }
         check(style_at < n_rows && row_at == style_at + 1, "...right after Show health as");
     }
-    {   // HUD art: one New / Classic choice in Video right after the damage and heal numbers, New by default, in a match and while watching, in both skins
+    {   // Show ping: one On / Off switch in Video right after the damage and heal numbers, Off by default, in a match of a seat and not in a recording, in both skins
+        const gm::Row* row = gm::find_row(gm::kShowPing);
+        check(row != nullptr && std::string(row->key) == "show_ping" && std::string(row->label) == "Show ping" && row->section == gm::Section::Video && row->kind == gm::Kind::Switch &&
+                  row->def == 0 && row->min == 0 && row->max == 1 && std::string(row->words) == "On|Off" && !(row->show & gm::kShowWatch) && (row->show & gm::kShowWeb) && (row->show & gm::kShowDesktop) && (row->show & gm::kShowNew),
+              "the Show ping row: a switch in Video, Off by default, in both skins, tagged new, and not in a recording");
+        check(row != nullptr && std::string(row->hint).find("in network games") != std::string::npos, "...and its hint says that it is for network games");
+        size_t n_rows = 0;
+        const gm::Row* all = gm::rows(n_rows);
+        size_t changes_at = n_rows, row_at = n_rows;
+        for (size_t i = 0; i < n_rows; ++i) {
+            if (all[i].id == gm::kHealthChanges) changes_at = i;
+            if (all[i].id == gm::kShowPing) row_at = i;
+        }
+        check(changes_at < n_rows && row_at == changes_at + 1, "...right after Damage & heal numbers");
+    }
+    {   // HUD art: one New / Classic choice in Video right after Show ping, New by default, in a match and while watching, in both skins
         const gm::Row* row = gm::find_row(gm::kHudArt);
         check(row != nullptr && std::string(row->key) == "hud_art" && std::string(row->label) == "HUD art" && row->section == gm::Section::Video && row->kind == gm::Kind::Choice &&
                   row->def == 0 && row->min == 0 && row->max == 1 && std::string(row->words) == "New|Classic" && (row->show & gm::kShowWatch) && (row->show & gm::kShowWeb) && (row->show & gm::kShowDesktop),
               "the HUD art row: a choice in Video, New first and by default, in both skins and in a recording");
         size_t n_rows = 0;
         const gm::Row* all = gm::rows(n_rows);
-        size_t changes_at = n_rows, row_at = n_rows;
+        size_t ping_at = n_rows, row_at = n_rows;
         for (size_t i = 0; i < n_rows; ++i) {
-            if (all[i].id == gm::kHealthChanges) changes_at = i;
+            if (all[i].id == gm::kShowPing) ping_at = i;
             if (all[i].id == gm::kHudArt) row_at = i;
         }
-        check(changes_at < n_rows && row_at == changes_at + 1, "...right after Damage & heal numbers");
+        check(ping_at < n_rows && row_at == ping_at + 1, "...right after Show ping");
     }
     check((gm::find_row(gm::kMaster)->show & gm::kShowLive) && !(gm::find_row(gm::kMusic)->show & gm::kShowLive), "Master volume acts while it is dragged, the original's sliders at the release");
 
@@ -180,6 +195,7 @@ void test_table() {
             Json reader(json);
             check(reader.valid(), std::string("the JSON is valid (watching ") + (watching ? "yes" : "no") + ", " + (web ? "web" : "desktop") + ")");
             check(has(json, "\"key\":\"master\"") && has(json, "\"key\":\"mute\"") && has(json, "\"key\":\"ant_health\"") && has(json, "\"key\":\"ant_health_style\"") && has(json, "\"key\":\"health_changes\"") && has(json, "\"key\":\"hud_art\"") && !has(json, "hp_numbers") && has(json, "\"key\":\"scroll\""), "the sound and video rows are there");
+            check(has(json, "\"key\":\"show_ping\"") == !watching, "Show ping is in a match of a seat and not in a recording, in both skins");
             check(has(json, "\"id\":\"controls\"") && has(json, "\"id\":\"sound\"") && has(json, "\"id\":\"video\""), "the Sound, Video and Controls sections are there");
             check(has(json, "\"key\":\"chat\"") == !watching && has(json, "\"id\":\"game\"") == !watching && has(json, "\"key\":\"version\"") == !watching, "the Game section is in a match and not in a recording");
             check(has(json, "\"key\":\"picture\"") == web && has(json, "\"key\":\"lockmouse\"") == web, "the picture's shape and the fullscreen mouse are the browser's rows");
@@ -240,6 +256,7 @@ void test_settings() {
     check(defaults.master == 100 && !defaults.mute && defaults.ant_health == health::Setting{When::Hurt, Style::Bar}, "an empty file: Master 100, not muted, a bar on hurt ants");
     check(defaults.gain() == 1.0f, "which is the mix as it was");
     check(defaults.health_changes, "the damage and heal numbers are on when the file says nothing");
+    check(!defaults.show_ping, "the ping is not shown when the file says nothing");
     gm::MenuSettings s;
     s.master = 37;
     s.mute = true;
@@ -271,6 +288,38 @@ void test_settings() {
         m.health_changes = false;
         m.load(each);
         check(m.health_changes, "a value that is not exactly off reads as on: '" + odd + "'");
+    }
+    {   // Show ping: off unless the file says on; it round-trips under its own name, also through the settings text
+        for (const bool on : {true, false}) {
+            ConfigStore each;
+            gm::MenuSettings out;
+            out.show_ping = on;
+            out.write(each, gm::kShowPing);
+            gm::MenuSettings in;
+            in.show_ping = !on;
+            in.load(each);
+            check(in.show_ping == on && each.get_string("show_ping", "", 8) == (on ? "on" : "off"), std::string("round trip of show_ping=") + (on ? "on" : "off"));
+            ConfigStore text;
+            text.parse(each.serialise());
+            gm::MenuSettings again;
+            again.show_ping = !on;
+            again.load(text);
+            check(again.show_ping == on, std::string("...through the settings text, as the browser keeps it: ") + (on ? "on" : "off"));
+        }
+        for (const std::string odd : {"On", "ON", "yes", "1", "", "on "}) {
+            ConfigStore each;
+            each.set_string("show_ping", odd);
+            gm::MenuSettings m;
+            m.show_ping = true;
+            m.load(each);
+            check(!m.show_ping, "a value that is not exactly on reads as off: '" + odd + "'");
+        }
+        check(std::string(gm::MenuSettings::key(gm::kShowPing)) == "show_ping", "the name");
+        ConfigStore other;
+        gm::MenuSettings writes;
+        writes.show_ping = true;
+        writes.write(other, gm::kHealthChanges);
+        check(!other.has("show_ping"), "another row's write does not write it");
     }
     {   // HUD art: New unless the file says classic; it round-trips; a store that gives nothing (the browser refuses its storage) is New
         check(defaults.hud_art_new, "the HUD art is the new one when the file says nothing");
@@ -521,6 +570,11 @@ void test_values() {
         check(!app.game_menu_set(gm::kHudArt, 2) && !app.game_menu_set(gm::kHudArt, -1) && app.game_menu_get(gm::kHudArt) == 1 && app.hud().art() == nullptr, "a word that the row does not have is refused");
         check(app.game_menu_set(gm::kHudArt, 0) && app.game_menu_get(gm::kHudArt) == 0 && app.hud().art() != nullptr && has(read_file(file), "hud_art=new\n"), "New gives it back, and is written");
         check(app.game_menu_set(gm::kHudArt, 1), "(Classic again, for the file)");
+        check(app.game_menu_get(gm::kShowPing) == 0 && !app.menu_settings().show_ping, "Show ping starts Off");
+        check(app.game_menu_set(gm::kShowPing, 1) && app.game_menu_get(gm::kShowPing) == 1 && app.menu_settings().show_ping && has(read_file(file), "show_ping=on\n"), "...goes on, and that is written");
+        check(!app.game_menu_set(gm::kShowPing, 2) && !app.game_menu_set(gm::kShowPing, -1) && app.game_menu_get(gm::kShowPing) == 1, "a word that the row does not have is refused");
+        check(app.game_menu_set(gm::kShowPing, 0) && app.game_menu_get(gm::kShowPing) == 0 && has(read_file(file), "show_ping=off\n"), "...and Off is written");
+        check(app.game_menu_set(gm::kShowPing, 1), "(On again, for the file)");
         check(app.game_menu_get(gm::kHealthChanges) == 1 && app.menu_settings().health_changes, "the damage and heal numbers start On");
         check(app.game_menu_set(gm::kHealthChanges, 0) && app.game_menu_get(gm::kHealthChanges) == 0 && !app.menu_settings().health_changes && has(read_file(file), "health_changes=off\n"), "...go off, and that is written");
         check(!app.game_menu_set(gm::kHealthChanges, 2) && !app.game_menu_set(gm::kHealthChanges, -1) && app.game_menu_get(gm::kHealthChanges) == 0, "a word that the row does not have is refused");
@@ -539,8 +593,8 @@ void test_values() {
         app.run_frame_with_delta(0.016f);
         check(app.menu_settings().ant_health.when == health::When::Off, "...and off");
         const std::string saved = read_file(file);
-        check(has(saved, "master=41\n") && has(saved, "mute=on\n") && has(saved, "ant_health=off\n") && has(saved, "ant_health_style=number\n") && has(saved, "health_changes=off\n") && has(saved, "hud_art=classic\n") && !has(saved, "hp_numbers"),
-              "the file has master=41, mute=on, ant_health=off, ant_health_style=number, health_changes=off, hud_art=classic, and no old key");
+        check(has(saved, "master=41\n") && has(saved, "mute=on\n") && has(saved, "ant_health=off\n") && has(saved, "ant_health_style=number\n") && has(saved, "health_changes=off\n") && has(saved, "show_ping=on\n") && has(saved, "hud_art=classic\n") && !has(saved, "hp_numbers"),
+              "the file has master=41, mute=on, ant_health=off, ant_health_style=number, health_changes=off, show_ping=on, hud_art=classic, and no old key");
         check(has(saved, "Music Volume=30\n") && has(saved, "Sound Volume=77\n") && has(saved, "Scroll Speed=12\n") && has(saved, "Participate In Chat=0\n") && has(saved, "Show Quick Help at Startup=0\n"), "the original's keep their own names");
     }
     {
@@ -551,6 +605,7 @@ void test_values() {
             check(app.game_menu_get(gm::kMaster) == 41 && app.game_menu_get(gm::kMute) == 1 && app.game_menu_get(gm::kAntHealth) == 2 && app.game_menu_get(gm::kHealthStyle) == 1 &&
                       app.hud().ant_health() == health::Setting{health::When::Off, health::Style::Number}, "Master, Mute and the health marks come back");
             check(app.game_menu_get(gm::kHealthChanges) == 0, "...and so does the switch of the damage and heal numbers");
+            check(app.game_menu_get(gm::kShowPing) == 1 && app.menu_settings().show_ping, "...and Show ping");
             check(app.game_menu_get(gm::kHudArt) == 1 && app.hud().art() == nullptr, "...and the choice of the original's HUD art, which the HUD then draws");
             check(app.game_menu_get(gm::kMusic) == 30 && app.game_menu_get(gm::kScroll) == 12, "and the original's");
         }
@@ -752,6 +807,68 @@ void test_hud_art() {
     }
 }
 
+void test_show_ping_start() {
+    std::printf("[show ping] the settings file and --show-ping\n");
+    const auto start = [](Application& app, bool given, bool on, const std::string& settings) {
+        const QuietStdout quiet;
+        SDL_Init(SDL_INIT_VIDEO);
+        ApplicationConfig cfg = base_config(Aspect::Wide16x9);
+        cfg.screenshot_path = "never_written.png";
+        cfg.screenshot_frames = 1 << 30;
+        cfg.show_ping_given = given;
+        cfg.show_ping = on;
+        cfg.settings_path = settings;
+        return app.init(cfg);
+    };
+    const std::filesystem::path file = std::filesystem::temp_directory_path() / ("ants_show_ping_" + std::to_string(static_cast<long long>(SDL_GetTicks())) + ".ini");
+    {
+        Application app;
+        check(start(app, false, false, std::string()) && !app.menu_settings().show_ping && app.game_menu_get(gm::kShowPing) == 0, "by default the ping is not shown");
+    }
+    {
+        Application app;
+        check(start(app, true, true, std::string()) && app.menu_settings().show_ping && app.game_menu_get(gm::kShowPing) == 1, "--show-ping on: shown for this run");
+    }
+    {
+        std::ofstream out(file);
+        out << "show_ping=on\n";
+    }
+    {
+        Application app;
+        check(start(app, false, false, file.string()) && app.menu_settings().show_ping && app.game_menu_get(gm::kShowPing) == 1, "the settings file says on: shown");
+    }
+    {
+        Application app;
+        check(start(app, true, false, file.string()) && !app.menu_settings().show_ping && app.game_menu_get(gm::kShowPing) == 0, "...and --show-ping off says off for this run");
+        check(read_file(file) == "show_ping=on\n", "...and the file is not changed by it");
+    }
+    std::error_code ignored;
+    std::filesystem::remove(file, ignored);
+    {   // the command line
+        std::vector<std::string> args;
+        std::vector<char*> st;
+        const auto parse = [&](std::vector<std::string> a) {
+            args = std::move(a);
+            st.clear();
+            for (std::string& x : args) st.push_back(x.data());
+            st.push_back(nullptr);
+            return Application::parse_arguments(static_cast<int>(args.size()), st.data());
+        };
+        ApplicationConfig c = parse({"ants"});
+        check(!c.show_ping && !c.show_ping_given && c.startup_error.empty(), "the command line says nothing: the settings decide, and the default is off");
+        c = parse({"ants", "--show-ping", "on"});
+        check(c.show_ping && c.show_ping_given && c.startup_error.empty(), "--show-ping on");
+        c = parse({"ants", "--show-ping", "off"});
+        check(!c.show_ping && c.show_ping_given && c.startup_error.empty(), "--show-ping off");
+        c = parse({"ants", "--show-ping", "maybe"});
+        check(c.startup_error == "--show-ping needs on or off" && !c.show_ping_given, "--show-ping with another word is refused with the reason");
+        c = parse({"ants", "--show-ping"});
+        check(c.startup_error == "--show-ping needs on or off", "--show-ping with no word is refused");
+        c = parse({"ants", "--show-ping", "on", "--show-ping", "off"});
+        check(!c.show_ping && c.show_ping_given, "the last one wins");
+    }
+}
+
 void test_input() {
     std::printf("[input] the game takes nothing while the panel is up\n");
     AppRig rig(Aspect::Wide16x9, 1.0f, false, std::string(), true, true);
@@ -921,6 +1038,7 @@ int main(int argc, char* argv[]) {
     test_esc();
     test_values();
     test_hud_art();
+    test_show_ping_start();
     test_input();
     test_acts();
     std::printf("\ngame menu: %d checks, %d failures\n", g_checks, g_failures);

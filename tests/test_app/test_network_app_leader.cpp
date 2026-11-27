@@ -1036,13 +1036,16 @@ void run_leader_tests() {
 
 
 
-// ping and delay next to the frame rate (latency_corner.hpp, ants_net/latency.hpp): what a guest and a host measure in the room and in the match, and what the corner does
+// ping next to the frame rate (latency_corner.hpp, ants_net/latency.hpp): what a guest and a host measure in the room and in the match (and the delay of their own commands, which the
+// prediction and the browser measurement read), and what the corner does
 void run_latency_tests() {
-    TEST_CASE("N5.27 Latency: A Guest Measures Its Ping In The Room And Its Ping And The Delay Of Its Own Commands In The Match; The Corner Draws Them; Nothing Waits At The End") {
+    TEST_CASE("N5.27 Latency: A Guest Measures Its Ping In The Room And Its Ping And The Delay Of Its Own Commands In The Match; The Corner Draws The Ping; Nothing Waits At The End") {
         Peer host;
         ASSERT_TRUE(host.net.host(0, "Alice", true));
         host.net.set_map("TINY.LVL");
         ApplicationConfig cfg = headless_config();
+        cfg.show_ping = true;
+        cfg.show_ping_given = true;
         cfg.net_role = ApplicationConfig::NetRole::Join;
         cfg.net_address = "127.0.0.1";
         cfg.net_port = host.net.listen_port();
@@ -1057,7 +1060,7 @@ void run_latency_tests() {
         ASSERT_TRUE(duo.until([&]() { return app.net()->ping_ms().has_value(); }, 8000));
         ASSERT_TRUE(*app.net()->ping_ms() <= 30);
         ASSERT_FALSE(app.net()->command_delay_ms().has_value());                           // no command yet: "-"
-        app.render_frame();                                                                // the room's corner: one row left of the version
+        app.render_frame();                                                                // the room's corner: the ping, in a row left of the version
         // the match
         uint64_t hash = 0;
         ASSERT_TRUE(net::hash_file(maps_dir() + "TINY.LVL", hash));
@@ -1079,13 +1082,13 @@ void run_latency_tests() {
         // the delay: the way there (up to one step), the wait for the next 50 ms turn (0 - 50), the way back (up to one step), and one turn of jitter buffer (50 - 60)
         ASSERT_TRUE(*app.net()->command_delay_ms() >= 50 && *app.net()->command_delay_ms() <= 150);
         ASSERT_TRUE(app.net()->stalled_ms() < 1000);                                       // turns are flowing: no "Waiting for the other players..."
-        app.render_frame();                                                                // the match's corner: two lines above the row
-        // a player who gives no order for more than ten seconds sees "delay -" (the number is not about now any more), and the next order brings it back
+        app.render_frame();                                                                // the match's corner: the ping, on a line above the row
+        // a player who gives no order for more than ten seconds has no delay (the number is not about now any more), and the next order brings it back
         duo.step(9000);
         ASSERT_TRUE(app.net()->command_delay_ms().has_value());
         duo.step(2500);
         ASSERT_FALSE(app.net()->command_delay_ms().has_value());
-        app.render_frame();                                                                // (the corner draws the dash)
+        app.render_frame();
         for (uint32_t t = 0; t < 2000 && !app.net()->command_delay_ms().has_value(); t += 10) {
             if (t % 300 == 0) {
                 const auto mine = ants_of(app.sim(), 1);
@@ -1094,7 +1097,6 @@ void run_latency_tests() {
             duo.step(10);
         }
         ASSERT_TRUE(app.net()->command_delay_ms().has_value());
-        // the results screen of a match shows the readout too (one row: nothing stands in the corner row there)
         app.return_to_map_select();
         ASSERT_FALSE(app.network_active());
         ASSERT_FALSE(app.net() != nullptr && app.net()->ping_ms().has_value());
@@ -1102,6 +1104,8 @@ void run_latency_tests() {
 
     TEST_CASE("N5.28 Latency: A Host's Ping Is 0 (it has no link to itself), The Delay Of Its Own Commands Is The Wait For The Seal Plus One Turn Of Buffer") {
         ApplicationConfig cfg = headless_config();
+        cfg.show_ping = true;
+        cfg.show_ping_given = true;
         cfg.net_role = ApplicationConfig::NetRole::Host;
         cfg.net_port = 0;
         cfg.net_loopback_only = true;
@@ -1134,7 +1138,7 @@ void run_latency_tests() {
         }
         ASSERT_TRUE(app.net()->command_delay_ms().has_value());
         ASSERT_TRUE(*app.net()->command_delay_ms() >= 50 && *app.net()->command_delay_ms() <= 120);        // 0 - 50 for the seal, 50 for the buffer, one step of rounding
-        app.render_frame();                                                                  // the host's corner: "ping 0 ms", its own delay
+        app.render_frame();                                                                  // the host's corner: "ping 0 ms"
     } TEST_END();
 
     TEST_CASE("N5.30 The Network Keeps Real Time: A Frame Of 400 ms Lets The Runner Pay Back Eight Turns At Once (the local simulation's clamp of 100 ms would run two and leave the rest in the queue)") {
@@ -1207,7 +1211,7 @@ void run_latency_tests() {
         ASSERT_TRUE(app.net()->ping_ms().has_value());
     } TEST_END();
 
-    TEST_CASE("N5.29 Latency Corner With The Real Font: The Row Of The Setup And Results Screens And The Two Lines Of The Match Clear The Version, The Frame Rate, The Sparkline And The Score Boxes") {
+    TEST_CASE("N5.29 Latency Corner With The Real Font: The Row Of The Setup And Results Screens And The Line Of The Match Clear The Version, The Frame Rate, The Sparkline And The Score Boxes") {
         ApplicationConfig cfg = headless_config();
         Application app;
         ASSERT_TRUE(app.init(cfg));
@@ -1219,50 +1223,46 @@ void run_latency_tests() {
         const int32_t ver_w = r.get_text_width(std::string(ants::VERSION_STRING), FontSize::Px12);
         const int32_t ver_x = spark_x - ver_w - 6;
         const int32_t text_y = FPS_OVERLAY_SPARK_Y + (FPS_OVERLAY_SPARK_H - text_h) / 2;
-        const int32_t widest = r.get_text_width(ping_text(LATENCY_SHOWN_MAX_MS), FontSize::Px12) + LATENCY_TEXT_GAP + r.get_text_width(delay_text(LATENCY_SHOWN_MAX_MS), FontSize::Px12);
+        const int32_t widest = r.get_text_width(ping_text(LATENCY_SHOWN_MAX_MS), FontSize::Px12);
         struct Box { int32_t x, y, w, h; };
         auto overlap = [](const Box& a, const Box& b) { return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h; };
         for (const uint32_t ms : {0u, 7u, 42u, 230u, 1234u, 9999u}) {
             const std::string p = ping_text(ms);
-            const std::string d = delay_text(ms);
             const int32_t pw = r.get_text_width(p, FontSize::Px12);
-            const int32_t dw = r.get_text_width(d, FontSize::Px12);
             const Box version{ver_x, text_y, ver_w, text_h};
             const Box plate{spark_x - 1, FPS_OVERLAY_TOP, 36 + 2, FPS_OVERLAY_BOTTOM - FPS_OVERLAY_TOP};
             const Box fps{text_x, text_y, fps_w, text_h};
             // setup and results screens: one row, left of the version; the prompt box of the setup screen (36 .. 329, picture to 336, rows 441 .. 468) is further left
             for (const int32_t limit : {LATENCY_LEFT_LIMIT_SETUP, LATENCY_LEFT_LIMIT_RESULTS}) {
-                const LatencyCornerLayout l = layout_latency_corner(pw, dw, widest, text_h, ver_x, text_y, limit);
+                const LatencyCornerLayout l = layout_latency_corner(pw, widest, text_h, ver_x, text_y, limit);
                 ASSERT_FALSE(l.stacked);
                 const Box ping{l.ping_x, l.ping_y, pw, text_h};
-                const Box delay{l.delay_x, l.delay_y, dw, text_h};
-                ASSERT_FALSE(overlap(ping, version) || overlap(delay, version) || overlap(ping, plate) || overlap(delay, plate) || overlap(ping, fps) || overlap(delay, fps) || overlap(ping, delay));
+                ASSERT_FALSE(overlap(ping, version) || overlap(ping, plate) || overlap(ping, fps));
                 ASSERT_TRUE(l.ping_x >= limit);
-                ASSERT_TRUE(l.ping_y == text_y && l.delay_y == text_y);                      // level with the frame rate, in the corner row
+                ASSERT_TRUE(l.ping_y == text_y);                                             // level with the frame rate, in the corner row
             }
-            ASSERT_TRUE(layout_latency_corner(pw, dw, widest, text_h, ver_x, text_y, LATENCY_LEFT_LIMIT_SETUP).ping_x > 336);                  // right of the prompt box's picture
-            // match: two lines above the row. They clear the version, the sparkline plate, the frame rate and the score boxes (bottom row, to x = 458) and the chat input box
-            // (x 479 .. 622, rows 423 .. 436); the only HUD piece they touch is the right edge of the "Send to: All" button (x 532 .. 576, rows 443 .. 467), by at most 7 pixels
-            const LatencyCornerLayout m = layout_latency_corner(pw, dw, widest, text_h, ver_x, text_y, LATENCY_LEFT_LIMIT_MATCH);
+            ASSERT_TRUE(layout_latency_corner(pw, widest, text_h, ver_x, text_y, LATENCY_LEFT_LIMIT_SETUP).ping_x > 336);                  // right of the prompt box's picture
+            // match: a line above the row. It clears the version, the sparkline plate, the frame rate and the score boxes (bottom row, to x = 458) and the chat input box
+            // (x 479 .. 622, rows 423 .. 436); the only HUD piece it touches is the right edge of the "Send to: All" button (x 532 .. 576, rows 443 .. 467), by at most 9 pixels
+            const LatencyCornerLayout m = layout_latency_corner(pw, widest, text_h, ver_x, text_y, LATENCY_LEFT_LIMIT_MATCH);
             ASSERT_TRUE(m.stacked);
             const Box ping{m.ping_x, m.ping_y, pw, text_h};
-            const Box delay{m.delay_x, m.delay_y, dw, text_h};
-            ASSERT_FALSE(overlap(ping, version) || overlap(delay, version) || overlap(ping, plate) || overlap(delay, plate) || overlap(ping, fps) || overlap(delay, fps) || overlap(ping, delay));
+            ASSERT_FALSE(overlap(ping, version) || overlap(ping, plate) || overlap(ping, fps));
             const Box score_boxes{0, 461, 458, 19};
             const Box chat_input{479, 423, 143, 14};
-            ASSERT_FALSE(overlap(ping, score_boxes) || overlap(delay, score_boxes) || overlap(ping, chat_input) || overlap(delay, chat_input));
-            // the "Send to: All" button's box is x 532 .. 575, rows 443 .. 466 (its picture ends a pixel or two inside it): the lines end at the frame rate's right edge, so a longer
-            // text reaches further into the box: "delay 230 ms" 7 px, "ping 230 ms" 2, a number of one or two digits none, "delay 9999 ms" 13 (and "ping 9999 ms" 9)
+            ASSERT_FALSE(overlap(ping, score_boxes) || overlap(ping, chat_input));
+            // the "Send to: All" button's box is x 532 .. 575, rows 443 .. 466 (its picture ends a pixel or two inside it): the line ends at the frame rate's right edge, so a longer
+            // text reaches further into the box: "ping 230 ms" 2 px, a number of one or two digits none, "ping 9999 ms" 9
             const Box all_button{532, 443, 44, 24};
             auto touches = [&](const Box& line) { return std::max(0, std::min(all_button.x + all_button.w, line.x + line.w) - std::max(all_button.x, line.x)); };
-            ASSERT_TRUE(touches(delay) <= 13 && touches(ping) <= 9);
-            ASSERT_TRUE(ms >= 1000 || (touches(delay) <= 7 && touches(ping) <= 2));
-            ASSERT_TRUE(ms >= 100 || (touches(delay) == 0 && touches(ping) == 0));
-            ASSERT_TRUE(m.ping_x >= 0 && m.delay_x >= 0 && m.delay_y + text_h <= 480 && m.ping_y >= 436);
+            ASSERT_TRUE(touches(ping) <= 9);
+            ASSERT_TRUE(ms >= 1000 || touches(ping) <= 2);
+            ASSERT_TRUE(ms >= 100 || touches(ping) == 0);
+            ASSERT_TRUE(m.ping_x >= 0 && m.ping_y + text_h <= 480 && m.ping_y >= 436);
         }
     } TEST_END();
 
-    TEST_CASE("N5.29b Latency Corner In The 16:9 Match: The Application's Readout Stands On Two Lines In The Corner, Right Of The Row Of Score Boxes That Are Spread Over The Wide Bottom Strip (The Match's Limit Is The Layout's, Not The Original's 460), And In The Original's Own Picture Still On Two Lines Right Of 460") {
+    TEST_CASE("N5.29b Show Ping In The Application: Off By Default (The Corner Draws No Ping And Has No Text To Tap In The Room Or The Match); On, The Ping Stands On One Line In The Match Corner, Right Of The Row Of Score Boxes That Are Spread Over The Wide Bottom Strip (The Match's Limit Is The Layout's, Not The Original's 460), In Both Pictures; Off Again, It Is Gone") {
         for (const Aspect aspect : {Aspect::Wide16x9, Aspect::Classic4x3}) {
             Peer host;
             ASSERT_TRUE(host.net.host(0, "Alice", true));
@@ -1276,27 +1276,41 @@ void run_latency_tests() {
             cfg.player_name = "Bob";
             Application app;
             ASSERT_TRUE(app.init(cfg));
+            ASSERT_FALSE(app.menu_settings().show_ping);                                // off until the player turns it on
             Duo duo{app, host};
             ASSERT_TRUE(duo.until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && host.net.can_start(); }, 8000));
             app.render_frame();
+            ASSERT_FALSE(app.last_latency_layout().has_value());                        // the room's corner: no ping
+            ASSERT_TRUE(app.game_menu_set(game_menu::kShowPing, 1));
+            app.render_frame();
             ASSERT_TRUE(app.last_latency_layout().has_value());                         // the room's corner: one row (a page; no match yet)
+            ASSERT_TRUE(app.game_menu_set(game_menu::kShowPing, 0));
             uint64_t hash = 0;
             ASSERT_TRUE(net::hash_file(maps_dir() + "TINY.LVL", hash));
             ASSERT_TRUE(host.net.start_match(4242, hash));
             ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && host.net.phase() == net::NetGame::Phase::Playing; }, 8000));
             duo.step(300);
             app.render_frame();
+            ASSERT_FALSE(app.last_latency_layout().has_value());                        // the match's corner: no ping, and no text that opens the list
+            ASSERT_EQ(app.connections_hit().w, 0);
+            ASSERT_TRUE(app.game_menu_set(game_menu::kShowPing, 1));
+            app.render_frame();
             ASSERT_TRUE(app.last_latency_layout().has_value());
+            ASSERT_TRUE(app.connections_hit().w > 0);
             const LatencyCornerLayout l = *app.last_latency_layout();
             const ScreenLayout& layout = app.layout();
             ASSERT_EQ(layout.width, aspect == Aspect::Wide16x9 ? 960 : 640);
             const int32_t row_right = layout.score_row_right();                         // 780 at 960 x 540 (the third box 722 + 58), 460 in the original's picture
             ASSERT_EQ(row_right, aspect == Aspect::Wide16x9 ? 780 : 460);
-            ASSERT_TRUE(l.stacked);                                                     // a match's corner row has room for no row of texts, in either picture
-            ASSERT_TRUE(l.ping_x >= row_right && l.delay_x >= row_right);               // right of the last score box and its cover
-            ASSERT_EQ(l.delay_y + app.renderer().get_text_height(FontSize::Px12) + 1, layout.height - (480 - FPS_OVERLAY_TOP));     // the lower line is a row above the plate
-            ASSERT_TRUE(l.ping_y + app.renderer().get_text_height(FontSize::Px12) <= l.delay_y);
+            ASSERT_TRUE(l.stacked);                                                     // a match's corner row has room for no row of text, in either picture
+            ASSERT_TRUE(l.ping_x >= row_right);                                         // right of the last score box and its cover
+            ASSERT_EQ(l.ping_y + app.renderer().get_text_height(FontSize::Px12) + 1, layout.height - (480 - FPS_OVERLAY_TOP));     // the line is a row above the plate
+            ASSERT_TRUE(app.game_menu_set(game_menu::kShowPing, 0));
+            app.render_frame();
+            ASSERT_FALSE(app.last_latency_layout().has_value());                        // off again: gone at the next frame
+            ASSERT_EQ(app.connections_hit().w, 0);
             // a frame on a page of the original's (the results) is a row left of the version, and a frame of a match with no network draws nothing: checked where the screens are made
+            ASSERT_TRUE(app.game_menu_set(game_menu::kShowPing, 1));
             app.return_to_map_select();
             app.render_frame();
             ASSERT_FALSE(app.last_latency_layout().has_value());                        // the connection is closed with the match: nothing is drawn
