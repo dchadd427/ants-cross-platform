@@ -158,8 +158,8 @@ class TheBlockRuns(unittest.TestCase):
         self.beacon(headers={"User-Agent": "canary-agent-7e55"})
         with open(self.rig.log_file, encoding="utf-8") as f:
             text = f.read()[before:]
-        self.assertNotIn("/hub/a", text)
-        self.assertNotIn("canary", text)
+        self.assertNotIn("canary", text, "the door writes no line: not the path, not the query, not the browser (a path that is another location's, such as /hub/ab, is that location's own 404 line)")
+        self.assertNotRegex(text, r'"POST /hub/a HTTP')
 
 
 @unittest.skipUnless(shutil.which("nginx"), "nginx is not installed: the allowance of the counter's door was NOT run (tests/scripts/test_nginx_hub_analytics.py)")
