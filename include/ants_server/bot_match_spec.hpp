@@ -25,6 +25,9 @@ inline constexpr uint32_t kBotPeopleShareNumerator = 3;
 inline constexpr uint32_t kBotPeopleShareDenominator = 4;
 /// The matches of computer players that are made one after another are started this far apart, so that setting up their engines is spread over the passes of the server's loop (milliseconds)
 inline constexpr uint32_t kBotStartGapMs = 1000;
+/// While a match with people is in play, a due start waits for a pass that has spent less than this many microseconds already (loop_pass.hpp), and is put off at most kBotStartPutOffMaxMs: it then starts in any pass
+inline constexpr int64_t kBotStartHeadroomUs = 10000;
+inline constexpr uint32_t kBotStartPutOffMaxMs = 5000;
 /// The original's maps and the players' maps are picked at random only when the map's own time limit is this many minutes or less; a longer one is played when a choice names it, or when it is in a list of the rotation
 inline constexpr uint32_t kBotRandomMaxMinutes = 30;
 /// A list of the rotation holds at most this many maps

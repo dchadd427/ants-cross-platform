@@ -1,5 +1,6 @@
 // The tests of the server loop's slow-pass log (loop_pass.hpp, docs/SERVER.md "The slow-pass log"): a pass over the threshold is told in one line with its parts by name, the lines are rate-limited and
-// the passes that were slow meanwhile are counted, and the room manager lays the time of a pass on its parts. Included by test_server_files.cpp after bot_queue_tests.hpp, whose fixtures it uses; test_server.cpp calls run_loop_pass_tests().
+// the passes that were slow meanwhile are counted, the room manager lays the time of a pass on its parts, a due start of a match of computer players waits for a pass with headroom while a match with people
+// is in play. Included by test_server_files.cpp after bot_queue_tests.hpp, whose fixtures it uses; test_server.cpp calls run_loop_pass_tests().
 #pragma once
 
 #include "ants_server/loop_pass.hpp"
@@ -95,5 +96,57 @@ void run_loop_pass_tests() {
         keeping.mgr.update(keeping.now);
         ASSERT_TRUE(second.us(PassPart::Store) > 0);
         keeping.mgr.set_loop_pass(nullptr);
+    } TEST_END();
+
+    TEST_CASE("S3.367 A Due Start Of A Match Of Computer Players Waits For A Pass That Has Headroom While A Match With People Is In Play (The Pass Has Spent Under 10 Ms), Is Made At Once When A Pass Has, Waits No Longer Than 5 Seconds Of Heavy Passes, And Is Never Held Back When Nobody Plays Or When No Pass Is Timed") {
+        BotDoor d("looppass-headroom");
+        int64_t clock = 0;
+        LoopPass pass([&clock]() { return clock; });
+        pass.begin();
+        d.w.mgr.set_loop_pass(&pass);
+        // nobody plays: a pass that has spent 50 ms already does not hold a start back
+        clock = 50000;
+        ASSERT_TRUE(d.w.mgr.bot_start_headroom(d.w.now));
+        ASSERT_TRUE(d.w.mgr.create_room(spec_of("HR-P", 2), d.w.now).ok);
+        d.w.connect("Ann", "HR-P");
+        d.w.connect("Bob", "HR-P");
+        clock = 0;
+        ASSERT_TRUE(run_until(d.w, [&] { return d.w.status("HR-P").state == RoomState::Running; }, 15000));
+        ASSERT_TRUE(d.w.mgr.people_in_play() && !d.w.mgr.history_may_run());
+        // the pass has spent just under, and exactly, the headroom
+        clock = kBotStartHeadroomUs - 1;
+        ASSERT_TRUE(d.w.mgr.bot_start_headroom(d.w.now));
+        clock = kBotStartHeadroomUs;
+        ASSERT_FALSE(d.w.mgr.bot_start_headroom(d.w.now));
+        clock = 0;
+        ASSERT_TRUE(d.w.mgr.bot_start_headroom(d.w.now));
+        // a batch with a spacing: the first match starts now (the admin's own call is answered at once), the next one is due after a minute
+        ASSERT_EQ(d.post("bot-matches", spaced_body(3, 60)).status, 200);
+        ASSERT_TRUE(d.w.mgr.bot_match_count() == 1 && d.bots->waiting_count() == 2);
+        stagger_step(d, 59000);
+        clock = kBotStartHeadroomUs;                                                   // (a heavy pass: the start that is due waits)
+        stagger_step(d, 1000);
+        ASSERT_TRUE(d.w.mgr.bot_match_count() == 1 && d.bots->waiting_count() == 2);
+        stagger_step(d, 1000);
+        ASSERT_TRUE(d.w.mgr.bot_match_count() == 1 && d.bots->waiting_count() == 2);
+        clock = 0;                                                                     // (a pass with headroom: it starts at once)
+        stagger_step(d, 10);
+        ASSERT_TRUE(d.w.mgr.bot_match_count() == 2 && d.bots->waiting_count() == 1);
+        // passes that are heavy for good: the start waits 5 seconds, not for ever
+        stagger_step(d, 59000);
+        clock = kBotStartHeadroomUs + 5000;
+        stagger_step(d, 1000);                                                         // (the third is due now, and the passes are heavy)
+        stagger_step(d, kBotStartPutOffMaxMs - 1);
+        ASSERT_TRUE(d.w.mgr.bot_match_count() == 2 && d.bots->waiting_count() == 1);
+        stagger_step(d, 1);
+        ASSERT_TRUE(d.w.mgr.bot_match_count() == 3 && d.bots->waiting_count() == 0);
+        // the match of people is over: a heavy pass holds nothing back; and without a pass nothing is asked
+        d.post("bot-matches/stop-all");
+        ASSERT_TRUE(d.w.mgr.close_room("HR-P", d.w.now));
+        d.w.run(1000);
+        ASSERT_FALSE(d.w.mgr.people_in_play());
+        ASSERT_TRUE(d.w.mgr.bot_start_headroom(d.w.now));
+        d.w.mgr.set_loop_pass(nullptr);
+        ASSERT_TRUE(d.w.mgr.bot_start_headroom(d.w.now));
     } TEST_END();
 }

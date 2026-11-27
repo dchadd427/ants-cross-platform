@@ -747,6 +747,7 @@ void BotMatches::update(int64_t now_s, uint32_t now_ms) {
         next_sync_ms_ = now_ms + 1000u;
         sync_started(now_ms);                                                        // (the matches that ended are counted as done by their queue, and forgotten)
     }
+    if (!rooms_.bot_start_headroom(now_ms)) return;                                  // (a match with people is in play and this pass has spent its share already: what is due starts in a later pass)
     size_t made = release_queues(now_s, now_ms);                                     // (what Start now set in time or left to wait for room: it goes on while the schedules are switched off)
     if (!scheduling_) {
         if (made == 0) warm_maps(now_ms);

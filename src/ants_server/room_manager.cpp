@@ -622,13 +622,27 @@ void RoomManager::route_hello(std::unique_ptr<net::Connection> connection, const
 // A match that a person plays is never slowed down by the counting (a whole recording takes the one thread for 0.4 - 0.5 s): the matches of computer players alone, the older recordings and the backfill, which the feeder plays a step at a time but without hurry, are
 // counted only while no room with a person in it runs or loads a match and no record of a restart is being played again. No match of computer players holds it: nobody waits on them. The match that
 // has just ended does not wait for it at all, when a person played in it: the feeder counts it in steps of about 2 ms (HistoryFeeder, docs/SERVER_REPLAYS.md "The match history").
-bool RoomManager::history_may_run() const {
-    if (!restoring_.empty()) return false;
+bool RoomManager::history_may_run() const { return !people_in_play(); }
+
+bool RoomManager::people_in_play() const {
+    if (!restoring_.empty()) return true;
     for (const auto& kv : rooms_) {
         const RoomState state = kv.second->state();
-        if ((state == RoomState::Running || state == RoomState::Loading) && !kv.second->bots_only()) return false;       // (a room that loads is about to start: it gets the thread too)
+        if ((state == RoomState::Running || state == RoomState::Loading) && !kv.second->bots_only()) return true;       // (a room that loads is about to start: it gets the thread too)
     }
-    return true;
+    return false;
+}
+
+bool RoomManager::bot_start_headroom(uint32_t now_ms) {
+    if (loop_pass_ == nullptr || !people_in_play() || loop_pass_->elapsed_us() < kBotStartHeadroomUs) {
+        bot_pass_heavy_ = false;
+        return true;
+    }
+    if (!bot_pass_heavy_) {
+        bot_pass_heavy_ = true;
+        bot_pass_heavy_since_ms_ = now_ms;
+    }
+    return net::time_reached(now_ms, bot_pass_heavy_since_ms_ + kBotStartPutOffMaxMs);
 }
 
 void RoomManager::update(uint32_t now_ms) {

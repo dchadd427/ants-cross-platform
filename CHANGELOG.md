@@ -32,7 +32,11 @@ Work that is not released yet is written in the same template under a heading th
 - **Show ping.** A new setting in the Video tab of the settings menu, off by default: switched on, the corner of a network game shows "ping NN ms" above the frame rate, and a click on it opens the list of connections as before. Off, the corner is the frame rate and the version only. The corner no longer shows "delay". On the desktop it is `show_ping=on` in the settings file or `--show-ping on` for one run.
 - **Tags keep your capitals.** A tag is now shown the way you type it ("[Ant] Zoe", "[aNt] Zoe"), no longer turned into capitals. The checks still read it in capitals (reserved, staff and rude words), tags that are already set stay as they are, and changing only the capitals counts as a tag change, so it waits a day like any other ([`docs/HUB_NICKNAMES.md`](docs/HUB_NICKNAMES.md)).
 
+**Fixes:**
+- Fewer short freezes in online matches: the server no longer lists its whole folder of replays in one go after every match it keeps, and starts the matches of computer players in a quiet moment while people play.
+
 **For operators:**
+- The log tells a slow pass of the server's main loop (over 25 ms) in one line with where its time went, `slow pass: 36.0 ms (rooms 5.1, store 21.0)`, at most one line in ten seconds ([`docs/SERVER.md`](docs/SERVER.md#the-slow-pass-log)). The replay store's look at its folder runs in 2 ms slices, and its own saves and deletes no longer call for one ([`docs/SERVER_REPLAYS.md`](docs/SERVER_REPLAYS.md)).
 - For search engines the game page now names `/play` as its address (it still says `noindex`, so no `/play?...` address is listed), and a `.txt` file of the site, such as the licence text of the front page's font, sends `X-Robots-Tag: noindex` ([`docs/BUILD_AND_RUN.md`](docs/BUILD_AND_RUN.md#search-engines-and-share-cards)).
 
 ## v0.22.0 - 2026-11-26 - Nicknames, tags and guest names, a welcome for guests, a better Play of the game and Fill a box

@@ -231,6 +231,8 @@ public:
     /// Whether the match history may count the older recordings and the backfill now (the feeder asks when it has such work): no room with a person in it runs or loads a match and no record of a restart is being played again. A room
     /// of computer players alone (the server's own matches) does not hold it. The match that has just ended is counted whatever this says, in steps of a few milliseconds (HistoryFeeder).
     bool history_may_run() const;
+    /// A room with a person in it runs or loads a match, or a record of a restart is being played again: the loop is spent for turns that people wait for (history_may_run says the opposite)
+    bool people_in_play() const;
     size_t parked_count() const noexcept { return parked_.size(); }
     /// The server is told to stop: every room that keeps a record makes it durable (fsync) and leaves it on disk, the other rooms are closed. Returns the number of records that were kept. Nothing is
     /// deleted: a record is deleted when its room is over, never because the server stops.
@@ -283,6 +285,10 @@ public:
     /// The pass of the loop that is running (loop_pass.hpp), which the main loop begins: update() lays its parts on it (the store's look, the history feeder, the rooms, the matches that begin, the records that are
     /// flushed) so that a slow pass can say where it went; null: nothing is timed (the tests that do not give one)
     void set_loop_pass(LoopPass* pass) noexcept { loop_pass_ = pass; }
+    /// Whether the starts of matches of computer players may be made in this pass (BotMatches asks before it starts any): yes unless a match with people is in play and the pass has spent kBotStartHeadroomUs
+    /// already (a start costs 5 to 25 ms, and a match with people waits for its turn at the end of the pass). The next pass asks again; passes that are heavy for kBotStartPutOffMaxMs on end let it start in any
+    /// pass, or it would never. Always yes without a pass.
+    bool bot_start_headroom(uint32_t now_ms);
     /// How many of the matches of computer players that go will be kept as replays (the slots that they hold of this hour's budget)
     size_t bot_kept_count() const;
     /// Ends one match of computer players (the room's code), or all of them: the room is closed, and a match that ran 30 seconds is kept as a replay up to where it stopped. False for a code that is no such match; the
@@ -508,6 +514,8 @@ private:
         if (loop_pass_ != nullptr) loop_pass_->lap(part);
     }
     void lap_room(const Room& room);             // ... and the same for a room's update, less what the room spent in a match that began and in a flush of its record
+    bool bot_pass_heavy_{false};                 // the passes that bot_start_headroom was asked in have been too heavy since bot_pass_heavy_since_ms_
+    uint32_t bot_pass_heavy_since_ms_{0};
     std::set<std::string> bot_maps_skipped_;     // the maps of the lists that the last match found that a room cannot play (each is named in the log once, not at every match)
     std::vector<BotRotationEntry> bot_rotation_[2]{bot_rotation_defaults(false), bot_rotation_defaults(true)};      // the two lists of the rotation: the original's game, 187
     size_t bot_warm_at_{0};                      // where warm_bot_maps goes on in the catalog
