@@ -501,7 +501,17 @@ public:
     bool can_rejoin() const noexcept { return state_ == RoomState::Running && session_ != nullptr && spec_.reconnect; }
     bool rejoin(std::unique_ptr<net::Connection>& connection, const net::HelloMsg& hello, uint32_t now_ms);
 
-    void update(uint32_t now_ms);
+    /// A gate for a start that is heavy (RoomManager::bot_start_headroom): a room of computer players alone asks it when its match is due to begin (begin_match: the engine, the record, the bots' first look at the
+    /// map, 5 to 25 ms) and, when it says no, keeps the start and asks again in the next pass. Other rooms never ask. Null: the match begins at once.
+    using BeginGate = std::function<bool()>;
+    void update(uint32_t now_ms, const BeginGate* begin_gate = nullptr);
+    /// What the last update() spent its real time on besides the match's turns, in microseconds: a match that began (engine, record, recording, the bots' first look at the map) and the record that was made
+    /// durable. The room manager hands them to the loop's slow-pass log (loop_pass.hpp).
+    struct PassWork {
+        int64_t start_us{0};
+        int64_t flush_us{0};
+    };
+    const PassWork& pass_work() const noexcept { return pass_work_; }
     /// The owner closes the room: every client is dropped, the state is Failed with `reason`
     void close(const std::string& reason, uint32_t now_ms);
     RoomStatus status(uint32_t now_ms) const;
@@ -564,6 +574,7 @@ private:
     uint32_t started_ms_{0};                 // when the match began (run_ms)
     uint32_t begin_delay_ms_{net::kMatchStartDelayMs};   // protocol 21: how long the first turn of the match that starts now is held (set by start_lobby together with what the Begin tells)
     uint32_t retry_at_ms_{0};                // after a cancelled start the room waits a moment before it tries again (a client that cannot load the map does not make a tight loop): until here, while retry_pending_
+    bool begin_due_{false};                  // the lobby has begun the match (every seat has loaded) and begin_match waits for its turn: a room of computer players alone is let begin in a light pass only (update's gate)
     bool retry_pending_{false};              // (a flag and not an old time: a lobby room waits for ever, and a time that is older than 24.8 days reads as a time to come in a signed comparison)
     uint32_t last_cancel_ms_{0};             // a lobby room: when its start was last cancelled (cancels_ counts those in a row)
     uint8_t load_failed_seat_{255};          // a lobby room: the person whose game could not load the map at the last START that was cancelled for it (255: none), and the name they had then
@@ -623,6 +634,7 @@ private:
     std::unique_ptr<RestartWriter> record_;
     std::string record_note_;                // why there is no record (the status says it)
     std::string stale_path_;                 // the file of a record that could not be deleted: the status says kept and stale until the store has deleted it
+    PassWork pass_work_;                     // pass_work(): reset at the start of every update()
     uint32_t next_sync_ms_{0};
     uint32_t sync_every_ms_{0};              // the interval to the next flush of the record: the configured one, doubled (to a limit) by every slow flush
     uint8_t roster_{0};                      // the seats of the match (a restored room has no lobby that knows them)

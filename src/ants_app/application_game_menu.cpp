@@ -27,6 +27,7 @@ namespace ants::app {
 void Application::load_game_menu_settings() {
     menu_settings_.load(config_store_);
     if (config_.hud_art_given) menu_settings_.hud_art_new = config_.hud_art_new;            // (--hud-art says it for this run; the settings file is not changed by it)
+    if (config_.show_ping_given) menu_settings_.show_ping = config_.show_ping;              // (--show-ping likewise)
     hud_.set_ant_health(menu_settings_.ant_health);
     audio_mixer_.set_output_gain(menu_settings_.gain());
 }
@@ -151,6 +152,7 @@ int Application::game_menu_get(int what) {
         case gm::kAntHealth:       return static_cast<int>(hud_.ant_health().when);
         case gm::kHealthStyle:     return static_cast<int>(hud_.ant_health().style);
         case gm::kHealthChanges:   return menu_settings_.health_changes ? 1 : 0;
+        case gm::kShowPing:        return menu_settings_.show_ping ? 1 : 0;
         case gm::kHudArt:          return menu_settings_.hud_art_new ? 0 : 1;
         case gm::kScroll:          return hud_.get_scroll_speed();
         case gm::kChat:            return hud_.is_chat_enabled() ? 1 : 0;
@@ -178,6 +180,15 @@ bool Application::game_menu_set(int id, int value, bool save) {
             menu_settings_.health_changes = value != 0;
             menu_settings_.write(config_store_, id);
             if (!menu_settings_.health_changes) health_changes_.reset();                 // (Off: nothing is kept, and what comes back starts from the hit points of that moment)
+            return true;
+        case gm::kShowPing:
+            if (value != 0 && value != 1) return false;                                  // (neither On nor Off)
+            menu_settings_.show_ping = value != 0;
+            menu_settings_.write(config_store_, id);
+            if (!menu_settings_.show_ping) {                                             // (Off: the ping text that opens the list of connections is gone, and so is the list)
+                connections_open_ = false;
+                connections_press_ = false;
+            }
             return true;
         case gm::kHudArt:
             if (value != 0 && value != 1) return false;                                  // (a word that the row does not have)

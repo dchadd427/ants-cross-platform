@@ -26,6 +26,22 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.22.1 - 2026-11-27 - Smoother ants online, fewer freezes, Show ping
+
+**For players:**
+- **Show ping.** A new setting in the Video tab of the settings menu, off by default: switched on, the corner of a network game shows "ping NN ms" above the frame rate, and a click on it opens the list of connections as before. Off, the corner is the frame rate and the version only. The corner no longer shows "delay". On the desktop it is `show_ping=on` in the settings file or `--show-ping on` for one run.
+- **Tags keep your capitals.** A tag is now shown the way you type it ("[Ant] Zoe", "[aNt] Zoe"), no longer turned into capitals. The checks still read it in capitals (reserved, staff and rude words), tags that are already set stay as they are, and changing only the capitals counts as a tag change, so it waits a day like any other ([`docs/HUB_NICKNAMES.md`](docs/HUB_NICKNAMES.md)).
+- Smoother ants in network matches: a corrected ant moves at a walk's pace at most.
+
+**Fixes:**
+- Fewer short freezes in online matches: the server no longer lists its whole folder of replays in one go after every match it keeps, and starts the matches of computer players in a quiet moment while people play.
+
+**For operators:**
+- The log tells a slow pass of the server's main loop (over 25 ms) in one line with where its time went, `slow pass: 36.0 ms (rooms 5.1, store 21.0)`, at most one line in ten seconds ([`docs/SERVER.md`](docs/SERVER.md#the-slow-pass-log)). The replay store's look at its folder runs in 2 ms slices, and its own saves and deletes no longer call for one ([`docs/SERVER_REPLAYS.md`](docs/SERVER_REPLAYS.md)).
+- For search engines the game page now names `/play` as its address (it still says `noindex`, so no `/play?...` address is listed), and a `.txt` file of the site, such as the licence text of the front page's font, sends `X-Robots-Tag: noindex` ([`docs/BUILD_AND_RUN.md`](docs/BUILD_AND_RUN.md#search-engines-and-share-cards)).
+
+**Details:** [commits](https://github.com/dchadd427/ants-server/compare/bb9239fc...f3e8fea2)
+
 ## v0.22.0 - 2026-11-26 - Nicknames, tags and guest names, a welcome for guests, a better Play of the game and Fill a box
 
 **For players:**
@@ -542,18 +558,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/59cbc736...3b57c6ae)
 
-## v0.16.5 - 2026-11-13 - A countdown card for solo play, computer players stay out of your base, Settings anywhere and no Live now page
+## Older versions (v0.16.5 and before)
 
-**For players:**
-- **A countdown card with a Fullscreen button when you play alone against computer players.** A server room with one person in it (with or without computer players) opens with the "Get ready. Fullscreen is one press away." card for 10 seconds, and a game on this computer in the browser does the same, showing the name you typed (the desktop game keeps its 5-second dialog unless asked). Rooms with two or more people keep the 30-second countdown; recordings, live views and rejoins get no card. A server setting, --solo-countdown-seconds (default 10), sets the one-person time.
-- **Computer players leave your base alone.** Medium and Hard computer players no longer walk into another player's base to defuse bombs or put out fire walls: a player's own walls and bombs at home are left to that player, an ally's hazards follow the same rule, and the last ants of a computer player stay home.
-- **The game's Settings work before a match too.** The gear opens a small panel with Fullscreen, Picture shape and Fullscreen mouse on the game's own screens. This corrects the v0.16.4 note: outside a match the gear was greyed out (its tip said "Not now"), and now it works anywhere. Held keys no longer reach the game when the panel is open.
-- **The Live now page is gone.** Running matches are listed on the front page with a Watch button, and the page's old addresses lead there. While matches run, the top bar shows a small red "N live" mark that leads to the front page. The installed app's Live now shortcut is gone too.
-
-**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.4 page or game still joins. Under the hood: several tests are steadier.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/fb6cf52c...13968e10)
-
-## Older versions (v0.16.4 and before)
-
-Every release before v0.16.5, and the long notes of v0.16.4, v0.16.3, v0.16.2, v0.16.1, v0.16.0, v0.15.1, v0.15.0, v0.14.1, v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.16.6, and the long notes of v0.16.5, v0.16.4, v0.16.3, v0.16.2, v0.16.1, v0.16.0, v0.15.1, v0.15.0, v0.14.1, v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

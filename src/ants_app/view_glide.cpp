@@ -3,29 +3,39 @@
 #include "ants_app/health_changes.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 
 namespace ants::app {
 
-int32_t ViewGlide::scaled(int32_t value, uint32_t left_ms) noexcept {
+int32_t ViewGlide::scaled(int32_t value, uint32_t left_ms, uint32_t total_ms) noexcept {
     const int64_t scaled = static_cast<int64_t>(value) * static_cast<int64_t>(left_ms);
-    return static_cast<int32_t>(scaled >= 0 ? (scaled + kDurationMs / 2) / kDurationMs : -((-scaled + kDurationMs / 2) / kDurationMs));
+    const int64_t half = static_cast<int64_t>(total_ms) / 2;
+    return static_cast<int32_t>(scaled >= 0 ? (scaled + half) / total_ms : -((-scaled + half) / total_ms));
+}
+
+uint32_t ViewGlide::duration_ms(int32_t dx, int32_t dy) noexcept {
+    const double length = std::sqrt(static_cast<double>(dx) * dx + static_cast<double>(dy) * dy);
+    const double ms = std::ceil(length * 1000.0 / static_cast<double>(kWalkPxPerSecond));
+    return static_cast<uint32_t>(std::clamp(ms, static_cast<double>(kMinDurationMs), static_cast<double>(kMaxDurationMs)));
 }
 
 void ViewGlide::add(uint32_t ant, int32_t dx, int32_t dy) {
     for (size_t i = 0; i < entries_.size(); ++i) {
         if (entries_[i].ant != ant) continue;
-        const int32_t sum_x = scaled(entries_[i].dx, entries_[i].left_ms) + dx;
-        const int32_t sum_y = scaled(entries_[i].dy, entries_[i].left_ms) + dy;
+        const int32_t sum_x = scaled(entries_[i].dx, entries_[i].left_ms, entries_[i].total_ms) + dx;
+        const int32_t sum_y = scaled(entries_[i].dy, entries_[i].left_ms, entries_[i].total_ms) + dy;
         if (std::max(std::abs(sum_x), std::abs(sum_y)) > kMaxShiftPx || (sum_x == 0 && sum_y == 0)) {
             entries_.erase(entries_.begin() + static_cast<std::ptrdiff_t>(i));
         } else {
-            entries_[i] = Entry{ant, sum_x, sum_y, kDurationMs};
+            const uint32_t total = duration_ms(sum_x, sum_y);
+            entries_[i] = Entry{ant, sum_x, sum_y, total, total};
         }
         return;
     }
     if (std::max(std::abs(dx), std::abs(dy)) > kMaxShiftPx || (dx == 0 && dy == 0)) return;
-    entries_.push_back(Entry{ant, dx, dy, kDurationMs});
+    const uint32_t total = duration_ms(dx, dy);
+    entries_.push_back(Entry{ant, dx, dy, total, total});
 }
 
 void ViewGlide::advance(uint32_t ms) {
@@ -43,8 +53,8 @@ bool ViewGlide::offset_of(uint32_t ant, int32_t& dx, int32_t& dy) const {
     dy = 0;
     for (const Entry& e : entries_) {
         if (e.ant != ant) continue;
-        dx = scaled(e.dx, e.left_ms);
-        dy = scaled(e.dy, e.left_ms);
+        dx = scaled(e.dx, e.left_ms, e.total_ms);
+        dy = scaled(e.dy, e.left_ms, e.total_ms);
         return dx != 0 || dy != 0;
     }
     return false;

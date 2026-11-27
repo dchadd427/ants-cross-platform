@@ -816,7 +816,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_set_page_fullscreen(int on) {
 // For the page's browser check (tests/scripts/web_edge_check.py): what the game believes about the pointer and the view, read-only. 0 and 1: the pointer's x and y on the picture (what the
 // game draws its cursor at and scrolls from); 2: 1 while the game takes the pointer as gone from its window (no cursor, no scrolling); 3 and 4: the map view's origin in world pixels
 // (-1 outside a match); 5: 1 while a dialog of the match is open (options, quit, quick help, the "get ready" dialog: the edges do not scroll then); 6: the view's zoom times 100.
-// The prediction of one's own orders (docs/NETWORK_PORT.md), for the browser measurements: 7: the corner's "delay" in ms as the player reads it (the felt delay while the prediction is on, the
+// The prediction of one's own orders (docs/NETWORK_PORT.md), for the browser measurements: 7: the delay of the player's orders in ms (the felt delay while the prediction is on, the
 // network's otherwise; -1 for a dash); 8: the network's delay (the confirmed engine's) in ms, -1 when none is measured; 9: the prediction's state, 0 off, 1 on, 2 cooling down after its budget; 10: the
 // orders that it has predicted; 11: the rebuilds that it has made (10 and 11 are 0 when the game has no prediction at all); 12 - 15: the frames' own work since the last reset, in microseconds (12: the mean, 13: the longest, 14: the number of frames;
 // 15: reads 0 and starts again). The lines that the way-back overlay shows (the page cannot read the canvas; tests/scripts/web_rejoin_check.py): 16: how many lines there are now (0: none); 10000 + 1000 * line + index:
@@ -843,7 +843,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
         case 5: return g_web_app->match_running() ? (g_web_app->hud().is_modal_open() ? 1 : 0) : -1;
         case 6: return static_cast<int>(g_web_app->zoom() * 100.0f + 0.5f);
         case 7: {
-            const std::optional<uint32_t> delay = g_web_app->corner_delay_ms();
+            const std::optional<uint32_t> delay = g_web_app->order_delay_ms();
             return delay ? static_cast<int>(*delay) : -1;
         }
         case 8: {

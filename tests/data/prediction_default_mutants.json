@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the prediction's default and of the slide of the ants that the prediction moves, for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the product rules that the shaped-link, glide and prediction tests hold: it is on by default and the screen reads it, the player's own orders and attack orders are predicted (and nobody else's, and not a refused one), it is off while the link is away, the lead is the shortest lag, falls a tick at a time and forgets at a stop, a missed order is expected in the next turn, the corrections and the changes of the shown engine slide the right way for a time that reads as walking, never across the fog, and the pointer picks what is drawn and nothing else.",
+  "note": "Mutants of the prediction's default and of the slide of the ants that the prediction moves, for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the product rules that the shaped-link, glide and prediction tests hold: it is on by default and the screen reads it, the player's own orders and attack orders are predicted (and nobody else's, and not a refused one), it is off while the link is away, the lead is the shortest lag, falls a tick at a time and forgets at a stop, a missed order is expected in the next turn, the corrections and the changes of the shown engine slide the right way, never faster than the ant walks, never across the fog, and the pointer picks what is drawn and nothing else.",
   "mutants": [
     {
       "id": "netgame_default_off",
@@ -134,10 +134,10 @@
       "expect": "VG5"
     },
     {
-      "id": "glide_too_long",
-      "file": "include/ants_app/view_glide.hpp",
-      "old": "static constexpr uint32_t kDurationMs = 150;",
-      "new": "static constexpr uint32_t kDurationMs = 600;",
+      "id": "glide_ceiling_removed",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "std::clamp(ms, static_cast<double>(kMinDurationMs), static_cast<double>(kMaxDurationMs))",
+      "new": "std::max(ms, static_cast<double>(kMinDurationMs))",
       "build": [
         "test_view_glide"
       ],
@@ -145,9 +145,86 @@
       "expect": "VG0"
     },
     {
+      "id": "glide_floor_removed",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "std::clamp(ms, static_cast<double>(kMinDurationMs), static_cast<double>(kMaxDurationMs))",
+      "new": "std::min(ms, static_cast<double>(kMaxDurationMs))",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG0"
+    },
+    {
+      "id": "glide_ignores_the_distance",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "const double ms = std::ceil(length * 1000.0 / static_cast<double>(kWalkPxPerSecond));",
+      "new": "const double ms = static_cast<double>(kMinDurationMs) + 0.0 * length;",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG0"
+    },
+    {
+      "id": "glide_faster_than_a_walk",
+      "file": "include/ants_app/view_glide.hpp",
+      "old": "static constexpr int32_t kWalkPxPerSecond = 80;",
+      "new": "static constexpr int32_t kWalkPxPerSecond = 160;",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG0"
+    },
+    {
+      "id": "glide_diagonal_by_larger_axis",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "const double length = std::sqrt(static_cast<double>(dx) * dx + static_cast<double>(dy) * dy);",
+      "new": "const double length = static_cast<double>(std::max(std::abs(dx), std::abs(dy)));",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG0"
+    },
+    {
+      "id": "glide_second_shift_keeps_the_first_time",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "const uint32_t total = duration_ms(sum_x, sum_y);",
+      "new": "const uint32_t total = entries_[i].total_ms;",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG2"
+    },
+    {
+      "id": "glide_runs_fast_in_the_frame",
+      "file": "src/ants_app/renderer_terrain.cpp",
+      "old": "view_glide_.advance(static_cast<uint32_t>(std::max(0.0f, dt) * 1000.0f + 0.5f));",
+      "new": "view_glide_.advance(static_cast<uint32_t>(std::max(0.0f, dt) * 3000.0f + 0.5f));",
+      "build": [
+        "test_prediction_link"
+      ],
+      "test": "./build/tests/test_app/test_prediction_link",
+      "expect": "LK11"
+    },
+    {
+      "id": "glide_fixed_time_in_the_match",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "const double ms = std::ceil(length * 1000.0 / static_cast<double>(kWalkPxPerSecond));",
+      "new": "const double ms = static_cast<double>(kMinDurationMs) + 0.0 * length;",
+      "build": [
+        "test_prediction_link"
+      ],
+      "test": "./build/tests/test_app/test_prediction_link",
+      "expect": "LK11"
+    },
+    {
       "id": "glide_shifts_not_added",
       "file": "src/ants_app/view_glide.cpp",
-      "old": "const int32_t sum_x = scaled(entries_[i].dx, entries_[i].left_ms) + dx;",
+      "old": "const int32_t sum_x = scaled(entries_[i].dx, entries_[i].left_ms, entries_[i].total_ms) + dx;",
       "new": "const int32_t sum_x = dx;",
       "build": [
         "test_view_glide"

@@ -19,6 +19,7 @@ namespace ants::server {
 namespace {
 constexpr uint32_t kMaxFailedStarts = 5;             // a room whose start is cancelled this many times (a client that cannot load the map, leavers) gives up
 constexpr uint32_t kRelayMarginS = 600;              // a relay credential outlasts the longest that its match can last by this much (the countdowns after a pause, a slow end)
+int64_t micros_since(std::chrono::steady_clock::time_point began) { return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - began).count(); }
 }  // namespace
 
 const char* room_state_name(RoomState state) noexcept {
@@ -558,7 +559,8 @@ void Room::lobby_waiting_pass(uint32_t now_ms, uint8_t asked_by, const std::arra
     if (!start_lobby(now_ms, roster, fill_seats, sim::start_teams_for(spec_.teams, true, asked_teams))) lobby_.end_start(std::string());
 }
 
-void Room::update(uint32_t now_ms) {
+void Room::update(uint32_t now_ms, const BeginGate* begin_gate) {
+    pass_work_ = PassWork();
     if (state_ == RoomState::Failed) return;
     if (state_ == RoomState::Finished) {
         if (connections_closed_) return;
@@ -604,12 +606,20 @@ void Room::update(uint32_t now_ms) {
                 record_discard();                                    // (and it has no match to bring back)
             }
         } else if (ev.type == net::HostLobby::Event::Type::Begun && state_ == RoomState::Loading) {
-            begin_match(now_ms);
+            begin_due_ = true;                                       // (begins below: a room of computer players alone waits there for a pass with headroom)
         } else if (ev.type == net::HostLobby::Event::Type::LeaderStart) {
             asked_by = ev.seat;
             asked_fill = ev.fill;
             asked_teams = ev.teams;
         }
+    }
+
+    if (state_ != RoomState::Loading) begin_due_ = false;
+    if (begin_due_ && (!spec_.bots_only || begin_gate == nullptr || (*begin_gate)())) {
+        begin_due_ = false;
+        const auto began = std::chrono::steady_clock::now();
+        begin_match(now_ms);
+        pass_work_.start_us += micros_since(began);
     }
 
     if (state_ == RoomState::Waiting && spec_.lobby) {
@@ -786,7 +796,9 @@ void Room::sync_record(uint32_t now_ms) {
     const uint32_t base = std::max<uint32_t>(1, cfg.sync_every_ms);
     if (record_->dirty()) {
         const uint32_t began = cfg.clock_ms ? cfg.clock_ms() : restart_steady_ms();
+        const auto began_real = std::chrono::steady_clock::now();
         const bool synced = record_->sync();
+        pass_work_.flush_us += micros_since(began_real);
         const uint32_t took = (cfg.clock_ms ? cfg.clock_ms() : restart_steady_ms()) - began;
         if (!synced) return record_stop("the disk refused a flush: " + record_->error());
         const uint64_t longest = std::max<uint32_t>(base, cfg.max_sync_every_ms);

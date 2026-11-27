@@ -19,11 +19,11 @@
     var TEXT = {
         title: 'Your name', close: 'Close', previewLabel: 'How others see you', save: 'Save',
         nickLabel: 'Nickname', nickHint: '3 to 16 characters', nickPick: 'Pick a nickname', nickHelp: 'Letters and digits of one alphabet, spaces and . _ - \u2019',
-        tagLabel: 'Tag', tagHint: 'optional, 2 to 5', tagPick: 'ABC', tagHelp: 'Letters or digits. Shown as [TAG] before your name.',
+        tagLabel: 'Tag', tagHint: 'optional, 2 to 5', tagPick: 'ABC', tagHelp: 'Letters or digits, with the capitals you type. Shown as [Tag] before your name.',
         guestLabel: 'Name', guestPick: 'Pick a name',
         firstNote: 'In the chat, the players list, rooms and match results.', guestNote: 'In rooms and in the game.', guestFirst: 'This is your name until you set one.',
         sinceNow: function (date) { return 'Your nickname since ' + date + '. You can change it now; after that you wait 30 days.'; }, sinceLater: function (date, free) { return 'Your nickname since ' + date + '. You can change it again on ' + free + '.'; },
-        rules: ['Your nickname is yours alone: nobody else can use it.', 'You can change it once every 30 days. The old one stays yours for 30 days.', 'A tag can change once a day. Anyone can use any tag.', 'Names and tags are public and are kept with match results.'],
+        rules: ['Your nickname is yours alone: nobody else can use it.', 'You can change it once every 30 days. The old one stays yours for 30 days.', 'A tag can change once a day, and a change of capitals counts. Anyone can use any tag.', 'Names and tags are public and are kept with match results.'],
         guestRules: ['You cannot use the name of a player who is logged in.', 'Your name stays in this browser. Another browser starts over.', 'Names are public and are kept with match results.'],
         guestBox: 'Guests cannot chat in the lobby or get messages.', loginWith: 'Log in with Discord',
         menuFirst: 'You show as ', menuFirstEnd: ', your Discord name.', menuChoose: 'Choose a nickname', menuChange: 'Nickname and tag', menuNick: 'Nickname ', menuTag: ' \u00b7 Tag ', menuNoTag: ' \u00b7 No tag',

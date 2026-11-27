@@ -1,6 +1,6 @@
 // Tests of the glide of an ant that the prediction has moved (include/ants_app/view_glide.hpp): a model without SDL. A rebuild of the predicted engine puts an ant where the engine has it, and the picture
-// slides it there from where it was shown instead of jumping: the rules of that slide (how long, what is too big to slide, what a second shift does), and the property that matters on the screen, that an
-// ant which walks and is corrected never moves by more than its walk and the slide's share in a frame.
+// slides it there from where it was shown instead of jumping: the rules of that slide (how fast, how long, what is too big to slide, what a second shift does), and the properties that matter on the
+// screen: an ant which walks and is corrected never moves by more than its walk and the slide's share in a frame, and a slide never carries an ant back along its walk (never faster than the ant walks).
 #include "ants_app/view_glide.hpp"
 
 #include "ants_app/health_changes.hpp"
@@ -65,23 +65,58 @@ int main(int argc, char* argv[]) {
     (void)argv;
     std::cout << "\n=======================================================\n [VIEW GLIDE] the slide of an ant that a rebuild moved\n=======================================================\n";
 
-    TEST_CASE("VG0 The Slide Lasts As Long As A Few Ticks Of Walking And Reads As Walking, Not As A Jump Or A Lag: Between A Tenth And A Quarter Of A Second") {
-        ASSERT_TRUE(ViewGlide::kDurationMs >= 100 && ViewGlide::kDurationMs <= 250);
-        ASSERT_EQ(ViewGlide::kMaxShiftPx, 64);                                              // (two tiles: the most that a few ticks of a walking ant's correction can be)
+    TEST_CASE("VG0 A Slide Is Carried At The Pace Of A Walk At Most: Its Time Is Its Length At 80 Pixels A Second (The Walk Of The Engine's Own Ant), Never Under 150 Ms And Never Over 700 Ms, In Every Direction; Two Tiles Is The Most That Is Slid At All") {
+        using namespace ants;
+        sim::SimulationEngine sim;                                                           // the pace that the picture holds the slide to is the pace that the engine walks an ant at: measured on open ground
+        sim.init_test_world(60, 60, 1, 600000);
+        const uint32_t ant = sim.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{10, 10});
+        sim.issue_move_order(ant, sim::TileCoord{50, 10});
+        const auto px_of = [&]() {
+            for (const auto& a : sim.get_world_state().ants) {
+                if (a.id == ant) return a.px;
+            }
+            return -1;
+        };
+        for (int i = 0; i < 10; ++i) sim.tick();                                             // (the start-up ticks are over)
+        const int32_t from = px_of();
+        for (int i = 0; i < 20; ++i) sim.tick();                                             // one second of walking
+        ASSERT_EQ(ViewGlide::kWalkPxPerSecond, px_of() - from);
+        ASSERT_EQ(ViewGlide::kMaxShiftPx, 64);                                               // (two tiles: the most that a few ticks of a walking ant's correction can be)
+        ASSERT_EQ(ViewGlide::duration_ms(24, 0), 300u);                                      // 24 px: 0.3 s
+        ASSERT_EQ(ViewGlide::duration_ms(0, -48), 600u);                                     // 48 px, any direction: 0.6 s
+        ASSERT_EQ(ViewGlide::duration_ms(-56, 0), 700u);                                     // 56 px: the longest slide, exactly at the pace of a walk
+        ASSERT_EQ(ViewGlide::duration_ms(24, 24), 425u);                                     // a diagonal is carried at the pace of a walk along the line (34 px, not 24)
+        ASSERT_EQ(ViewGlide::duration_ms(12, 0), ViewGlide::kMinDurationMs);                 // a short correction stays as quick as it was
+        ASSERT_EQ(ViewGlide::duration_ms(3, -4), ViewGlide::kMinDurationMs);                 // (and a smaller one is no quicker)
+        ASSERT_EQ(ViewGlide::duration_ms(1, 0), ViewGlide::kMinDurationMs);
+        ASSERT_EQ(ViewGlide::kMinDurationMs, 150u);
+        ASSERT_EQ(ViewGlide::kMaxDurationMs, 700u);
+        ASSERT_EQ(ViewGlide::duration_ms(ViewGlide::kMaxShiftPx, 0), ViewGlide::kMaxDurationMs);       // two tiles take the longest slide: a little faster than a walk, never a drag
+        ASSERT_EQ(ViewGlide::duration_ms(ViewGlide::kMaxShiftPx, ViewGlide::kMaxShiftPx), ViewGlide::kMaxDurationMs);
+        for (int32_t dx = -64; dx <= 64; ++dx) {
+            for (int32_t dy = -64; dy <= 64; ++dy) {
+                const uint32_t ms = ViewGlide::duration_ms(dx, dy);
+                ASSERT_TRUE(ms >= ViewGlide::kMinDurationMs && ms <= ViewGlide::kMaxDurationMs);
+                const double length = std::sqrt(static_cast<double>(dx * dx + dy * dy));
+                if (length <= 56.0) ASSERT_TRUE(length * 1000.0 <= static_cast<double>(ViewGlide::kWalkPxPerSecond) * ms + 1e-6);       // no correction is carried faster than the ant walks
+            }
+        }
     } TEST_END();
 
-    TEST_CASE("VG1 An Ant That Was Shown Elsewhere Starts The Slide Where It Was Shown, Is Half Way After Half Of The Time, And Is Where The Engine Has It When The Time Is Over") {
+    TEST_CASE("VG1 An Ant That Was Shown Elsewhere Starts The Slide Where It Was Shown, Is Half Way After Half Of Its Time, And Is Where The Engine Has It When The Time Is Over; A Longer Correction Takes Longer, Not Faster") {
         ViewGlide glide;
         int32_t dx = 0;
         int32_t dy = 0;
         ASSERT_FALSE(glide.offset_of(7, dx, dy));
-        glide.add(7, 12, -8);
+        glide.add(7, 16, -12);                                                              // 20 px: 250 ms
+        const uint32_t total = ViewGlide::duration_ms(16, -12);
+        ASSERT_EQ(total, 250u);
         ASSERT_TRUE(glide.offset_of(7, dx, dy));
-        ASSERT_TRUE(dx == 12 && dy == -8);                                                  // the picture still shows it where it was
-        glide.advance(ViewGlide::kDurationMs / 2);
+        ASSERT_TRUE(dx == 16 && dy == -12);                                                 // the picture still shows it where it was
+        glide.advance(total / 2);
         ASSERT_TRUE(glide.offset_of(7, dx, dy));
-        ASSERT_TRUE(dx == 6 && dy == -4);
-        glide.advance(ViewGlide::kDurationMs / 2 - 1);
+        ASSERT_TRUE(dx == 8 && dy == -6);
+        glide.advance(total / 2 - 1);
         glide.offset_of(7, dx, dy);                                                         // (a millisecond left: less than a pixel of it)
         ASSERT_TRUE(std::abs(dx) <= 1 && std::abs(dy) <= 1);
         glide.advance(1);
@@ -92,20 +127,45 @@ int main(int argc, char* argv[]) {
         int32_t oy = 0;
         glide.add(1, 5, 5);
         ASSERT_FALSE(glide.offset_of(2, ox, oy));                                           // (another ant: nothing)
+        glide.clear();
+        glide.add(1, 12, 0);                                                                // a short correction: the shortest slide, over after 150 ms
+        glide.add(2, 48, 0);                                                                // a long one: 600 ms, and not over after 150 or 300
+        glide.advance(150);
+        ASSERT_FALSE(glide.offset_of(1, ox, oy));
+        ASSERT_TRUE(glide.offset_of(2, ox, oy) && ox == 36);
+        glide.advance(440);
+        ASSERT_TRUE(glide.offset_of(2, ox, oy));                                            // (10 ms left: a pixel of it)
+        glide.advance(10);
+        ASSERT_FALSE(glide.offset_of(2, ox, oy));
     } TEST_END();
 
-    TEST_CASE("VG2 A Second Shift Of An Ant That Is Still Sliding Is Added To What Is Left Of The First, The Slide Starts Again, And Two Shifts That Cancel Leave Nothing To Slide") {
+    TEST_CASE("VG2 A Second Shift Of An Ant That Is Still Sliding Is Added To What Is Left Of The First: The Ant Goes On From Where It Is Drawn, The Slide Starts Again With The Time Of The Sum, And Two Shifts That Cancel Leave Nothing To Slide") {
         ViewGlide glide;
         int32_t dx = 0;
         int32_t dy = 0;
-        glide.add(3, 20, 0);
-        glide.advance(ViewGlide::kDurationMs / 2);                                           // 10 left
-        glide.add(3, 6, 4);
+        glide.add(3, 24, 0);                                                                 // 300 ms
+        glide.advance(150);                                                                  // 12 left
+        glide.add(3, 4, 12);                                                                 // the sum is (16, 12): 20 px, 250 ms
         ASSERT_TRUE(glide.offset_of(3, dx, dy));
-        ASSERT_TRUE(dx == 16 && dy == 4);
-        glide.advance(ViewGlide::kDurationMs / 2);
-        ASSERT_TRUE(glide.offset_of(3, dx, dy) && dx == 8 && dy == 2);                       // a whole new slide: half of it is gone after half of the time
-        glide.add(3, -8, -2);
+        ASSERT_TRUE(dx == 16 && dy == 12);                                                   // (what was drawn plus the new correction: the drawn ant itself does not jump)
+        glide.advance(125);
+        ASSERT_TRUE(glide.offset_of(3, dx, dy) && dx == 8 && dy == 6);                       // a whole new slide of the sum's time: half of it is gone after half of that time
+        glide.advance(100);
+        ASSERT_TRUE(glide.offset_of(3, dx, dy));                                             // (it is not over with the remainder of the first one's time, 150 ms, that has passed twice)
+        glide.advance(25);
+        ASSERT_FALSE(glide.offset_of(3, dx, dy));
+        glide.add(3, 24, 0);
+        glide.advance(280);                                                                  // 2 px left of a slide of 300 ms
+        glide.add(3, 24, 0);                                                                 // a second correction in the same direction: 26 px, 325 ms (not 150: the pace stays a walk's)
+        ASSERT_TRUE(glide.offset_of(3, dx, dy) && dx == 26 && dy == 0);
+        glide.advance(300);
+        ASSERT_TRUE(glide.offset_of(3, dx, dy));
+        glide.advance(25);
+        ASSERT_FALSE(glide.offset_of(3, dx, dy));
+        glide.add(3, 20, 0);
+        glide.advance(100);
+        glide.offset_of(3, dx, dy);
+        glide.add(3, -dx, 0);                                                                // the correction that undoes what is left: nothing to slide
         ASSERT_FALSE(glide.offset_of(3, dx, dy));
         ASSERT_EQ(glide.size(), 0u);
     } TEST_END();
@@ -127,31 +187,35 @@ int main(int argc, char* argv[]) {
         ASSERT_FALSE(glide.offset_of(9, dx, dy));
     } TEST_END();
 
-    TEST_CASE("VG4 On The Screen An Ant That Walks And Is Corrected Never Moves By More In A Frame Than Its Walk Plus The Slide's Share: A Tile Of Correction Is Spread Over The Frames Of A Fifth Of A Second, Not Taken In One") {
-        for (const int32_t shift : {4, 12, 24, 32, 64}) {
+    TEST_CASE("VG4 On The Screen An Ant That Walks And Is Corrected Is Never Drawn Walking Backwards By A Slide Of A Walk's Length Or Less (The Slide Holds It Up, As The Engine's Own Stand Does), And Never Moves By More In A Frame Than Its Walk Plus The Slide's Share: A Correction Is Spread Over The Frames Of Its Time, Not Taken In One") {
+        for (const int32_t shift : {4, 12, 24, 32, 56, 64}) {
             for (const uint32_t frame_ms : {7u, 16u, 17u, 33u}) {
                 ViewGlide glide;
-                // the ant walks 4 px every 50 ms (the engine's pace); the picture had it `shift` px ahead of where the engine has it now
-                const double speed = 4.0 / 50.0;
+                // the ant walks 4 px every 50 ms (the engine's pace); the picture had it `shift` px ahead of where the engine has it now: the slide carries it BACK along its walk
+                const double speed = static_cast<double>(ViewGlide::kWalkPxPerSecond) / 1000.0;
                 double engine = 1000.0;
                 glide.add(1, shift, 0);
+                const uint32_t total = ViewGlide::duration_ms(shift, 0);
                 int32_t dx = 0;
                 int32_t dy = 0;
                 glide.offset_of(1, dx, dy);
                 double drawn_before = engine + dx;
                 double worst = 0.0;
+                double most_backwards = 0.0;
                 uint32_t elapsed = 0;
-                while (elapsed < ViewGlide::kDurationMs + 3 * frame_ms) {
+                while (elapsed < total + 3 * frame_ms) {
                     glide.advance(frame_ms);
                     elapsed += frame_ms;
                     engine += speed * frame_ms;
                     glide.offset_of(1, dx, dy);
                     const double drawn = engine + dx;
                     worst = std::max(worst, std::abs(drawn - drawn_before - speed * frame_ms));
+                    most_backwards = std::min(most_backwards, drawn - drawn_before);
                     drawn_before = drawn;
                 }
-                const double share = static_cast<double>(shift) * frame_ms / ViewGlide::kDurationMs;      // the slide's own part of a frame
+                const double share = static_cast<double>(shift) * frame_ms / total;                        // the slide's own part of a frame
                 ASSERT_TRUE(worst <= share + 1.5);                                                         // (a pixel and a half for the rounding)
+                if (shift <= 56) ASSERT_TRUE(most_backwards >= -1.5);                                      // the drawn ant never goes back: at worst it stands (a slide at the pace of a walk against the walk)
                 ASSERT_TRUE(drawn_before == engine);                                                       // at the end the picture is the engine's
             }
         }
@@ -248,10 +312,10 @@ int main(int argc, char* argv[]) {
         click(enemy.px, enemy.py - 8);                                                       // where the engine has it the picture shows open ground: a plain move
         ASSERT_EQ(sink.log.size(), 2u);
         ASSERT_TRUE(sink.log[1].type == sim::CommandType::GroupMove);
-        glide.advance(ViewGlide::kDurationMs / 2);                                           // half of the slide is over: the ant is drawn 24 px from the engine's place
+        glide.advance(ViewGlide::duration_ms(48, 0) / 2);                                    // half of the slide is over: the ant is drawn 24 px from the engine's place
         ASSERT_TRUE(cursor(enemy.px + 24, enemy.py - 8) == CursorType::Attack);
         ASSERT_TRUE(cursor(enemy.px + 48, enemy.py - 8) == CursorType::Move);
-        glide.advance(ViewGlide::kDurationMs);                                               // the slide is over
+        glide.advance(ViewGlide::kMaxDurationMs);                                            // the slide is over
         ASSERT_TRUE(cursor(enemy.px, enemy.py - 8) == CursorType::Attack);
         // the rubber band takes an own ant where it is drawn
         sim.stop_ant(mine);

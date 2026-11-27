@@ -93,20 +93,29 @@ class TheRules(unittest.TestCase):
         self.assertEqual(self.nick("\u0421\u0443\u043a\u043d\u043e")[1], None)                        # ... that is no word inside a name
         self.assertTrue(nickrules.is_rude("sh1t") and nickrules.is_rude("S H I T") and nickrules.is_rude("sh.i.t") and not nickrules.is_rude("shine"))
 
-    def test_a_tag_is_two_to_five_letters_and_digits_of_one_alphabet_in_capitals(self):
-        for good, shown in (("ant", "ANT"), ("\u00c4NT", "\u00c4NT"), ("\u00e4nt", "\u00c4NT"), ("ANTS1", "ANTS1"), ("42", "42"), ("\u0440\u0443\u0441", "\u0420\u0423\u0421"), ("w\u00fc", "W\u00dc"), ("\u0131i", "II")):
-            self.assertEqual(nickrules.check_tag(good, "Zo\u00eb"), (shown, None), good)
+    def test_a_tag_is_two_to_five_letters_and_digits_of_one_alphabet_and_keeps_the_capitals_it_was_typed_with(self):
+        for good in ("ant", "Ant", "aNt", "ANT", "\u00c4NT", "\u00e4nt", "ANTS1", "42", "\u0440\u0443\u0441", "\u0420\u0443\u0441", "w\u00fc", "\u0131i", "\u00df\u00df"):
+            self.assertEqual(nickrules.check_tag(good, "Zo\u00eb"), (good, None), good)           # (the tag is the text that was typed: nothing is turned into capitals)
+        self.assertEqual(nickrules.check_tag("  Ant  ", "Zo\u00eb"), ("Ant", None))             # (the ends are trimmed like every name's)
         for raw in (None, "", "   "):
             self.assertEqual(nickrules.check_tag(raw), ("", None), repr(raw))                      # (no tag is fine)
-        cases = {"a": "short", "abcdef": "long", "a b": "chars", "a-b": "chars", "[ab]": "chars", "\u00df\u00df": "chars", "\u0391\u039b": "script", "\u9f8d\u9f8d": "script", "a\u0430": "alphabets",
+        cases = {"a": "short", "abcdef": "long", "a b": "chars", "a-b": "chars", "[ab]": "chars", "\u0391\u039b": "script", "\u9f8d\u9f8d": "script", "a\u0430": "alphabets",
                  "MOD": "reserved", "mod": "reserved", "ADMIN": "reserved", "STAFF": "reserved", "OWNER": "reserved", "ANTS": "reserved", "M0D": "staff", "4DM1N": "staff", "M\u041eD": "alphabets",
                  "FUCK": "rude", "BOT": "bot", "B0T": "bot", "B\u00d8T": "bot", "\u0412\u041eT": "alphabets", 5: "long"}
         for raw, why in cases.items():
             self.assertEqual(nickrules.check_tag(raw, "Zo\u00eb")[1], why, repr(raw))
         self.assertEqual(nickrules.check_tag("BOTS", "Zo\u00eb")[1], None)                           # ("[BOTS] Zoe" is no label of a computer player)
 
+    def test_a_tag_is_checked_against_the_words_in_capitals_however_it_is_typed(self):
+        cases = {"Mod": "reserved", "mOd": "reserved", "aDmIn": "reserved", "sTaFf": "reserved", "Ants": "reserved", "m0d": "staff", "4dMiN": "staff", "Fuck": "rude", "fUcK": "rude", "bOt": "bot", "B0t": "bot", "b\u00f8t": "bot",
+                 "adm\u0131n": "reserved", "4dm\u0131n": "staff", "d\u0131ck": "rude"}          # (the dotless i is the i of the capitals: "ADMIN", "4DMIN", "DICK")
+        for raw, why in cases.items():
+            self.assertEqual(nickrules.check_tag(raw, "Zo\u00eb")[1], why, raw)
+        self.assertEqual(nickrules.check_tag("Bots", "Zo\u00eb"), ("Bots", None))
+
     def test_how_a_name_is_shown(self):
         self.assertEqual(nickrules.shown("Zo\u00eb", "ANT"), "[ANT] Zo\u00eb")
+        self.assertEqual(nickrules.shown("Zo\u00eb", "aNt"), "[aNt] Zo\u00eb")
         self.assertEqual(nickrules.shown("Zo\u00eb", ""), "Zo\u00eb")
         self.assertEqual(nickrules.guest_shown("Wren"), "Wren (Guest)")
 
@@ -249,8 +258,8 @@ class TheStore(Base):
 
 class TheFrames(Base):
     def test_a_check_says_each_field_and_how_the_others_will_see_the_person_and_saves_nothing(self):
-        answer = self.ask(self.anna, "Zo\u00eb", "ant")
-        self.assertEqual(answer, {"t": "name", "r": 1, "ok": True, "nick": {"ok": True}, "tag": {"ok": True}, "shown": "[ANT] Zo\u00eb", "saved": False})
+        answer = self.ask(self.anna, "Zo\u00eb", "Ant")
+        self.assertEqual(answer, {"t": "name", "r": 1, "ok": True, "nick": {"ok": True}, "tag": {"ok": True}, "shown": "[Ant] Zo\u00eb", "saved": False})
         self.assertIsNone(self.w.store.nick_row(ANNA_ID))
         self.assertEqual(self.ask(self.anna, "Zo\u00eb", "")["shown"], "Zo\u00eb")
         self.assertEqual(self.ask(self.anna, "Zo\u00eb", "", r=77)["r"], 77)                              # (the page's own number comes back: an answer that is late is told from a newer one)
@@ -274,15 +283,15 @@ class TheFrames(Base):
     def test_a_save_stores_the_nickname_and_the_tag_and_every_socket_of_the_account_gets_the_whole_you(self):
         tab = self.w.join(ANNA)
         before = len([m for m in tab.sent if m["t"] == "you"])
-        answer = self.choose(self.anna, "Zo\u00eb", "ant")
-        self.assertEqual((answer["shown"], answer["nick"], answer["tag"]), ("[ANT] Zo\u00eb", {"ok": True}, {"ok": True}))
+        answer = self.choose(self.anna, "Zo\u00eb", "Ant")
+        self.assertEqual((answer["shown"], answer["nick"], answer["tag"]), ("[Ant] Zo\u00eb", {"ok": True}, {"ok": True}))
         row = self.w.store.nick_row(ANNA_ID)
-        self.assertEqual((row.nick, row.tag), ("Zo\u00eb", "ANT"))
+        self.assertEqual((row.nick, row.tag), ("Zo\u00eb", "Ant"))
         for peer in (self.anna, tab):
             you = [m for m in peer.sent if m["t"] == "you"][-1]["you"]
-            self.assertEqual((you["name"], you["nick"], you["tag"]), ("Zo\u00eb", "Zo\u00eb", "ANT"))
+            self.assertEqual((you["name"], you["nick"], you["tag"]), ("Zo\u00eb", "Zo\u00eb", "Ant"))
             self.assertEqual(peer.identity.name, "Zo\u00eb")
-            self.assertEqual((peer.identity.nick, peer.identity.tag), ("Zo\u00eb", "ANT"))
+            self.assertEqual((peer.identity.nick, peer.identity.tag), ("Zo\u00eb", "Ant"))
         self.assertEqual(len([m for m in tab.sent if m["t"] == "you"]), before + 1)
         self.assertNotIn("you", [m["t"] for m in self.ben.sent])                                         # (nobody else is sent anything)
         self.assertEqual(self.w.chat.welcome(self.anna)["you"]["nick"], "Zo\u00eb")
@@ -298,7 +307,7 @@ class TheFrames(Base):
             self.assertIsNone(self.w.store.nick_row(BEN_ID))
 
     def test_the_answer_never_names_the_person_whose_name_it_is(self):
-        self.choose(self.anna, "Zo\u00eb", "ant")
+        self.choose(self.anna, "Zo\u00eb", "Ant")
         answers = [self.ask(self.ben, raw) for raw in ("Zo\u00eb", "zoe", "Z0e")]
         blob = json.dumps(answers)
         for secret in (ANNA_ID, "anna", self.w.chat.key_of(ANNA_ID), self.w.chat.ref(ANNA_ID)):
@@ -319,10 +328,10 @@ class TheFrames(Base):
     def test_the_tag_alone_changes_when_the_nickname_is_the_same_and_no_limit_is_asked_of_what_does_not_change(self):
         self.choose(self.anna, "Zo\u00eb", "")
         self.later(2 * DAY)
-        answer = self.ask(self.anna, "Zo\u00eb", "ant", save=True)                                       # (inside the nickname's 30 days: the nickname does not change, so its wait does not matter)
+        answer = self.ask(self.anna, "Zo\u00eb", "Ant", save=True)                                       # (inside the nickname's 30 days: the nickname does not change, so its wait does not matter)
         self.assertTrue(answer["ok"] and answer["saved"], answer)
-        self.assertEqual(self.w.store.nick_row(ANNA_ID).tag, "ANT")
-        self.assertEqual(self.ask(self.anna, "Zo\u00eb", "ANT")["nick"], {"ok": True})
+        self.assertEqual(self.w.store.nick_row(ANNA_ID).tag, "Ant")
+        self.assertEqual(self.ask(self.anna, "Zo\u00eb", "Ant")["nick"], {"ok": True})
 
     def test_the_frames_of_the_page_are_read_strictly(self):
         for bad in ({"t": "name"}, {"t": "name", "r": "1", "nick": "Zoe"}, {"t": "name", "r": 1, "nick": 5}, {"t": "name", "r": 1, "nick": "Zoe", "tag": 1}, {"t": "name", "r": -1, "nick": "Zoe"},
@@ -342,7 +351,7 @@ class TheFrames(Base):
         self.assertEqual(self.ask(self.guest, "Wren", guest=True, r=3), {"t": "name", "r": 3, "ok": True, "nick": {"ok": True}, "tag": None, "shown": "Wren (Guest)"})
 
     def test_a_guests_name_has_the_rules_of_a_nickname_and_may_not_copy_a_person_who_is_logged_in(self):
-        self.choose(self.anna, "Zo\u00eb", "ant")
+        self.choose(self.anna, "Zo\u00eb", "Ant")
         for raw, why in (("Zo\u00eb", "lookalike"), ("zoe", "lookalike"), ("Z0e", "lookalike"), ("Admin", "reserved"), ("fuck", "rude"), ("\u0391\u03bb\u03ad", "script"), ("Zo\u0435", "alphabets"), ("ab", "short"), ("Guest 123456", "reserved")):
             answer = self.ask(self.guest, raw, guest=True)
             self.assertEqual((answer["ok"], answer["nick"].get("why"), answer["shown"]), (False, why, None), raw)
@@ -429,21 +438,35 @@ class TheLimits(Base):
         self.assertEqual(self.ask(self.anna, "Wren", save=True)["nick"]["why"], "soon")
 
     def test_a_tag_changes_once_a_day_and_says_when(self):
-        self.choose(self.anna, "Zo\u00eb", "ant")
+        self.choose(self.anna, "Zo\u00eb", "Ant")
         start = int(self.w.wall.now)
         answer = self.ask(self.anna, "Zo\u00eb", "pet", save=True)
         self.assertEqual((answer["ok"], answer["tag"]), (False, {"ok": False, "why": "soon", "until": start + DAY}))
-        self.assertEqual(self.w.store.nick_row(ANNA_ID).tag, "ANT")
+        self.assertEqual(self.w.store.nick_row(ANNA_ID).tag, "Ant")
         self.later(DAY)
         self.assertTrue(self.ask(self.anna, "Zo\u00eb", "pet", save=True)["saved"])
         self.later(DAY)
         answer = self.ask(self.anna, "Zo\u00eb", "", save=True)                                           # (taking the tag away is a change too)
         self.assertTrue(answer["saved"])
         self.assertEqual(self.w.store.nick_row(ANNA_ID).tag, "")
-        self.assertEqual(self.ask(self.anna, "Zo\u00eb", "ant", save=True)["tag"]["why"], "soon")
+        self.assertEqual(self.ask(self.anna, "Zo\u00eb", "Ant", save=True)["tag"]["why"], "soon")
+
+    def test_a_change_of_capitals_alone_is_a_change_and_waits_a_day_like_any_other(self):
+        self.choose(self.anna, "Zo\u00eb", "ANT")                                                        # (a tag from before capitals were kept: it stays as it is until the person changes it)
+        start = int(self.w.wall.now)
+        answer = self.ask(self.anna, "Zo\u00eb", "Ant", save=True)
+        self.assertEqual((answer["ok"], answer["saved"], answer["tag"]), (False, False, {"ok": False, "why": "soon", "until": start + DAY}))
+        self.assertEqual(self.w.store.nick_row(ANNA_ID).tag, "ANT")
+        self.assertEqual(self.ask(self.anna, "Zo\u00eb", "ANT", save=True)["tag"], {"ok": True})         # (the same text is no change, and no wait is asked of it)
+        self.later(DAY)
+        answer = self.ask(self.anna, "Zo\u00eb", "Ant", save=True)
+        self.assertEqual((answer["saved"], answer["shown"]), (True, "[Ant] Zo\u00eb"))
+        self.assertEqual(self.w.store.nick_row(ANNA_ID).tag, "Ant")
+        self.assertEqual(self.ask(self.anna, "Zo\u00eb", "aNt", save=True)["tag"]["why"], "soon")          # (the day starts again with the change of capitals)
+        self.assertEqual(self.w.store.nick_row(ANNA_ID).tag, "Ant")
 
     def test_the_you_says_when_each_may_change_again_and_stops_saying_it(self):
-        self.choose(self.anna, "Zo\u00eb", "ant")
+        self.choose(self.anna, "Zo\u00eb", "Ant")
         now = int(self.w.wall.now)
         you = self.you(self.anna)
         self.assertEqual((you["nickat"], you["nickfree"], you["tagfree"]), (now, now + 30 * DAY, now + DAY))
@@ -454,7 +477,7 @@ class TheLimits(Base):
         self.assertNotIn("nickfree", self.you(self.anna))
 
     def test_a_refused_change_leaves_the_names_and_costs_no_wait(self):
-        self.choose(self.anna, "Zo\u00eb", "ant")
+        self.choose(self.anna, "Zo\u00eb", "Ant")
         row = self.w.store.nick_row(ANNA_ID)
         self.later(2 * DAY)
         self.ask(self.anna, "Wren", "pet", save=True)
@@ -463,25 +486,25 @@ class TheLimits(Base):
 
 class TheShownName(Base):
     def test_a_line_carries_the_tag_of_its_author_and_the_history_keeps_it(self):
-        self.choose(self.anna, "Zo\u00eb", "ant")
+        self.choose(self.anna, "Zo\u00eb", "Ant")
         self.w.clock.now += 3
         self.w.say(self.anna, "hello")
         self.w.clock.now += 3
         self.w.say(self.ben, "hi")
         lines = self.w.chat.welcome(self.guest)["history"]
-        self.assertEqual([(l["who"], l.get("tag")) for l in lines], [("Zo\u00eb", "ANT"), ("ben", None)])
+        self.assertEqual([(l["who"], l.get("tag")) for l in lines], [("Zo\u00eb", "Ant"), ("ben", None)])
         self.assertEqual(lines[0]["text"], "hello")
         later = self.w.store.recent_lines(10)
-        self.assertEqual([l.tag for l in later], ["ANT", ""])
+        self.assertEqual([l.tag for l in later], ["Ant", ""])
         self.later(DAY)
         self.choose(self.anna, "Zo\u00eb", "")
-        self.assertEqual([(l["who"], l.get("tag")) for l in self.w.chat.welcome(self.guest)["history"]][0], ("Zo\u00eb", "ANT"))       # (a line keeps the name and tag that it was written with)
+        self.assertEqual([(l["who"], l.get("tag")) for l in self.w.chat.welcome(self.guest)["history"]][0], ("Zo\u00eb", "Ant"))       # (a line keeps the name and tag that it was written with)
 
     def test_the_list_of_people_has_the_nickname_and_the_tag(self):
-        self.choose(self.anna, "Zo\u00eb", "ant")
+        self.choose(self.anna, "Zo\u00eb", "Ant")
         rows = list(self.w.chat.presence.view()["rows"].values())
         by_name = {r["name"]: r for r in rows}
-        self.assertEqual(by_name["Zo\u00eb"].get("tag"), "ANT")
+        self.assertEqual(by_name["Zo\u00eb"].get("tag"), "Ant")
         self.assertNotIn("tag", by_name["ben"])
         self.assertNotIn("anna", by_name)
 
@@ -529,7 +552,7 @@ class TheShownName(Base):
 
     def test_a_reset_takes_the_nickname_and_the_tag_and_the_account_is_shown_by_its_login_again(self):
         a = self.w.join(session.Identity(ANNA_ID, "Anna Smith", False, None, 0, "anna", "display", "anna"))
-        self.choose(a, "Zo\u00eb", "ant")
+        self.choose(a, "Zo\u00eb", "Ant")
         self.assertTrue(self.w.chat.nicknames.reset(ANNA_ID))
         self.assertFalse(self.w.chat.nicknames.reset(ANNA_ID))
         you = [m for m in a.sent if m["t"] == "you"][-1]["you"]
@@ -579,8 +602,8 @@ class ThePass(Base):
     def test_the_game_name_of_an_account_is_its_nickname_with_the_tag(self):
         n = self.w.chat.nicknames
         self.assertEqual(n.play_name(ANNA), "anna")
-        self.choose(self.anna, "Zo\u00eb", "ant")
-        self.assertEqual(n.play_name(self.anna.identity), "[ANT] Zo\u00eb")
+        self.choose(self.anna, "Zo\u00eb", "Ant")
+        self.assertEqual(n.play_name(self.anna.identity), "[Ant] Zo\u00eb")
         self.choose(self.ben, "Pip")
         self.assertEqual(n.play_name(self.ben.identity), "Pip")
 
@@ -657,11 +680,11 @@ class ThePass(Base):
 
     def test_play_gives_the_pass_only_where_the_hub_has_the_key(self):
         n = self.w.chat.nicknames
-        self.choose(self.anna, "Zo\u00eb", "ant")
-        self.assertEqual(n.play(self.anna.identity), {"name": "[ANT] Zo\u00eb"})
+        self.choose(self.anna, "Zo\u00eb", "Ant")
+        self.assertEqual(n.play(self.anna.identity), {"name": "[Ant] Zo\u00eb"})
         n.pass_maker = namepass.Maker(SECRET)
         play = n.play(self.anna.identity)
-        self.assertEqual(play["name"], "[ANT] Zo\u00eb")
+        self.assertEqual(play["name"], "[Ant] Zo\u00eb")
         self.assertTrue(n.pass_maker.check(play["name"], play["pass"], self.w.store.clock()))
         self.assertFalse(n.pass_maker.check("Zo\u00eb", play["pass"], self.w.store.clock()))
         nothing = n.play(session.Identity("8421000099990021", "Zoe", False, None, 0, "zo.e", "display", "zo.e"))
@@ -740,7 +763,7 @@ class TheReset(unittest.TestCase):
 
 class TheSecrets(Base):
     def test_no_id_and_no_reference_is_in_a_frame_of_a_name(self):
-        self.choose(self.anna, "Zo\u00eb", "ant")
+        self.choose(self.anna, "Zo\u00eb", "Ant")
         self.ask(self.ben, "zoe")
         self.ask(self.guest, "Zoe", guest=True)
         blob = json.dumps([m for p in (self.anna, self.ben, self.guest) for m in p.sent if m["t"] == "name"])

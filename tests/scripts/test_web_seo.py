@@ -8,8 +8,8 @@ game page's template), the catalog of sprites and sounds and the changelog page,
 
   - every page has a title in the one form "<page> - Ants (1998)" (an em dash; the front page's is "Ants (1998) - <a line about the game>"), one description, and the share card (Open Graph and the shape of the Twitter card) that says the same title and description,
     with a picture that exists and is big enough;
-  - a page that asks to be listed has exactly one canonical link, its own address on the site's one address; a page that asks not to be (a match, the game page) says noindex, keeps its links followed, has no
-    canonical link, and is not in the sitemap; the pages that are listed are the front page, the matches, the map maker, the changelog and the legal page;
+  - a page that asks to be listed has exactly one canonical link, its own address on the site's one address; a page that asks not to be (a match, the game page) says noindex, keeps its links followed, and is not
+    in the sitemap, and has no canonical link, except the game page, which names its own address (every query on it is the same file); the pages that are listed are the front page, the matches, the map maker, the changelog and the legal page;
   - the front page has structured data that parses and describes a free game that plays in a browser; no other page has structured data;
   - no page, script or tool names the site's host: the address is the one line of web/SITE_ORIGIN, put into the pages when the image is built (the tool refuses a text that is not an origin);
   - the sitemap lists exactly the pages that ask to be listed, by the same address as their canonical links; robots.txt keeps a crawler out of every door that nginx hands to the game server and the chat hub
@@ -41,6 +41,7 @@ TITLE = re.compile(r"^(?P<page>.+) — Ants \(1998\)$")
 FRONT_TITLE = re.compile(r"^Ants \(1998\) — (?P<line>.+)$")                                # (the front page names the game first, then says in a line what it is)
 LISTED = {"/", "/matches", "/mapmaker", "/changelog", "/legal"}
 NOT_LISTED = {"/match", "/play", "/asset_catalog/", "/test_3d/", "/test_3d/viewer.html"}                 # (a match, the game page, the sprite catalog, and the 3D viewer: pages that are there, and ask not to be in a search engine)
+NAMES_ITSELF = {"/play"}                                                                                 # (a page that is not listed and still names its own address: /play?live=, /play?replay=, /play?anything is this one file, so each says "/play" and noindex)
 NO_CARD = {"/asset_catalog/", "/test_3d/", "/test_3d/viewer.html"}                                       # (a page that is not made to be shared has no share card)
 CONF = stats.strip_comments(stats.read("docker", "nginx.conf"))
 
@@ -171,7 +172,7 @@ class ThePages(unittest.TestCase):
             seen.add(found[0])
         self.assertEqual(len(seen), len(self.heads))
 
-    def test_a_listed_page_has_one_canonical_link_that_is_its_own_address_and_a_page_that_is_not_listed_has_none_and_says_noindex(self):
+    def test_a_listed_page_has_one_canonical_link_that_is_its_own_address_and_a_page_that_is_not_listed_says_noindex_and_has_none_but_the_game_page_s_own(self):
         for address, head in self.heads.items():
             canonical = [l["href"] for l in head.links if l.get("rel") == "canonical"]
             robots = [c.replace(" ", "").split(",") for c in head.meta("name", "robots")]
@@ -180,7 +181,7 @@ class ThePages(unittest.TestCase):
                 self.assertEqual(head.meta("property", "og:url"), [PLACEHOLDER + address], address)
                 self.assertEqual([r for r in robots if "noindex" in r], [], address)
             else:
-                self.assertEqual(canonical, [], address)                      # (a page that is not listed has no address to name: the same page answers at /match?id=x for every match)
+                self.assertEqual(canonical, [PLACEHOLDER + address] if address in NAMES_ITSELF else [], address)      # (a match has no address to name: the same page answers at /match?id=x for every match; the game page's is /play, whatever the query)
                 self.assertEqual(head.meta("property", "og:url"), [], address)
                 self.assertEqual(len(robots), 1, address)
                 self.assertIn("noindex", robots[0], address)
@@ -261,7 +262,8 @@ class TheFiles(unittest.TestCase):
         self.assertEqual(root.tag, "{http://www.sitemaps.org/schemas/sitemap/0.9}urlset")
         locations = [e.find("{http://www.sitemaps.org/schemas/sitemap/0.9}loc").text for e in root]
         self.assertEqual(len(locations), len(set(locations)))
-        canonicals = sorted(l["href"].replace(PLACEHOLDER, ORIGIN) for head in self.heads.values() for l in head.links if l.get("rel") == "canonical")
+        asks = [head for head in self.heads.values() if not any("noindex" in r for r in head.meta("name", "robots"))]              # (a page that says noindex and names its address is not a page of the sitemap)
+        canonicals = sorted(l["href"].replace(PLACEHOLDER, ORIGIN) for head in asks for l in head.links if l.get("rel") == "canonical")
         self.assertEqual(sorted(locations), canonicals)
         self.assertEqual(sorted(l[len(ORIGIN):] for l in locations), sorted(LISTED))
         for location in locations:
@@ -276,7 +278,7 @@ class TheFiles(unittest.TestCase):
 
     def test_a_crawler_may_read_every_page_and_every_file_that_a_page_loads_to_draw_itself(self):
         robots = self.files["robots.txt"]
-        for address in sorted(LISTED | NOT_LISTED) + ["/matches?q=ann", "/match?id=ants-X-20260101-000000Z", "/play", "/?vp", "/changelog.html", "/legal.html"]:
+        for address in sorted(LISTED | NOT_LISTED) + ["/matches?q=ann", "/match?id=ants-X-20260101-000000Z", "/play", "/play?utm_source=x", "/play?map=Treasure", "/?vp", "/changelog.html", "/legal.html"]:
             self.assertTrue(crawler_may_fetch(robots, address), address)           # (a match page too: a crawler that may not read it never sees its noindex)
         for address, head in self.heads.items():
             for loaded in head.loads:

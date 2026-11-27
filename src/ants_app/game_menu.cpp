@@ -32,7 +32,7 @@ constexpr PictureText picture_words() {
 constexpr PictureText kPictureWords = picture_words();
 
 // The table. Texts are plain ASCII with no markup (a skin puts them in with its text calls). The original's own names stay in the hints, so that a player who knows the options window finds them.
-constexpr std::array<Row, 17> kRows = {{
+constexpr std::array<Row, 18> kRows = {{
     {kMaster, "master", Section::Sound, Kind::Slider, 0, 99, 100, kBoth | kShowWatch | kShowLive | kShowNew, "Master volume", "Everything you hear", ""},
     {kMusic, "music", Section::Sound, Kind::Slider, 0, 99, 65, kBoth | kShowWatch, "Music volume", "The original's \"Music Volume\"", ""},
     {kEffects, "effects", Section::Sound, Kind::Slider, 0, 99, 100, kBoth | kShowWatch, "Sound effects volume", "The original's \"Sound Volume\"", ""},
@@ -43,6 +43,7 @@ constexpr std::array<Row, 17> kRows = {{
     {kAntHealth, "ant_health", Section::Video, Kind::Choice, 0, 2, static_cast<int>(health::When::Hurt), kBoth | kShowWatch | kShowNew, "Ant health", "Shows hit points: a bar over the ant, or a number at its lower right. Every ant has 10 at most.", "Hurt ants|All ants|Off"},
     {kHealthStyle, "ant_health_style", Section::Video, Kind::Choice, 0, 1, static_cast<int>(health::Style::Bar), kBoth | kShowWatch | kShowNew, "Show health as", "A small bar over the ant, or a number at its lower right", "Bar|Number"},
     {kHealthChanges, "health_changes", Section::Video, Kind::Switch, 0, 1, 1, kBoth | kShowWatch | kShowNew, "Damage & heal numbers", "A small -N over an ant that loses hit points and +N over one that is healed at its hill", "On|Off"},
+    {kShowPing, "show_ping", Section::Video, Kind::Switch, 0, 1, 0, kBoth | kShowNew, "Show ping", "Your ping to the server, beside the frame rate, in network games. Click or tap it to see everyone's.", "On|Off"},
     {kHudArt, "hud_art", Section::Video, Kind::Choice, 0, 1, 0, kBoth | kShowWatch | kShowNew, "HUD art", "The look of the frame, buttons and panel around the map: the new pictures, or the original's own", "New|Classic"},
     {kScroll, "scroll", Section::Video, Kind::Slider, 0, 99, 50, kBoth | kShowWatch, "Map scroll speed", "Edge scrolling; the original's \"Scroll Speed\"", ""},
     {kChat, "chat", Section::Game, Kind::Switch, 0, 1, 1, kBoth, "Participate in chat", "The original's option", "On|Off"},
@@ -220,6 +221,7 @@ const char* MenuSettings::key(int row_id) noexcept {
         case kAntHealth: return "ant_health";
         case kHealthStyle: return "ant_health_style";
         case kHealthChanges: return "health_changes";
+        case kShowPing:  return "show_ping";
         case kHudArt:    return "hud_art";
         default:         return "";
     }
@@ -236,6 +238,7 @@ void MenuSettings::load(const ConfigStore& store) {
     }
     health::parse(store.get_string(key(kHealthStyle), "", 8), ant_health.style);
     health_changes = store.get_string(key(kHealthChanges), "on", 8) != "off";                 // (a word that is not "off", or none: on)
+    show_ping = store.get_string(key(kShowPing), "off", 8) == "on";                          // (a word that is not "on", or none: off)
     hud_art_new = store.get_string(key(kHudArt), "new", 8) != "classic";                      // (a word that is not "classic", or none: the new pictures)
 }
 
@@ -246,6 +249,7 @@ void MenuSettings::write(ConfigStore& store, int row_id) const {
         case kAntHealth: store.set_string(key(kAntHealth), health::word(ant_health.when)); break;
         case kHealthStyle: store.set_string(key(kHealthStyle), health::word(ant_health.style)); break;
         case kHealthChanges: store.set_string(key(kHealthChanges), health_changes ? "on" : "off"); break;
+        case kShowPing:  store.set_string(key(kShowPing), show_ping ? "on" : "off"); break;
         case kHudArt:    store.set_string(key(kHudArt), hud_art_new ? "new" : "classic"); break;
         default: break;
     }
