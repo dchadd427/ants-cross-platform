@@ -143,6 +143,8 @@ class TheRoutesRun(unittest.TestCase):
                 f.write(text)
         with open(os.path.join(html, "front", "LibreFranklin-Medium.ttf"), "wb") as f:
             f.write(b"\x00\x01\x00\x00 a stand-in for the font")
+        with open(os.path.join(html, "front", "LibreFranklin-OFL.txt"), "w", encoding="utf-8") as f:
+            f.write("a stand-in for the font's licence text\n")
         os.makedirs(os.path.join(html, "mapmaker_atlas"))                                  # the map maker's sprite atlas (the image's build makes the real one): stand-ins of the three files
         for name, data in (("atlas.json", b'{"v":1}'), ("ground.png", b"\x89PNG\r\n\x1a\n a stand-in"), ("objects.png", b"\x89PNG\r\n\x1a\n a stand-in")):
             with open(os.path.join(html, "mapmaker_atlas", name), "wb") as f:

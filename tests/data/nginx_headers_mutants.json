@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the headers, the origin check, the one page of another site that may read three routes, the headers passed to the game server, the access log and the compressed files of docker/nginx.conf and the Dockerfile, for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with the program nginx installed: python3 tools/mutate.py tests/data/nginx_headers_mutants.json --keep-going --jobs 1. Every mutant must be caught by tests/scripts/test_nginx_headers.py: each breaks one rule - Strict-Transport-Security on every kind of answer (and only for this host), the four headers of a page and the policy directive by directive (the game page against the others), which address is which kind, the permissions policy (what is switched off and what the game needs), the sockets of the policy, the origin of a game connection (none, the site's own host with or without a port or the final dot of a fully qualified name, anything else refused), what the game server is given, the access log (the path that was asked for, no query, no referrer, cookie or Authorization header), the compressed copies and their step in the Dockerfile, that every Host name is served, and what the front page at https://playants.org may read (that one Origin and no other, a GET of /live, /stats and /history and no other address, no credentials and no preflight answer, Vary: Origin, the headers the three routes already had). The page of an address that is nothing (a 404 with web/404.html, never the game page; a folder, and an .html, .css or .js file that is not there, are the same 404), and the short plain 404 under the name of a door (/ws/, /busy/, /stats/, /hub/, ...), are rules of this file too: the page is named by the catch-all location only, not by the whole server.",
+ "note": "Mutants of the headers, the origin check, the one page of another site that may read three routes, the headers passed to the game server, the access log and the compressed files of docker/nginx.conf and the Dockerfile, for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with the program nginx installed: python3 tools/mutate.py tests/data/nginx_headers_mutants.json --keep-going --jobs 1. Every mutant must be caught by tests/scripts/test_nginx_headers.py: each breaks one rule - Strict-Transport-Security on every kind of answer (and only for this host), the four headers of a page and the policy directive by directive (the game page against the others), which address is which kind, the permissions policy (what is switched off and what the game needs), the sockets of the policy, the origin of a game connection (none, the site's own host with or without a port or the final dot of a fully qualified name, anything else refused), what the game server is given, the access log (the path that was asked for, no query, no referrer, cookie or Authorization header), the compressed copies and their step in the Dockerfile, that every Host name is served, and what the front page at https://playants.org may read (that one Origin and no other, a GET of /live, /stats and /history and no other address, no credentials and no preflight answer, Vary: Origin, the headers the three routes already had). The page of an address that is nothing (a 404 with web/404.html, never the game page; a folder, and an .html, .css or .js file that is not there, are the same 404), and the short plain 404 under the name of a door (/ws/, /busy/, /stats/, /hub/, ...), and the noindex of a text file (a font's licence) that is no page, are rules of this file too: the page is named by the catch-all location only, not by the whole server.",
  "mutants": [
   {
    "id": "hsts_missing_at_the_server",
@@ -1376,22 +1376,22 @@
   {
    "id": "unknown_address_is_the_game_page",
    "file": "docker/nginx.conf",
-   "old": "        try_files $uri =404;\n        error_page 404 /404.html;\n",
-   "new": "        try_files $uri $uri/ /index.html;\n        error_page 404 /404.html;\n",
+   "old": "    location / {\n        try_files $uri =404;\n        error_page 404 /404.html;\n",
+   "new": "    location / {\n        try_files $uri $uri/ /index.html;\n        error_page 404 /404.html;\n",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {
    "id": "unknown_address_has_no_page",
    "file": "docker/nginx.conf",
-   "old": "        try_files $uri =404;\n        error_page 404 /404.html;\n",
-   "new": "        try_files $uri =404;\n",
+   "old": "    location / {\n        try_files $uri =404;\n        error_page 404 /404.html;\n",
+   "new": "    location / {\n        try_files $uri =404;\n",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {
    "id": "unknown_address_is_answered_200",
    "file": "docker/nginx.conf",
-   "old": "        try_files $uri =404;\n        error_page 404 /404.html;\n",
-   "new": "        try_files $uri =404;\n        error_page 404 =200 /404.html;\n",
+   "old": "    location / {\n        try_files $uri =404;\n        error_page 404 /404.html;\n",
+   "new": "    location / {\n        try_files $uri =404;\n        error_page 404 =200 /404.html;\n",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {
@@ -1439,15 +1439,15 @@
   {
    "id": "under_the_chat_a_script_is_the_page",
    "file": "docker/nginx.conf",
-   "old": "    location ~* ^/hub/.*\\.(html|css|js)$ {\n        return 404;\n    }\n",
+   "old": "    location ~* ^/hub/.*\\.(html|css|js|txt)$ {\n        return 404;\n    }\n",
    "new": "",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {
    "id": "under_the_chat_a_script_is_the_page_in_lower_case_only",
    "file": "docker/nginx.conf",
-   "old": "    location ~* ^/hub/.*\\.(html|css|js)$ {",
-   "new": "    location ~ ^/hub/.*\\.(html|css|js)$ {",
+   "old": "    location ~* ^/hub/.*\\.(html|css|js|txt)$ {",
+   "new": "    location ~ ^/hub/.*\\.(html|css|js|txt)$ {",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {
@@ -1504,6 +1504,20 @@
    "file": "docker/nginx.conf",
    "old": "    location ^~ /asset_catalog/sounds/ {\n        root /usr/share/nginx/html;\n        try_files $uri =404;\n        add_header X-Robots-Tag \"noindex\" always;\n",
    "new": "    location ^~ /asset_catalog/sounds/ {\n        root /usr/share/nginx/html;\n        try_files $uri =404;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "a_text_file_is_open_to_the_index_of_a_search_engine",
+   "file": "docker/nginx.conf",
+   "old": "        error_page 500 502 503 504 /50x.html;\n        add_header X-Robots-Tag \"noindex\" always;\n",
+   "new": "        error_page 500 502 503 504 /50x.html;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "a_text_file_under_the_chat_is_the_page_of_the_site",
+   "file": "docker/nginx.conf",
+   "old": "location ~* ^/hub/.*\\.(html|css|js|txt)$ {",
+   "new": "location ~* ^/hub/.*\\.(html|css|js)$ {",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   }
  ]

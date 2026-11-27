@@ -14,7 +14,7 @@ Every html answer has the headers that every page of the site has always had: Ca
 request is answered 304), and the redirect has the server's cross-origin headers too. The pages are recognised by one marker each: the lobby has the room (id="lobby"; the build writes it with or without quotes),
 the game page has the stage (id="game-stage"; the build writes it with or without quotes).
 /stats, /stats/local                  the numbers of the front page: a GET and a POST that go to the game server (only what nginx itself refuses is checked here: other methods, a query)
-/front/classic.css, the font          the Classic look's own files: served as files (an unknown address is the page of a 404, so the type is checked), the stylesheet with the pages' revalidation
+/front/classic.css, the font          the Classic look's own files: served as files (an unknown address is the page of a 404, so the type is checked), the stylesheet with the pages' revalidation; the font's licence text (a .txt) too, with X-Robots-Tag: noindex
 /matches, /match, their stylesheet and the code that they and the game page in replay mode (play?replay=<file>) share; /matches.html and /match.html
                                       (and the old /watch.html, to /matches) go to the clean address with the query (a 301); /live-now, /live-now/ and /live.html go to / with no query (a 301); /live is the game server's list, not a page
 /robots.txt, /sitemap.xml, /sitemap-library.xml   the files for search engines (docs/BUILD_AND_RUN.md "Search engines and share cards"): files with their own types, revalidated; an address that only starts like one is a 404 with the page
@@ -133,6 +133,9 @@ def main():
     check(bool(tag) and status2 == 304, "/front/classic.css: an unchanged stylesheet is answered 304 to If-None-Match (%s)" % status2)
     status, headers, names, body = get("/front/LibreFranklin-Medium.ttf")
     check(status == 200 and not headers.get("content-type", "").startswith("text/html"), "/front/LibreFranklin-Medium.ttf is the font, not a page (%s, %s)" % (status, headers.get("content-type")))
+    status, headers, names, body = get("/front/LibreFranklin-OFL.txt")
+    check(status == 200 and headers.get("content-type", "").startswith("text/plain") and not GAME.search(body) and not LOBBY.search(body) and not NOT_FOUND.search(body), "/front/LibreFranklin-OFL.txt is the licence text, not a page (%s, %s)" % (status, headers.get("content-type")))
+    check(names.count("x-robots-tag") == 1 and headers.get("x-robots-tag") == "noindex", "/front/LibreFranklin-OFL.txt asks a search engine not to list it: X-Robots-Tag noindex, once (%s)" % headers.get("x-robots-tag"))
     print("[web routes] the map maker's sprite atlas: its index and two sheets are files of the site, revalidated (never the week that other PNG files get), and an unknown name in the folder is a 404")
     for name, kind in (("atlas.json", "application/json"), ("ground.png", "image/png"), ("objects.png", "image/png")):
         status, headers, names, body = get("/mapmaker_atlas/" + name)
@@ -150,6 +153,7 @@ def main():
         status, headers, names, body = get(path)
         check(status == 200 and headers.get("content-type") == kind and marker in body and not GAME.search(body) and not LOBBY.search(body) and not NOT_FOUND.search(body), "%s is the file (%s, %s)" % (path, status, headers.get("content-type")))
         check(headers.get("cache-control") == "no-cache, must-revalidate" and names.count("cache-control") == 1 and headers.get("x-content-type-options") == "nosniff", "%s: Cache-Control is exactly one line, no-cache, must-revalidate, and nosniff is sent (%s)" % (path, headers.get("cache-control")))
+        check("x-robots-tag" not in names, "%s is a file for crawlers and asks nothing of them: no X-Robots-Tag" % path)
     status, headers, names, body = get("/app/icon-192.png")
     check(status == 200 and headers.get("content-type", "").split(";")[0] == "image/png" and body[1:4] == "PNG", "/app/icon-192.png is the icon (%s, %s)" % (status, headers.get("content-type")))
     for path in ("/favicon.png?v=0", "/favicon.png", "/favicon.ico?v=0"):

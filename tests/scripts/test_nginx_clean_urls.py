@@ -151,8 +151,8 @@ class TheText(unittest.TestCase):
         for clean, text in pages.items():
             self.assertEqual(re.findall(r'<link rel="canonical"[^>]*>', text), ['<link rel="canonical" href="@@SITE_ORIGIN@@%s">' % clean], clean)         # (the site's address is put in when the image is built: docs/BUILD_AND_RUN.md "Search engines and share cards")
             self.assertLess(text.index('rel="canonical"'), text.index("</head>"), clean)
-        for name in ("match", "404", "50x", "admin", "shell"):
-            self.assertNotIn('rel="canonical"', stats.read("web", name + ".html"), name)                  # (a match and the game page ask not to be listed; the pages of an error and the admin page are no address)
+        for name in ("match", "404", "50x", "admin"):
+            self.assertNotIn('rel="canonical"', stats.read("web", name + ".html"), name)                  # (a match asks not to be listed and its one file has no address of its own, the pages of an error and the admin page are no address; the game page names /play, tests/scripts/test_web_seo.py)
 
     def test_the_page_headers_still_come_from_the_file_s_address(self):
         # (the clean address is an internal rewrite to the file, so the maps that read $uri see the file: the policy, the framing rule, the referrer policy and the permissions policy of a page)
