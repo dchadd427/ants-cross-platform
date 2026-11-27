@@ -1142,21 +1142,29 @@ void run_bot_tests() {
             int attempts{1};                                                                 // how many times the row was measured
             std::string readings;                                                            // every reading of the row, "ms a second / worst pass / start pass", for the printout
         };
-        // twelve rooms, each with one person (a client that asks for its seat) and bots in the other three seats: through the leader's fill (`fill` set) or the room's specification
-        const auto measure = [&](const char* map, const char* kind, ai::Level level, bool via_fill, Result& out, int room_count = 12, int window_passes = 3000) {
-            World w;
-            std::vector<Client*> leaders;
-            std::vector<std::string> codes;
-            for (int r = 0; r < room_count; ++r) {
-                codes.push_back("CPU-" + std::to_string(r));
-                RoomSpec spec = spec_of(codes.back(), 4, map);
-                if (!via_fill) {
-                    for (uint8_t seat = 1; seat < 4; ++seat) spec.bots.push_back(ai::BotSpec{seat, kind, level});
-                }
-                if (!w.mgr.create_room(spec, w.now).ok) return false;
-                leaders.push_back(&w.connect("P" + std::to_string(r), codes.back(), 0));
-            }
-            const auto pass = [&](double& timed_ms) {
+        // rooms of one person (a client that asks for its seat) and bots in the other three seats: through the leader's fill (`via_fill`) or the room's specification
+        struct Row {
+            const char* map;
+            const char* kind;
+            ai::Level level;
+            bool via_fill;
+            int room_count;
+            Result* out;
+        };
+        // The rows of a call are played side by side: each has a World of its own and is brought to a running match on its own, then the window is played pass by pass, a pass of each row in turn, so
+        // that whatever the host does to the thread meanwhile (the load of a neighbor on a shared machine, a slower or faster phase of the processor) falls on every row alike and not on the one that
+        // happens to be measured at that moment. A row measured after another reads the host's state of its own seconds: the idle row of ISLANDS, which costs 2 to 3 ms a second, read 2.3 to 3.2 on one
+        // hosted Windows runner in six runs one after the other, and the hard bots of the same map 12.8 to 14.9 on another; the two read side by side, the ratio of the one to the other was within 3% (nine rounds).
+        const auto measure = [&](const std::vector<Row>& rows, int window_passes = 3000) {
+            struct Rig {
+                std::unique_ptr<World> w;
+                std::vector<Client*> leaders;
+                std::vector<std::string> codes;
+                double total_ms{0};
+            };
+            std::vector<Rig> rigs(rows.size());
+            const auto pass = [](Rig& rig, double& timed_ms) {
+                World& w = *rig.w;
                 w.now += 10;
                 w.net.set_time(w.now);
                 const double cpu0 = thread_cpu_ms();                                          // the thread's CPU time, not the wall clock: a loaded machine delays the thread (a slow host, though, makes the same work read longer: see the bounds below)
@@ -1164,28 +1172,46 @@ void run_bot_tests() {
                 timed_ms = thread_cpu_ms() - cpu0;
                 for (auto& c : w.clients) c->update(w.now, maps_dir());
             };
-            double ms = 0;
-            for (int i = 0; i < 100; ++i) pass(ms);
-            if (via_fill) {
-                for (Client* c : leaders) c->lobby->request_start(net::FillLevel::Medium);
+            for (size_t i = 0; i < rows.size(); ++i) {
+                const Row& row = rows[i];
+                Rig& rig = rigs[i];
+                rig.w = std::make_unique<World>();
+                for (int r = 0; r < row.room_count; ++r) {
+                    rig.codes.push_back("CPU-" + std::to_string(r));
+                    RoomSpec spec = spec_of(rig.codes.back(), 4, row.map);
+                    if (!row.via_fill) {
+                        for (uint8_t seat = 1; seat < 4; ++seat) spec.bots.push_back(ai::BotSpec{seat, row.kind, row.level});
+                    }
+                    if (!rig.w->mgr.create_room(spec, rig.w->now).ok) return false;
+                    rig.leaders.push_back(&rig.w->connect("P" + std::to_string(r), rig.codes.back(), 0));
+                }
+                double ms = 0;
+                for (int p = 0; p < 100; ++p) pass(rig, ms);
+                if (row.via_fill) {
+                    for (Client* c : rig.leaders) c->lobby->request_start(net::FillLevel::Medium);
+                }
+                row.out->start_pass_ms = 0;
+                for (int p = 0; p < 600; ++p) {                                              // six seconds: every room starts, loads, begins
+                    pass(rig, ms);
+                    row.out->start_pass_ms = std::max(row.out->start_pass_ms, ms);
+                }
+                for (const std::string& code : rig.codes) {
+                    if (rig.w->status(code).state != RoomState::Running) return false;
+                }
+                row.out->worst_pass_ms = 0;
             }
-            out.start_pass_ms = 0;
-            for (int i = 0; i < 600; ++i) {                                                  // six seconds: every room starts, loads, begins
-                pass(ms);
-                out.start_pass_ms = std::max(out.start_pass_ms, ms);
+            for (int p = 0; p < window_passes; ++p) {                                         // 30 s of match in all twelve rooms (the island map: fewer rooms and 100 s, for the endgame of the bots is after 60 s)
+                for (size_t i = 0; i < rows.size(); ++i) {
+                    double ms = 0;
+                    pass(rigs[i], ms);
+                    rigs[i].total_ms += ms;
+                    rows[i].out->worst_pass_ms = std::max(rows[i].out->worst_pass_ms, ms);
+                }
             }
-            for (const std::string& code : codes) {
-                if (w.status(code).state != RoomState::Running) return false;
+            for (size_t i = 0; i < rows.size(); ++i) {
+                rows[i].out->ms_per_second = rigs[i].total_ms / (static_cast<double>(window_passes) / 100.0);
+                rows[i].out->rooms = rows[i].room_count;
             }
-            double total = 0;
-            const int passes = window_passes;                                                // 30 s of match in all twelve rooms (the island map: fewer rooms and 100 s, for the endgame of the bots is after 60 s)
-            for (int i = 0; i < passes; ++i) {
-                pass(ms);
-                total += ms;
-                out.worst_pass_ms = std::max(out.worst_pass_ms, ms);
-            }
-            out.ms_per_second = total / (static_cast<double>(passes) / 100.0);
-            out.rooms = room_count;
             return true;
         };
         // A build with AddressSanitizer or UBSan runs the server 10 to 30 times slower than the program: its figures say nothing about the server, so such a build plays the two TINY rows (twelve
@@ -1204,15 +1230,18 @@ void run_bot_tests() {
         // What is tested, and what is only a stop. The thread's CPU time is still the host's: on a hosted runner (a virtual machine that other jobs share) the same work reads 1.1 to 3 times longer in
         // a slow job than in a fast one, for the whole job (TREASURE with hard bots: 25.7, 45.5, 43.1 and, in a slow job, 122.3 ms a second for the same code), so no absolute figure judges the server.
         // The test is the RATIO of a row to the idle bots' row on the same map, measured in the same run a few seconds before (hard bots over idle bots read 2.0 to 3.1 in four jobs, whatever the host's
-        // speed): a bot whose own work grows threefold over what it was (the hard bots' search made again on every pass, a map analysed again by each bot on every pass) is over 6, and nothing else
+        // speed; the island rows are played side by side, see island_rounds): a bot whose own work grows threefold over what it was (the hard bots' search made again on every pass, a map analysed again by each bot on every pass) is over 6, and nothing else
         // moves the ratio. The absolute bounds that follow are SAFETY STOPS, far from any reading (a host three times slower than the slowest one seen is still inside): ms a second under 300 and no pass
         // of 750 ms or more (no stall). A row that is over a stop is measured again, up to three times, and the first run that is within all three stops is the row; when none is, the run with the
         // smallest cost is the row and every reading is printed with it, so that a failure shows what each run read (as test_server_persist.cpp does with its trials).
         constexpr double kStopMsPerSecond = 300.0;
         constexpr double kStopPassMs = 750.0;
         constexpr double kRatioBound = 6.0;
-        // The island map's bots do more (the swarm, the flower link, the bridge planner, the endgame's Thief), and its idle row is a few milliseconds a second: the row has the bound of the others,
-        // 8 (a quiet Mac reads 3.7 times the idle bots, the Windows runners about half as much again)
+        // The island map's bots do more (the swarm, the flower link, the bridge planner, the endgame's Thief), and its idle row is only 1 to 3 milliseconds a second: the row has a bound of 8. Played side
+        // by side (see island_rounds) the hard bots read 4.4 times the idle bots on a Mac and 6.0 and 6.4 on the two kinds of hosted Windows runner (nine rounds on each: every round within 3% of the
+        // others), so the bound is 25% to 33% over every host seen, and a bot whose own work grows by a third is over it on the slowest one. The bound was set on 24 November 2026 from one Mac reading (3.7)
+        // and the guess that the Windows runners read half as much again; measured one row after the other as they were, the same code read 5.7 to 8.7 on those runners (the idle row alone moved
+        // from 2.3 to 3.2 ms a second inside one job, the hard bots from 12.8 to 20.3 between jobs), and the test failed in CI on 8.2, 8.6 and 8.7: the measure was the fault, not the bound.
         constexpr double kRatioBoundIslands = 8.0;
         const auto within_stops = [](const Result& r) { return r.ms_per_second < kStopMsPerSecond && r.worst_pass_ms < kStopPassMs && r.start_pass_ms < kStopPassMs; };
         const auto best_of = [&](const char* map, const char* kind, ai::Level level, bool via_fill, Result& out, int room_count = 12, int window_passes = 3000) {
@@ -1220,7 +1249,7 @@ void run_bot_tests() {
             Result cheapest;
             for (int attempt = 1; attempt <= 3; ++attempt) {
                 Result r;
-                if (!measure(map, kind, level, via_fill, r, room_count, window_passes)) return false;
+                if (!measure({Row{map, kind, level, via_fill, room_count, &r}}, window_passes)) return false;
                 std::ostringstream one;
                 one << std::fixed << std::setprecision(2) << r.ms_per_second << " / " << r.worst_pass_ms << " / " << r.start_pass_ms;
                 readings += (attempt > 1 ? "; " : "") + one.str();
@@ -1237,6 +1266,39 @@ void run_bot_tests() {
             out.readings = readings;
             return true;
         };
+        // The island rows are the ones that a host moves: their idle row is a few milliseconds a second (see the bound), so a neighbor's load on the shared machine during two of its seconds moves
+        // the ratio by a third. They are played as kIslandRounds rounds, the idle bots and the hard bots side by side in each (see `measure`), and the row is the round whose ratio is the middle
+        // one of the rounds, with the idle bots' reading of that round: a round that a neighbor spoiled, one way or the other, is not the row. Every round is printed with it. (These rows are not
+        // measured again when they are over a stop, as best_of does: the stops are judged on the middle round.)
+        constexpr int kIslandRounds = 3;
+        const auto island_rounds = [&](Result& idle, Result& hard) {
+            struct Round {
+                Result idle, hard;
+                double times{0};
+            };
+            std::vector<Round> rounds(kIslandRounds);
+            std::string idle_readings, hard_readings;
+            for (int i = 0; i < kIslandRounds; ++i) {
+                Round& r = rounds[static_cast<size_t>(i)];
+                if (!measure({Row{"ISLANDS.LVL", "idle", ai::Level::Medium, false, 3, &r.idle}, Row{"ISLANDS.LVL", "standard", ai::Level::Hard, false, 3, &r.hard}}, 10000)) return false;      // (the island play and the endgame batch run after the first minute: a window of 100 s in three rooms)
+                r.times = r.idle.ms_per_second > 0.0 ? r.hard.ms_per_second / r.idle.ms_per_second : 0.0;
+                std::ostringstream one_idle, one_hard;
+                one_idle << std::fixed << std::setprecision(2) << r.idle.ms_per_second << " / " << r.idle.worst_pass_ms << " / " << r.idle.start_pass_ms;
+                one_hard << std::fixed << std::setprecision(2) << r.hard.ms_per_second << " / " << r.hard.worst_pass_ms << " / " << r.hard.start_pass_ms << " (" << r.times << " times)";
+                idle_readings += (i > 0 ? "; " : "") + one_idle.str();
+                hard_readings += (i > 0 ? "; " : "") + one_hard.str();
+            }
+            std::vector<size_t> order(rounds.size());
+            for (size_t i = 0; i < order.size(); ++i) order[i] = i;
+            std::sort(order.begin(), order.end(), [&](size_t a, size_t b) { return rounds[a].times < rounds[b].times; });
+            const Round& middle = rounds[order[order.size() / 2]];
+            idle = middle.idle;
+            hard = middle.hard;
+            idle.attempts = hard.attempts = kIslandRounds;
+            idle.readings = idle_readings;
+            hard.readings = hard_readings;
+            return true;
+        };
         Result tiny_fill, tiny_idle, tiny_medium, tiny_hard, treasure_idle, treasure_hard, islands_idle, islands_hard;
         ASSERT_TRUE(best_of("TINY.LVL", "standard", ai::Level::Medium, true, tiny_fill));
         ASSERT_TRUE(best_of("TINY.LVL", "standard", ai::Level::Medium, false, tiny_medium));
@@ -1245,8 +1307,7 @@ void run_bot_tests() {
             ASSERT_TRUE(best_of("TINY.LVL", "standard", ai::Level::Hard, false, tiny_hard));
             ASSERT_TRUE(best_of("TREASURE.LVL", "idle", ai::Level::Medium, false, treasure_idle));
             ASSERT_TRUE(best_of("TREASURE.LVL", "standard", ai::Level::Hard, false, treasure_hard));
-            ASSERT_TRUE(best_of("ISLANDS.LVL", "idle", ai::Level::Medium, false, islands_idle, 3, 10000));      // (the island play and the endgame batch run after the first minute: a window of 100 s in three rooms)
-            ASSERT_TRUE(best_of("ISLANDS.LVL", "standard", ai::Level::Hard, false, islands_hard, 3, 10000));
+            ASSERT_TRUE(island_rounds(islands_idle, islands_hard));
         }
         const auto row = [](const char* what, const Result& r) {
             std::cout << "\n    " << std::left << std::setw(34) << what << std::right << std::fixed << std::setprecision(2) << std::setw(7) << r.ms_per_second << " ms per second of play for " << r.rooms << " rooms ("
