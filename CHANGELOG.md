@@ -31,6 +31,9 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - **Show ping.** A new setting in the Video tab of the settings menu, off by default: switched on, the corner of a network game shows "ping NN ms" above the frame rate, and a click on it opens the list of connections as before. Off, the corner is the frame rate and the version only. The corner no longer shows "delay". On the desktop it is `show_ping=on` in the settings file or `--show-ping on` for one run.
 
+**For operators:**
+- For search engines the game page now names `/play` as its address (it still says `noindex`, so no `/play?...` address is listed), and a `.txt` file of the site, such as the licence text of the front page's font, sends `X-Robots-Tag: noindex` ([`docs/BUILD_AND_RUN.md`](docs/BUILD_AND_RUN.md#search-engines-and-share-cards)).
+
 ## v0.22.0 - 2026-11-26 - Nicknames, tags and guest names, a welcome for guests, a better Play of the game and Fill a box
 
 **For players:**

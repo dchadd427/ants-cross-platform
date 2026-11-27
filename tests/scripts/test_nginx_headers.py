@@ -6,7 +6,7 @@ The text of the file is checked everywhere. Where an nginx program is installed 
 stand-in for the game server, its replay and submission doors and the chat hub: one small program that answers every path with a JSON body and a 101 to an upgrade, and remembers the headers of each request.
 A second nginx has no server behind it, for the answers of the named locations (a game server that is not there). Skipped, with the reason, where there is no nginx. What is asked of it:
 
-  - HEADERS: a table of every kind of address (the front page, the game page and its addresses, the other pages, the map maker, the admin page, scripts and styles, pictures, sounds, the game files, the
+  - HEADERS: a table of every kind of address (the front page, the game page and its addresses, the other pages, the map maker, the admin page, scripts and styles, pictures, sounds, text files, the game files, the
     players' maps, the doors of the game server and the hub, the answers for a server that is not there, a refused connection) and what each sends: the Content-Security-Policy, the rule for framing, the referrer
     policy, the permissions policy, Strict-Transport-Security and the cross-origin headers, none of them twice. The two policies are read apart, directive by directive. The page headers are sent for a document
     only; the cross-origin headers and nosniff are what they always were on every answer that had them.
@@ -358,8 +358,10 @@ def expected(kind, host=SITE):
         return dict(cross, **no_page)
     if kind == "manifest":                                   # (the web app's manifest: the four headers of any static file, revalidated, its own type; no page header)
         return dict(cross, **dict(no_page, **{"cache-control": "no-cache, must-revalidate", "content-type": "application/manifest+json"}))
-    if kind in ("robots", "sitemap"):                        # (the files for search engines: as the manifest, revalidated, each with its own type and character set; no page header)
-        return dict(cross, **dict(no_page, **{"cache-control": "no-cache, must-revalidate", "content-type": "text/plain; charset=utf-8" if kind == "robots" else "application/xml; charset=utf-8"}))
+    if kind in ("robots", "sitemap"):                        # (the files for search engines: as the manifest, revalidated, each with its own type and character set; no page header; a file that asks a crawler not to list it would be a trap of its own)
+        return dict(cross, **dict(no_page, **{"cache-control": "no-cache, must-revalidate", "content-type": "text/plain; charset=utf-8" if kind == "robots" else "application/xml; charset=utf-8", "x-robots-tag": None}))
+    if kind == "text":                                       # (a plain-text file such as a font's licence: the four static-file headers, no page header, and a crawler is asked not to list it)
+        return dict(cross, **dict(no_page, **{"x-robots-tag": "noindex"}))
     if kind == "data":                                       # (the update notice's data file: as the manifest, revalidated, JSON)
         return dict(cross, **dict(no_page, **{"cache-control": "no-cache, must-revalidate", "content-type": "application/json"}))
     if kind == "icon":                                       # (the web app's icons: the picture rule, a week)
@@ -414,6 +416,9 @@ LIVE_ROWS = [
     ("the changelog page with a slash", "GET", "/changelog/", (), 301, "plain"),
     ("a page that is not there", "GET", "/nothing.html", (), 404, "page"),
     ("the robots file", "GET", "/robots.txt", (), 200, "robots"),
+    ("a font's licence text", "GET", "/front/LibreFranklin-OFL.txt", (), 200, "text"),
+    ("a font's licence text with a query", "GET", "/front/LibreFranklin-OFL.txt?v=1", (), 200, "text"),
+    ("a text file that is not there", "GET", "/front/nothing.txt", (), 404, "page"),
     ("the sitemap", "GET", "/sitemap.xml", (), 200, "sitemap"),
     ("the sitemap of the map pages", "GET", "/sitemap-library.xml", (), 200, "sitemap"),
     ("the asset catalog", "GET", "/asset_catalog/", (), 200, "page"),
@@ -503,6 +508,7 @@ LIVE_ROWS = [
     ("under the chat's door", "GET", "/hub/ws/", (), 404, "plain"),
     ("a script under the chat", "GET", "/hub/x.js", (), 404, "plain"),
     ("a page under the chat", "GET", "/hub/x.html", (), 404, "plain"),
+    ("a text file under the chat", "GET", "/hub/x.txt", (), 404, "plain"),
     ("a style sheet under the chat, in capitals", "GET", "/hub/X.CSS", (), 404, "plain"),
 ]
 # the same nginx with nothing behind it: the answers for a server that is not there
@@ -534,7 +540,7 @@ def docroot_files():
     files.update({"404.html": stats.read("web", "404.html"), "50x.html": stats.read("web", "50x.html")})                  # (the real error pages)
     files.update({"robots.txt": seo_files.robots_txt(SITE_ORIGIN), "sitemap.xml": seo_files.sitemap_xml(SITE_ORIGIN), "sitemap-library.xml": seo_files.sitemap_xml(SITE_ORIGIN, ["/map-library", "/map/treasure"])})   # (the real files' text, as the build makes them)
     files.update({"front/classic.css": "body { color: #222; }\n" * 80, "front/big.css": ".a { color: red; }\n" * 400, "shapes.js": "var shapes = 1;\n" * 80, "home/home.js": "var home = 1;\n" * 80, "asset_catalog/catalog_data.js": "var data = 1;\n" * 80, "test_3d/compare.js": "var cmp = 1;\n" * 80, "test_3d/models/manifest.json": '{"version":"v-test"}',
-                  "front/logo.png": "\x89PNG stand-in", "manifest.webmanifest": stats.read("web", "manifest.webmanifest"), "whats_new.json": WHATS_NEW, "app/icon-192.png": "\x89PNG stand-in", "app/apple-touch-icon.png": "\x89PNG stand-in", "favicon.png": "\x89PNG stand-in", "favicon.ico": "ico stand-in", "front/click.wav": "RIFF stand-in", "mapmaker_atlas/atlas.json": '{"v":1}', "mapmaker_atlas/ground.png": "\x89PNG stand-in",
+                  "front/logo.png": "\x89PNG stand-in", "front/LibreFranklin-OFL.txt": "a stand-in for a font's licence text\n", "manifest.webmanifest": stats.read("web", "manifest.webmanifest"), "whats_new.json": WHATS_NEW, "app/icon-192.png": "\x89PNG stand-in", "app/apple-touch-icon.png": "\x89PNG stand-in", "favicon.png": "\x89PNG stand-in", "favicon.ico": "ico stand-in", "front/click.wav": "RIFF stand-in", "mapmaker_atlas/atlas.json": '{"v":1}', "mapmaker_atlas/ground.png": "\x89PNG stand-in",
                   "asset_catalog/sprites/s1.png": "\x89PNG stand-in", "asset_catalog/sounds/a.wav": "RIFF stand-in", "lvl_core.wasm": "\0asm stand-in", "index.js": big[:50000], "index.wasm": big[:120000], "index.data": big})
     return files
 
