@@ -381,10 +381,127 @@
     }
   }
 
+  // Crisp 2-layer pulsing ground glow halo ring for map power-ups (`pu_*`):
+  // Layer 1: subtle dark grounding shadow ring (contrast on bright grass & sand)
+  // Layer 2: smooth luminous pulsing color-coded energy ring + faint inner glow pool (pops cleanly without clutter!)
+  const POWERUP_RING_COLORS = {
+    pu_mason: [1.35, 0.86, 0.14], // Fire Ant: warm golden-amber
+    pu_swim:  [0.16, 1.05, 1.48], // Swimmer: bright aqua-cyan
+    pu_bomb:  [1.45, 0.42, 0.16], // Bomber: vivid ember-orange
+    pu_comb:  [1.42, 1.12, 0.22], // Combat: royal gold
+    pu_thief: [0.95, 0.44, 1.48], // Thief: crisp electric violet
+  };
+
+  function buildPowerupRingModel(gl, id, rgb) {
+    const { mat4Identity } = window.__antGltf;
+    const idMat = mat4Identity();
+    const bufs = [];
+    function buildAnnulus(rIn, rOut, yH, baseCol, emissive, alpha, name) {
+      const pos = [], nrm = [], uv = [], col = [], idx = [];
+      const segs = 32;
+      for (let s = 0; s <= segs; s++) {
+        const a = (s / segs) * Math.PI * 2;
+        const ca = Math.cos(a), sa = Math.sin(a);
+        pos.push(ca * rIn, yH, sa * rIn, ca * rOut, yH, sa * rOut);
+        nrm.push(0, 1, 0, 0, 1, 0);
+        uv.push(s / segs, 0, s / segs, 1);
+        col.push(1, 1, 1, 1, 1, 1);
+      }
+      for (let s = 0; s < segs; s++) {
+        const a = s * 2, b = a + 1, c = a + 2, d = a + 3;
+        idx.push(a, c, b, b, c, d);
+      }
+      const vao = gl.createVertexArray();
+      gl.bindVertexArray(vao);
+      const up = (target, data, loc, sz) => {
+        const b = gl.createBuffer(); gl.bindBuffer(target, b); gl.bufferData(target, data, gl.STATIC_DRAW);
+        if (loc !== undefined) { gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, sz, gl.FLOAT, false, 0, 0); }
+        bufs.push(b);
+      };
+      up(gl.ARRAY_BUFFER, new Float32Array(pos), 0, 3);
+      up(gl.ARRAY_BUFFER, new Float32Array(nrm), 1, 3);
+      up(gl.ARRAY_BUFFER, new Float32Array(uv), 2, 2);
+      up(gl.ARRAY_BUFFER, new Float32Array(col), 3, 3);
+      up(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx));
+      gl.bindVertexArray(null);
+      return {
+        vao,
+        dc: {
+          nodeIndex: 0, worldMat: idMat,
+          prim: {
+            vao, indexed: true, mode: gl.TRIANGLES, drawCount: idx.length, indexType: gl.UNSIGNED_SHORT,
+            hasUv: false, localMin: [-rOut, yH, -rOut], localMax: [rOut, yH + 0.01, rOut],
+            material: {
+              name, baseColor: [...baseCol, alpha], metallic: 0.0, roughness: 0.96,
+              normalScale: 0.0, normalTex: null, baseTex: null, mrTex: null,
+              emissive, alphaMode: alpha < 0.99 ? "BLEND" : "OPAQUE", doubleSided: true,
+            },
+          },
+        },
+      };
+    }
+    const baseRim = buildAnnulus(0.02, 0.41, 0.014, [0.03, 0.03, 0.04], [0, 0, 0], 0.22, `pu_ring_base_${id}`);
+    const glowBand = buildAnnulus(0.36, 0.45, 0.028, [rgb[0] * 0.58, rgb[1] * 0.58, rgb[2] * 0.58], rgb, 0.80, `pu_ring_glow_${id}`);
+    const outerFeather = buildAnnulus(0.45, 0.55, 0.022, [rgb[0] * 0.42, rgb[1] * 0.42, rgb[2] * 0.42], [rgb[0] * 0.65, rgb[1] * 0.65, rgb[2] * 0.65], 0.22, `pu_ring_halo_${id}`);
+    return {
+      animations: [], idleAnims: [], blinkInfo: { hasBlink: false },
+      baseWorldMats: [idMat],
+      bounds: { min: [-0.56, 0.01, -0.56], max: [0.56, 0.04, 0.56] },
+      size: [1.12, 0.03, 1.12],
+      drawCalls: [baseRim.dc, outerFeather.dc, glowBand.dc],
+      dispose() {
+        gl.deleteVertexArray(baseRim.vao); gl.deleteVertexArray(glowBand.vao); gl.deleteVertexArray(outerFeather.vao);
+        bufs.forEach((b) => gl.deleteBuffer(b));
+      },
+    };
+  }
+
+  function buildPowerupGlowRingsForMap(gl, itemEntries) {
+    const models = new Map();
+    const rings = [];
+    for (let i = 0; i < itemEntries.length; i++) {
+      const e = itemEntries[i];
+      if (!e.spec.id.startsWith("pu_")) continue;
+      const id = e.spec.id;
+      if (!models.has(id)) {
+        models.set(id, buildPowerupRingModel(gl, id, POWERUP_RING_COLORS[id] || [1.35, 0.92, 0.20]));
+      }
+      rings.push({
+        x: e.x, z: e.z, phase: (i * 0.71) % 6.283,
+        inst: {
+          kind: "item", id: `pu_ring_${i}`, isGrass: true,
+          model: models.get(id), clipName: "Idle", idleTime: 0, offsetMat: null,
+        },
+      });
+    }
+    if (!rings.length) return null;
+    return {
+      rings,
+      dispose() { models.forEach((m) => m.dispose()); },
+    };
+  }
+
+  function updatePowerupGlowRings(puRings, t, patrolsOn, tx, tz, visHalfSpan, visible) {
+    if (!puRings) return;
+    const { mat4FromTRS } = window.__antGltf;
+    for (let i = 0; i < puRings.rings.length; i++) {
+      const r = puRings.rings[i];
+      if (Math.abs(r.x - tx) > visHalfSpan + 1.5 || Math.abs(r.z - tz) > visHalfSpan + 1.5) continue;
+      const pulse = patrolsOn ? Math.sin(t * 2.8 + r.phase) : 0.35;
+      const sc = 0.94 + 0.12 * pulse;
+      const yaw = patrolsOn ? (-t * 0.65 + r.phase) : r.phase;
+      const h = yaw * 0.5;
+      r.inst.offsetMat = mat4FromTRS([r.x, 0.0, r.z], [0, Math.sin(h), 0, Math.cos(h)], [sc, 1.0, sc]);
+      visible.push(r.inst);
+    }
+  }
+
   window.__demoAtmo = {
     buildGroundScatterMesh,
     buildAtmoParticles,
     buildColonyAntsForMap,
     updateColonyAnts,
+    buildPowerupGlowRingsForMap,
+    updatePowerupGlowRings,
   };
 })();

@@ -7,7 +7,7 @@
   } = window.__antRender;
   const { buildCarriedLunchboxMat, buildHeistsForMap, updateHeists } = window.__demoHeist;
   const { buildBorderGrassMesh, buildBatchedMapBombsMesh } = window.__demoBorder;
-  const { buildGroundScatterMesh, buildAtmoParticles, buildColonyAntsForMap, updateColonyAnts } = window.__demoAtmo;
+  const { buildGroundScatterMesh, buildAtmoParticles, buildColonyAntsForMap, updateColonyAnts, buildPowerupGlowRingsForMap, updatePowerupGlowRings } = window.__demoAtmo;
   const { ACTION_ANT_CLASSES, ACTION_ITEM_IDS, buildActionVignettes, updateActionVignettes } = window.__demoActions;
 
   const $ = (id) => document.getElementById(id);
@@ -611,7 +611,7 @@
           idleTime: ((i * 0.29) % 1.1),
           offsetMat: buildWorldMat(model, spec.x, spec.z, spec.s, 0),
         };
-        itemEntries.push({ inst, spec, x: spec.x, z: spec.z, radius });
+        itemEntries.push({ inst, spec, x: spec.x, z: spec.z, radius, isPowerup: spec.id.startsWith("pu_"), phase: (i * 0.71) % 6.283 });
       }
       if (activeMap && activeMap.scene) {
         if (activeMap.scene.borderGrass) activeMap.scene.borderGrass.dispose();
@@ -620,11 +620,13 @@
       }
       if (activeMap && activeMap.batchedBombs) activeMap.batchedBombs.dispose();
       if (activeMap && activeMap.colonyAnts) activeMap.colonyAnts.dispose();
+      if (activeMap && activeMap.powerupRings) activeMap.powerupRings.dispose();
       if (activeMap && activeMap.actions && activeMap.actions.bridgeModel) {
         activeMap.actions.bridgeModel.dispose();
       }
       const batchedBombs = batchBombs ? buildBatchedMapBombsMesh(renderer.gl, bombSpecs) : null;
       const colonyAnts = buildColonyAntsForMap(renderer.gl, itemEntries);
+      const powerupRings = buildPowerupGlowRingsForMap(renderer.gl, itemEntries);
       const borderGrass = buildBorderGrassMesh(renderer.gl, mapData, mapsCatalog.water_tile_index);
       const groundScatter = buildGroundScatterMesh(renderer.gl, mapData, mapsCatalog.water_tile_index);
       const atmoParticles = buildAtmoParticles(renderer.gl, mapData);
@@ -675,6 +677,7 @@
         itemEntries,
         batchedBombs,
         colonyAnts,
+        powerupRings,
         antEntries,
         heists,
         actions,
@@ -762,9 +765,17 @@
     if (activeMap.colonyAnts) {
       updateColonyAnts(activeMap.colonyAnts, t, state.patrols, tx, tz, visHalfSpan, visible);
     }
+    if (activeMap.powerupRings) {
+      updatePowerupGlowRings(activeMap.powerupRings, t, state.patrols, tx, tz, visHalfSpan, visible);
+    }
     for (let i = 0; i < itemEntries.length; i++) {
       const e = itemEntries[i];
       if (Math.abs(e.x - tx) > visHalfSpan + e.radius || Math.abs(e.z - tz) > visHalfSpan + e.radius) continue;
+      if (e.isPowerup) {
+        const hoverY = 0.08 + 0.055 * (state.patrols ? Math.sin(t * 2.8 + e.phase) : 0.35);
+        const spinYaw = (state.patrols ? t * 1.15 : 0.35) + e.phase;
+        e.inst.offsetMat = buildWorldMat(e.inst.model, e.x, e.z, e.spec.s, spinYaw, hoverY);
+      }
       if (!e.managedAnim) e.inst.idleTime = t + ((i * 0.29) % 1.1);
       visible.push(e.inst);
     }
