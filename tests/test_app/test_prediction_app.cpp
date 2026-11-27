@@ -810,7 +810,7 @@ int main(int argc, char* argv[]) {
         ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
     } TEST_END();
 
-    TEST_CASE("PA6 The Corner's \"delay\" Is What The Click Feels While The Prediction Is On: A Dash Until An Order Has Been Felt, Then The Time From The Frame That Took It To The Frame That Shows It (Less Than A Tick And A Frame), The Network's Delay (The Confirmed Engine's) When It Is Off") {
+    TEST_CASE("PA6 The Delay Of An Order (The Browser Measurement's) Is What The Click Feels While The Prediction Is On: Nothing Until An Order Has Been Felt, Then The Time From The Frame That Took It To The Frame That Shows It (Less Than A Tick And A Frame), The Network's Delay (The Confirmed Engine's) When It Is Off") {
         Application app;
         Peer bob;
         Duo duo{app, bob};
@@ -829,7 +829,7 @@ int main(int argc, char* argv[]) {
         };
         for (int i = 0; i < 20; ++i) frame();
         ASSERT_TRUE(app.net()->predicting());
-        ASSERT_FALSE(app.corner_delay_ms().has_value());                                    // no order has been felt: a dash (the network's delay is not what the click feels)
+        ASSERT_FALSE(app.order_delay_ms().has_value());                                    // no order has been felt: nothing (the network's delay is not what the click feels)
         // select an own ant and order it with the right button
         const std::vector<uint32_t> mine = ants_of(app.sim(), 0);
         ASSERT_TRUE(!mine.empty());
@@ -861,20 +861,20 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(app.felt_delay().samples(), size_t{1});
         ASSERT_EQ(app.felt_delay().pending(), size_t{0});
         ASSERT_TRUE(app.felt_delay().felt_ms() <= 60);                                      // within a tick (50 ms) and the frame that draws it
-        ASSERT_TRUE(app.corner_delay_ms().has_value() && *app.corner_delay_ms() == app.felt_delay().felt_ms());
-        // the number is about now only for ten seconds: the frame clock runs on (the net's clock does not, so the network's delay is still the fresh number that it was), and the corner
+        ASSERT_TRUE(app.order_delay_ms().has_value() && *app.order_delay_ms() == app.felt_delay().felt_ms());
+        // the number is about now only for ten seconds: the frame clock runs on (the net's clock does not, so the network's delay is still the fresh number that it was), and it
         // says nothing rather than the network's delay, which is not what the click feels
         for (int i = 0; i < 30; ++i) frame();                                               // (the order reaches the confirmed engine meanwhile)
         ASSERT_TRUE(app.net()->command_delay_ms().has_value());
         counter += 11ull * 1000ull * (SDL_GetPerformanceFrequency() / 1000ull);
-        ASSERT_FALSE(app.corner_delay_ms().has_value());
+        ASSERT_FALSE(app.order_delay_ms().has_value());
         ASSERT_TRUE(app.net()->command_delay_ms().has_value());
-        // off: the corner says what the confirmed engine's delay is (a dash while no order has been applied there; the order is by now)
+        // off: it is what the confirmed engine's delay is (nothing while no order has been applied there; the order is by now)
         ASSERT_TRUE(duo.until([&]() { return app.net()->command_delay_ms().has_value(); }, 3000));
         app.net()->set_prediction_enabled(false);
         app.pump_network(0.0f);
         ASSERT_FALSE(app.net()->predicting());
-        ASSERT_TRUE(app.corner_delay_ms().has_value() && *app.corner_delay_ms() == *app.net()->command_delay_ms());
+        ASSERT_TRUE(app.order_delay_ms().has_value() && *app.order_delay_ms() == *app.net()->command_delay_ms());
         app.net()->freeze();
         for (int i = 0; i < 150; ++i) frame();
         ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());

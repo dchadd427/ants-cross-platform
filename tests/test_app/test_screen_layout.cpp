@@ -129,7 +129,7 @@ void test_classic_numbers() {
     const CornerPlate corner = CornerPlate::classic();
     check(corner.right_edge == 632 && corner.spark_y == FPS_OVERLAY_SPARK_Y && corner.top == FPS_OVERLAY_TOP && corner.bottom == FPS_OVERLAY_BOTTOM, "the classic corner plate is the FPS_OVERLAY_ constants");
     check(FPS_OVERLAY_SPARK_Y == 468 && FPS_OVERLAY_TOP == 467 && FPS_OVERLAY_BOTTOM == 480 && corner.bottom == 480, "... that is rows 467 .. 479, the last row of the screen");
-    check(LATENCY_RIGHT_EDGE == 632, "the latency texts end where the frame rate ends");
+    check(LATENCY_RIGHT_EDGE == 632, "the latency text ends where the frame rate ends");
 }
 
 /// The canvas of every shape of the table (include/ants_app/canvas_layout.hpp kAspectTable) and the map view that its match screen has: the rows that the picture of the layout is checked at
@@ -452,23 +452,21 @@ void test_plate_and_overlay() {
         check(p.bottom == s.second && p.right_edge == s.first - 8 && p.top == p.spark_y - 1 && p.bottom - p.top == classic.bottom - classic.top, "the plate of " + std::to_string(s.first) + " x " + std::to_string(s.second) + " ends at the last row, 8 px in from the right edge, as tall as the original's");
     }
 
-    // the latency texts of a match stack above the plate, right aligned with the frame rate: in the corner they are given
+    // the latency text of a match stands above the plate, right aligned with the frame rate: in the corner it is given
     const int32_t pw = 70;
-    const int32_t dw = 80;
-    const int32_t widest = 190;
-    const LatencyCornerLayout old_layout = layout_latency_corner(pw, dw, widest, 14, 560, 470, LATENCY_LEFT_LIMIT_MATCH);
-    const LatencyCornerLayout same_layout = layout_latency_corner(pw, dw, widest, 14, 560, 470, LATENCY_LEFT_LIMIT_MATCH, classic);
-    check(old_layout.stacked && old_layout.ping_x == same_layout.ping_x && old_layout.delay_x == same_layout.delay_x && old_layout.ping_y == same_layout.ping_y && old_layout.delay_y == same_layout.delay_y,
-          "the latency layout without a corner is the classic corner's");
-    check(old_layout.ping_x == 632 - pw && old_layout.delay_x == 632 - dw && old_layout.delay_y == 467 - 1 - 14 && old_layout.ping_y == old_layout.delay_y - 14, "classic: both lines end at x = 632, the lower one a row above the plate");
+    const int32_t widest = 100;
+    const LatencyCornerLayout old_layout = layout_latency_corner(pw, widest, 14, 560, 470, LATENCY_LEFT_LIMIT_MATCH);
+    const LatencyCornerLayout same_layout = layout_latency_corner(pw, widest, 14, 560, 470, LATENCY_LEFT_LIMIT_MATCH, classic);
+    check(old_layout.stacked && old_layout.ping_x == same_layout.ping_x && old_layout.ping_y == same_layout.ping_y, "the latency layout without a corner is the classic corner's");
+    check(old_layout.ping_x == 632 - pw && old_layout.ping_y == 467 - 1 - 14, "classic: the line ends at x = 632, a row above the plate");
     // (rewritten with the review fixes of M3: the match's limit is the layout's, where the row of score boxes ends: 780 at 960 x 540 where the boxes are spread over the strip; the old
-    // lines took the original's 460 and added the 160 of dx / 2 by hand, which stood the row of texts on the third box)
+    // lines took the original's 460 and added the 160 of dx / 2 by hand, which stood the row of text on the third box)
     const int32_t wide_limit = ScreenLayout::with_size(960, 540).score_row_right();
     check(wide_limit == 780 && ScreenLayout::classic().score_row_right() == 460, "the score row ends at 780 at 960 x 540 (the third box 722 + 58) and at 460 in the original's picture");
-    const LatencyCornerLayout wide_layout = layout_latency_corner(pw, dw, widest, 14, 840, 530, LATENCY_LEFT_LIMIT_SETUP, wide);
-    check(!wide_layout.stacked && wide_layout.delay_x + dw == 840 - 6, "960 x 540, a page (the setup screen's limit): the room left of the version holds the two texts in one row, ending 6 px left of the version");
-    const LatencyCornerLayout wide_stacked = layout_latency_corner(pw, dw, widest, 14, 840, 530, wide_limit, wide);
-    check(wide_stacked.stacked && wide_stacked.ping_x == 952 - pw && wide_stacked.delay_x == 952 - dw && wide_stacked.delay_y == 527 - 1 - 14, "960 x 540: stacked, they end at x = 952 and the lower one is a row above the plate (row 527)");
+    const LatencyCornerLayout wide_layout = layout_latency_corner(pw, widest, 14, 840, 530, LATENCY_LEFT_LIMIT_SETUP, wide);
+    check(!wide_layout.stacked && wide_layout.ping_x + pw == 840 - 6, "960 x 540, a page (the setup screen's limit): the room left of the version holds the text in one row, ending 6 px left of the version");
+    const LatencyCornerLayout wide_stacked = layout_latency_corner(pw, widest, 14, 840, 530, wide_limit, wide);
+    check(wide_stacked.stacked && wide_stacked.ping_x == 952 - pw && wide_stacked.ping_y == 527 - 1 - 14, "960 x 540: stacked, it ends at x = 952 and stands a row above the plate (row 527)");
 
     // the network overlay's box (render_net_overlay): the original's (17 + (441 - w) / 2, 26)
     const NetOverlayBox c = net_overlay_box(ScreenLayout::classic().view(), 100, 14);

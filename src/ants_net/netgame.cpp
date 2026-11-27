@@ -634,7 +634,7 @@ std::optional<uint32_t> NetGame::ping_ms() const {
 
 std::optional<uint32_t> NetGame::command_delay_ms() const {
     const CommandDelayMeter* meter = host_session_ ? &host_session_->command_delay() : (client_session_ ? &client_session_->command_delay() : nullptr);
-    if (meter == nullptr || meter->stale(now_)) return std::nullopt;       // none yet, or the last one was applied more than ten seconds ago: "delay -"
+    if (meter == nullptr || meter->stale(now_)) return std::nullopt;       // none yet, or the last one was applied more than ten seconds ago: none
     return meter->delay_ms();
 }
 

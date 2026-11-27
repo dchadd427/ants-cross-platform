@@ -289,11 +289,11 @@ void test_score_slots(const assets::AssetArchive& arc) {
 // The network's ping and delay stay clear of the score boxes
 // =====================================================================================================================================================
 
-/// The ping and delay of a network match (latency_corner.hpp) stand in the corner row left of the version when the row is free, and on two lines above the plate when it is not. "Free" is the
+/// The ping of a network match (latency_corner.hpp) stands in the corner row left of the version when the row is free, and on a line above the plate when it is not. "Free" is the
 /// match's limit: where the row of score boxes ends. It was the original's picture's number (460) in every layout: at 960 x 540, where the boxes are spread over the strip (the third one
-/// ends at 778), a row of texts at x 644 .. 828 stood on the third box.
+/// ends at 778), a row of text at x 644 .. 828 stood on the third box.
 void test_latency_clear_of_scores(const assets::AssetArchive& arc) {
-    group("latency", "the ping / delay readout of a network match does not touch a score box or cover, with two, three and four teams, in both pictures");
+    group("latency", "the ping readout of a network match does not touch a score box or cover, with two, three and four teams, in both pictures");
     using NP = net::NetGame::Phase;
     RendererRig measure(arc, 960, 540);                                      // the application's own font metrics
     check(measure.ok, "a renderer for the text metrics");
@@ -310,6 +310,7 @@ void test_latency_clear_of_scores(const assets::AssetArchive& arc) {
         const CornerRow row = CornerRow::of(plate, fps_w, ver_w, 36, FPS_OVERLAY_SPARK_H, text_h);
         const std::optional<int32_t> limit = latency_left_limit(true, NP::Playing, CornerScreen::Match, layout);
         check(limit.has_value() && *limit == layout.score_row_right() && (!layout.is_classic() || *limit == 460), pic + "the match's limit is the layout's (" + std::to_string(limit ? *limit : -1) + ", and the original's 460 in its own picture)");
+        const int32_t widest = measure.renderer.get_text_width(ping_text(LATENCY_SHOWN_MAX_MS), FontSize::Px12);
         int32_t strip_right = 0;                                              // the right edge of what the bottom row holds, over every roster
         for (const Roster& r : rosters) {
             HudRig rig(arc, layout, 0);
@@ -326,30 +327,24 @@ void test_latency_clear_of_scores(const assets::AssetArchive& arc) {
             for (const LayoutRect& it : row_items) right_edge = std::max(right_edge, it.right());
             strip_right = std::max(strip_right, right_edge);
             // the readout: nothing measured yet, a typical one and the widest, each laid out as the application does
-            const struct { const char* what; std::optional<uint32_t> ping, delay; } readouts[] = {{"nothing measured", std::nullopt, std::nullopt}, {"12 / 80 ms", 12u, 80u}, {"9999 / 9999 ms", 9999u, 9999u}};
+            const struct { const char* what; std::optional<uint32_t> ping; } readouts[] = {{"nothing measured", std::nullopt}, {"12 ms", 12u}, {"9999 ms", 9999u}};
             for (const auto& ro : readouts) {
                 const int32_t pw = measure.renderer.get_text_width(ping_text(ro.ping), FontSize::Px12);
-                const int32_t dw = measure.renderer.get_text_width(delay_text(ro.delay), FontSize::Px12);
-                const int32_t widest = measure.renderer.get_text_width(ping_text(LATENCY_SHOWN_MAX_MS), FontSize::Px12) + LATENCY_TEXT_GAP + measure.renderer.get_text_width(delay_text(LATENCY_SHOWN_MAX_MS), FontSize::Px12);
-                const LatencyCornerLayout l = layout_latency_corner(pw, dw, widest, text_h, row.version_x, row.text_y, *limit, plate);
+                const LatencyCornerLayout l = layout_latency_corner(pw, widest, text_h, row.version_x, row.text_y, *limit, plate);
                 const LayoutRect ping_rect{l.ping_x, l.ping_y, pw, text_h};
-                const LayoutRect delay_rect{l.delay_x, l.delay_y, dw, text_h};
                 bool touches = false;
-                for (const LayoutRect& it : row_items) {
-                    touches = touches || (ping_rect.x < it.right() && it.x < ping_rect.right() && ping_rect.y < it.bottom() && it.y < ping_rect.bottom());
-                    touches = touches || (delay_rect.x < it.right() && it.x < delay_rect.right() && delay_rect.y < it.bottom() && it.y < delay_rect.bottom());
-                }
-                check(!touches, pic + r.what + ", " + ro.what + ": the texts (" + (l.stacked ? "stacked" : "in a row") + ", ping at x " + std::to_string(l.ping_x) + ") touch no box or cover");
-                check(l.ping_x >= right_edge, pic + r.what + ", " + ro.what + ": the texts begin right of the score row (" + std::to_string(right_edge) + ")");
+                for (const LayoutRect& it : row_items) touches = touches || (ping_rect.x < it.right() && it.x < ping_rect.right() && ping_rect.y < it.bottom() && it.y < ping_rect.bottom());
+                check(!touches, pic + r.what + ", " + ro.what + ": the text (" + (l.stacked ? "stacked" : "in a row") + ", at x " + std::to_string(l.ping_x) + ") touches no box or cover");
+                check(l.ping_x >= right_edge, pic + r.what + ", " + ro.what + ": the text begins right of the score row (" + std::to_string(right_edge) + ")");
             }
         }
         check(*limit == strip_right + ScreenLayout::kScoreRowMargin, pic + "the limit is the right edge of the last cover (" + std::to_string(strip_right) + ") and the margin of " + std::to_string(ScreenLayout::kScoreRowMargin));
-        // the control: the original's number (460) in a wider picture, where the boxes are further right, puts the row of texts on the third box
+        // the control: the original's number (460) in a wider picture, where the boxes are further right, leaves the text in the row, hard against the third box; the layout's own limit takes it above the row
         if (!layout.is_classic()) {
-            const int32_t widest = measure.renderer.get_text_width(ping_text(LATENCY_SHOWN_MAX_MS), FontSize::Px12) + LATENCY_TEXT_GAP + measure.renderer.get_text_width(delay_text(LATENCY_SHOWN_MAX_MS), FontSize::Px12);
-            const LatencyCornerLayout old = layout_latency_corner(measure.renderer.get_text_width(ping_text(12u), FontSize::Px12), measure.renderer.get_text_width(delay_text(80u), FontSize::Px12), widest, text_h, row.version_x,
-                                                                  row.text_y, LATENCY_LEFT_LIMIT_MATCH, plate);
-            check(!old.stacked && old.ping_x < strip_right, pic + "the control: with the original's limit (460) the texts stand in a row at x " + std::to_string(old.ping_x) + ", on the boxes (they end at " + std::to_string(strip_right) + ")");
+            const int32_t pw = measure.renderer.get_text_width(ping_text(12u), FontSize::Px12);
+            const LatencyCornerLayout old = layout_latency_corner(pw, widest, text_h, row.version_x, row.text_y, LATENCY_LEFT_LIMIT_MATCH, plate);
+            const LatencyCornerLayout own = layout_latency_corner(pw, widest, text_h, row.version_x, row.text_y, *limit, plate);
+            check(!old.stacked && own.stacked && old.ping_x - strip_right <= 2, pic + "the control: with the original's limit (460) the text stands in the row at x " + std::to_string(old.ping_x) + ", against the boxes (they end at " + std::to_string(strip_right) + "); the layout's limit puts it above the row");
         }
     }
 }

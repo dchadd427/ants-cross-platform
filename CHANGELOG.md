@@ -35,6 +35,7 @@ Work that is not released yet is written in the same template under a heading th
 - **A welcome for guests.** The first time you open Ants & Uncles without logging in, a card offers Sign in with Discord to chat, Set a display name if you do not want to chat, or Not now. It does not come back once you answer it, set a name or log in.
 - **Long names fit.** The results show an alliance on two lines when its names are long, and a long name ends in dots in a room and on the countdown card.
 - **The Games list fills itself with Open lobby cards.** As many as the window has room for with nothing to scroll (more on a tall window, none when real games fill the list), and the dashed plus on a card hosts a game, the same as Host here.
+- **Show ping.** A new setting in the Video tab of the settings menu, off by default: switched on, the corner of a network game shows "ping NN ms" above the frame rate, and a click on it opens the list of connections as before. Off, the corner is the frame rate and the version only. The corner no longer shows "delay". On the desktop it is `show_ping=on` in the settings file or `--show-ping on` for one run.
 
 **Rules / network:** network protocol 29 (a name is UTF-8, and a name that is not a guest's carries the hub's signature, [`docs/HUB_NICKNAMES.md`](docs/HUB_NICKNAMES.md)): an older page or game cannot join a room of this version, so reload the page. The rules and the recordings are unchanged.
 

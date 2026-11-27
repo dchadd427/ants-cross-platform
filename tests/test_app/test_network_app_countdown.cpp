@@ -103,7 +103,7 @@ void run_countdown_look_tests() {
         ASSERT_TRUE(app.sim().current_tick() > 40 && !app.net()->desynced());
     } TEST_END();
 
-    TEST_CASE("N5.103 Ping Stats: A Click On The Corner's Ping Text In A Match Of A Network Game Opens The List Of Connections And The Next One Closes It (A Press Away From The Text, The Right Button And The Countdown Do Not), It Is Closed In The Next Match, And It Orders Nothing") {
+    TEST_CASE("N5.103 Ping Stats: A Click On The Corner's Ping Text In A Match Of A Network Game Opens The List Of Connections And The Next One Closes It (A Press Away From The Text, The Right Button And The Countdown Do Not), It Is Closed In The Next Match, It Orders Nothing, And Show Ping Off Takes The Text And The List Away") {
         Server srv;
         ASSERT_TRUE(srv.listener != nullptr);
         server::RoomSpec spec;
@@ -122,6 +122,8 @@ void run_countdown_look_tests() {
         cfg.net_port = srv.port();
         cfg.net_room = "CDN-6";
         cfg.player_name = "Ana";
+        cfg.show_ping = true;                                                                  // (the text is there only while Show ping is on)
+        cfg.show_ping_given = true;
         Application app;
         ASSERT_TRUE(app.init(cfg));
         Hall hall{srv, &app, {}};
@@ -166,6 +168,18 @@ void run_countdown_look_tests() {
         ASSERT_EQ(rows.size(), 2u);
         ASSERT_TRUE(rows[0].name == "Ana (you)" && rows[0].tag == "server" && rows[1].tag.compare(0, 3, "bot") == 0 && rows[1].ping.empty());
         ASSERT_FALSE(rows[0].name.empty());
+        // Show ping Off takes the text away, and the list that it opened with it: the list opens only while the setting is on
+        const LayoutRect was = hit;
+        ASSERT_TRUE(app.game_menu_set(game_menu::kShowPing, 0));
+        ASSERT_FALSE(app.connections_open());
+        app.render_frame();
+        ASSERT_EQ(app.connections_hit().w, 0);
+        click(was.x + 2, was.y + 2);
+        ASSERT_FALSE(app.connections_open());
+        ASSERT_TRUE(app.game_menu_set(game_menu::kShowPing, 1));
+        app.render_frame();
+        click(was.x + 2, was.y + 2);
+        ASSERT_TRUE(app.connections_open());
     } TEST_END();
 
     TEST_CASE("N5.104 Protocol 21, Fairness Of Looking Round In The Countdown: With Fog Of War On Moving, Zooming And Dragging The View Reveals Nothing And Changes Nothing (The Revealed Ground, The State Hash And The Tick Stay As They Were, And No Command Is Sent)") {
