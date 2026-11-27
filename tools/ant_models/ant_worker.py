@@ -551,6 +551,7 @@ def build_worker(blink: float = 0.0) -> SceneBuilder:
         head_tilt_deg=2.0,
         head_yaw_deg=0.0,
         eye_look=(0.0, 0.0),
+        pupil_scale=0.64,
         eye_scale_left=1.05,
         eye_scale_right=1.03,
         eye_aspect_left=0.94,

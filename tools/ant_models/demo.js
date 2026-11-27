@@ -42,14 +42,13 @@
   const MAP_FOCUSES = {
     treasure: [
       { id: "center",   label: "Center Crossroads", target: [30.5, 0.3, 29.0], zoom: 0.92 },
+      { id: "deposit",  label: "Food Deposit",      target: [24.2, 0.45, 35.0], zoom: 0.38 },
       { id: "combat",   label: "Combat Knockback",  target: [31.2, 0.35, 22.2], zoom: 0.36 },
       { id: "fire",     label: "Fire Ant & Flames", target: [30.4, 0.35, 36.0], zoom: 0.38 },
       { id: "bomber",   label: "Bomber Blast",      target: [39.0, 0.35, 29.0], zoom: 0.38 },
-      { id: "bridge",   label: "Swimmer Bridge",    target: [15.0, 0.25, 29.5], zoom: 0.38 },
+      { id: "bridge",   label: "Swimmer Bridge",    target: [15.8, 0.25, 29.5], zoom: 0.44 },
       { id: "brawl",    label: "Worker Brawl",      target: [21.4, 0.30, 29.0], zoom: 0.34 },
       { id: "heist",    label: "Thief Base Heist",  target: [39.1, 0.35, 22.8], zoom: 0.42 },
-      { id: "can",      label: "Can & Slingshot",   target: [15.5, 0.3, 14.0], zoom: 0.66 },
-      { id: "steak",    label: "Steak Whiz & Bear", target: [38.5, 0.3,  6.5], zoom: 0.78 },
       { id: "full",     label: "Full 60×60 Map",    target: [30.0, 0.2, 30.0], zoom: 2.55 },
     ],
     popcorn: [
@@ -61,17 +60,21 @@
     ],
     tiny: [
       { id: "center",   label: "Center Arena",      target: [15.5, 0.3, 15.5], zoom: 0.95 },
+      { id: "deposit",  label: "Food Deposit",      target: [24.2, 0.45, 24.0], zoom: 0.42 },
       { id: "heist",    label: "Thief Base Heist",  target: [ 7.1, 0.35,  6.8], zoom: 0.44 },
-      { id: "red",      label: "Red Corner",        target: [24.0, 0.3, 24.0], zoom: 0.62 },
       { id: "full",     label: "Full 31×31 Map",    target: [15.5, 0.2, 15.5], zoom: 1.48 },
     ],
     small: [
       { id: "center",   label: "Center Pond",       target: [20.0, 0.3, 20.0], zoom: 0.96 },
+      { id: "dropper",  label: "Power-Up Dropper",  target: [37.5, 1.5, 20.2], zoom: 0.56 },
+      { id: "deposit",  label: "Food Deposit",      target: [ 7.5, 0.45, 32.0], zoom: 0.42 },
       { id: "heist",    label: "Thief Base Heist",  target: [34.1, 0.35,  6.8], zoom: 0.44 },
       { id: "full",     label: "Full 40×40 Map",    target: [20.0, 0.2, 20.0], zoom: 1.85 },
     ],
     islands: [
       { id: "center",   label: "Center Islands",    target: [30.0, 0.3, 30.0], zoom: 1.05 },
+      { id: "dropper",  label: "Power-Up Dropper",  target: [30.5, 1.5,  5.2], zoom: 0.56 },
+      { id: "deposit",  label: "Food Deposit",      target: [24.0, 0.45, 36.2], zoom: 0.42 },
       { id: "heist",    label: "Thief Base Heist",  target: [24.1, 0.35, 24.8], zoom: 0.44 },
       { id: "full",     label: "Full 60×60 Map",    target: [30.0, 0.2, 30.0], zoom: 2.55 },
     ],
@@ -317,6 +320,8 @@
     state.lighting = key;
     state.sunElev = sc.elev;
     state.sunAzim = sc.azim;
+    const optEl = $("demo-optics");
+    if (optEl) optEl.dataset.lighting = key;
     syncUi();
     setStatus(`Lighting scenario: ${sc.label} (${sc.elev}° sun)`);
   }
@@ -553,11 +558,17 @@
       if (serial !== loadSerial) return;
 
       renderer.uploadMapGrid(mapData.cols, mapData.rows, mapData.tiles);
+      if (mapData.mask) {
+        const maskImg = await loadImage(`models/demo/${mapData.mask}`);
+        if (serial !== loadSerial) return;
+        renderer.uploadMaskAtlas(maskImg);
+      }
 
       const itemEntries = [];
       for (let i = 0; i < mapData.objects.length; i++) {
         const spec = mapData.objects[i];
-        const model = await modelCache.get(`item:${spec.id}`);
+        const useAnimatedDropper = spec.id === "flower1" && (mapData.id === "small" || mapData.id === "islands");
+        const model = await modelCache.get(`item:${useAnimatedDropper ? "dflower1" : spec.id}`);
         const radius = 0.65 * Math.max(model.size[0], model.size[2], 0.8) * spec.s;
         const inst = {
           kind: "item",
@@ -584,7 +595,7 @@
       const actionModels = {};
       for (const cls of ACTION_ANT_CLASSES) actionModels[cls] = await modelCache.get(`ant:${cls}`);
       for (const iid of ACTION_ITEM_IDS) actionModels[iid] = await modelCache.get(`item:${iid}`);
-      const actions = buildActionVignettes(renderer.gl, mapData, actionModels, mapsCatalog.water_tile_index, ANT_SCALE);
+      const actions = buildActionVignettes(renderer.gl, mapData, actionModels, mapsCatalog.water_tile_index, ANT_SCALE, itemEntries);
 
       const lunchboxModel = await modelCache.get("item:lunchbox");
       const thiefModel = await modelCache.get("ant:thief");
@@ -703,7 +714,7 @@
     for (let i = 0; i < itemEntries.length; i++) {
       const e = itemEntries[i];
       if (Math.abs(e.x - tx) > visHalfSpan + e.radius || Math.abs(e.z - tz) > visHalfSpan + e.radius) continue;
-      e.inst.idleTime = t + ((i * 0.29) % 1.1);
+      if (!e.managedAnim) e.inst.idleTime = t + ((i * 0.29) % 1.1);
       visible.push(e.inst);
     }
 

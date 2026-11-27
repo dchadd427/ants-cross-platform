@@ -537,6 +537,9 @@
       float depth = clamp(-v_worldPos.y, 0.0, 1.2);
       outCol = mix(outCol * vec3(0.55, 0.86, 1.16), vec3(0.06, 0.26, 0.60), clamp(0.24 + (1.0 - exp(-depth * 1.45)) * 0.44, 0.0, 0.76));
     }
+    if (u_lightMix.w < 0.5 && u_isOrtho == 0) {
+      outCol = mix(outCol, linearToSrgb(acesFilm((u_skyColor * 0.65 + u_keyColor * 0.30) * u_lightMix.z)), smoothstep(14.0, 62.0, length(v_worldPos - u_cameraPos)) * 0.34);
+    }
     fragColor = vec4(outCol, outAlpha);
   }`;
 

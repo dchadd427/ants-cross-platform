@@ -596,19 +596,23 @@
   vec3 tgAces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
   float tgHash(vec2 p) { p = fract(p * vec2(127.1, 311.7)); p += dot(p, p + 34.23); return fract(p.x * p.y); }
   float tgNoise(vec2 p) {
-    vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+    vec2 i = floor(p), f = fract(p);
+    // Quintic C2-smooth interpolation (eliminates vertical/horizontal cubic lattice crease bands!)
+    vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
     return mix(mix(tgHash(i), tgHash(i + vec2(1.0, 0.0)), u.x), mix(tgHash(i + vec2(0.0, 1.0)), tgHash(i + vec2(1.0, 1.0)), u.x), u.y);
   }
   float tgFbm(vec2 p) {
-    return tgNoise(p) * 0.54 + tgNoise(p * 2.13 + vec2(17.3, 9.1)) * 0.29 + tgNoise(p * 4.47 + vec2(5.7, 23.4)) * 0.17;
+    mat2 rot = mat2(0.80, 0.60, -0.60, 0.80);
+    vec2 p1 = rot * p;
+    vec2 p2 = rot * p1 * 2.13 + vec2(17.3, 9.1);
+    vec2 p3 = rot * p2 * 2.09 + vec2(5.7, 23.4);
+    return tgNoise(p1) * 0.54 + tgNoise(p2) * 0.29 + tgNoise(p3) * 0.17;
   }
-  // Seamless cross-tile smooth terrain weight lookup: R=mud, G=sand, B=slate, A=water (dirt = 1 - sum)
+  // Continuous cross-tile map-wide smooth terrain mask + subtle organic contour warp (ZERO blocky tile edges or seams!)
   vec4 sampleMask(vec2 wp) {
-    vec2 c = clamp(floor(wp), vec2(0.0), u_mapSize - 1.0);
-    vec2 uv = clamp(fract(wp), vec2(0.5 / 64.0), vec2(63.5 / 64.0));
-    float idx = floor(texture(u_mapTex, (c + 0.5) / u_mapSize).r * 255.0 + 0.5);
-    vec2 aCell = vec2(mod(idx, u_atlasGrid.x), floor(idx / u_atlasGrid.x));
-    return texture(u_maskTex, (aCell + uv) / u_atlasGrid);
+    vec2 mw = (vec2(tgNoise(wp * 1.9 + vec2(3.1, 1.7)), tgNoise(wp * 1.9 + vec2(11.4, 7.9))) - 0.5) * 0.24;
+    vec2 uv = clamp((wp + mw) / u_mapSize, vec2(0.001), vec2(0.999));
+    return texture(u_maskTex, uv);
   }
   float pbrTerrainHeight(vec2 wp, vec4 m) {
     float wM = m.r, wS = m.g, wL = m.b, wW = m.a;
@@ -682,10 +686,13 @@
         vec3 flatGrass = tgToSrgb(tgAces(lawnAlb * 1.25)) * mix(1.0 - u_shadowStrength * 0.55, 1.0, sh);
         outCol = mix(outCol, flatGrass, u_lightMix.w);
       }
-      // In Game View / Top-Down (ortho): 100% lush green grass; in 3D persp: warm atmospheric horizon haze
+      // Atmospheric perspective: gentle depth air veil in Game View (ortho) and rich warm sunlit aerial haze in 3D persp!
       float camDist = length(v_worldPos - u_cameraPos);
-      float fade = (u_isOrtho != 0) ? 0.0 : clamp(smoothstep(24.0, 56.0, dOut) + smoothstep(26.0, 82.0, camDist) * 0.26, 0.0, 1.0);
-      fragColor = vec4(mix(outCol, skyMatch, fade), 1.0);
+      vec3 airCol = mix(skyMatch, tgToSrgb(tgAces((u_skyColor * 0.65 + u_keyColor * 0.32) * u_lightMix.z)), 0.42);
+      float orthoAir = smoothstep(0.32, 1.0, suv.y) * 0.13 * (1.0 - u_lightMix.w);
+      float perspAir = clamp(smoothstep(14.0, 58.0, camDist) * 0.42 + smoothstep(22.0, 54.0, dOut) * 0.55, 0.0, 0.94);
+      float fade = (u_isOrtho != 0) ? orthoAir : perspAir;
+      fragColor = vec4(mix(outCol, airCol, fade), 1.0);
       return;
     }
 
@@ -949,9 +956,15 @@
     }
 
     vec3 outCol = tgToSrgb(tgAces(lit * 1.06 * u_lightMix.z));
-    if (u_isOrtho == 0 && u_lightMix.w < 0.5) {
-      float haze = smoothstep(24.0, 80.0, length(v_worldPos - u_cameraPos)) * 0.24;
-      outCol = mix(outCol, skyMatch, haze);
+    if (u_lightMix.w < 0.5) {
+      vec3 airCol = mix(skyMatch, tgToSrgb(tgAces((u_skyColor * 0.65 + u_keyColor * 0.32) * u_lightMix.z)), 0.45);
+      float haze = (u_isOrtho == 0)
+        ? smoothstep(14.0, 62.0, length(v_worldPos - u_cameraPos)) * 0.38
+        : smoothstep(0.36, 1.0, suv.y) * 0.12;
+      outCol = mix(outCol, airCol, haze);
+      // Ultra-subtle organic optical film-grain breaking up sterile digital smoothness
+      float grain = (tgHash(floor(gl_FragCoord.xy) + fract(u_time * 0.3) * 17.0) - 0.5) * 0.014;
+      outCol = clamp(outCol + grain, 0.0, 1.0);
     }
     if (u_lightMix.w > 0.001) {
       vec3 flatCol = (u_pbrFloor != 0 ? tgToSrgb(tgAces(albedo * 1.25)) : texSrgb) * mix(1.0 - u_shadowStrength * 0.62, 1.0, sh);
@@ -1070,20 +1083,25 @@
   uniform float u_time;
   out vec3 v_nrm;
   out vec3 v_col;
+  out float v_air;
   void main() {
     float bend = a_col.a * a_col.a;
     float w = sin(u_time * 1.9 + a_pos.x * 0.45 + a_pos.z * 0.36) * 0.095
             + cos(u_time * 1.3 - a_pos.x * 0.24 + a_pos.z * 0.52) * 0.045;
     vec3 wp = a_pos + vec3(w * bend, -abs(w) * bend * 0.24, w * 0.58 * bend);
-    gl_Position = u_viewProj * vec4(wp, 1.0);
+    vec4 cp = u_viewProj * vec4(wp, 1.0);
+    gl_Position = cp;
     v_nrm = a_nrm;
     v_col = a_col.rgb;
+    // Perspective depth (cp.w > 1.5) -> real distance aerial haze; Ortho (cp.w ~ 1) -> gentle top-of-frame air lift
+    v_air = (cp.w > 1.5) ? smoothstep(15.0, 62.0, cp.w) * 0.38 : smoothstep(0.25, 1.0, cp.y * 0.5 + 0.5) * 0.11;
   }`;
 
   const BORDER_GRASS_FS = `#version 300 es
   precision highp float;
   in vec3 v_nrm;
   in vec3 v_col;
+  in float v_air;
   uniform vec3 u_keyDir, u_fillDir, u_keyColor, u_fillColor, u_skyColor, u_groundColor;
   uniform vec4 u_lightMix;
   out vec4 fragColor;
@@ -1098,6 +1116,10 @@
     vec3 hemi = mix(u_groundColor, u_skyColor, N.y * 0.5 + 0.5);
     vec3 lit = v_col * (u_keyColor * (NoL * 0.28 + wrapL * 0.11) + u_fillColor * NoF * 0.14 + hemi * 0.25 * u_lightMix.x);
     vec3 outCol = bgSrgb(bgAces(lit * 1.08 * u_lightMix.z));
+    if (u_lightMix.w < 0.5 && v_air > 0.005) {
+      vec3 airCol = bgSrgb(bgAces((u_skyColor * 0.65 + u_keyColor * 0.30) * u_lightMix.z));
+      outCol = mix(outCol, airCol, v_air);
+    }
     if (u_lightMix.w > 0.001) outCol = mix(outCol, bgSrgb(bgAces(v_col * 1.18)), u_lightMix.w);
     fragColor = vec4(outCol, 1.0);
   }`;

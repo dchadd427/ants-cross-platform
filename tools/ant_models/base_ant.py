@@ -340,6 +340,7 @@ def _build_eyes(
     eye_aspect_left: float = 1.0,
     eye_aspect_right: float = 1.0,
     eye_look: Tuple[float, float] = (0.0, 0.0),
+    pupil_scale: float = 1.0,
 ) -> Dict[str, Any]:
     """Build simple, clean 1998-style eyes (bright white sclera, round glossy black dot pupil, soft glint) + brows."""
     style = str(brow_style).strip().lower()
@@ -388,34 +389,36 @@ def _build_eyes(
             .rotate_xyz(rx=eye_rx, ry=yaw)
             .translate(ex, ey, eye_z)
         )
-        # Clean simplistic Option-A eyes: generous bright white sclera framing a crisp round glossy
-        # black dot pupil (~52% of sclera width) with one subtle soft upper-left specular glint.
+        # Crisp round glossy black dot pupil with generous bright white sclera + soft upper-left specular glint.
+        ps = max(0.45, min(1.25, float(pupil_scale)))
+        z_shift = (1.0 - ps) * 0.022 * s
         limbal = (
-            ellipsoid(0.0372 * s, 0.0398 * s * a_p, 0.0265 * s, u_segs=22, v_segs=12, name=f"limbal_{tag}", material="eye_limbal")
-            .translate(-side * 0.0018 * s, 0.0010 * s + dy_p, 0.0392 * s)
+            ellipsoid(0.0372 * ps * s, 0.0398 * ps * s * a_p, 0.0265 * ps * s, u_segs=22, v_segs=12, name=f"limbal_{tag}", material="eye_limbal")
+            .translate(-side * 0.0018 * s, 0.0010 * s + dy_p, 0.0392 * s + z_shift)
             .rotate_xyz(rx=-look_pitch, ry=look_yaw)
             .rotate_xyz(rx=eye_rx, ry=yaw)
             .translate(ex, ey, eye_z)
         )
         iris = (
-            ellipsoid(0.0362 * s, 0.0388 * s * a_p, 0.0272 * s, u_segs=22, v_segs=12, name=f"iris_{tag}", material="eye_iris")
-            .translate(-side * 0.0020 * s, 0.0012 * s + dy_p, 0.0400 * s)
+            ellipsoid(0.0362 * ps * s, 0.0388 * ps * s * a_p, 0.0272 * ps * s, u_segs=22, v_segs=12, name=f"iris_{tag}", material="eye_iris")
+            .translate(-side * 0.0020 * s, 0.0012 * s + dy_p, 0.0400 * s + z_shift)
             .rotate_xyz(rx=-look_pitch, ry=look_yaw)
             .rotate_xyz(rx=eye_rx, ry=yaw)
             .translate(ex, ey, eye_z)
         )
         pupil = (
-            ellipsoid(0.0348 * s, 0.0372 * s * a_p, 0.0252 * s, u_segs=22, v_segs=14, name=f"pupil_{tag}", material="eye_pupil")
-            .translate(-side * 0.0020 * s, 0.0012 * s + dy_p, 0.0436 * s)
+            ellipsoid(0.0348 * ps * s, 0.0372 * ps * s * a_p, 0.0252 * ps * s, u_segs=22, v_segs=14, name=f"pupil_{tag}", material="eye_pupil")
+            .translate(-side * 0.0020 * s, 0.0012 * s + dy_p, 0.0436 * s + z_shift)
             .rotate_xyz(rx=-look_pitch, ry=look_yaw)
             .rotate_xyz(rx=eye_rx, ry=yaw)
             .translate(ex, ey, eye_z)
         )
         # One small subtle upper-left catchlight glint well inside the spherical eyelid inner radius.
+        gs = 0.72 + 0.28 * ps
         glint_main = (
-            ellipsoid(0.0056 * s, 0.0060 * s, 0.0020 * s, u_segs=12, v_segs=10, name=f"catchlight_main_{tag}", material="eye_catchlight")
+            ellipsoid(0.0052 * gs * s, 0.0056 * gs * s, 0.0020 * s, u_segs=12, v_segs=10, name=f"catchlight_main_{tag}", material="eye_catchlight")
             .rotate_xyz(rx=-0.24, ry=-0.22)
-            .translate(-0.0122 * s, 0.0132 * s + dy_p, 0.0672 * s)
+            .translate(-0.0102 * gs * s, 0.0110 * gs * s + dy_p, 0.0672 * s)
             .rotate_xyz(rx=-0.55 * look_pitch, ry=0.55 * look_yaw)
             .rotate_xyz(rx=eye_rx, ry=yaw)
             .translate(ex, ey, eye_z)
@@ -1137,6 +1140,7 @@ def build_base_ant(
     eye_aspect_left: float = 1.0,
     eye_aspect_right: float = 1.0,
     eye_look: Tuple[float, float] = (0.0, 0.0),
+    pupil_scale: float = 1.0,
     head_pitch_deg: float = -16.0,
     head_tilt_deg: float = 0.0,
     head_yaw_deg: float = 0.0,
@@ -1185,6 +1189,7 @@ def build_base_ant(
             eye_aspect_left=a_l,
             eye_aspect_right=a_r,
             eye_look=eye_look,
+            pupil_scale=pupil_scale,
         )
 
     ant_anchors = {

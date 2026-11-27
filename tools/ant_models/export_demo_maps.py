@@ -111,6 +111,50 @@ def build_smooth_ground_masks(t4_entries, sprites_dir, out_path, atlas_cols=16, 
         ).astype(np.uint8)
 
     Image.fromarray(atlas, mode="RGBA").save(out_path, optimize=True)
+    return atlas
+
+
+def build_continuous_map_mask(parsed, tile_atlas, atlas_cols, out_path, tile_out=64, px_per_tile=16):
+    """Build a continuous cross-tile smoothed full-map RGBA terrain mask (kills blocky tile seams & mismatched edges)."""
+    import numpy as np
+    from PIL import Image
+
+    cols, rows = int(parsed["cols"]), int(parsed["rows"])
+    tiles = parsed["tiles"]
+    # Downsample each tile in the 64x64 atlas to px_per_tile x px_per_tile float32
+    step = tile_out // px_per_tile
+    a_small = tile_atlas.reshape(
+        tile_atlas.shape[0] // tile_out, px_per_tile, step,
+        tile_atlas.shape[1] // tile_out, px_per_tile, step, 4
+    ).mean(axis=(2, 5)) / 255.0
+
+    grid = np.zeros((rows * px_per_tile, cols * px_per_tile, 4), dtype=np.float32)
+    for r in range(rows):
+        r0 = r * px_per_tile
+        for c in range(cols):
+            idx = tiles[r * cols + c]
+            rc, cc = divmod(idx, atlas_cols)
+            grid[r0 : r0 + px_per_tile, c * px_per_tile : (c + 1) * px_per_tile] = a_small[rc, :, cc, :, :]
+
+    # Map-wide continuous Gaussian blur across every tile border (sigma ~ 0.22 tiles)
+    rad = 9
+    ks = np.arange(-rad, rad + 1, dtype=np.float32)
+    kern = np.exp(-0.5 * (ks / 3.5) ** 2)
+    kern /= kern.sum()
+    p = np.pad(grid, ((rad, rad), (rad, rad), (0, 0)), mode="edge")
+    tmp = sum(kern[i + rad] * p[rad:-rad, i + rad : i + rad + grid.shape[1], :] for i in range(-rad, rad + 1))
+    p2 = np.pad(tmp, ((rad, rad), (0, 0), (0, 0)), mode="edge")
+    sm = sum(kern[i + rad] * p2[i + rad : i + rad + grid.shape[0], :, :] for i in range(-rad, rad + 1))
+
+    # Crisp yet smooth organic S-curve so shorelines & mud/sand borders stay lively & never blocky
+    u = np.clip((sm - 0.16) / 0.68, 0.0, 1.0)
+    out = u * u * (3.0 - 2.0 * u)
+    # Keep water (alpha) crisp and avoid exceeding sum > 1 on mud/sand/slate
+    rgb_sum = out[:, :, 0] + out[:, :, 1] + out[:, :, 2] + out[:, :, 3]
+    over = rgb_sum > 1.0
+    if np.any(over):
+        out[over] /= rgb_sum[over, None]
+    Image.fromarray(np.clip(np.round(out * 255.0), 0, 255).astype(np.uint8), mode="RGBA").save(out_path, optimize=True)
 
 
 def read_png_dims(path):
@@ -408,9 +452,9 @@ def main():
 
     # 1b. Build smooth 64x64 anti-aliased terrain-material weight atlas for new PBR lighting-reactive floor tiles
     dst_masks = os.path.join(out_dir, "ground_masks.png")
-    build_smooth_ground_masks(t4_entries, sprites_dir, dst_masks, atlas_cols=map_atlas.GROUND_COLUMNS, tile_out=64)
+    mask_atlas = build_smooth_ground_masks(t4_entries, sprites_dir, dst_masks, atlas_cols=map_atlas.GROUND_COLUMNS, tile_out=64)
 
-    # 2. Export parsed classic .LVL maps
+    # 2. Export parsed classic .LVL maps + continuous cross-tile smoothed full-map terrain mask PNG per map
     metrics = build_sprite_metrics(t4_entries, items_manifest, sprites_dir)
     maps_out = []
     for map_id, label, rel_path in MAPS_TO_EXPORT:
@@ -418,6 +462,9 @@ def main():
         parsed["id"] = map_id
         parsed["label"] = label
         parsed["file"] = os.path.basename(rel_path)
+        mask_name = f"mask_{map_id}.png"
+        build_continuous_map_mask(parsed, mask_atlas, map_atlas.GROUND_COLUMNS, os.path.join(out_dir, mask_name))
+        parsed["mask"] = mask_name
         maps_out.append(parsed)
         print(
             f"  {map_id:10s} ({parsed['cols']}x{parsed['rows']}): "

@@ -8,16 +8,16 @@
   <meta name="description" content="High-resolution 3D Ants (1998) live map demo running authentic original .LVL tile grids (Treasure Map, Tiny, Small, Islands) at exact 1:1 scale with directional shadows.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23183825'/%3E%3Ccircle cx='16' cy='12' r='5' fill='%23e0b029'/%3E%3Ccircle cx='16' cy='21' r='6' fill='%23297040'/%3E%3C/svg%3E">
   <title>3D Map Demo — Ants (1998)</title>
-  <link rel="stylesheet" href="viewer.css?v=19">
-  <link rel="stylesheet" href="demo.css?v=19">
-  <script src="viewer_gltf.js?v=19" defer></script>
-  <script src="viewer_fx.js?v=19" defer></script>
-  <script src="viewer_render.js?v=19" defer></script>
-  <script src="demo_heist.js?v=19" defer></script>
-  <script src="demo_border.js?v=19" defer></script>
-  <script src="demo_atmo.js?v=19" defer></script>
-  <script src="demo_actions.js?v=19" defer></script>
-  <script src="demo.js?v=19" defer></script>
+  <link rel="stylesheet" href="viewer.css?v=22">
+  <link rel="stylesheet" href="demo.css?v=22">
+  <script src="viewer_gltf.js?v=22" defer></script>
+  <script src="viewer_fx.js?v=22" defer></script>
+  <script src="viewer_render.js?v=22" defer></script>
+  <script src="demo_heist.js?v=22" defer></script>
+  <script src="demo_border.js?v=22" defer></script>
+  <script src="demo_atmo.js?v=22" defer></script>
+  <script src="demo_actions.js?v=22" defer></script>
+  <script src="demo.js?v=22" defer></script>
 </head>
 <body>
   <div class="app-shell demo-app-shell">
@@ -74,6 +74,7 @@
             tabindex="0"
             aria-label="Interactive high-resolution 3D Ants map viewport on authentic 1998 tile grid. Left-drag to pan across the map in Game View or right-drag to orbit 3D, scroll or pinch to zoom. Press arrow keys or WASD to pan, Space to pause, G to toggle grid, R to reset camera, and 1 through 4 to switch maps."
           ></canvas>
+          <div class="demo-optics" id="demo-optics" data-lighting="daylight" aria-hidden="true"></div>
 
           <div class="demo-hud-card" id="demo-hud-card" aria-live="polite">
             <div class="demo-hud-head">
