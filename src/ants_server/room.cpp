@@ -559,7 +559,7 @@ void Room::lobby_waiting_pass(uint32_t now_ms, uint8_t asked_by, const std::arra
     if (!start_lobby(now_ms, roster, fill_seats, sim::start_teams_for(spec_.teams, true, asked_teams))) lobby_.end_start(std::string());
 }
 
-void Room::update(uint32_t now_ms) {
+void Room::update(uint32_t now_ms, const BeginGate* begin_gate) {
     pass_work_ = PassWork();
     if (state_ == RoomState::Failed) return;
     if (state_ == RoomState::Finished) {
@@ -606,14 +606,20 @@ void Room::update(uint32_t now_ms) {
                 record_discard();                                    // (and it has no match to bring back)
             }
         } else if (ev.type == net::HostLobby::Event::Type::Begun && state_ == RoomState::Loading) {
-            const auto began = std::chrono::steady_clock::now();
-            begin_match(now_ms);
-            pass_work_.start_us += micros_since(began);
+            begin_due_ = true;                                       // (begins below: a room of computer players alone waits there for a pass with headroom)
         } else if (ev.type == net::HostLobby::Event::Type::LeaderStart) {
             asked_by = ev.seat;
             asked_fill = ev.fill;
             asked_teams = ev.teams;
         }
+    }
+
+    if (state_ != RoomState::Loading) begin_due_ = false;
+    if (begin_due_ && (!spec_.bots_only || begin_gate == nullptr || (*begin_gate)())) {
+        begin_due_ = false;
+        const auto began = std::chrono::steady_clock::now();
+        begin_match(now_ms);
+        pass_work_.start_us += micros_since(began);
     }
 
     if (state_ == RoomState::Waiting && spec_.lobby) {

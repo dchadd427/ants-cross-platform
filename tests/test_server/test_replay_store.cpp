@@ -1903,6 +1903,33 @@ int main() {
         ASSERT_TRUE(store.looks() == 1 && !store.rescanning());
     } TEST_END();
 
+    TEST_CASE("RS13.5 rescan() Finishes A Look That Is Under Way And Then Looks Again, So That A File That Was Put In The Folder After The Look Had Listed It (The Listing Is Over, The New Files Are Being Read) Is Found By The Call, And A Call With Nothing Changed Looks At Nothing") {
+        Fixture f;
+        int64_t fake_us = 0;
+        ReplayConfig config = f.config();
+        config.clock_us = [&]() { return fake_us += 100; };
+        ReplayStore store(config);
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        const std::vector<uint8_t> bytes = make_file("TINY.LVL", 700, true, 0, 5);
+        for (int i = 0; i < 60; ++i) {
+            char name[64];
+            std::snprintf(name, sizeof name, "ants-TINY-20261001-%02d%02d%02dZ.antsrep", 0, i / 60, i % 60);
+            write_file(f.dir / name, bytes);
+        }
+        fs::last_write_time(f.dir, fs::file_time_type(std::chrono::hours(200000)));
+        f.now += ReplayStore::kRescanEveryS + 1;
+        for (int pass = 0; pass < 1000 && store.count() == 0; ++pass) store.update();      // (the passes until the first file of the look is read: the listing is over)
+        ASSERT_TRUE(store.rescanning() && store.count() > 0 && store.count() < 60);
+        const std::string foreign = "ants-TINY-" + ReplayStore::time_stamp(kT0 - 3600) + ".antsrep";
+        write_file(f.dir / foreign, make_file("TINY.LVL", 900, true, 0, 6));
+        fs::last_write_time(f.dir, fs::file_time_type(std::chrono::hours(200001)));
+        ASSERT_EQ(store.rescan(), size_t{61});                                         // (the 60 of the look that was under way, and the one that came after its listing)
+        ASSERT_TRUE(!store.rescanning() && store.count() == 61 && store.find(foreign) != nullptr && store.looks() == 2);
+        ASSERT_EQ(store.rescan(), size_t{0});                                          // (nothing changed since: no look)
+        ASSERT_TRUE(store.looks() == 2 && store.count() == 61);
+    } TEST_END();
+
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Failed:           " << g_test_failures
               << "\n=======================================================\n";
     return g_test_failures == 0 ? 0 : 1;

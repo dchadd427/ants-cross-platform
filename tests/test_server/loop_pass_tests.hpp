@@ -1,6 +1,6 @@
 // The tests of the server loop's slow-pass log (loop_pass.hpp, docs/SERVER.md "The slow-pass log"): a pass over the threshold is told in one line with its parts by name, the lines are rate-limited and
-// the passes that were slow meanwhile are counted, the room manager lays the time of a pass on its parts, a due start of a match of computer players waits for a pass with headroom while a match with people
-// is in play. Included by test_server_files.cpp after bot_queue_tests.hpp, whose fixtures it uses; test_server.cpp calls run_loop_pass_tests().
+// the passes that were slow meanwhile are counted, the room manager lays the time of a pass on its parts, a due start of a match of computer players (its room, and its beginning in the room) waits for a pass with
+// headroom while a match with people is in play. Included by test_server_files.cpp after bot_queue_tests.hpp, whose fixtures it uses; test_server.cpp calls run_loop_pass_tests().
 #pragma once
 
 #include "ants_server/loop_pass.hpp"
@@ -148,5 +148,133 @@ void run_loop_pass_tests() {
         ASSERT_TRUE(d.w.mgr.bot_start_headroom(d.w.now));
         d.w.mgr.set_loop_pass(nullptr);
         ASSERT_TRUE(d.w.mgr.bot_start_headroom(d.w.now));
+    } TEST_END();
+
+    TEST_CASE("S3.368 The Wait Of A Start That Is Held Is Counted From The Pass In Which It Was First Held (Not From A Heavy Pass In Which Nothing Was Due), Ends When A Whole Pass Held No Start Or A Start Went Through, And Lets All The Starts That Are Due In The Pass In Which One Went Through By Its Wait Go With It") {
+        BotDoor d("looppass-timer");
+        int64_t clock = 0;
+        LoopPass pass([&clock]() { return clock; });
+        pass.begin();
+        d.w.mgr.set_loop_pass(&pass);
+        ASSERT_TRUE(d.w.mgr.create_room(spec_of("HT-P", 2), d.w.now).ok);
+        d.w.connect("Ann", "HT-P");
+        d.w.connect("Bob", "HT-P");
+        ASSERT_TRUE(run_until(d.w, [&] { return d.w.status("HT-P").state == RoomState::Running; }, 15000));
+        ASSERT_TRUE(d.w.mgr.people_in_play());
+        const int64_t heavy = kBotStartHeadroomUs;
+        const uint32_t wait_ms = kBotStartPutOffMaxMs;
+        // a start is held, and a whole pass goes by in which none is: the wait is over, so the next start that is held waits its own time (not what is left of the first)
+        clock = heavy;
+        ASSERT_FALSE(d.w.mgr.bot_start_headroom(d.w.now));
+        d.w.run(10);                                                                   // (the pass in which it was held)
+        d.w.run(10);                                                                   // (a pass in which none was)
+        d.w.run(wait_ms + 100);
+        ASSERT_FALSE(d.w.mgr.bot_start_headroom(d.w.now));
+        d.w.now += wait_ms - 1;
+        ASSERT_FALSE(d.w.mgr.bot_start_headroom(d.w.now));
+        // it goes at the end of its wait, and so does every other start that is due in that pass; the one of the pass after waits again
+        d.w.now += 1;
+        ASSERT_TRUE(d.w.mgr.bot_start_headroom(d.w.now));
+        ASSERT_TRUE(d.w.mgr.bot_start_headroom(d.w.now));
+        d.w.now += 1;
+        ASSERT_FALSE(d.w.mgr.bot_start_headroom(d.w.now));
+        d.w.now += wait_ms - 1;
+        ASSERT_FALSE(d.w.mgr.bot_start_headroom(d.w.now));
+        d.w.now += 1;
+        ASSERT_TRUE(d.w.mgr.bot_start_headroom(d.w.now));
+        // a start that goes in a light pass leaves nothing of its wait either
+        d.w.now += 1;
+        ASSERT_FALSE(d.w.mgr.bot_start_headroom(d.w.now));
+        d.w.now += wait_ms - 1000;
+        clock = 0;
+        ASSERT_TRUE(d.w.mgr.bot_start_headroom(d.w.now));
+        d.w.now += 1000;
+        clock = heavy;
+        ASSERT_FALSE(d.w.mgr.bot_start_headroom(d.w.now));
+        clock = 0;
+        ASSERT_TRUE(d.w.mgr.bot_start_headroom(d.w.now));
+        clock = heavy;
+        // the queue of a batch asks only for a start that is due: heavy passes in which nothing is due start no wait
+        ASSERT_EQ(d.post("bot-matches", spaced_body(4, 60)).status, 200);
+        ASSERT_TRUE(d.w.mgr.bot_match_count() == 1 && d.bots->waiting_count() == 3);
+        for (int i = 0; i < 20; ++i) stagger_step(d, 1000);                            // (twenty heavy passes: none of them has a start that is due)
+        stagger_step(d, 40000);                                                        // (the second start is due now)
+        ASSERT_TRUE(d.w.mgr.bot_match_count() == 1 && d.bots->waiting_count() == 3);
+        stagger_step(d, wait_ms - 1);
+        ASSERT_TRUE(d.w.mgr.bot_match_count() == 1 && d.bots->waiting_count() == 3);
+        stagger_step(d, 1);
+        ASSERT_TRUE(d.w.mgr.bot_match_count() == 2 && d.bots->waiting_count() == 2);
+        // ... and the start that went through by its wait leaves nothing of it for the next one, which is due a minute later
+        stagger_step(d, 59000);
+        ASSERT_TRUE(d.w.mgr.bot_match_count() == 2);
+        stagger_step(d, 1000);
+        ASSERT_TRUE(d.w.mgr.bot_match_count() == 2 && d.bots->waiting_count() == 2);
+        stagger_step(d, wait_ms - 1);
+        ASSERT_TRUE(d.w.mgr.bot_match_count() == 2 && d.bots->waiting_count() == 2);
+        stagger_step(d, 1);
+        ASSERT_TRUE(d.w.mgr.bot_match_count() == 3 && d.bots->waiting_count() == 1);
+        d.w.mgr.set_loop_pass(nullptr);
+    } TEST_END();
+
+    TEST_CASE("S3.369 The Beginning Of A Match Of Computer Players (Its Engine, Its Record, The Bots' First Look At The Map: Room::begin_match, In The Pass After Its Room Was Made) Is Held While A Match With People Is In Play And The Pass Has Spent 10 Ms, Is Made In The Next Pass That Has Headroom Or After 5 Seconds Of Heavy Passes, And Is Never Held When Nobody Plays") {
+        BotDoor d("looppass-begin");
+        int64_t clock = 0;
+        LoopPass pass([&clock]() { return clock; });
+        pass.begin();
+        d.w.mgr.set_loop_pass(&pass);
+        ASSERT_TRUE(d.w.mgr.create_room(spec_of("HB-P", 2), d.w.now).ok);
+        d.w.connect("Ann", "HB-P");
+        d.w.connect("Bob", "HB-P");
+        ASSERT_TRUE(run_until(d.w, [&] { return d.w.status("HB-P").state == RoomState::Running; }, 15000));
+        ASSERT_TRUE(d.w.mgr.people_in_play());
+        const int64_t heavy = kBotStartHeadroomUs;
+        const std::string one = batch_body(1, "TINY.LVL", "highest-score", "2");
+        std::set<std::string> known;
+        const auto fresh = [&]() {                                                     // (the code of the match that the last call made: its room is made at once, its match begins in a pass of the manager)
+            for (const BotMatchInfo& m : d.w.mgr.bot_matches(d.w.now)) {
+                if (known.insert(m.code).second) return m.code;
+            }
+            return std::string();
+        };
+        const auto state_of = [&](const std::string& code) {
+            for (const BotMatchInfo& m : d.w.mgr.bot_matches(d.w.now)) {
+                if (m.code == code) return m.state;
+            }
+            return RoomState::Failed;
+        };
+        // heavy passes: the room is made (the admin's call is answered at once) and its lobby has begun, but its match does not begin
+        clock = heavy;
+        ASSERT_EQ(d.post("bot-matches", one).status, 200);
+        const std::string first = fresh();
+        ASSERT_TRUE(!first.empty() && state_of(first) == RoomState::Waiting);
+        d.w.run(10);
+        ASSERT_TRUE(state_of(first) == RoomState::Loading);
+        d.w.run(10);
+        d.w.run(4000);
+        ASSERT_TRUE(state_of(first) == RoomState::Loading);                            // (four seconds of heavy passes: still held)
+        clock = heavy - 1;                                                             // (a pass that has spent 9.999 ms has headroom: the match begins in it)
+        d.w.run(10);
+        ASSERT_TRUE(state_of(first) == RoomState::Running);
+        // the wait is over after 5 seconds of heavy passes: it begins whatever the pass
+        clock = heavy;
+        ASSERT_EQ(d.post("bot-matches", one).status, 200);
+        const std::string second = fresh();
+        ASSERT_TRUE(!second.empty() && second != first);
+        d.w.run(10);
+        d.w.run(10);                                                                   // (the beginning is due, and held from here)
+        d.w.run(kBotStartPutOffMaxMs - 120);
+        ASSERT_TRUE(state_of(second) == RoomState::Loading);
+        d.w.run(130);
+        ASSERT_TRUE(state_of(second) == RoomState::Running);
+        // nobody plays: a heavy pass holds nothing
+        ASSERT_TRUE(d.w.mgr.close_room("HB-P", d.w.now));
+        d.w.run(100);
+        ASSERT_FALSE(d.w.mgr.people_in_play());
+        ASSERT_EQ(d.post("bot-matches", one).status, 200);
+        const std::string third = fresh();
+        ASSERT_TRUE(!third.empty() && state_of(third) == RoomState::Waiting);
+        d.w.run(30);
+        ASSERT_TRUE(state_of(third) == RoomState::Running);
+        d.w.mgr.set_loop_pass(nullptr);
     } TEST_END();
 }

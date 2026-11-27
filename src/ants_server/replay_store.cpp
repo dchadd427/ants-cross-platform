@@ -734,12 +734,19 @@ void ReplayStore::look_end() {
     }
 }
 
+// A caller (the history service, the tools, the tests) has made a change before it calls and wants it seen: a look that is under way may have listed the folder before the change, so it is finished and a fresh
+// look is made after it (which runs only when the folder's time moved since that look began, like any look).
 size_t ReplayStore::rescan() {
     if (!ready_) return 0;
-    if (look_ == nullptr && !look_begin(false)) return 0;
-    last_look_ = 0;
-    while (look_ != nullptr) look_step(-1);
-    return last_look_;
+    size_t found = 0;
+    const auto finish = [&]() {
+        last_look_ = 0;
+        while (look_ != nullptr) look_step(-1);
+        found += last_look_;
+    };
+    if (look_ != nullptr) finish();
+    if (look_begin(false)) finish();
+    return found;
 }
 
 size_t ReplayStore::bot_saves_left() const {

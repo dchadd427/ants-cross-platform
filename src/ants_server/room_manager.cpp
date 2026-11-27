@@ -633,20 +633,32 @@ bool RoomManager::people_in_play() const {
     return false;
 }
 
+bool RoomManager::bot_pass_has_headroom() const {
+    return loop_pass_ == nullptr || !people_in_play() || loop_pass_->elapsed_us() < kBotStartHeadroomUs;
+}
+
 bool RoomManager::bot_start_headroom(uint32_t now_ms) {
-    if (loop_pass_ == nullptr || !people_in_play() || loop_pass_->elapsed_us() < kBotStartHeadroomUs) {
-        bot_pass_heavy_ = false;
+    if (bot_pass_has_headroom()) {
+        bot_held_ = false;                                         // (it goes through: the next start that is held waits its own time)
         return true;
     }
-    if (!bot_pass_heavy_) {
-        bot_pass_heavy_ = true;
-        bot_pass_heavy_since_ms_ = now_ms;
+    if (bot_released_ && bot_released_ms_ == now_ms) return true;  // (one went through by its wait in this very pass: the others that are due go with it, or they would wait one after the other)
+    bot_held_asked_ = true;
+    if (!bot_held_) {
+        bot_held_ = true;
+        bot_held_since_ms_ = now_ms;
     }
-    return net::time_reached(now_ms, bot_pass_heavy_since_ms_ + kBotStartPutOffMaxMs);
+    if (!net::time_reached(now_ms, bot_held_since_ms_ + kBotStartPutOffMaxMs)) return false;
+    bot_held_ = false;
+    bot_released_ = true;
+    bot_released_ms_ = now_ms;
+    return true;
 }
 
 void RoomManager::update(uint32_t now_ms) {
     now_hint_ = now_ms;
+    if (!bot_held_asked_) bot_held_ = false;                       // (no start was held in the last pass: the one that waited is gone, and a start that is due now has its wait from now)
+    bot_held_asked_ = false;
     lap(PassPart::Other);                                          // (what the loop did before: the connections that came in)
     if (replays_ != nullptr) {
         replays_->update();                                        // (the replays that are too old are deleted once an hour; the folder is looked at in slices)
@@ -724,8 +736,9 @@ void RoomManager::update(uint32_t now_ms) {
     lap(PassPart::Other);
     // 4. the rooms (a lobby room whose match the rules have just ended is opened again below, the rematch)
     std::vector<std::string> rematches;
+    const Room::BeginGate begin_gate = [this, now_ms]() { return bot_start_headroom(now_ms); };      // (a room of computer players alone asks before its match begins: a start is due, and a heavy pass holds it)
     for (auto it = rooms_.begin(); it != rooms_.end();) {
-        it->second->update(now_ms);
+        it->second->update(now_ms, &begin_gate);
         lap_room(*it->second);
         for (std::string& line : it->second->take_notes()) room_notes_.push_back(std::move(line));
         if (it->second->rematch_due()) rematches.push_back(it->first);

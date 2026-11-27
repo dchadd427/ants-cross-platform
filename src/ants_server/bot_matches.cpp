@@ -703,6 +703,7 @@ size_t BotMatches::release_queues(int64_t now_s, uint32_t now_ms) {
     size_t made = 0;
     for (Queue& q : queues_) {
         while (q.remaining > 0 && made < kBotStartsPerPass && (q.every_ms == 0 || net::time_reached(now_ms, q.due_ms))) {
+            if (!rooms_.bot_start_headroom(now_ms)) return made;                         // (a start is due, a match with people is in play and this pass has spent its share already: it starts in a later pass)
             std::string code, why;
             BotRefusal refusal = BotRefusal::None;
             bool keep = false;
@@ -747,10 +748,9 @@ void BotMatches::update(int64_t now_s, uint32_t now_ms) {
         next_sync_ms_ = now_ms + 1000u;
         sync_started(now_ms);                                                        // (the matches that ended are counted as done by their queue, and forgotten)
     }
-    if (!rooms_.bot_start_headroom(now_ms)) return;                                  // (a match with people is in play and this pass has spent its share already: what is due starts in a later pass)
     size_t made = release_queues(now_s, now_ms);                                     // (what Start now set in time or left to wait for room: it goes on while the schedules are switched off)
     if (!scheduling_) {
-        if (made == 0) warm_maps(now_ms);
+        if (made == 0 && rooms_.bot_pass_has_headroom()) warm_maps(now_ms);          // (the judging of maps waits for a light pass while people play, like a start)
         return;                                                                      // (the operator switched the schedules off: they are kept and shown, and none of them starts a match)
     }
     std::vector<int64_t> due;
@@ -760,6 +760,7 @@ void BotMatches::update(int64_t now_s, uint32_t now_ms) {
     for (const int64_t id : due) {
         const BotSchedule* found = schedules_.find(id);
         if (found == nullptr) continue;
+        if (!rooms_.bot_start_headroom(now_ms)) break;                               // (a start is due and the pass is heavy while people play: the schedule stays due, the next pass asks again)
         const BotSchedule s = *found;
         const Batch batch = run_batch(s.what, std::string(), s.name, now_s, now_ms, false);
         made += batch.started;
@@ -769,7 +770,7 @@ void BotMatches::update(int64_t now_s, uint32_t now_ms) {
         note(line);
         schedules_.note_run(s.id, batch.started > 0 ? now_s : s.last_run, bot_schedule_next_after_run(s, now_s));
     }
-    if (made == 0) warm_maps(now_ms);
+    if (made == 0 && rooms_.bot_pass_has_headroom()) warm_maps(now_ms);
 }
 
 // The maps of the catalog that have no verdict yet are judged a few at a time while nothing else is started, so that the first call of the admin page finds them kept. Once a pass finds nothing to do, it looks again in ten
