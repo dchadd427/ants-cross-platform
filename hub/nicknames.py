@@ -1,4 +1,4 @@
-"""Nicknames, tags and the names that the game server takes (docs/HUB_NICKNAMES.md). A person who is logged in has ONE nickname (unique, 3 to 16 characters) and an optional TAG (2 to 5 letters and digits, shown before it:
+"""Nicknames, tags and the names that the game server takes (docs/HUB_NICKNAMES.md). A person who is logged in has ONE nickname (unique, 3 to 16 characters) and an optional TAG (2 to 5 letters and digits, with the capitals that the person typed, shown before it:
 "[TAG] Nickname"); a guest may type a name for the games, which is shown as "Name (Guest)". The rules of the text are hub/nickrules.py, the letters hub/name_letters.py; this file is who has what, how often it may change,
 the frames of the page's "Your name" sheet, and the pass that lets the game server take a name.
 
@@ -10,7 +10,7 @@ The page never learns whose nickname made a name a lookalike: `taken` is the sam
 
 Who may. A nickname is the account's own: nobody else, guest or logged in, may take its letters in any case, nor a lookalike of it (text.squash: dots, accents, a digit for the letter it looks like, a Cyrillic letter drawn like
 a Latin one), nor a name that is a reserved word, a role or a placeholder. It may be changed once in 30 days; the old one is held for the account for 30 days, so that nobody takes it to pass for the person, and a person who
-changes back has their old name again (and the 30 days start again). A tag may change once a day, is not unique and is not held. A moderator's /rename takes both away, and the account may choose again at once.
+changes back has their old name again (and the 30 days start again). A tag may change once a day (a change of its capitals alone is a change: "ANT" and "Ant" are two texts), is not unique and is not held. A moderator's /rename takes both away, and the account may choose again at once.
 A guest's name may not copy a logged-in person's nickname (or a name that is held), has the same letters, length and word list, is kept in the guest's browser and is not reserved for the guest.
 
 The game server. `play_name` is the name that a person plays under: "[TAG] Nickname", the nickname, or, for a person who has chosen none, the name that the login has (the shown name, then the other names, then the
