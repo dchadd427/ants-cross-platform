@@ -26,24 +26,23 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.22.0 - 2026-11-26 - Nicknames, tags and guest names, a welcome for guests, a better Play of the game and Fill a box
 
 **For players:**
 - **A better Play of the game.** It is now one player's best 10 seconds: 10 points a kill, more for knocking a player out, saving your hill from a Thief, stopping a Thief with loot and wiping out a whole group. The card says it ("Gory: triple kill in 8 seconds", "saved the hill").
 - **Fill a box in the Map Maker.** A switch under the Objects, Food and Ants tools: drag a box and it fills with every cell, every other cell, every Nth row or column or a random pattern, as one Undo step. Water, rock and things in the way are skipped and counted; one fill puts at most 250 ants. An AI that you connect has it too (`fill_area`).
-- **Nicknames, tags and guest names.** Log in and choose a nickname (3 to 16 letters and digits, yours alone) and, if you like, a tag ("[ANTS] Zoe") on one sheet, Your name, from the name in the chat menu. The chat, the Players list, the rooms, the results and the match history show it; finished matches keep the names they were played with. A guest can type a name too: it shows as "Wren (Guest)" and stays in this browser. Latin (with Vietnamese) and Cyrillic letters work.
-- **A welcome for guests.** The first time you open Ants & Uncles without logging in, a card offers Sign in with Discord to chat, Set a display name if you do not want to chat, or Not now. It does not come back once you answer it, set a name or log in.
-- **Long names fit.** The results show an alliance on two lines when its names are long, and a long name ends in dots in a room and on the countdown card.
+- **Nicknames, tags and guest names.** Log in and choose a nickname (3 to 16 letters and digits, yours alone) and, if you like, a tag ("[ANTS] Zoe") on one sheet, Your name, from the name in the chat menu. The chat, the Players list, the rooms, the results and the match history show it; finished matches keep the names they were played with. A guest can type a name too: it shows as "Wren (Guest)" and stays in this browser. Latin (with Vietnamese) and Cyrillic letters work. **A welcome for guests.** The first time you open Ants & Uncles without logging in, a card offers Sign in with Discord to chat, Set a display name if you do not want to chat, or Not now. It does not come back once you answer it, set a name or log in. **Long names fit.** The results show an alliance on two lines when its names are long, and a long name ends in dots in a room and on the countdown card.
 - **The Games list fills itself with Open lobby cards.** As many as the window has room for with nothing to scroll (more on a tall window, none when real games fill the list), and the dashed plus on a card hosts a game, the same as Host here.
 
 **Rules / network:** network protocol 29 (a name is UTF-8, and a name that is not a guest's carries the hub's signature, [`docs/HUB_NICKNAMES.md`](docs/HUB_NICKNAMES.md)): an older page or game cannot join a room of this version, so reload the page. The rules and the recordings are unchanged.
 
 **Fixes:**
-- The live match cards of the Games list and their scoreboard name a computer player "Kit (bot)", never with its level.
-- A connected AI's `put_ants` puts the ant type that it names, and `get_region` names the types right (they were mixed up: asking for a combat ant gave a bomber, and a swimmer gave a combat ant).
+- The live match cards of the Games list and their scoreboard name a computer player "Kit (bot)", never with its level. A connected AI's `put_ants` puts the ant type that it names, and `get_region` names the types right (they were mixed up: asking for a combat ant gave a bomber, and a swimmer gave a combat ant).
 
 **For operators:**
-- Moderators have `/rename NAME`, which takes a nickname and a tag away. The key `ANTS_ADMIN_GATE_SECRET` also signs the pass of a name: with it the game server keeps a nickname only when the hub signed it (without it names are checked as before). The hub adds its tables `nicknames` and `nick_hold` and the column `lines.tag` by itself.
+- Moderators have `/rename NAME`, which takes a nickname and a tag away. The key `ANTS_ADMIN_GATE_SECRET` also signs the pass of a name: with it the game server keeps a nickname only when the hub signed it (without it names are checked as before). The hub adds its tables `nicknames`, `nick_hold` and `login_claim` and the column `lines.tag` by itself.
+
+**Details:** [commits](https://github.com/dchadd427/ants-server/compare/7e54f31a...8f1fafc9)
 
 ## v0.21.6 - 2026-11-26 - Live scores, open lobbies, Top Thief and bots that fight for the flower
 
