@@ -14,7 +14,7 @@ Part of [The chat hub](HUB.md). A person who is logged in has **one nickname** (
 
 The chat and the players list show the nickname and, before it and dimmer, the tag; a guest name is shown with "(Guest)" dimmer than the name. The game has one plain string for each name (`[TAG] Nickname`, `Wren (Guest)`) and draws it in one color. A finished match keeps the names that were played with (the history pages, the replay's head), so a later change of nickname never rewrites an old match; matches from the day this ships on show the new names, earlier ones keep what they had.
 
-The top bar's chip shows the nickname only, and its round badge takes the first letter of the nickname. A guest's chip has a dashed ring.
+The top bar's chip shows the nickname only, and its round badge takes the first letter of the nickname. Every round badge does (the chip, the Players list, a conversation, the moderation card), also for a name that comes as "[TAG] Nickname": never the bracket. A guest's chip has a dashed ring.
 
 ## The rules
 
@@ -72,7 +72,7 @@ What may stand in a name is what the game's font draws: the Latin letters (A-Z, 
 ## The page
 
 * **Logged in.** The chat menu's name chip opens the sheet "Your name": a live preview ("How others see you"), the nickname field and the tag field, each with its counter, the hub's answer under the field, the rules, and Save. The preview is `[TAG] Nickname`. Save is allowed when the hub said both fields are fine.
-* **Guest.** A chip with a dashed ring in the top bar (under 375 px it takes the Discord mark's place) and the note "Please set a name" until a name is set or the note is closed; after that, never again in this browser (`localStorage`, `ants.guestnote`). The same sheet without the tag. The name is kept in this browser (`ants.guestname`) and nowhere else; another browser starts over.
+* **Guest.** A chip with a dashed ring in the top bar (under 375 px it takes the Discord mark's place) and, on the first visit with no name set, a welcome card that offers the Discord login or this sheet ([HOME_CHAT.md](HOME_CHAT.md), "Your name"). The same sheet without the tag. The name is kept in this browser (`ants.guestname`) and nowhere else; another browser starts over.
 * **Rooms.** The room's seats follow the current room layout: rows on the wide page and tiles on a phone, with the tag and "(Guest)" dimmer than the name, four players included.
 
 ## In the game

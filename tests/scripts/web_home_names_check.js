@@ -1,9 +1,11 @@
-// Runs the sheet "Your name", the guest's chip and its note (web/home/names.js, docs/HUB_NICKNAMES.md "The page") in the fake browser of tests/scripts/web_page_harness.js (its DOM), with a fake dock (the
+// Runs the sheet "Your name", the guest's chip and the welcome card (web/home/names.js, docs/HOME_CHAT.md "Your name") in the fake browser of tests/scripts/web_page_harness.js (its DOM), with a fake dock (the
 // hub's frames in and out), a fake clock and a fake person (front/player_name.js: the guest's name that this browser keeps). What it checks:
 //   1. the pure parts: the day and the month of a time, the words for a wait, and the sentence under a field for every word that the hub says, in each of the three kinds (a nickname, a tag, a guest's
 //      name): a refusal is red, a wait is a lock with its dates, a name that is taken names the name that was asked and nobody else, a word that the page does not know is "could not check";
-//   2. the guest's chip: only when the dock is live, nobody is logged in and the Log in button shows; its letter and its name; "Please set a name" until a name is set or the note is closed, and then never
-//      again in this browser (also not after a reload); a browser that keeps nothing shows the note again, and the page still works;
+//   2. the guest's chip: only when the dock is live, nobody is logged in and the Log in button shows; its letter and its name; and the welcome card, over an inert page, with the focus in it: it shows to a
+//      guest who has no name and has not answered, only where Home is calm, and never again in this browser (also not after a reload) once a name is set, "Set a display name" or the sheet was opened, "Not now"
+//      or Escape was pressed, or the person logged in; "Sign in with Discord to chat" presses the page's Log in button and answers nothing; Tab stays in the card and the focus goes back to the chip; a browser
+//      that keeps nothing shows the card again with the next page, and the page still works;
 //   3. a guest's sheet: the name is asked of the hub a moment after the last key (one frame, `guest: true`, no tag), the answer is said under the field, Save waits for a good answer, a good name is kept
 //      by the person and the chip changes, a name that the person refuses leaves the sheet open, an answer that is not the last question is not heard;
 //   4. a logged-in person's sheet: opened by the dock's tap, with the nickname and the tag that the account has; the check frame carries both fields and `save: false`, Save sends `save: true` and the sheet
@@ -36,6 +38,7 @@ function same(label, got, want) {
 const cls = (e) => String(e.className).split(/\s+/);
 const byClass = (root, c) => root.findAll((e) => cls(e).indexOf(c) !== -1);
 const one = (root, c) => byClass(root, c)[0] || null;
+const helps = (root) => byClass(root, 'nm-h').filter((h) => !h.hidden).map((h) => h.textContent);
 const button = (root, text) => root.findAll((e) => e.tagName === 'button' && e.textContent === text)[0] || null;
 
 // 1 June 2026, 12:00 UTC (a Monday) is the fake clock's start; the page's own time zone is the machine's, so the checks that name a day use the machine's day of the same instant
@@ -65,7 +68,7 @@ function rig(o) {
         now = until;
     };
     class FakeDate extends Date { static now() { return now; } }
-    const store = {};
+    const store = Object.assign({}, o.store || {});
     const storage = o.noStorage ? { getItem() { throw new Error('no storage'); }, setItem() { throw new Error('no storage'); } } : { getItem: (k) => (Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } };
     const doc = {
         hidden: false, listeners: {}, capturing: {}, activeElement: null, head: new El(env, 'head', ''), body: new El(env, 'body', ''), documentElement: { clientWidth: 1280 },
@@ -79,7 +82,7 @@ function rig(o) {
     doc.body.appendChild(bar);
     const sent = [];
     let taps = [];
-    const state = { live: o.live !== false, you: o.you === undefined ? null : o.you, sendFails: !!o.sendFails };
+    const state = { live: o.live !== false, you: o.you === undefined ? null : o.you, sendFails: !!o.sendFails, calm: o.calm !== false };
     const dock = {
         state: () => (state.live ? 'live' : 'down'), you: () => state.you,
         send: (m) => { if (state.sendFails) return false; sent.push(m); return true; },
@@ -94,12 +97,15 @@ function rig(o) {
     const changes = [];
     let clicks = 0;
     login.click = () => { clicks++; };
-    const api = Names.mount({ doc, win, dock, bar, login, person, letters: Letters, changed: () => changes.push(1) });
+    const api = Names.mount({ doc, win, dock, bar, login, person, letters: Letters, calm: () => state.calm, changed: () => changes.push(1) });
     const r = { env, doc, win, bar, login, dock, api, sent, typed, person, store, changes, state, advance, now: () => now, clicks: () => clicks };
     r.tell = (kind, m) => taps.forEach((fn) => fn(kind, m));
     if (state.live) r.tell('live', { login: !o.noLogin });       // (the welcome of a hub: it says whether the hub has a login)
     r.chip = () => one(bar, 'nm-gchip');
-    r.pop = () => one(doc.body, 'nm-pop');
+    r.card = () => one(doc.body, 'nm-welcome');
+    r.shade = () => one(doc.body, 'nm-wshade');
+    r.key = (key, o2) => { let prevented = false; r.shade().fire('keydown', Object.assign({ key, stopPropagation() {}, preventDefault() { prevented = true; } }, o2 || {})); return prevented; };
+    r.buttons = () => ({ sign: one(r.card(), 'nm-wdc'), set: one(r.card(), 'nm-wset'), not: one(r.card(), 'nm-wnot') });
     r.sheet = () => one(doc.body, 'nm-sheet');
     r.nick = () => doc.body.findAll((e) => e.id === 'nm-nick')[0] || null;
     r.tag = () => doc.body.findAll((e) => e.id === 'nm-tag')[0] || null;
@@ -145,46 +151,112 @@ const OK = { ok: true };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// 2. The guest's chip and its note
+// 2. The guest's chip and the welcome card
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
+    const KEY = 'ants.guestwelcome';
     let r = rig({});
     check('chip: a guest on a live dock sees the chip, with the first letter and the shown name', !!r.chip() && !r.chip().hidden && one(r.chip(), 'gc-av').textContent === 'G' && one(r.chip(), 'gc-cn').textContent === 'Guest 550000', r.chip() && r.chip().textContent);
     check('chip: it stands before the Log in button', r.bar.children.indexOf(r.chip()) === r.bar.children.indexOf(r.login) - 1);
     check('chip: its label says what to do', /Set a name/.test(r.chip().getAttribute('aria-label')), r.chip().getAttribute('aria-label'));
-    check('note: "Please set a name" shows under it, with the name that the others see now, and closes with its button', !!r.pop() && /Please set a name/.test(r.pop().textContent) && /Guest 550000/.test(r.pop().textContent));
-    byClass(r.pop(), 'rs-x')[0].click();
-    check('note: closing it removes it and keeps one key in this browser', r.pop() === null && r.store['ants.guestnote'] === '1');
-    r.tell('shown'); r.tell('live', {});
-    check('note: it does not come back in this page', r.pop() === null);
-    r = rig({});
-    r.store['ants.guestnote'] = '1';
-    r.tell('shown');
-    check('note: a browser that closed it once never sees it again (a new page, the same browser)', r.pop() === null);
-    r = rig({ noStorage: true });
-    check('note: a browser that keeps nothing shows the note, and the page works', !!r.pop() && !!r.chip());
-    byClass(r.pop(), 'rs-x')[0].click();
-    check('note: ...and closes it for the page', r.pop() === null);
 
+    // the card of a first visit
+    const box = r.card();
+    check('welcome: a guest with no name and no answer sees the card on the first visit', !!box && !!r.shade());
+    check('welcome: it is a dialog named by its title and described by its line', box.getAttribute('role') === 'dialog' && box.getAttribute('aria-modal') === 'true'
+        && (r.doc.body.findAll((e) => e.id === box.getAttribute('aria-labelledby'))[0] || {}).textContent === 'Welcome to Ants & Uncles'
+        && (r.doc.body.findAll((e) => e.id === box.getAttribute('aria-describedby'))[0] || {}).textContent === 'Chatting needs a Discord sign-in. You can play and watch without one.');
+    same('welcome: the words of the buttons and their names for a screen reader', [r.buttons().sign.textContent, r.buttons().set.textContent, r.buttons().set.getAttribute('aria-label'), r.buttons().not.textContent],
+        ['Sign in with Discord to chat', 'Set a display nameif you don\u2019t want to chat', 'Set a display name, if you don\u2019t want to chat', 'Not now']);
+    check('welcome: the focus is in the card itself, so that a reader begins with the title and the line', r.doc.activeElement === box);
+    check('welcome: the page behind it is inert (a key, a tap and a reader), the card is not', r.bar.hasAttribute('inert') && !r.shade().hasAttribute('inert') && !box.hasAttribute('inert'));
+    check('welcome: the chip is there behind it with its dashed badge', !r.chip().hidden);
+    check('welcome: nothing is written to the browser by showing it', r.store[KEY] === undefined);
+    {
+        const tags = r.doc.body.findAll(() => true).map((e) => e.tagName);
+        check('welcome: it makes only the elements of a card, and no markup', tags.every((t) => ['body', 'div', 'button', 'h2', 'p', 'i', 'span', 'small'].indexOf(t) !== -1) && r.env.innerHTMLWrites.length === 0, JSON.stringify(Array.from(new Set(tags))));
+    }
+
+    // Tab stays in the card
+    const wrapped = (key, shift, from) => { from.focus(); const prevented = r.key(key, { shiftKey: shift }); return { prevented, at: r.doc.activeElement }; };
+    const b = r.buttons();
+    same('welcome: Tab on the last button goes to the first, Shift+Tab on the first goes to the last, on the card itself to the last', [wrapped('Tab', false, b.not).at === b.sign, wrapped('Tab', true, b.sign).at === b.not, wrapped('Tab', true, box).at === b.not], [true, true, true]);
+    same('welcome: Tab and Shift+Tab inside the card are left to the browser (no cancel, the focus stays)', [wrapped('Tab', false, b.sign).prevented, wrapped('Tab', false, b.set).prevented, wrapped('Tab', true, b.not).prevented, wrapped('Tab', false, box).prevented], [false, false, false, false]);
+    check('welcome: a press beside the card gives the focus back to it', (r.doc.activeElement = null, r.shade().fire('click', { target: r.shade() }), r.doc.activeElement === box));
+    check('welcome: a press inside it does not', (b.set.focus(), r.shade().fire('click', { target: b.set }), r.doc.activeElement === b.set));
+
+    // Not now
+    b.not.click();
+    check('welcome: "Not now" closes it, wakes the page, puts the focus on the chip, keeps the chip and writes the one key', r.card() === null && r.shade() === null && !r.bar.hasAttribute('inert') && r.doc.activeElement === r.chip() && !r.chip().hidden && r.store[KEY] === '1' && r.sheet() === null);
+    r.tell('shown'); r.tell('live', { login: true }); r.tell('you', {});
+    check('welcome: it does not come back in this page', r.card() === null);
+    r = rig({ store: { [KEY]: '1' } });
+    check('welcome: a browser that answered once never sees it again (a new page, the same browser)', r.card() === null && !!r.chip());
+
+    // Escape
+    r = rig({});
+    check('welcome: Escape is "Not now": the same close, the focus on the chip, the key (and the key goes no further)', (() => { let stopped = false; r.shade().fire('keydown', { key: 'Escape', stopPropagation() { stopped = true; } }); return stopped && r.card() === null && r.doc.activeElement === r.chip() && r.store[KEY] === '1' && !r.bar.hasAttribute('inert'); })());
+    r = rig({});
+    r.key('Enter');
+    check('welcome: another key does nothing', !!r.card() && r.store[KEY] === undefined);
+
+    // Set a display name
+    r = rig({});
+    r.buttons().set.click();
+    check('welcome: "Set a display name" closes it, opens the guest\'s sheet with the field in focus, and answers the welcome', r.card() === null && !!r.sheet() && r.doc.activeElement === r.nick() && r.store[KEY] === '1' && !r.bar.hasAttribute('inert'));
+    byClass(r.sheet(), 'rs-x')[0].click();
+    check('welcome: closing the sheet without a name does not bring the card back (the sheet is one tap away on the chip)', r.card() === null && r.sheet() === null && !!r.chip() && !r.chip().hidden);
+    r.tell('shown');
+    check('welcome: ...not even when the page is painted again', r.card() === null);
+    r = rig({ calm: false });
+    r.chip().click();
+    byClass(r.sheet(), 'rs-x')[0].click();
+    r.state.calm = true; r.tell('shown');
+    check('welcome: a sheet that was opened from the chip answers the welcome too', r.card() === null && r.store[KEY] === '1');
+
+    // Sign in with Discord to chat
+    r = rig({});
+    r.buttons().sign.click();
+    check('welcome: "Sign in with Discord to chat" presses the page\'s own Log in button, closes the card and puts the focus on the chip', r.clicks() === 1 && r.card() === null && r.doc.activeElement === r.chip() && !r.bar.hasAttribute('inert'));
+    check('welcome: ...and answers nothing for good (a person who comes back as a guest from Discord is asked once more)', r.store[KEY] === undefined);
+    r.tell('shown');
+    check('welcome: ...but the same page asks no second time', r.card() === null && r.clicks() === 1);
+    r.state.you = ME({}); r.tell('you', {});
+    check('welcome: a person who logs in has answered it for good', r.store[KEY] === '1');
+    r.state.you = null; r.tell('you', {});
+    check('welcome: ...and as a guest again has no card', r.card() === null);
+
+    // who sees it, and when
+    r = rig({});
+    r.state.you = ME({}); r.tell('you', {});
+    check('welcome: logging in while the card shows takes it away and wakes the page', r.card() === null && r.chip().hidden === true && !r.bar.hasAttribute('inert') && r.store[KEY] === '1');
+    r = rig({ you: ME({}) });
+    check('welcome: a person who is logged in sees none, has no chip, and has answered it for good', r.card() === null && r.chip() === null && r.store[KEY] === '1');
+    r.state.you = null; r.tell('you', {});
+    check('welcome: ...and logging out brings the chip back without the card', r.chip().hidden === false && r.card() === null);
+    r = rig({ noLogin: true });
+    check('welcome: a site with no login has no card (there is nothing to sign in to)', r.card() === null && r.chip() === null && r.store[KEY] === undefined);
+    r = rig({ typed: 'Wren' });
+    check('welcome: a guest who has a name sees none, and the chip has the name and its own label', r.card() === null && one(r.chip(), 'gc-cn').textContent === 'Wren' && one(r.chip(), 'gc-av').textContent === 'W' && /Change it/.test(r.chip().getAttribute('aria-label')));
     r = rig({ live: false });
-    check('chip: no chip while the dock is not live (the page does not know yet who this is)', r.chip() === null && r.pop() === null);
+    check('chip: no chip and no card while the dock is not live (the page does not know yet who this is)', r.chip() === null && r.card() === null);
     r.live();
-    check('chip: it comes with the dock', !!r.chip() && !r.chip().hidden);
+    check('chip: the chip comes with the dock, and so does the card', !!r.chip() && !r.chip().hidden && !!r.card());
     r = rig({ live: false });
     r.login.hidden = true;
     r.live();
-    check('chip: the welcome says that the hub has a login while the Log in button is not shown yet (the dock shows it a moment later): the chip is there all the same', !!r.chip() && !r.chip().hidden);
-    r = rig({ you: ME({}) });
-    check('chip: a person who is logged in has none', r.chip() === null && r.pop() === null);
-    r = rig({ noLogin: true });
-    check('chip: a site with no login has none (nothing to log in to: a guest name is only for a site that has accounts)', r.chip() === null);
-    r = rig({});
-    r.state.you = ME({}); r.tell('you', {});
-    check('chip: logging in hides it and its note', r.chip().hidden === true && r.pop() === null);
-    r.state.you = null; r.tell('you', {});
-    check('chip: logging out brings it back', r.chip().hidden === false);
-    r = rig({ typed: 'Wren' });
-    check('chip: a guest who set a name shows it with its own label, and no note', one(r.chip(), 'gc-cn').textContent === 'Wren' && one(r.chip(), 'gc-av').textContent === 'W' && /Change it/.test(r.chip().getAttribute('aria-label')) && r.pop() === null);
+    check('chip: the welcome says that the hub has a login while the Log in button is not shown yet (the dock shows it a moment later): the chip and the card are there all the same', !!r.chip() && !r.chip().hidden && !!r.card());
+    r = rig({ calm: false });
+    check('welcome: not while Home is not calm (the Room shows, a dialog or a hand-off holds the page), and the chip is there', r.card() === null && !!r.chip() && !r.chip().hidden && r.store[KEY] === undefined);
+    r.state.calm = true; r.tell('shown');
+    check('welcome: it comes when Home is calm again and the page is painted again', !!r.card());
+    r.state.calm = false; r.tell('shown');
+    check('welcome: ...and goes, without an answer, when Home is not calm again', r.card() === null && r.store[KEY] === undefined && !r.bar.hasAttribute('inert'));
+    r = rig({ noStorage: true });
+    check('welcome: a browser that keeps nothing shows the card, and the page works', !!r.card() && !!r.chip());
+    r.buttons().not.click();
+    r.tell('shown');
+    check('welcome: ...and "Not now" closes it for the page', r.card() === null && !!r.chip());
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -193,9 +265,10 @@ const OK = { ok: true };
 {
     const r = rig({});
     r.chip().click();
-    check('guest sheet: the chip opens it, the note goes, there is one field (no tag) with a counter', !!r.sheet() && r.pop() === null && !!r.nick() && r.tag() === null && one(r.sheet(), 'nm-cnt').textContent === '0 / 16');
+    check('guest sheet: the chip opens it, the welcome card goes, there is one field (no tag) with a counter', !!r.sheet() && r.card() === null && !!r.nick() && r.tag() === null && one(r.sheet(), 'nm-cnt').textContent === '0 / 16');
     check('guest sheet: Save is off and nothing was asked yet', r.save().disabled === true && r.sent.length === 0);
-    check('guest sheet: it says what the others see now and has the rules for guests and the login button', /Guest 550000/.test(r.preview()) && byClass(r.sheet(), 'nm-rules')[0].children.length === 3 && !!button(r.sheet(), 'Log in with Discord'));
+    same('guest sheet: the empty field says "Pick a name" and, under it, which letters a name may hold', [r.nick().placeholder, helps(r.sheet())], ['Pick a name', [Names.TEXT.nickHelp]]);
+    check('guest sheet: it says what the others see now (the number is the name until one is set) and has the rules for guests and the login button', /Guest 550000/.test(r.preview()) && /until you set one/.test(one(r.sheet(), 'nm-ps').textContent) && byClass(r.sheet(), 'nm-rules')[0].children.length === 3 && !!button(r.sheet(), 'Log in with Discord'));
     r.type(r.nick(), 'Wr');
     r.advance(100);
     r.type(r.nick(), 'Wren');
@@ -210,6 +283,7 @@ const OK = { ok: true };
     check('guest sheet: an answer to an earlier question is not heard', r.msgs().length === 0 && r.save().disabled === true);
     r.tell('name', { t: 'name', r: q, ok: false, nick: { ok: false, why: 'taken' }, tag: null, shown: '', saved: false });
     same('guest sheet: a refusal is said under the field with the name that was asked', r.msgs(), ['\u00c4ngel\u00e4 is taken. Pick another one.']);
+    check('guest sheet: while the hub has something to say the line of letters is gone', helps(r.sheet()).length === 0);
     check('guest sheet: the field is red and Save stays off', cls(one(r.sheet(), 'nm-in')).indexOf('err') !== -1 && r.save().disabled === true);
     r.type(r.nick(), 'Wren');
     r.advance(400);
@@ -221,7 +295,7 @@ const OK = { ok: true };
     r.typed.refuse = false;
     r.save().click();
     check('guest sheet: Save keeps the name in the person, closes the sheet, changes the chip and tells the page', r.sheet() === null && r.typed.name === 'Wren' && one(r.chip(), 'gc-cn').textContent === 'Wren' && r.changes.length === 1);
-    check('guest sheet: the note is never shown again (one key), and Save sent nothing more to the hub', r.store['ants.guestnote'] === '1' && r.pop() === null && r.sent.every((m) => m.guest === true));
+    check('guest sheet: the welcome is never shown again (one key), and Save sent nothing more to the hub', r.store['ants.guestwelcome'] === '1' && r.card() === null && r.sent.every((m) => m.guest === true));
     r.chip().click();
     check('guest sheet: it opens again with the name that was kept', r.nick().value === 'Wren');
     r.type(r.nick(), '   ');
@@ -254,6 +328,7 @@ const OK = { ok: true };
     let r = rig({ you: ME({}) });
     r.tell('names');
     check('sheet: the dock\'s tap opens it with a nickname field and a tag field, both empty, and the rules of a nickname', !!r.sheet() && !!r.nick() && !!r.tag() && r.nick().value === '' && r.tag().value === '' && byClass(r.sheet(), 'nm-rules')[0].children.length === 4);
+    same('sheet: the empty fields say "Pick a nickname" and "ABC", and under them which letters a nickname may hold and what a tag is', [r.nick().placeholder, r.tag().placeholder, helps(r.sheet())], ['Pick a nickname', 'ABC', [Names.TEXT.nickHelp, Names.TEXT.tagHelp]]);
     check('sheet: a login has no guest\'s box and no login button', one(r.sheet(), 'nm-gbox') === null && button(r.sheet(), 'Log in with Discord') === null);
     check('sheet: it says first what the person shows as now (the login\'s name)', r.preview() === 'maple.leaf' && /chat/.test(one(r.sheet(), 'nm-ps').textContent));
     r.type(r.nick(), 'Zo\u00eb');

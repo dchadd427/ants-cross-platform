@@ -1136,6 +1136,10 @@ const answer = (r, code) => (code === 'ok' ? r.recv({ t: 'ok', c: 'x' }) : r.rec
     check('no answer in 8 s: the same, "Check again"', q.names()[0] === 'Check again');
     const k = withPeople('admin');
     k.popen(4); k.mutes([]); k.press('Kick Clover');
+    const kt = withPeople('admin');
+    kt.who(ROWS.map((x) => (x.i === 4 ? Object.assign({}, x, { name: '[ANT] Clover' }) : x)));
+    kt.popen(4); kt.mutes([]); kt.press('Kick [ANT] Clover');
+    check('the circle of the card holds the letter of the nickname of a person who has a tag, in capitals', one(one(kt.box(), 'gm-chip'), 'gc-av').textContent === 'C');
     check('Kick asks once more: the card names the person (no username: the list has none), and nothing is sent', k.mod.state() === 'confirm' && one(one(k.box(), 'gm-chip'), 'gm-cn').textContent === 'Clover' && k.said().length === 1);
     k.press('Kick');
     check('...the red button takes no press for 400 ms', k.said().length === 1);

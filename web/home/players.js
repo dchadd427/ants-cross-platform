@@ -33,10 +33,6 @@
     // ---- the pure parts ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     function whole(v, low, high) { return typeof v === 'number' && v === Math.floor(v) && v >= low && v <= high; }
     function possessive(name) { return name + (/s$/i.test(name) ? '’' : '’s'); }
-    function initial(name, Chat) {                                       // the first code point of a name, for the circle
-        var first = Chat.clip(name, 1);
-        return first.length > 1 && first.charAt(first.length - 1) === '…' ? first.slice(0, -1) : first;
-    }
     function fresh() { return { rows: Object.create(null), n: 0, g: 0, more: 0 }; }
     function roleOf(raw, mod) { return mod !== true ? 'none' : raw === 'admin' ? 'admin' : 'mod'; }       // (the hub's `mod` is true for both roles; `role` says which, where the hub says it: nothing else makes an admin)
     // One row of the hub's list, cleaned: { id, name, at, mod, role, pic (a checked picture name or ''), pub, priv (a private room or match), solo (a game against the computer; its map is an original's name only), map, mapName, guess, n, of, code }, or null when it is not a row. A room's details are kept for a public room only, a code for a room that waits only.
@@ -275,7 +271,7 @@
             return copy;
         }
         function card(row, o) {                                          // o: { you: the visitor's own row, label: say where the person is under the name, join: a Join button (a public room that waits) }
-            var li = el('li', 'pl-card'), who = el('span', 'pl-who'), name = el('span', 'pl-name'), av = el('span', 'pl-av', initial(row.name, Chat)), meta = metaOf(row, o.label, o.you);
+            var li = el('li', 'pl-card'), who = el('span', 'pl-who'), name = el('span', 'pl-name'), av = el('span', 'pl-av', Chat.initial(row.name)), meta = metaOf(row, o.label, o.you);
             li.setAttribute('data-s', row.at);
             if (!o.you) li.setAttribute('data-i', String(row.id));       // (the hub's number of the row: the moderation sheet names the person by it, `row:<n>`, never by the name; a person who is not here has a number from 900,000,000 and the hub's handle instead: `h:<handle>`)
             av.setAttribute('aria-hidden', 'true'); Chat.picture(el, av, row.pic, 32);

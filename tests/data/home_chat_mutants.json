@@ -2055,8 +2055,8 @@
   {
    "id": "circle_cuts_a_pair_of_surrogates",
    "file": "web/home/chat.js",
-   "old": "var first = clip(name, 1);",
-   "new": "var first = name.charAt(0);",
+   "old": "first = clip(shown ? shown[1] : name, 1);",
+   "new": "first = (shown ? shown[1] : name).charAt(0);",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -3983,6 +3983,20 @@
    "old": "nameBtn.addEventListener('click', guard(function () { setMenu(false); tapped('names'); }));",
    "new": "nameBtn.addEventListener('click', guard(function () { setMenu(false); }));",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_circle_takes_the_bracket_of_a_tag",
+   "file": "web/home/chat.js",
+   "old": "first = clip(shown ? shown[1] : name, 1);",
+   "new": "first = clip(name, 1);",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_circle_takes_a_bracket_for_a_tag_of_one_letter_too",
+   "file": "web/home/chat.js",
+   "old": "var SHOWN = /^\\[[^\\]\\s]{2,5}\\] (.+)$/;",
+   "new": "var SHOWN = /^\\[[^\\]\\s]{1,5}\\] (.+)$/;",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]
 }

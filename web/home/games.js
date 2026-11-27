@@ -609,7 +609,7 @@
         // player on it in this tab, or in a NEW one while the page holds a room, so that its seat stays (markWatch)
         function liveNode(e) {
             var li = el('li', 'gitem glive'), text = el('span', 'gtxt'), top = el('span', 'gtop'), line = el('span', 'gline'), dots = el('span', 'gdots'), who = el('span', 'gwho'), len = el('span', 'glen', lengthWords(e));
-            var names = e.who.map(function (w) { return w.name; }).join(', ') || TEXT.nobodyNamed, go = el('a', 'btn gwatch', TEXT.watch), marks = el('span', 'gmarks'), kind = e.mode187 ? TEXT.mode187 + ' match' : 'match';
+            var names = e.who.map(seatName).join(', ') || TEXT.nobodyNamed, go = el('a', 'btn gwatch', TEXT.watch), marks = el('span', 'gmarks'), kind = e.mode187 ? TEXT.mode187 + ' match' : 'match';
             dots.setAttribute('aria-hidden', 'true');
             e.who.forEach(function (w) { var d = el('i', 'gdot ' + (BOT_NAME.test(w.name) ? 'bot' : 'player')); d.className += w.seat < 0 ? ' cn' : ' c' + w.seat; dots.appendChild(d); });          // (a computer player is a ring, as in the open rooms; a color that the door does not know is a neutral dot)
             who.textContent = names; who.setAttribute('title', names);
@@ -649,7 +649,8 @@
         function seatClass(w) { return w.seat < 0 ? 'n' : String(w.seat); }                  // (the color of a seat; a color that the door does not know is the neutral one)
         function sideColors(x) { return 'c' + seatClass(x.who[0]) + (x.who.length > 1 ? ' two d' + seatClass(x.who[1]) : ''); }        // (a team's bar is its two colors)
         function paintName(node, name) { var L = win.AntsNameLetters; if (L && L.paint) L.paint(doc, node, name); else node.textContent = name; return node; }       // (a name with its tag and "(Guest)" dimmer: front/name_letters.js)
-        function sideNames(x) { return x.who.map(function (w) { return plainName(w.name) + (BOT_NAME.test(w.name) ? TEXT.bot : ''); }).join(' + '); }
+        function seatName(w) { return plainName(w.name) + (BOT_NAME.test(w.name) ? TEXT.bot : ''); }       // (a computer player is "Kit (bot)" everywhere a card names the players: the mark stays, its level never shows)
+        function sideNames(x) { return x.who.map(seatName).join(' + '); }
         function squareOf(w) { var q = el('i', 'gsq'); q.className += ' c' + seatClass(w) + (BOT_NAME.test(w.name) ? ' bot' : ''); return q; }                 // (a computer player is a ring, as its dot is)
         function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
         function numberText(x) { return x.n === null ? '\u2013' : groupDigits(x.n); }

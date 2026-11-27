@@ -154,7 +154,6 @@ function rig(o) {
     check('a list of more than 50 rows, or with no rows, is no frame', P.listOf({ rows: Array.from({ length: 51 }, () => conv(H1, 'x')) }, Chat) === null && P.listOf({}, Chat) === null && P.listOf(null, Chat) === null && P.listOf({ rows: 'x' }, Chat) === null && P.listOf({ rows: Array.from({ length: 50 }, () => conv(H1, 'x')) }, Chat).length === 50);
     same('a thread: the name, the flags and the messages that are right', P.threadOf(thread(H1, 'maple', [mine(1, 'a'), { id: 'x' }, theirs(2, 'b')], { f: 1, b: 1 }), Chat), { h: H1, name: 'maple', f: true, b: true, rows: [{ id: 1, at: NOW - 30, text: 'a', me: true }, { id: 2, at: NOW - 40, text: 'b', me: false }], loaded: true });
     check('a thread of more than 100 messages, with a wrong handle or with no name is no frame', P.threadOf(thread(H1, 'x', Array.from({ length: 101 }, (_, i) => theirs(i + 1, 't'))), Chat) === null && P.threadOf(thread('bad', 'x', []), Chat) === null && P.threadOf(thread(H1, '', []), Chat) === null && P.threadOf(thread(H1, 'x', Array.from({ length: 100 }, (_, i) => theirs(i + 1, 't'))), Chat).rows.length === 100);
-    same('the circle holds the first code point', [P.initial('maple', Chat), P.initial(String.fromCodePoint(0x1F41C) + 'x', Chat)], ['m', String.fromCodePoint(0x1F41C)]);
     same('the limits are the hub\'s own', [P.LIMIT.convs, P.LIMIT.rows, P.LIMIT.text, P.LIMIT.name], [50, 100, 500, 32]);
 }
 
@@ -271,6 +270,7 @@ function rig(o) {
     same('the day words: a divider where the day changes, and Today for today', texts(r.panel(), 'pm-day'), ['Friday', 'Today']);
     same('the time under each message', texts(r.panel(), 'pm-tm'), ['10:00', '10:10', '10:30']);
     same('only their messages have a Report', r.bubbles().map((b) => byClass(b, 'pm-rep').length), [1, 1, 0]);
+    check('the circle of the panel holds the letter of the nickname of a person who has a tag', one(rig().openThread(H1, '[ANT] Zoe', [theirs(1, 'hi')]).panel(), 'pm-av').textContent === 'Z');
     same('the head: the name, Private with its lock, the way back, the menu and the close', [r.names()[0], texts(r.panel(), 'pm-tag')[0], !!one(r.panel(), 'pm-back'), !!one(r.panel(), 'pm-more'), !!one(r.panel(), 'pm-x')], ['maple', 'Private', true, true, true]);
     same('the notice says who can read it, what the admins see and how long it is kept', texts(r.panel(), 'pm-note'), ['Only you and maple can read this. Admins see a message only if one of you reports it. Kept for 7 days.']);
     same('...and the line over the field says it is not the public chat', texts(r.panel(), 'pm-to'), ['Private message to maple. This is not the public chat.']);

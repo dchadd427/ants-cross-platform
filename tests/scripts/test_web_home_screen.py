@@ -46,7 +46,7 @@ TALK_FILES = ("talk.js", "talk.css")                  # the emoji and microphone
 ROOM_FILES = ("room.css", "roomchat.js", "roomchat.css")   # the room inside Home (its layout, and the room's tab of the chat box): the budgets and the tests of these are in tests/scripts/test_web_home_room.py
 MOD_FILES = ("mod.js", "mod.css")                     # the moderation sheet of the chat, loaded after the dock for a visitor with a role only: its own budgets and tests are tests/scripts/test_web_home_mod.py
 CMDS_FILES = ("cmds.js", "cmds.css")                   # the helper of the chat's commands, loaded after the dock once the hub sends it a command to list: its own budgets and tests are tests/scripts/test_web_home_cmds.py
-NAMES_FILES = ("names.js", "names.css")            # the sheet "Your name", the guest's chip and its note, loaded after the dock: its own budget and tests are tests/scripts/test_web_home_names.py
+NAMES_FILES = ("names.js", "names.css")            # the sheet "Your name", the guest's chip and the welcome card, loaded after the dock: its own budget and tests are tests/scripts/test_web_home_names.py
 sys.path.insert(0, os.path.join(REPO, "tools"))
 from size_limits import HOME_BUDGET, HOME_GZIP_BUDGET  # noqa: E402  (every byte budget: tools/size_limits.py)
 

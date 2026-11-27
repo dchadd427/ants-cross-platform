@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""The sheet "Your name", the guest's chip and its note (web/home/names.js and names.css, web/front/name_parts.css, the loader in web/home/home.js, the chat menu's button in web/home/chat.js,
-docs/HUB_NICKNAMES.md "The page"; run by ./run_tests.sh --fast and by the CI).
+"""The sheet "Your name", the guest's chip and the welcome card (web/home/names.js and names.css, web/front/name_parts.css, the loader in web/home/home.js, the chat menu's button in web/home/chat.js,
+docs/HOME_CHAT.md "Your name"; run by ./run_tests.sh --fast and by the CI).
 
 A person who is logged in chooses a nickname and a tag; a guest types a name that this browser keeps. What this file checks:
   - tests/scripts/web_home_names_check.js runs in node, in the fake browser of tests/scripts/web_page_harness.js with a fake dock: the words under a field for every word that the hub says, the guest's
-    chip and its note (shown once, never again after a name or a close), the guest's sheet and the login's sheet (what is asked, what Save sends, what is heard, what is locked), and that nothing is markup;
+    chip and the welcome card (shown to a guest with no name who has not answered, never again after a name, a login, "Set a display name", "Not now" or Escape; its focus, its Tab and its inert page), the guest's
+    sheet and the login's sheet (what is asked, what Save sends, what is heard, what is locked), and that nothing is markup; tests/scripts/web_home_screen_check.js runs the card in the page (Home only, nothing holding it);
   - the folder: its budgets (raw and gzipped) and that the scripts are plain ASCII (a letter is written as an escape);
   - the wiring: the front page loads the sheet after the dock, the chat menu says which button opens it, both pages that show names load the letters first, the files are in the image and its check;
   - tests/data/home_names_mutants.json changes one thing at a time in a COPY of the files: the checks must then fail (the last class of this file; tools/mutate.py runs the same list).
@@ -63,7 +64,7 @@ class TheScripts(unittest.TestCase):
     def test_the_sheet_makes_no_markup_and_asks_the_browser_for_nothing_but_its_own_storage(self):
         code = read("web", "home", "names.js")
         self.assertNotRegex(code, r"innerHTML|outerHTML|insertAdjacentHTML|\beval\b|new Function|document\.write|XMLHttpRequest|\bfetch\(|WebSocket|sessionStorage|document\.cookie")
-        self.assertEqual(re.findall(r"""setItem\((\w+),""", code), ["NOTE_KEY"], "the one key that the sheet writes: the note that never comes back (the guest's name is kept by front/player_name.js)")
+        self.assertEqual(re.findall(r"""setItem\((\w+),""", code), ["WELCOME_KEY"], "the one key that the sheet writes: the welcome that never comes back (the guest's name is kept by front/player_name.js)")
 
 
 class TheWiring(unittest.TestCase):

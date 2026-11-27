@@ -407,10 +407,10 @@
             wantSheet();
         }
         var askedNames = false;
-        function wantNames() {                              // the sheet "Your name", the guest's chip and its note (names.js, names.css), after the dock: a guest names themselves there, a person who is logged in chooses a nickname and a tag
+        function wantNames() {                              // the sheet "Your name", the guest's chip and the welcome card (names.js, names.css), after the dock: a guest names themselves there, a person who is logged in chooses a nickname and a tag
             if (askedNames || !dock || !dock.tap || !page.person) return;
             askedNames = true;
-            lazy('home/names', function () { if (win.AntsHomeNames) win.AntsHomeNames.mount({ doc: doc, win: win, dock: dock, bar: right, login: login, person: page.person, letters: win.AntsNameLetters, changed: function () { if (page.nameChanged) page.nameChanged(); } }); });
+            lazy('home/names', function () { if (win.AntsHomeNames) win.AntsHomeNames.mount({ doc: doc, win: win, dock: dock, bar: right, login: login, person: page.person, letters: win.AntsNameLetters, calm: function () { return screen === 'home' && !held && !going && !stalled; }, changed: function () { if (page.nameChanged) page.nameChanged(); } }); });
         }
         function wantTalk() {                               // the emoji and microphone buttons (talk.js, talk.css), after the dock: they stand in its form
             if (askedTalk || !dock) return;

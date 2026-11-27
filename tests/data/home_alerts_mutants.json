@@ -755,10 +755,17 @@
   },
   {
    "id": "the_circle_has_no_dots_of_a_cut",
-   "file": "web/home/alerts.js",
+   "file": "web/home/chat.js",
    "old": "? first.slice(0, -1) : first;",
    "new": "? first : first;",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_circle_of_a_conversation_takes_the_bracket_of_a_tag",
+   "file": "web/home/alerts.js",
+   "old": "el('span', 'al-ic', C.initial(c.name))",
+   "new": "el('span', 'al-ic', c.name.charAt(0))",
+   "test": "node tests/scripts/web_home_alerts_check.js web/lobby.html"
   }
  ]
 }
