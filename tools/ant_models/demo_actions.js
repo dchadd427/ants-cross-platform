@@ -12,7 +12,7 @@
 
   const ACTION_ANT_CLASSES = ["worker", "combat", "bomber", "swimmer", "fire"];
   const DROPPER_FD_IDS = ["FD_BOMB", "FD_FIRE", "FD_SWIM", "FD_COMB", "FD_THIEF"];
-  const ACTION_ITEM_IDS = ["wallup04", "redbomb", "bluebomb", "greenbomb", "blackbomb", "lunchbox", "dflower1", ...DROPPER_FD_IDS];
+  const ACTION_ITEM_IDS = ["wallup04", "redbomb", "bluebomb", "greenbomb", "blackbomb", "lunchbox", "dflower1", "pu_mason", "pu_swim", ...DROPPER_FD_IDS];
   const BOMB_SCALE = 0.58; // Matches `bomber_held_bomb` inside `PlantBomb` for a seamless 1:1 ground handoff!
   const FIRE_SCALE = 1.06;
   const FD_DROP_SCALE = 2.45;
@@ -349,7 +349,7 @@
     const bridgeStages = [1, 2, 3, 4].map((st) => buildMudBridgeStage(gl, st));
     const blastModels = buildBombExplosionModels(gl);
     const bridgeModel = { dispose() { bridgeStages.forEach((m) => m.dispose()); blastModels.dispose(); } };
-    const v = { bridgeModel, bridgeStages, blastModels, bridges: [], waterBridges: [], bombers: [], combats: [], fires: [], brawls: [], deposits: [], droppers: [] };
+    const v = { bridgeModel, bridgeStages, blastModels, bridges: [], waterBridges: [], swimmers: [], morphs: [], bombers: [], combats: [], fires: [], brawls: [], deposits: [], droppers: [] };
     const mid = mapData.id;
 
     // 1A. Land-Digging Swimmers (`asbbl` / `Shovel`): build 3-tile dark-mud bridges (`bridge1`..`bridge4`) from shore!
@@ -392,6 +392,45 @@
       });
     }
 
+    // 1c. Authentic 1998 Amphibious Swimmer Transitions: Walk on mud -> Dive into pond -> Swim underwater -> Surface back onto land!
+    const swimTransSpots = mid === "treasure"
+      ? [[27.45, 16.5, "blue", 0.4], [28.45, 44.5, "green", 3.1]]
+      : (mid === "small"
+        ? [[14.45, 18.5, "blue", 0.3]]
+        : (mid === "islands"
+          ? [[28.45, 25.5, "red", 0.5]]
+          : (mid === "medium"
+            ? [[22.45, 17.5, "blue", 0.4]]
+            : (mid === "gauntlet" ? [[47.45, 6.5, "blue", 0.4]] : []))));
+    for (const [sx, sz, team, ph] of swimTransSpots) {
+      const sh = findBridgeShore(mapData, waterTile, sx, sz);
+      if (!sh || !models.swimmer) continue;
+      v.swimmers.push({
+        landX: sh[0] - 0.95, shoreX: sh[0] + 0.12, waterX: sh[0] + 2.35,
+        z: sh[1], phase: ph, antScale,
+        swimmer: makeAntInst("swimmer", team, models.swimmer, ph, false),
+      });
+    }
+
+    // 1d. Live Worker -> Specialty Class Power-Up Morph Vignette (`worker` picks up `pu_mason` or `pu_swim` -> transforms into Fire/Swimmer Ant!)
+    const morphSpotMap = {
+      treasure: [[26.5, 29.0, "green", "fire", "pu_mason", 0.6], [33.5, 29.0, "blue", "swimmer", "pu_swim", 3.4]],
+      gauntlet: [[29.5, 32.0, "green", "fire", "pu_mason", 0.8]],
+      medium: [[30.0, 29.5, "red", "fire", "pu_mason", 0.5]],
+      islands: [[29.5, 29.5, "green", "swimmer", "pu_swim", 0.7]],
+      small: [[20.5, 29.5, "green", "fire", "pu_mason", 0.4]],
+    };
+    for (const [mx, mz, team, targetCls, puId, ph] of (morphSpotMap[mid] || [])) {
+      if (!models.worker || !models[targetCls] || !models[puId]) continue;
+      v.morphs.push({
+        x: mx, z: mz, phase: ph, antScale, targetCls,
+        worker: makeAntInst("worker", team, models.worker, ph),
+        morphed: makeAntInst(targetCls, team, models[targetCls], ph),
+        powerup: makePropInst(puId, models[puId]),
+        ring: makePropInst("morph_ring", blastModels.ring),
+      });
+    }
+
     // 2. Bomber seamlessly planting Red Bomb -> 1998 `bombex` explosion + `BlownBack` flight (alternating with Dud `BlownUp`!)
     const bomberSpotMap = {
       treasure: [38.6, 29.0], gauntlet: [39.5, 19.5], medium: [39.5, 19.5],
@@ -400,7 +439,7 @@
     if (models.bomber && models.worker && models.redbomb && bomberSpotMap[mid]) {
       const [bx, bz] = bomberSpotMap[mid];
       v.bombers.push({
-        x: bx, z: bz, phase: 1.0, antScale,
+        x: bx, z: bz, phase: 1.0, antScale, drownEast: mid === "treasure",
         bomber: makeAntInst("bomber", "red", models.bomber, 0.3),
         victim: makeAntInst("worker", "blue", models.worker, 0.7),
         bomb: makePropInst("redbomb", models.redbomb),
@@ -649,6 +688,123 @@
       visible.push(uwb.swimmer);
     }
 
+    // --- 1c. Authentic 1998 Amphibious Swimmer Land <-> Water Transitions (`Walk` -> `Dive` -> `Swim` -> `Surface` -> `Walk`) ---
+    for (const sw of v.swimmers) {
+      if (!inView(sw.shoreX, sw.z)) continue;
+      const dur = 8.4;
+      const lt = patrolsOn ? ((t + sw.phase) % dur + dur) % dur : 1.72;
+      const swimDepth = -0.34 * sw.antScale;
+      let ax = sw.landX, ay = 0.0, yaw = Math.PI * 0.5;
+      sw.swimmer.submerged = false;
+
+      if (lt < 1.15) {
+        // Walk from mud bank up to the shoreline edge
+        const u = smooth(lt / 1.15);
+        ax = lerp(sw.landX, sw.shoreX, u);
+        sw.swimmer.clipName = "Walk"; sw.swimmer.animTime = lt * 1.45;
+      } else if (lt < 2.19) {
+        // Authentic `Dive` (`asdi`, 1.04s): leaps head-first off the bank & splashes under the water surface!
+        const dtD = lt - 1.15;
+        const u = clamp01(dtD / 1.04);
+        ax = lerp(sw.shoreX, sw.shoreX + 0.85, smooth(u));
+        ay = u < 0.42 ? Math.sin((u / 0.42) * Math.PI) * 0.20 : lerp(0.0, swimDepth, smooth((u - 0.42) / 0.58));
+        sw.swimmer.submerged = u > 0.46;
+        sw.swimmer.clipName = "Dive"; sw.swimmer.animTime = Math.min(1.03, dtD);
+        if (u > 0.36 && ripples.length < 8) ripples.push([ax, sw.z, (dtD * 1.3) % 1.0, 0.95]);
+      } else if (lt < 4.55) {
+        // Swims gracefully out into deep sapphire water & turns back toward shore!
+        const u = (lt - 2.19) / 2.36;
+        const out = u < 0.50;
+        const p = smooth(out ? (u / 0.50) : ((u - 0.50) / 0.50));
+        ax = out ? lerp(sw.shoreX + 0.85, sw.waterX, p) : lerp(sw.waterX, sw.shoreX + 0.55, p);
+        ay = swimDepth + Math.sin(lt * 5.2) * 0.025;
+        yaw = out ? Math.PI * 0.5 : -Math.PI * 0.5;
+        sw.swimmer.submerged = true;
+        sw.swimmer.clipName = "Swim"; sw.swimmer.animTime = lt * 1.35;
+        if (ripples.length < 8) ripples.push([ax, sw.z, sw.phase + 0.25, 0.72]);
+      } else if (lt < 5.35) {
+        // Authentic `Surface` (`asgo`, 0.42s x2): pops back out of the pond & scrambles onto dry mud!
+        const dtS = lt - 4.55;
+        const u = clamp01(dtS / 0.80);
+        ax = lerp(sw.shoreX + 0.55, sw.shoreX - 0.10, smooth(u));
+        ay = lerp(swimDepth, 0.0, smooth(u)) + Math.sin(u * Math.PI) * 0.08;
+        yaw = -Math.PI * 0.5;
+        sw.swimmer.submerged = u < 0.45;
+        sw.swimmer.clipName = "Surface"; sw.swimmer.animTime = Math.min(0.41, u * 0.41);
+        if (u < 0.75 && ripples.length < 8) ripples.push([sw.shoreX + 0.35, sw.z, (dtS * 1.4) % 1.0, 0.88]);
+      } else if (lt < 6.85) {
+        // Walks proudly back onto land shaking off water
+        const u = smooth((lt - 5.35) / 1.50);
+        ax = lerp(sw.shoreX - 0.10, sw.landX, u);
+        yaw = -Math.PI * 0.5;
+        sw.swimmer.clipName = "Walk"; sw.swimmer.animTime = lt * 1.45;
+      } else {
+        // Turns back toward pond ready for next dive
+        const u = smooth((lt - 6.85) / 1.55);
+        ax = sw.landX;
+        yaw = lerp(-Math.PI * 0.5, Math.PI * 0.5, smooth(clamp01(u * 2.2)));
+        sw.swimmer.clipName = "Idle"; sw.swimmer.animTime = lt;
+      }
+      sw.swimmer.offsetMat = buildAntMat(sw.swimmer.model, ax, ay, sw.z, sw.antScale, yaw);
+      visible.push(sw.swimmer);
+    }
+
+    // --- 1d. Live Worker -> Specialty Class Power-Up Morph (`worker` collects `pu_mason` / `pu_swim` -> Fire / Swimmer Ant!) ---
+    for (const mp of v.morphs) {
+      if (!inView(mp.x, mp.z)) continue;
+      const dur = 7.6;
+      const lt = patrolsOn ? ((t + mp.phase) % dur + dur) % dur : 2.55;
+      const startX = mp.x - 1.85, endX = mp.x + 1.85;
+      const glowCol = mp.targetCls === "fire" ? [2.1, 0.95, 0.25] : [0.35, 1.45, 2.2];
+
+      if (lt < 2.20) {
+        // Regular Worker approaches the spinning specialty power-up emblem
+        const u = smooth(lt / 2.20);
+        const wx = lerp(startX, mp.x - 0.12, u);
+        mp.worker.clipName = "Walk"; mp.worker.animTime = lt * 1.5;
+        mp.worker.offsetMat = buildAntMat(mp.worker.model, wx, 0, mp.z, mp.antScale, Math.PI * 0.5);
+        const bob = 0.08 + Math.sin(t * 3.8 + mp.phase) * 0.05;
+        mp.powerup.offsetMat = buildPropMat(mp.powerup.model, mp.x, bob, mp.z, 0.72, 0.72, 0.72, t * 1.6);
+        visible.push(mp.worker, mp.powerup);
+        dynGlows.push([mp.x, mp.z, 2.1, 0.72 + 0.18 * Math.sin(t * 4.2), ...glowCol]);
+      } else if (lt < 3.05) {
+        // Power-Up pickup morph burst: sleek rising golden aura ring as Worker transforms cleanly into Fire / Swimmer Ant!
+        const u = clamp01((lt - 2.20) / 0.85);
+        const burst = Math.sin(u * Math.PI);
+        const active = u < 0.44 ? mp.worker : mp.morphed;
+        const popSc = mp.antScale * (1.0 + 0.16 * burst);
+        const spinYaw = Math.PI * 0.5 + (u < 0.44 ? u * 2.4 : (1.0 - u) * -2.4);
+        active.clipName = "Idle"; active.animTime = lt;
+        active.offsetMat = buildAntMat(active.model, mp.x, burst * 0.14, mp.z, popSc, spinYaw);
+        visible.push(active);
+        const rRad = lerp(0.50, 0.92, u);
+        const rH = Math.max(0.08, burst * 0.55);
+        mp.ring.offsetMat = mat4FromTRS([mp.x, lerp(0.12, 0.88, u), mp.z], quatY(lt * 5.0), [rRad, rH, rRad]);
+        visible.push(mp.ring);
+        dynGlows.push([mp.x, mp.z, 3.2, 2.0 * burst, ...glowCol]);
+      } else if (lt < 6.45) {
+        // Newly morphed Fire Ant / Swimmer Ant struts forward & shows off its new specialty class!
+        const u = clamp01((lt - 3.05) / 3.40);
+        const mx = u < 0.55 ? lerp(mp.x, endX, smooth(u / 0.55)) : endX;
+        mp.morphed.clipName = u < 0.55 ? "Walk" : (mp.targetCls === "fire" ? "StartFire" : "Shovel");
+        mp.morphed.animTime = u < 0.55 ? (lt * 1.45) : (lt - 4.92);
+        mp.morphed.offsetMat = buildAntMat(mp.morphed.model, mx, 0, mp.z, mp.antScale, Math.PI * 0.5);
+        visible.push(mp.morphed);
+      } else {
+        // Smooth reset: power-up respawns softly for the next Worker coming up the path
+        const u = smooth((lt - 6.45) / 1.15);
+        const puSc = 0.72 * u;
+        const wx = lerp(startX - 0.5, startX, u);
+        mp.worker.clipName = "Walk"; mp.worker.animTime = lt * 1.4;
+        mp.worker.offsetMat = buildAntMat(mp.worker.model, wx, 0, mp.z, mp.antScale, Math.PI * 0.5);
+        if (puSc > 0.05) {
+          mp.powerup.offsetMat = buildPropMat(mp.powerup.model, mp.x, 0.08, mp.z, puSc, puSc, puSc, t * 1.6);
+          visible.push(mp.powerup);
+        }
+        visible.push(mp.worker);
+      }
+    }
+
     // --- 2. Seamless Bomber (`PlantBomb` 1:1 ground handoff) -> 1998 `bombex` Explosion + `BlownBack` Flight (vs Dud `BlownUp`!) ---
     // Measured `bomber_held_bomb` in `bomber.glb`: touches down at exact local `+0.348 * antScale` (`t = 1.08..1.32 s`), hides at `1.36 s`.
     for (const m of v.bombers) {
@@ -688,28 +844,50 @@
       }
 
       // Victim Blue Worker walks directly ONTO the bomb `(m.x, m.z)`!
+      let showVictim = true;
+      m.victim.submerged = false;
       if (lt < 2.85) {
         vx = m.x + 2.8; m.victim.clipName = "Idle"; m.victim.animTime = lt;
       } else if (lt < 4.90) {
         const u = smooth((lt - 2.85) / 2.05);
         vx = lerp(m.x + 2.8, m.x + 0.12, u);
         m.victim.clipName = "Walk"; m.victim.animTime = lt * 1.5;
+      } else if (!isDud && m.drownEast && lt < 5.88) {
+        // ROUND 1 (Treasure East Pond): Live `bombex` explosion blasts Blue Worker straight into East Pond (`x=44.4`)!
+        blastT = lt - 4.90;
+        const u = clamp01((lt - 4.90) / 0.98);
+        vx = lerp(m.x + 0.12, m.x + 5.75, Math.pow(u, 0.78));
+        vy = Math.sin(u * Math.PI) * 0.72;
+        m.victim.clipName = "BlownBack"; m.victim.animTime = Math.min(0.45, u * 0.45);
+      } else if (!isDud && m.drownEast && lt < 8.25) {
+        // SPLASH & DROWN: Flails frantically and sinks beneath the deep blue pond with expanding water ripples (`Drown`, 2.37s)!
+        const drT = lt - 5.88;
+        const drU = clamp01(drT / 2.37);
+        vx = m.x + 5.75;
+        vy = lerp(-0.04, -0.68, Math.pow(drU, 1.45));
+        vyaw = -Math.PI * 0.5 + Math.sin(drT * 9.0) * 0.35;
+        m.victim.submerged = true;
+        m.victim.clipName = "Drown"; m.victim.animTime = Math.min(2.36, drT);
+        ripples.push([vx, m.z, (drT * 0.9) % 1.0, lerp(1.05, 0.45, drU)]);
+      } else if (!isDud && m.drownEast) {
+        // Brief pause after sinking before resetting cleanly for next round
+        showVictim = false;
       } else if (!isDud && lt < 5.95) {
-        // ROUND 1 — LIVE BOMB: 1998 `bombex` explosion (680 ms) + Victim FLYING 3.8 TILES THROUGH THE AIR (`BlownBack`)!
+        // ROUND 1 — LIVE BOMB: 1998 `bombex` explosion (680 ms) + single clean ballistic `BlownBack` arc!
         blastT = lt - 4.90;
         const u = clamp01((lt - 4.90) / 1.05);
-        vx = lerp(m.x + 0.12, m.x + 3.85, Math.pow(u, 0.70));
-        vy = u < 0.78 ? (Math.sin((u / 0.78) * Math.PI) * 0.58) : (Math.sin(((u - 0.78) / 0.22) * Math.PI) * 0.16);
-        m.victim.clipName = "BlownBack"; m.victim.animTime = Math.min(0.89, (lt - 4.90) * 0.90);
+        vx = lerp(m.x + 0.12, m.x + 3.85, Math.pow(clamp01(u / 0.68), 0.72));
+        vy = u < 0.46 ? (Math.sin((u / 0.46) * Math.PI) * 0.42) : 0.0;
+        m.victim.clipName = "BlownBack"; m.victim.animTime = Math.min(0.89, u * 0.89);
       } else if (isDud && lt < 6.08) {
-        // ROUND 2 — DUD BOMB: Smoky dud fizzle + Victim blasted STRAIGHT UP & TOWARD THE CAMERA (`BlownUp`)!
+        // ROUND 2 — DUD BOMB: Smoky dud fizzle + single vertical `BlownUp` pop toward camera!
         blastT = lt - 4.90;
         const u = clamp01((lt - 4.90) / 1.15);
         vx = m.x + 0.12;
-        vz = m.z + Math.sin(u * Math.PI) * 0.65; // Pops toward the front/camera (+Z) while rocketing straight up!
-        vy = u < 0.78 ? (Math.sin((u / 0.78) * Math.PI) * 0.45) : (Math.sin(((u - 0.78) / 0.22) * Math.PI) * 0.12);
+        vz = m.z + (u < 0.60 ? Math.sin((u / 0.60) * Math.PI) * 0.62 : 0.0);
+        vy = u < 0.56 ? (Math.sin((u / 0.56) * Math.PI) * 0.32) : 0.0;
         vyaw = lerp(-Math.PI * 0.5, 0.0, smooth(clamp01(u * 2.5)));
-        m.victim.clipName = "BlownUp"; m.victim.animTime = Math.min(1.14, lt - 4.90);
+        m.victim.clipName = "BlownUp"; m.victim.animTime = Math.min(1.14, u * 1.14);
       } else if (lt < 8.15) {
         vx = isDud ? (m.x + 0.12) : (m.x + 3.85);
         m.victim.clipName = "Stunned"; m.victim.animTime = lt - (isDud ? 6.08 : 5.95);
@@ -781,15 +959,18 @@
       }
 
       m.bomber.offsetMat = buildAntMat(m.bomber.model, bx, by, m.z, m.antScale, byaw);
-      m.victim.offsetMat = buildAntMat(m.victim.model, vx, vy, vz, m.antScale, vyaw);
-      visible.push(m.bomber, m.victim);
+      visible.push(m.bomber);
+      if (showVictim) {
+        m.victim.offsetMat = buildAntMat(m.victim.model, vx, vy, vz, m.antScale, vyaw);
+        visible.push(m.victim);
+      }
     }
 
-    // --- 3. Combat Ant Hitting Worker -> Huge BlownBack Launch + Stunned + Hit Roll ---
+    // --- 3. Combat Ant Power-Hit -> Single Clean BlownBack Flight + Stunned + Recovery ---
     for (const c of v.combats) {
       if (!inView(c.x, c.z)) continue;
-      const dur = 7.4;
-      const lt = patrolsOn ? ((t + c.phase) % dur + dur) % dur : 1.72;
+      const dur = 5.6;
+      const lt = patrolsOn ? ((t + c.phase) % dur + dur) % dur : 1.62;
       let ax = c.x - 0.7, vx = c.x + 0.55, vy = 0;
       const ayaw = Math.PI * 0.5, vyaw = -Math.PI * 0.5;
 
@@ -804,51 +985,27 @@
         c.attacker.clipName = "Attack"; c.attacker.animTime = lt - 1.0;
         if (lt < 1.26) { c.victim.clipName = "Idle"; c.victim.animTime = lt; }
         else {
-          const u = (lt - 1.26) / 0.90;
-          vx = lerp(c.x + 0.52, c.x + 3.15, Math.pow(u, 0.68));
-          vy = Math.sin(clamp01(u / 0.72) * Math.PI) * 0.95;
-          c.victim.clipName = "BlownBack"; c.victim.animTime = lt - 1.26;
+          const u = clamp01((lt - 1.26) / 0.90);
+          vx = lerp(c.x + 0.52, c.x + 3.15, Math.pow(clamp01(u / 0.65), 0.72));
+          vy = u < 0.46 ? (Math.sin((u / 0.46) * Math.PI) * 0.55) : 0.0;
+          c.victim.clipName = "BlownBack"; c.victim.animTime = u * 0.89;
         }
       } else if (lt < 2.16) {
-        // Victim finishes flying backward & bounces onto dirt!
-        const u = (lt - 1.26) / 0.90;
+        // Victim finishes single ballistic flight & kips up cleanly (no double bounce!)
+        const u = clamp01((lt - 1.26) / 0.90);
         ax = c.x - 0.58;
-        vx = lerp(c.x + 0.52, c.x + 3.15, Math.pow(clamp01(u), 0.68));
-        vy = u < 0.72 ? (Math.sin((u / 0.72) * Math.PI) * 0.95) : (Math.sin(((u - 0.72) / 0.28) * Math.PI) * 0.22);
+        vx = lerp(c.x + 0.52, c.x + 3.15, Math.pow(clamp01(u / 0.65), 0.72));
+        vy = u < 0.46 ? (Math.sin((u / 0.46) * Math.PI) * 0.55) : 0.0;
         c.attacker.clipName = "Idle"; c.attacker.animTime = lt;
-        c.victim.clipName = "BlownBack"; c.victim.animTime = Math.min(0.89, lt - 1.26);
-      } else if (lt < 3.65) {
+        c.victim.clipName = "BlownBack"; c.victim.animTime = Math.min(0.89, u * 0.89);
+      } else if (lt < 4.10) {
         ax = c.x - 0.58; vx = c.x + 3.15;
         c.attacker.clipName = "Idle"; c.attacker.animTime = lt;
         c.victim.clipName = "Stunned"; c.victim.animTime = lt - 2.16;
-      } else if (lt < 4.95) {
-        // Worker charges angrily back in for round 2!
-        const u = smooth((lt - 3.65) / 1.30);
-        ax = c.x - 0.58; vx = lerp(c.x + 3.15, c.x + 0.52, u);
-        c.attacker.clipName = "Idle"; c.attacker.animTime = lt;
-        c.victim.clipName = "Walk"; c.victim.animTime = lt * 1.7;
-      } else if (lt < 5.50) {
-        ax = c.x - 0.58; vx = c.x + 0.52;
-        c.attacker.clipName = "Attack"; c.attacker.animTime = lt - 4.95;
-        if (lt < 5.20) { c.victim.clipName = "Attack"; c.victim.animTime = lt - 4.95; }
-        else {
-          const u = (lt - 5.20) / 0.80;
-          vx = lerp(c.x + 0.52, c.x + 1.85, Math.pow(clamp01(u), 0.65));
-          vy = Math.sin(clamp01(u / 0.55) * Math.PI) * 0.36;
-          c.victim.clipName = "Hit"; c.victim.animTime = lt - 5.20;
-        }
-      } else if (lt < 6.00) {
-        // Classic 1998 `Hit` knockback-onto-back + snappy kip-up roll recovery!
-        const u = (lt - 5.20) / 0.80;
-        ax = c.x - 0.58;
-        vx = lerp(c.x + 0.52, c.x + 1.85, Math.pow(clamp01(u), 0.65));
-        vy = u < 0.55 ? (Math.sin((u / 0.55) * Math.PI) * 0.36) : 0;
-        c.attacker.clipName = "Idle"; c.attacker.animTime = lt;
-        c.victim.clipName = "Hit"; c.victim.animTime = Math.min(0.79, lt - 5.20);
       } else {
-        const u = smooth((lt - 6.00) / 1.40);
+        const u = smooth((lt - 4.10) / 1.50);
         ax = lerp(c.x - 0.58, c.x - 1.5, u);
-        vx = lerp(c.x + 1.85, c.x + 1.5, u);
+        vx = lerp(c.x + 3.15, c.x + 1.5, u);
         c.attacker.clipName = "Walk"; c.attacker.animTime = lt * 1.4;
         c.victim.clipName = "Walk"; c.victim.animTime = lt * 1.4;
       }

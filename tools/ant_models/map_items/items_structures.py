@@ -97,7 +97,11 @@ def _build_anthill_base(
     ph_b = -0.8 + 0.5 * (seed % 5)
 
     def _wobble(ang: float) -> float:
-        return 1.0 + 0.075 * math.sin(ang * 3.0 + ph_a) + 0.048 * math.cos(ang * 5.0 + ph_b)
+        # Authentic 1998 asymmetric anthill layout: full rounded mound around crater `(0,0)` + extended lower-right
+        # earthen thief-tunnel shoulder reaching tile `(+2,+1)` (`ang ~ +0.32 rad`), staying compact on NE corner!
+        lobe = 0.165 * math.exp(-((ang - 0.31) / 0.55) ** 2)
+        ne_trim = -0.085 * math.exp(-((ang + 0.78) / 0.60) ** 2)
+        return 1.0 + lobe + ne_trim + 0.055 * math.sin(ang * 3.0 + ph_a) + 0.036 * math.cos(ang * 5.0 + ph_b)
 
     def _surface_y(x: float, z: float) -> float:
         ang = math.atan2(z, x)
@@ -114,7 +118,9 @@ def _build_anthill_base(
         p = pos.copy()
         ang = np.arctan2(p[:, 2], p[:, 0])
         r = np.hypot(p[:, 0], p[:, 2])
-        wobble = 1.0 + 0.075 * np.sin(ang * 3.0 + ph_a) + 0.048 * np.cos(ang * 5.0 + ph_b)
+        lobe = 0.165 * np.exp(-((ang - 0.31) / 0.55) ** 2)
+        ne_trim = -0.085 * np.exp(-((ang + 0.78) / 0.60) ** 2)
+        wobble = 1.0 + lobe + ne_trim + 0.055 * np.sin(ang * 3.0 + ph_a) + 0.036 * np.cos(ang * 5.0 + ph_b)
         p[:, 0] *= wobble
         p[:, 2] *= wobble
         # Pronounced radial rain-erosion gullies + crumbly soil ridges down the mound flanks!
@@ -489,12 +495,12 @@ def build_blackhill() -> SceneBuilder:
     rod = curved_tube([rod_a, rod_mid, rod_b], [0.024, 0.034, 0.044], samples_per_seg=4, radial_segs=14, cap_rings=3, name="bh_black_rod", material="item_rubber_dark")
     sc.add("anthill", rod)
 
-    # 5. Hinged silver metal bottle-cap secret hatch on the far-right slope (`245:BLACKHILL`)!
-    gx, gz = +0.38, +0.06
-    gy = surf_y(gx, gz) + 0.046
-    cap_parts = _crimped_bottle_cap("bh_silver_cap", "item_aluminum", radius=0.112)
-    dome = superellipsoid(0.095, 0.072, 0.095, e1=0.80, e2=0.92, u_segs=24, v_segs=14, name="bh_cap_dome", material="item_aluminum").translate(0.0, 0.036, 0.0)
-    _add_hatch_bottle_cap(sc, prefix="bh", cap_parts=cap_parts + [dome], pos=(gx, gy, gz), rot_rad=(0.28, 0.0, -0.42), radius=0.112, soil_mat="item_soil_grey")
+    # 5. Hinged silver crimped metal bottle-cap secret hatch calibrated to exact 1998 tile `(+2,+1)` (`245:BLACKHILL`)!
+    gx, gz = +0.54, +0.18
+    gy = max(0.048, surf_y(gx, gz) + 0.026)
+    cap_parts = _crimped_bottle_cap("bh_silver_cap", "item_machined_steel", radius=0.118)
+    cap_rim = torus_arc(0.096, 0.0055, u_segs=32, v_segs=8, plane="xz", name="bh_cap_rim", material="item_tin_aluminum").translate(0.0, 0.024, 0.0)
+    _add_hatch_bottle_cap(sc, prefix="bh", cap_parts=cap_parts + [cap_rim], pos=(gx, gy, gz), rot_rad=(0.28, 0.0, -0.40), radius=0.118, soil_mat="item_soil_grey")
     return _finalize_item(sc, target_span=1.00)
 
 
@@ -540,16 +546,16 @@ def build_bluehill() -> SceneBuilder:
     hose = curved_tube(hose_pts, [0.032, 0.040, 0.044, 0.044, 0.038, 0.030], samples_per_seg=5, radial_segs=16, cap_rings=3, name="bl_rubber_skirt", material="item_rubber_blue")
     sc.add("anthill", hose)
 
-    # 3. Hinged metallic silver & royal-blue "H2O" soda bottle cap secret hatch on the far-right slope (`246:BLUEHILL`)!
-    cx, cz = +0.40, +0.02
-    cy = surf_y(cx, cz) + 0.048
+    # 3. Hinged metallic silver & royal-blue "H2O" soda bottle cap secret hatch calibrated to exact 1998 tile `(+2,+1)` (`246:BLUEHILL`)!
+    cx, cz = +0.54, +0.18
+    cy = max(0.048, surf_y(cx, cz) + 0.032)
     _add_hatch_bottle_cap(
         sc,
         prefix="bl",
-        cap_parts=_crimped_bottle_cap("bl_h2o_cap", "item_cap_h2o", radius=0.112, planar_top_uv=True),
+        cap_parts=_crimped_bottle_cap("bl_h2o_cap", "item_cap_h2o", radius=0.118, planar_top_uv=True),
         pos=(cx, cy, cz),
-        rot_rad=(0.48, -0.18, -0.38),
-        radius=0.112,
+        rot_rad=(0.40, -0.14, -0.36),
+        radius=0.118,
         soil_mat="item_soil_mound",
     )
 
@@ -612,11 +618,11 @@ def build_redhill() -> SceneBuilder:
         droop=-0.028,
     )
 
-    # 2. Four iconic crimped crimson "soda" bottle caps framing the base (right-side cap is the hinged thief hatch!)
+    # 2. Four iconic crimped crimson "soda" bottle caps framing the base (right-side cap calibrated to exact 1998 tile `(+2,+1)`!)
     cap_specs = (
         (-0.34, +0.28, 0.112, 0.40, +0.22, +0.52),
         (-0.14, +0.40, 0.116, 0.36, +0.16, +0.20),
-        (+0.40, +0.06, 0.114, 0.38, -0.22, -0.44),
+        (+0.54, +0.18, 0.118, 0.36, -0.16, -0.40),
         (-0.28, -0.32, 0.104, -0.32, +0.25, +0.36),
     )
     for idx, (cx, cz, rad, rx, ry, rz) in enumerate(cap_specs):

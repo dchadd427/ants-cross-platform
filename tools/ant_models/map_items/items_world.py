@@ -241,18 +241,18 @@ def build_greenhill() -> SceneBuilder:
             ),
         )
 
-    # 4. Hinged metallic silver & deep emerald-teal soda bottle cap secret hatch on the far-right slope (`248:GREENHILL`)!
-    cap_x, cap_z = +0.40, +0.14
-    cap_y = surf_y(cap_x, cap_z) + 0.044
-    cap_parts = _crimped_bottle_cap("gh_teal_cap", "item_bottle_teal", radius=0.114)
-    cap_ring = torus_arc(0.072, 0.012, u_segs=26, v_segs=8, plane="xz", name="gh_cap_inner_rim", material="item_aluminum").translate(0.0, 0.024, 0.0)
+    # 4. Hinged metallic silver & deep emerald-teal soda bottle cap secret hatch calibrated to exact 1998 tile `(+2,+1)` (`248:GREENHILL`)!
+    cap_x, cap_z = +0.54, +0.18
+    cap_y = max(0.048, surf_y(cap_x, cap_z) + 0.032)
+    cap_parts = _crimped_bottle_cap("gh_teal_cap", "item_bottle_teal", radius=0.118)
+    cap_ring = torus_arc(0.074, 0.012, u_segs=26, v_segs=8, plane="xz", name="gh_cap_inner_rim", material="item_aluminum").translate(0.0, 0.024, 0.0)
     _add_hatch_bottle_cap(
         sc,
         prefix="gh",
         cap_parts=cap_parts + [cap_ring],
         pos=(cap_x, cap_y, cap_z),
-        rot_rad=(0.44, -0.12, -0.46),
-        radius=0.114,
+        rot_rad=(0.38, -0.12, -0.42),
+        radius=0.118,
         soil_mat="item_soil_mound",
     )
     return _finalize_item(sc, target_span=1.00)

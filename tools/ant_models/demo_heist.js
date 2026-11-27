@@ -130,10 +130,10 @@
       const hillEntry = itemEntries.find((e) => e.spec.id === hid);
       if (!hillEntry) continue;
       const hole = findHillHoleWorld(hillEntry);
-      // Stand spot just outside the right-front slope of the bottle cap; escape waypoint 3.2 tiles SE along 8-way leg!
+      // Stand spot calibrated right onto exact 1998 thief-raid tile `(+2,+1)` outside the bottle-cap hatch!
       const stand = [
-        Math.min(mapData.cols - 1.5, hole[0] + 0.78),
-        Math.min(mapData.rows - 1.5, hole[2] + 0.48),
+        Math.min(mapData.cols - 1.5, hole[0] + 0.62),
+        Math.min(mapData.rows - 1.5, hole[2] + 0.36),
       ];
       const homeHill = mapData.hills && mapData.hills[thiefTeam];
       const dirX = homeHill && homeHill[0] < hillEntry.x ? -1 : 1;

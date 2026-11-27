@@ -207,14 +207,11 @@ def build_sprite_metrics(t4_entries, items_manifest, sprites_dir):
         bw = br - bl
         bh = bb - bt
         # Tall canopy plants (clovers/flowers) anchor their stem at the cell center (bounds 5..20)
-        # while their sprite extends upward into negative dy. Ground objects anchor via bounds/sprite center.
+        # while their sprite extends upward into negative dy. Ground objects anchor directly on their 1998 sprite visual center!
         is_canopy = low.startswith(("clover", "flower", "dflower"))
         if is_canopy:
             ox = 0.5
             oz = 0.5
-        elif bw >= 24.0 or bh >= 24.0:
-            ox = 0.5 * (bl + br) / TILE_PX
-            oz = 0.5 * (bt + bb) / TILE_PX
         else:
             ox = 0.5 * (min_x + max_x) / TILE_PX
             oz = 0.5 * (min_y + max_y) / TILE_PX
@@ -239,14 +236,32 @@ def build_sprite_metrics(t4_entries, items_manifest, sprites_dir):
             # directly onto the 1998 sprite [min_y/32 .. max_y/32] so blades never poke north over food/powerups!
             ox = 0.5 * (min_x + max_x) / TILE_PX
             oz = 0.5 * (min_y + max_y) / TILE_PX + 0.5 * 0.78 * sy * scale
-        elif low.startswith(("ivy", "leaf")) or low in HILL_TEAMS or bw >= 60.0:
+        elif low in ("leg1", "leg2"):
+            # Flat ground-lying doll legs: match exact 1998 Game View vertical length (`sz + 0.78*sy`) 1:1
+            # so `leg1` (`4.25` tiles) and `leg2` (`3.56` tiles) align identically to the original sprites!
+            scale = h_tiles / (sz + 0.78 * sy)
+            ox = 0.5 * (min_x + max_x) / TILE_PX
+            oz = 0.5 * (min_y + max_y) / TILE_PX + 0.5 * 0.78 * sy * scale
+        elif low in HILL_TEAMS:
+            # Exact 1998 4x4 anthill base calibration: crater entrance lands in tile `(0,0)` (`+0.5, +0.8`)
+            # and bottle-cap thief entrance hatch lands squarely on tile `(+2,+1)` (`+2.5, +1.5`)!
+            scale = 4.00 / sx
+            ox = 0.88
+            oz = 1.06
+        elif low.startswith(("ivy", "leaf")) or bw >= 60.0:
             scale_x = w_tiles / sx
-            scale_h = h_tiles / (0.7071 * (sy + sz))
-            scale = 0.72 * scale_x + 0.28 * scale_h
+            scale_h = h_tiles / (sz + 0.78 * sy)
+            # Clamp to exact 1998 projected width & height so corner props (`bearhed`, `bigrock4`, `barbie`)
+            # never bulge past their 1998 sprite footprint or block power-up walkway gaps!
+            scale = min(scale_x * 1.02, scale_h * 1.04)
+            if not is_canopy:
+                oz = 0.5 * (min_y + max_y) / TILE_PX + 0.39 * sy * scale
         else:
             scale_x = w_tiles / sx
-            scale_h = h_tiles / (0.7071 * (sy + sz))
-            scale = math.sqrt(scale_x * scale_h)
+            scale_h = h_tiles / (sz + 0.78 * sy)
+            scale = min(scale_x * 1.04, scale_h * 1.06) if (sx > 0.25 and sz > 0.25) else math.sqrt(scale_x * scale_h)
+            if not is_canopy:
+                oz = 0.5 * (min_y + max_y) / TILE_PX + 0.39 * sy * scale
 
         metrics[low] = {
             "id": item_id,

@@ -7,7 +7,7 @@
   } = window.__antRender;
   const { buildCarriedLunchboxMat, buildHeistsForMap, updateHeists } = window.__demoHeist;
   const { buildBorderGrassMesh, buildBatchedMapBombsMesh } = window.__demoBorder;
-  const { buildGroundScatterMesh, buildAtmoParticles } = window.__demoAtmo;
+  const { buildGroundScatterMesh, buildAtmoParticles, buildColonyAntsForMap, updateColonyAnts } = window.__demoAtmo;
   const { ACTION_ANT_CLASSES, ACTION_ITEM_IDS, buildActionVignettes, updateActionVignettes } = window.__demoActions;
 
   const $ = (id) => document.getElementById(id);
@@ -619,10 +619,12 @@
         if (activeMap.scene.atmoParticles) activeMap.scene.atmoParticles.dispose();
       }
       if (activeMap && activeMap.batchedBombs) activeMap.batchedBombs.dispose();
+      if (activeMap && activeMap.colonyAnts) activeMap.colonyAnts.dispose();
       if (activeMap && activeMap.actions && activeMap.actions.bridgeModel) {
         activeMap.actions.bridgeModel.dispose();
       }
       const batchedBombs = batchBombs ? buildBatchedMapBombsMesh(renderer.gl, bombSpecs) : null;
+      const colonyAnts = buildColonyAntsForMap(renderer.gl, itemEntries);
       const borderGrass = buildBorderGrassMesh(renderer.gl, mapData, mapsCatalog.water_tile_index);
       const groundScatter = buildGroundScatterMesh(renderer.gl, mapData, mapsCatalog.water_tile_index);
       const atmoParticles = buildAtmoParticles(renderer.gl, mapData);
@@ -672,6 +674,7 @@
         mapData,
         itemEntries,
         batchedBombs,
+        colonyAnts,
         antEntries,
         heists,
         actions,
@@ -746,7 +749,19 @@
       updateActionVignettes(activeMap.actions, t, state.patrols, tx, tz, visHalfSpan, visible, ripples, dynGlows);
     }
 
-    if (activeMap.batchedBombs) visible.push(activeMap.batchedBombs.inst);
+    if (activeMap.batchedBombs) {
+      visible.push(activeMap.batchedBombs.inst);
+      const spks = activeMap.batchedBombs.sparkEntries || [];
+      for (let i = 0; i < spks.length; i++) {
+        const s = spks[i];
+        if (Math.abs(s.x - tx) > visHalfSpan + 1.0 || Math.abs(s.z - tz) > visHalfSpan + 1.0) continue;
+        s.inst.idleTime = t + s.phase;
+        visible.push(s.inst);
+      }
+    }
+    if (activeMap.colonyAnts) {
+      updateColonyAnts(activeMap.colonyAnts, t, state.patrols, tx, tz, visHalfSpan, visible);
+    }
     for (let i = 0; i < itemEntries.length; i++) {
       const e = itemEntries[i];
       if (Math.abs(e.x - tx) > visHalfSpan + e.radius || Math.abs(e.z - tz) > visHalfSpan + e.radius) continue;
@@ -1022,10 +1037,23 @@
   canvas.addEventListener("touchmove", (e) => { if (!e.touches || e.touches.length >= 2) e.preventDefault(); }, { passive: false });
 
   canvas.addEventListener("wheel", (e) => {
+    e.preventDefault(); camGoal = null;
+    if (e.shiftKey || e.altKey) {
+      cam.yaw = wrapAngleDeg(cam.yaw - clamp(e.deltaX, -120, 120) * 0.28);
+      cam.pitch = clamp(cam.pitch + clamp(e.deltaY, -120, 120) * 0.20, 16, 86);
+      if (Math.abs(cam.yaw) > 2 && state.camPreset === "game") { state.camPreset = "rts3d"; syncCamButtons(); }
+    } else {
+      cam.zoom = clamp(cam.zoom * Math.exp(clamp(e.deltaY, -180, 180) * 0.0014), 0.24, 3.0);
+    }
+  }, { passive: false });
+  // Native macOS Safari 2-finger trackpad twist-to-orbit & pinch-to-zoom (`GestureEvent`)
+  let gRot0 = 0, gSc0 = 1, gYaw0 = 0, gZoom0 = 1;
+  canvas.addEventListener("gesturestart", (e) => { e.preventDefault(); camGoal = null; gRot0 = e.rotation || 0; gSc0 = e.scale || 1; gYaw0 = cam.yaw; gZoom0 = cam.zoom; }, { passive: false });
+  canvas.addEventListener("gesturechange", (e) => {
     e.preventDefault();
-    camGoal = null;
-    const factor = Math.exp(clamp(e.deltaY, -180, 180) * 0.0014);
-    cam.zoom = clamp(cam.zoom * factor, 0.24, 3.0);
+    const dRot = (e.rotation || 0) - gRot0;
+    if (Math.abs(dRot) > 0.5) { cam.yaw = wrapAngleDeg(gYaw0 + dRot); if (state.camPreset === "game") { state.camPreset = "rts3d"; syncCamButtons(); } }
+    if (e.scale && gSc0 > 0) cam.zoom = clamp(gZoom0 / (e.scale / gSc0), 0.24, 3.0);
   }, { passive: false });
 
   // --- UI Synchronization ---
@@ -1194,24 +1222,13 @@
       if (id) { e.preventDefault(); activateMap(id, false); }
     } else if (e.key === " " || k === "i") {
       if (e.key === " " && tag === "BUTTON") return;
-      e.preventDefault();
-      $("btn-play").click();
-    } else if (k === "o") {
-      e.preventDefault();
-      $("btn-orbit").click();
-    } else if (k === "q") {
-      e.preventDefault();
-      applyOrbitDelta(-15, 0);
-    } else if (k === "e") {
-      e.preventDefault();
-      applyOrbitDelta(15, 0);
-    } else if (k === "g") {
-      e.preventDefault();
-      $("btn-grid").click();
-    } else if (k === "r") {
-      e.preventDefault();
-      $("btn-reset").click();
-    } else if (k === "l") {
+      e.preventDefault(); $("btn-play").click();
+    } else if (k === "o") { e.preventDefault(); $("btn-orbit").click(); }
+    else if (k === "q") { e.preventDefault(); applyOrbitDelta(-15, 0); }
+    else if (k === "e") { e.preventDefault(); applyOrbitDelta(15, 0); }
+    else if (k === "g") { e.preventDefault(); $("btn-grid").click(); }
+    else if (k === "r") { e.preventDefault(); $("btn-reset").click(); }
+    else if (k === "l") {
       e.preventDefault();
       const idx = Math.max(0, LIGHT_SCENARIO_ORDER.indexOf(state.lighting));
       applyLightingScenario(LIGHT_SCENARIO_ORDER[(idx + 1) % LIGHT_SCENARIO_ORDER.length]);
@@ -1229,14 +1246,12 @@
   }
 
   // --- Main Render Loop ---
-  let lastTs = performance.now();
-  let fpsAccum = 0, fpsFrames = 0;
+  let lastTs = performance.now(), fpsAccum = 0, fpsFrames = 0;
   function frame(ts) {
     const dt = Math.min(0.05, Math.max(0.001, (ts - lastTs) * 0.001));
     lastTs = ts;
     updateCamera(dt);
     updateSimulation(dt);
-
     if (activeMap) {
       const [w, h] = resizeCanvas();
       const { mapData, antEntries, scene, ripples } = activeMap;
@@ -1245,35 +1260,19 @@
       const shadowRadius = clamp(BASE_FIT_RADIUS * cam.zoom * 1.65, 9.5, 36.0);
       const glows = [...(activeMap.dynGlows || []), ...buildAtmosphereGlows(mapData, antEntries, ls.glowMode, cam.target)].slice(0, 8);
       renderer.drawScene(scene, cam, {
-        width: w,
-        height: h,
-        lighting: validLighting(state.lighting) || "daylight",
-        dark: isDark,
-        team: "green",
-        idleAnim: state.playing,
-        fixedIdleTime: state.playing ? null : state.simTime,
-        clipName: "Idle",
-        showPlinth: false,
-        sunDir,
-        shadowMap: state.castShadows,
-        skipGrassShadows: cam.zoom > 1.15,
-        shadowRadius,
-        customTarget: cam.target,
+        width: w, height: h, lighting: validLighting(state.lighting) || "daylight",
+        dark: isDark, team: "green", idleAnim: state.playing,
+        fixedIdleTime: state.playing ? null : state.simTime, clipName: "Idle",
+        showPlinth: false, sunDir, shadowMap: state.castShadows,
+        skipGrassShadows: cam.zoom > 1.15, shadowRadius, customTarget: cam.target,
         squareGameView: state.camPreset === "game" && cam.projection === "ortho",
         tileGround: {
-          cols: mapData.cols,
-          rows: mapData.rows,
-          atlasCols: mapsCatalog.atlas_cols,
-          atlasRows: mapsCatalog.atlas_rows,
+          cols: mapData.cols, rows: mapData.rows,
+          atlasCols: mapsCatalog.atlas_cols, atlasRows: mapsCatalog.atlas_rows,
           waterTile: mapsCatalog.water_tile_index,
-          gridAlpha: state.showGrid ? ls.gridAlpha : 0.0,
-          gridColor: ls.gridCol,
-          crispPixels: !state.hiResTiles,
-          pbrFloor: state.hiResTiles,
-          shadowStrength: ls.shadowStr,
-          time: state.simTime,
-          glows,
-          ripples,
+          gridAlpha: state.showGrid ? ls.gridAlpha : 0.0, gridColor: ls.gridCol,
+          crispPixels: !state.hiResTiles, pbrFloor: state.hiResTiles,
+          shadowStrength: ls.shadowStr, time: state.simTime, glows, ripples,
         },
       });
     }

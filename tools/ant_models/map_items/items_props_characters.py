@@ -113,28 +113,32 @@ def build_barbie() -> SceneBuilder:
     return _finalize_item(sc, target_span=0.94)
 
 
-def _sculpt_doll_leg(prefix: str) -> List[MeshPart]:
-    """Smooth sculpted Barbie plastic doll leg with slanted hip swivel joint & arched tiptoe foot."""
+def _sculpt_doll_leg(prefix: str, flip_x: bool = False) -> List[MeshPart]:
+    """Smooth sculpted Barbie plastic doll leg matched 1:1 to 1998 `331:leg1` / `332:leg2` proportions."""
+    sx = -1.0 if flip_x else 1.0
+    # Exact 1998 `leg1` silhouette profile (width/height = 0.412): slanted hip peg -> full curved thigh ->
+    # sculpted knee & calf -> slender ankle -> arched tiptoe foot jutting cleanly to the side.
     leg_tube = curved_tube(
         [
-            (+0.018, +0.415, 0.0),
-            (+0.010, +0.260, 0.0),
-            (-0.004, +0.060, 0.0),
-            (+0.008, -0.100, 0.0),
-            (-0.014, -0.310, 0.0),
-            (-0.032, -0.382, 0.0),
-            (-0.098, -0.412, 0.0),
+            (sx * +0.072, +0.365, 0.0),   # upper slanted thigh top
+            (sx * +0.076, +0.240, 0.0),   # full upper thigh
+            (sx * +0.052, +0.070, 0.0),   # lower thigh tapering to knee
+            (sx * +0.036, -0.075, 0.0),   # knee / upper calf bulge
+            (sx * -0.008, -0.255, 0.0),   # lower shin
+            (sx * -0.048, -0.375, 0.0),   # slender ankle
+            (sx * -0.076, -0.440, 0.0),   # instep arch
+            (sx * -0.210, -0.468, 0.0),   # pointed tiptoe foot
         ],
-        [0.056, 0.062, 0.044, 0.048, 0.025, 0.023, 0.013],
+        [0.080, 0.088, 0.068, 0.064, 0.044, 0.031, 0.032, 0.015],
         samples_per_seg=4,
         radial_segs=18,
         cap_rings=3,
         name=f"{prefix}_limb",
         material="item_doll_skin",
     )
-    hip_ball = sphere(0.046, u_segs=18, v_segs=12, name=f"{prefix}_hip_ball", material="item_doll_skin").translate(+0.032, +0.435, 0.0)
-    hip_peg = cylinder(0.024, 0.022, 0.095, radial_segs=16, bevel=0.004, axis="y", name=f"{prefix}_hip_peg", material="item_doll_skin").rotate_xyz(rz=-0.38).translate(+0.055, +0.495, 0.0)
-    heel = ellipsoid(0.024, 0.022, 0.022, u_segs=12, v_segs=8, name=f"{prefix}_heel", material="item_doll_skin").translate(-0.018, -0.392, 0.0)
+    hip_ball = sphere(0.060, u_segs=18, v_segs=12, name=f"{prefix}_hip_ball", material="item_doll_skin").translate(sx * +0.095, +0.402, 0.0)
+    hip_peg = cylinder(0.032, 0.029, 0.115, radial_segs=16, bevel=0.005, axis="y", name=f"{prefix}_hip_peg", material="item_doll_skin").rotate_xyz(rz=sx * -0.38).translate(sx * +0.128, +0.468, 0.0)
+    heel = ellipsoid(0.034, 0.030, 0.032, u_segs=12, v_segs=8, name=f"{prefix}_heel", material="item_doll_skin").translate(sx * -0.042, -0.452, 0.0)
     return [leg_tube, hip_ball, hip_peg, heel]
 
 
@@ -142,7 +146,7 @@ def build_leg1() -> SceneBuilder:
     """Upright detached Barbie doll leg with hip swivel peg & arched tiptoe foot pointing left (`331:leg1`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_leg1")
-    sc.add("leg1", [p.rotate_xyz(rx=-84.0, ry=4.0, degrees=True) for p in _sculpt_doll_leg("leg1")])
+    sc.add("leg1", [p.rotate_xyz(rx=-84.0, ry=0.0, degrees=True) for p in _sculpt_doll_leg("leg1")])
     return _finalize_item(sc, target_span=0.94)
 
 
@@ -150,7 +154,7 @@ def build_leg2() -> SceneBuilder:
     """Diagonal detached Barbie doll leg pointing top-left (hip) to bottom-right (foot) (`332:leg2`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_leg2")
-    sc.add("leg2", [p.rotate_xyz(rx=-84.0, ry=28.0, degrees=True) for p in _sculpt_doll_leg("leg2")])
+    sc.add("leg2", [p.rotate_xyz(rx=-84.0, ry=24.0, degrees=True) for p in _sculpt_doll_leg("leg2", flip_x=True)])
     return _finalize_item(sc, target_span=0.94)
 
 

@@ -315,28 +315,42 @@ def _dense_unit_grid(rows: Sequence[Tuple[float, ...]], dur: float, *, max_dt: f
 
 
 def _ensure_stun_stars_node(scene: SceneBuilder) -> str:
-    """Attach 3 cartoon golden 5-pointed stun stars on `"stun_stars"` hidden at `_HIDE_SCALE` at rest."""
+    """Attach bold 1998-style cartoon dazed halo (5 bright stars + twinkle motes + spin ring) on `"stun_stars"`."""
     if "stun_stars" in scene.nodes:
         return "stun_stars"
     parts: List[MeshPart] = []
-    orbit_r = 0.21
-    for s_idx in range(3):
-        ang = 2.0 * math.pi * s_idx / 3.0
+    orbit_r = 0.285
+    # Crisp slender glowing dizzy motion-trail halo connecting the orbiting cartoon stars!
+    halo = torus_arc(orbit_r, 0.0085, u_segs=32, v_segs=6, plane="xz", name="stun_orbit_halo", material="eye_catchlight").scale(1.0, 0.65, 1.0)
+    parts.append(halo)
+    # 5 bold orbiting cartoon stars (3 bright 5-point gold stars + 2 sparkling 4-point white-gold starbursts matching `agsd`/`acsd`!)
+    for s_idx in range(5):
+        ang = 2.0 * math.pi * s_idx / 5.0
         cx = orbit_r * math.cos(ang)
         cz = orbit_r * math.sin(ang)
-        cy = (0.00, +0.032, -0.024)[s_idx]
-        star_scale = (1.10, 0.94, 1.02)[s_idx]
-        core = sphere(0.022 * star_scale, u_segs=10, v_segs=8, name=f"stun_star_{s_idx}_core", material="gear_gold_metal").scale(1.0, 1.0, 0.55).rotate_xyz(ry=-ang + 0.5 * math.pi).translate(cx, cy, cz)
+        cy = (0.016, -0.028, +0.036, -0.018, +0.022)[s_idx]
+        is_burst = (s_idx % 2 == 1)
+        star_scale = (1.52, 1.32, 1.44, 1.26, 1.48)[s_idx]
+        core_mat = "eye_catchlight" if is_burst else "gear_gold"
+        tip_mat = "eye_catchlight" if is_burst else "gear_gold"
+        core = sphere(0.025 * star_scale, u_segs=10, v_segs=8, name=f"stun_star_{s_idx}_core", material=core_mat).scale(1.0, 1.0, 0.60).rotate_xyz(ry=-ang + 0.5 * math.pi).translate(cx, cy, cz)
         parts.append(core)
-        for p_idx in range(5):
-            pa = 2.0 * math.pi * p_idx / 5.0
+        n_pts = 4 if is_burst else 5
+        for p_idx in range(n_pts):
+            pa = 2.0 * math.pi * p_idx / float(n_pts)
             spike = (
-                cone(0.017 * star_scale, 0.064 * star_scale, radial_segs=6, name=f"stun_star_{s_idx}_pt{p_idx}", material="gear_gold")
+                cone(0.018 * star_scale, 0.072 * star_scale, radial_segs=6, name=f"stun_star_{s_idx}_pt{p_idx}", material=tip_mat)
                 .rotate_xyz(rz=pa)
                 .rotate_xyz(ry=-ang + 0.5 * math.pi)
                 .translate(cx, cy, cz)
             )
             parts.append(spike)
+        # Tiny trailing cartoon sparkle mote midway between stars
+        m_ang = ang + math.pi / 5.0
+        mote = sphere(0.017, u_segs=8, v_segs=6, name=f"stun_mote_{s_idx}", material="eye_catchlight").translate(
+            (orbit_r * 0.90) * math.cos(m_ang), -cy * 0.65, (orbit_r * 0.90) * math.sin(m_ang)
+        )
+        parts.append(mote)
     scene.add("stun_stars", parts)
     scene.set_node_transform("stun_stars", translation=_HIDE_POS, scale=_HIDE_SCALE)
     return "stun_stars"

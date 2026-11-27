@@ -98,11 +98,11 @@
     }
 
     // 3 concentric staggered organic bands outside all 4 edges + corners:
-    // Band 0 hugs the clearing tightly (zero bare strip; South slightly lower & further out so row `rows-1` stays clear!)
+    // Band 0 sits cleanly outside [0..cols, 0..rows] so edge & corner power-ups (e.g. Islands cols 0 & 59) stay 100% uncovered!
     const bands = [
-      { offN: 0.55, offS: 1.15, offW: 0.58, offE: 0.58, step: 1.05, jA: 0.34, jO: 0.28, blades: 10, rad: 0.72, hMin: 0.80, hMax: 1.48, wS: 1.08, pad: 1.0 },
-      { offN: 2.75, offS: 3.30, offW: 2.85, offE: 2.85, step: 2.25, jA: 0.65, jO: 0.60, blades: 10, rad: 1.42, hMin: 0.92, hMax: 1.72, wS: 1.28, pad: 3.6 },
-      { offN: 6.75, offS: 7.30, offW: 6.95, offE: 6.95, step: 3.70, jA: 1.05, jO: 1.05, blades: 9,  rad: 2.10, hMin: 1.05, hMax: 1.92, wS: 1.48, pad: 8.0 },
+      { offN: 1.05, offS: 1.35, offW: 1.08, offE: 1.08, step: 1.05, jA: 0.32, jO: 0.18, blades: 10, rad: 0.60, hMin: 0.78, hMax: 1.42, wS: 1.06, pad: 1.2 },
+      { offN: 2.95, offS: 3.45, offW: 3.05, offE: 3.05, step: 2.25, jA: 0.65, jO: 0.55, blades: 10, rad: 1.42, hMin: 0.92, hMax: 1.72, wS: 1.28, pad: 3.8 },
+      { offN: 6.85, offS: 7.40, offW: 7.05, offE: 7.05, step: 3.70, jA: 1.05, jO: 1.05, blades: 9,  rad: 2.10, hMin: 1.05, hMax: 1.92, wS: 1.48, pad: 8.2 },
     ];
 
     for (let b = 0; b < bands.length; b++) {
@@ -170,11 +170,13 @@
       bluebomb:  [0.032, 0.118, 0.560],
       greenbomb: [0.042, 0.340, 0.052],
     };
-    const crimson = [0.214, 0.004, 0.006];
+    const crimson = [0.235, 0.004, 0.006];
+    const steelDark = [0.068, 0.072, 0.082];
     const purple = [0.538, 0.012, 0.342];
     const purpleTop = [0.640, 0.022, 0.420];
     const brass = [0.711, 0.367, 0.027];
-    const fuseCol = [0.869, 0.787, 0.604];
+    const fuseCol = [0.92, 0.85, 0.68];
+    const charCol = [0.055, 0.042, 0.036];
 
     function pushLathe(dst, cx, cz, sc, rings, segs) {
       const base = dst.pos.length / 3;
@@ -199,10 +201,9 @@
           const ns = (s + 1) % segs;
           const a = base + r * segs + s, b = base + r * segs + ns;
           const c = base + (r + 1) * segs + s, d = base + (r + 1) * segs + ns;
-          dst.idx.push(a, d, b, a, c, d);
+          dst.idx.push(a, b, d, a, d, c);
         }
       }
-      // Top cap center closing the purple blast lid cleanly
       const topC = dst.pos.length / 3;
       const topR = rings[nR - 1];
       dst.pos.push(cx, topR[1] * sc, cz);
@@ -211,7 +212,7 @@
       dst.col.push(topR[2][0], topR[2][1], topR[2][2]);
       const lastRing = base + (nR - 1) * segs;
       for (let s = 0; s < segs; s++) {
-        dst.idx.push(lastRing + s, topC, lastRing + ((s + 1) % segs));
+        dst.idx.push(lastRing + s, lastRing + ((s + 1) % segs), topC);
       }
     }
 
@@ -220,7 +221,6 @@
       const dx = p1[0] - p0[0], dy = p1[1] - p0[1], dz = p1[2] - p0[2];
       const len = Math.hypot(dx, dy, dz) || 1;
       const tx = dx / len, ty = dy / len, tz = dz / len;
-      // Orthonormal frame (u, v) perpendicular to segment tangent
       let ux = -tz, uy = 0, uz = tx;
       const uL = Math.hypot(ux, uy, uz);
       if (uL < 0.01) { ux = 1; uy = 0; uz = 0; } else { ux /= uL; uz /= uL; }
@@ -255,6 +255,7 @@
       for (const k of f) dst.idx.push(base + k);
     }
 
+    const sparkSpecs = [];
     for (let i = 0; i < bombSpecs.length; i++) {
       const sp = bombSpecs[i];
       const s = sp.s || 0.715;
@@ -263,24 +264,43 @@
       const rings = [
         [0.132, 0.000, crimson],   // riveted crimson foot base
         [0.172, 0.068, crimson],   // crimson foot belly
-        [0.165, 0.095, bodyRgb],   // lower team canister
-        [0.211, 0.345, bodyRgb],   // flared team enamel body
-        [0.234, 0.435, crimson],   // deep crimson warning shoulder band
-        [0.222, 0.460, purple],    // underside of overhanging purple blast cap
-        [0.267, 0.510, purple],    // signature wide magenta-purple blast lid rim!
-        [0.236, 0.576, purpleTop], // domed magenta-purple blast lid crown
-        [0.052, 0.594, brass],     // brass hex fuse bushing
+        [0.165, 0.092, steelDark], // dark steel lower seam ring
+        [0.168, 0.105, bodyRgb],   // lower team canister
+        [0.214, 0.345, bodyRgb],   // flared team enamel body
+        [0.222, 0.358, steelDark], // steel mid-clamp ring
+        [0.236, 0.435, crimson],   // deep crimson warning shoulder band
+        [0.232, 0.456, steelDark], // dark cap seal ring
+        [0.268, 0.512, purple],    // signature wide magenta-purple blast lid rim!
+        [0.242, 0.576, purpleTop], // domed magenta-purple blast lid crown
+        [0.155, 0.588, purpleTop], // recessed blast dish
+        [0.068, 0.592, steelDark], // gunmetal fuse grommet
+        [0.048, 0.614, brass],     // brass hex fuse bushing
       ];
-      pushLathe(body, sp.x, sp.z, s, rings, 10);
-      // Curved cream-white cotton fuse sweeping up-left then arcing up-right to `(0.104, 0.855, 0.011)`!
-      const p0 = [sp.x, 0.605 * s, sp.z];
-      const p1 = [sp.x - 0.036 * s, 0.715 * s, sp.z - 0.006 * s];
-      const p2 = [sp.x + 0.032 * s, 0.835 * s, sp.z + 0.012 * s];
-      const p3 = [sp.x + 0.102 * s, 0.848 * s, sp.z + 0.010 * s];
-      pushTubeSeg(body, p0, p1, 0.022 * s, 0.020 * s, 5, fuseCol);
-      pushTubeSeg(body, p1, p2, 0.020 * s, 0.018 * s, 5, fuseCol);
-      pushTubeSeg(body, p2, p3, 0.018 * s, 0.015 * s, 5, fuseCol);
-      pushSparkStar(spark, sp.x + 0.108 * s, 0.855 * s, sp.z + 0.010 * s, 0.072 * s, [1.0, 0.82, 0.24]);
+      pushLathe(body, sp.x, sp.z, s, rings, 12);
+      // 4 dark armored canister ribs matching `blackbomb.glb`!
+      for (let k = 0; k < 4; k++) {
+        const a = (k * 0.5 + 0.25) * Math.PI;
+        const ca = Math.cos(a), sa = Math.sin(a);
+        pushTubeSeg(
+          body,
+          [sp.x + ca * 0.166 * s, 0.10 * s, sp.z + sa * 0.166 * s],
+          [sp.x + ca * 0.214 * s, 0.35 * s, sp.z + sa * 0.214 * s],
+          0.012 * s, 0.012 * s, 4, steelDark,
+        );
+      }
+      // Curved braided cream cotton fuse sweeping up-left then arcing up-right to `(0.106, 0.855, 0.011)`!
+      const p0 = [sp.x, 0.612 * s, sp.z];
+      const p1 = [sp.x - 0.036 * s, 0.715 * s, sp.z - 0.008 * s];
+      const p2 = [sp.x + 0.032 * s, 0.836 * s, sp.z + 0.013 * s];
+      const p3 = [sp.x + 0.095 * s, 0.852 * s, sp.z + 0.011 * s];
+      const p4 = [sp.x + 0.106 * s, 0.855 * s, sp.z + 0.011 * s];
+      pushTubeSeg(body, p0, p1, 0.022 * s, 0.021 * s, 5, fuseCol);
+      pushTubeSeg(body, p1, p2, 0.021 * s, 0.019 * s, 5, fuseCol);
+      pushTubeSeg(body, p2, p3, 0.019 * s, 0.017 * s, 5, fuseCol);
+      pushTubeSeg(body, p3, p4, 0.018 * s, 0.016 * s, 5, charCol);
+      // Bright incandescent molten ember bead right at the burning fuse end (visible at ALL zoom distances!)
+      pushSparkStar(spark, p4[0], p4[1], p4[2], 0.042 * s, [1.0, 0.94, 0.65]);
+      sparkSpecs.push({ x: p4[0], y: p4[1], z: p4[2], r: 0.082 * s, phase: (i * 0.37) % 1.7 });
     }
 
     const bufs = [];
@@ -316,7 +336,7 @@
         {
           nodeIndex: 0, worldMat: idMat,
           prim: uploadPrim(body, {
-            name: "batched_map_bombs", baseColor: [1, 1, 1, 1], metallic: 0.28, roughness: 0.36,
+            name: "batched_map_bombs", baseColor: [1, 1, 1, 1], metallic: 0.30, roughness: 0.34,
             normalScale: 0.0, normalTex: null, baseTex: null, mrTex: null,
             emissive: [0, 0, 0], alphaMode: "OPAQUE", doubleSided: true,
           }),
@@ -324,16 +344,40 @@
         {
           nodeIndex: 0, worldMat: idMat,
           prim: uploadPrim(spark, {
-            name: "batched_map_bomb_sparks", baseColor: [1, 0.88, 0.38, 1], metallic: 0.0, roughness: 0.20,
+            name: "batched_map_bomb_sparks", baseColor: [1, 0.94, 0.60, 1], metallic: 0.0, roughness: 0.15,
             normalScale: 0.0, normalTex: null, baseTex: null, mrTex: null,
-            emissive: [2.8, 1.75, 0.32], alphaMode: "OPAQUE", doubleSided: true,
+            emissive: [4.2, 2.5, 0.55], alphaMode: "OPAQUE", doubleSided: true,
           }),
         },
       ],
       dispose() { vaos.forEach((v) => gl.deleteVertexArray(v)); bufs.forEach((b) => gl.deleteBuffer(b)); },
     };
+    // Shared zero-geometry `item_spark_volume` model so visible bombs get real GPU sizzling sparklers (`viewer_render.js` caps to 56 closest)!
+    const sparkEmitterModel = {
+      animations: [], idleAnims: [], blinkInfo: { hasBlink: false },
+      baseWorldMats: [idMat],
+      bounds: { min: [-0.08, -0.08, -0.08], max: [0.08, 0.08, 0.08] },
+      size: [0.16, 0.16, 0.16],
+      drawCalls: [{
+        nodeIndex: 0, worldMat: idMat,
+        prim: {
+          vao: null, indexed: false, mode: gl.TRIANGLES, drawCount: 0,
+          hasUv: false, localMin: [-0.058, -0.058, -0.058], localMax: [0.058, 0.058, 0.058],
+          material: { name: "item_spark_volume", baseColor: [1, 1, 1, 1], metallic: 0, roughness: 1, emissive: [0, 0, 0], alphaMode: "OPAQUE" },
+        },
+      }],
+    };
+    const sparkEntries = sparkSpecs.map((ss, idx) => ({
+      x: ss.x, z: ss.z, phase: ss.phase,
+      inst: {
+        kind: "item", id: `bb_spark_${idx}`, isGrass: true, model: sparkEmitterModel,
+        clipName: "Idle", idleTime: ss.phase,
+        offsetMat: new Float32Array([ss.r / 0.058, 0, 0, 0, 0, ss.r / 0.058, 0, 0, 0, 0, ss.r / 0.058, 0, ss.x, ss.y, ss.z, 1]),
+      },
+    }));
     return {
       inst: { kind: "item", id: "batched_bombs", isGrass: true, model, clipName: "Idle", idleTime: 0, offsetMat: idMat },
+      sparkEntries,
       dispose() { model.dispose(); },
     };
   }

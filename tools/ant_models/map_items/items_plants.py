@@ -937,8 +937,9 @@ def _build_groucho_daisy(name: str, *, animated: bool) -> SceneBuilder:
     sc.set_node_transform("dflower_neck", translation=(0.0, up_seg_h, +0.022))
 
     # Pivoted flower bloom + Groucho disguise node (`dflower_head` parented cleanly to `dflower_neck`!)
+    # Tilted cleanly upward (`rx=42 deg`, facing ~48 deg skyward toward Game View) matching 1998 `flower1`/`dflower1`!
     sc.set_node_parent("dflower_head", "dflower_neck")
-    sc.set_node_transform("dflower_head", translation=(0.0, 0.095, +0.018), rotation=quat_from_euler_xyz(rx=68.0, degrees=True))
+    sc.set_node_transform("dflower_head", translation=(0.0, 0.095, +0.018), rotation=quat_from_euler_xyz(rx=42.0, degrees=True))
 
     head_parts: List[MeshPart] = []
     calyx = superellipsoid(0.068, 0.036, 0.068, e1=0.80, e2=0.95, u_segs=20, v_segs=10, name="dflower_calyx", material="item_stem_green").translate(0.0, -0.020, 0.0)
@@ -1052,13 +1053,13 @@ def _build_groucho_daisy(name: str, *, animated: bool) -> SceneBuilder:
         # Musical head-bobbing groove pinned cleanly atop the stem neck:
         #   1/7: jaunty UP-LEFT (`+16 deg`), 3/7: level, 4/7: upbeat lift, 5/7: BIG DOWN-RIGHT BOB (`-18 deg` + nod), 6/7: upbeat!
         head_poses = _wrap([
-            (64.0, -7.0, +16.0),  # f0 (1/7, sprite_0590)
-            (66.5, -4.0, +11.0),  # f1 (2/7, sprite_0594)
-            (69.5, +0.0, +2.0),   # f2 (3/7, sprite_0597)
-            (62.0, +4.0, -7.0),   # f3 (4/7, sprite_0600): upbeat lift
-            (82.0, +10.0, -19.0), # f4 (5/7, sprite_0601): BIG DOWN-RIGHT HEAD BOB TO THE BEAT!
-            (63.0, +4.0, -6.0),   # f5 (6/7, sprite_0600): bouncy upbeat pop
-            (68.5, -1.0, +3.0),   # f6 (7/7, sprite_0597)
+            (38.0, -7.0, +16.0),  # f0 (1/7, sprite_0590)
+            (40.5, -4.0, +11.0),  # f1 (2/7, sprite_0594)
+            (43.5, +0.0, +2.0),   # f2 (3/7, sprite_0597)
+            (36.0, +4.0, -7.0),   # f3 (4/7, sprite_0600): upbeat lift
+            (56.0, +10.0, -19.0), # f4 (5/7, sprite_0601): BIG DOWN-RIGHT HEAD BOB TO THE BEAT!
+            (37.0, +4.0, -6.0),   # f5 (6/7, sprite_0600): bouncy upbeat pop
+            (42.5, -1.0, +3.0),   # f6 (7/7, sprite_0597)
         ])
         head_trans = _wrap([
             (0.000, 0.095, +0.018),  # f0 (1/7)

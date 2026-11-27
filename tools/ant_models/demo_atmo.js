@@ -59,54 +59,7 @@
       return true;
     }
 
-    // Low-poly 5-vertex faceted backyard pebble / earth clod nestled into dirt (4 tris)
-    function addPebble(cx, cz, rx, ry, rz, yaw, r, g, b) {
-      const cy = Math.cos(yaw), sy = Math.sin(yaw);
-      const baseV = vCount;
-      const ring = [[-rx, 0, -rz * 0.4], [rx * 0.85, 0, -rz * 0.7], [rx, 0, rz * 0.65], [-rx * 0.75, 0, rz * 0.85]];
-      for (let i = 0; i < 4; i++) {
-        const lx = ring[i][0], lz = ring[i][2];
-        const wx = cx + lx * cy - lz * sy, wz = cz + lx * sy + lz * cy;
-        const nL = Math.hypot(lx, ry * 1.4, lz) || 1;
-        pos.push(wx, 0.002, wz);
-        nrm.push((lx * cy - lz * sy) / nL, (ry * 1.4) / nL, (lx * sy + lz * cy) / nL);
-        col.push(r * 0.74, g * 0.74, b * 0.74, 0.0);
-        vCount++;
-      }
-      pos.push(cx + (nextR() - 0.5) * rx * 0.3, ry, cz + (nextR() - 0.5) * rz * 0.3);
-      nrm.push(0, 1, 0);
-      col.push(r * 1.10, g * 1.10, b * 1.10, 0.0);
-      vCount++;
-      idx.push(
-        baseV + 0, baseV + 1, baseV + 4,
-        baseV + 1, baseV + 2, baseV + 4,
-        baseV + 2, baseV + 3, baseV + 4,
-        baseV + 3, baseV + 0, baseV + 4,
-      );
-    }
-
-    // Tiny curled fallen backyard leaf chip / bark splinter resting flat on the soil (2 tris)
-    function addLeafChip(cx, cz, len, wid, yaw, r, g, b) {
-      const cy = Math.cos(yaw), sy = Math.sin(yaw);
-      const baseV = vCount;
-      const pts = [
-        [0, 0.018, -len * 0.52],
-        [wid * 0.5, 0.006, 0],
-        [0, 0.022, len * 0.52],
-        [-wid * 0.5, 0.008, 0],
-      ];
-      for (let i = 0; i < 4; i++) {
-        const lx = pts[i][0], ly = pts[i][1], lz = pts[i][2];
-        const s = (i === 0 || i === 2) ? 1.06 : 0.86;
-        pos.push(cx + lx * cy - lz * sy, ly, cz + lx * sy + lz * cy);
-        nrm.push((i === 1 ? 0.25 : i === 3 ? -0.25 : 0) * cy, 0.96, (i === 0 ? -0.18 : 0.18) * sy);
-        col.push(r * s, g * s, b * s, 0.0);
-        vCount++;
-      }
-      idx.push(baseV, baseV + 1, baseV + 2, baseV, baseV + 2, baseV + 3);
-    }
-
-    // Tiny 3-blade stray grass sprout poking naturally through backyard dirt crevices (6 tris)
+    // Tiny 3-blade stray grass sprout poking naturally near outer grassy backyard edges (6 tris)
     function addSprout(cx, cz, hScale) {
       for (let k = 0; k < 3; k++) {
         const yaw = (k / 3) * Math.PI * 2 + nextR() * 1.1;
@@ -153,43 +106,22 @@
       );
     }
 
+    // Only scatter subtle pebbles on plain dirt tiles (`g01*` = 54..58) so white sand & mud stay spotless!
+    function isPlainDirt(x, z) {
+      if (!isSafeLand(x, z)) return false;
+      const ti = tiles[Math.floor(z) * cols + Math.floor(x)];
+      return ti >= 54 && ti <= 58;
+    }
+
     const area = cols * rows;
-    // 1. Scattered backyard pebbles & small gravel clods (clustered naturally in organic pockets)
-    const pebbleCount = Math.min(620, Math.round(area * 0.17));
-    const pebblePalette = [
-      [0.36, 0.30, 0.25], [0.46, 0.40, 0.34], [0.24, 0.21, 0.19], [0.30, 0.31, 0.38], [0.54, 0.46, 0.36],
-    ];
-    for (let i = 0; i < pebbleCount; i++) {
-      const x = nextR() * cols, z = nextR() * rows;
-      if (!isSafeLand(x, z)) continue;
-      const pal = pebblePalette[Math.floor(nextR() * pebblePalette.length)];
-      const sz = 0.048 + Math.pow(nextR(), 1.8) * 0.085;
-      addPebble(x, z, sz * (0.85 + nextR() * 0.45), sz * (0.42 + nextR() * 0.32), sz * (0.75 + nextR() * 0.45), nextR() * Math.PI * 2, pal[0], pal[1], pal[2]);
-    }
-
-    // 2. Fallen tiny dried backyard leaf flecks & twig splinters (breaks up sterile clean earth!)
-    const leafCount = Math.min(460, Math.round(area * 0.13));
-    const leafPalette = [
-      [0.34, 0.18, 0.06], [0.44, 0.26, 0.07], [0.22, 0.24, 0.08], [0.28, 0.15, 0.08], [0.48, 0.34, 0.10],
-    ];
-    for (let i = 0; i < leafCount; i++) {
-      const x = nextR() * cols, z = nextR() * rows;
-      if (!isSafeLand(x, z)) continue;
-      const pal = leafPalette[Math.floor(nextR() * leafPalette.length)];
-      const isTwig = nextR() < 0.32;
-      const len = isTwig ? (0.14 + nextR() * 0.18) : (0.09 + nextR() * 0.11);
-      const wid = isTwig ? (0.022 + nextR() * 0.014) : (0.06 + nextR() * 0.07);
-      addLeafChip(x, z, len, wid, nextR() * Math.PI * 2, pal[0], pal[1], pal[2]);
-    }
-
-    // 3. Delicate stray backyard grass sprouts (concentrated near edges & sparsely across soil)
-    const sproutCount = Math.min(340, Math.round(area * 0.10));
+    // 1. Delicate stray grass sprouts hugging only the outer grassy clearing edges (keeps dirt & sand 100% clean — zero dark chips!)
+    const sproutCount = Math.min(120, Math.round(area * 0.036));
     for (let i = 0; i < sproutCount; i++) {
       const x = nextR() * cols, z = nextR() * rows;
-      if (!isSafeLand(x, z)) continue;
+      if (!isPlainDirt(x, z)) continue;
       const edgeD = Math.min(Math.min(x, cols - x), Math.min(z, rows - z));
-      if (edgeD > 4.5 && nextR() > 0.36) continue;
-      addSprout(x, z, edgeD < 3.0 ? 1.15 : 0.85);
+      if (edgeD > 2.6) continue;
+      addSprout(x, z, 0.85 + nextR() * 0.35);
     }
 
     // 4. Tiny white clover & buttercup-yellow wildflowers dotting the outer grass border meadow
@@ -240,8 +172,219 @@
     return makeVao(gl, [[0, 2, new Float32Array(cArr)], [1, 4, new Float32Array(oArr)], [2, 4, new Float32Array(sArr)]], idx, false);
   }
 
+  // Build realistic miniature backyard colony ant model (head + pinched thorax + teardrop gaster + 6 legs + antennae, optional golden crumb).
+  function buildTinyColonyAntModel(gl, withCrumb) {
+    const { mat4Identity } = window.__antGltf;
+    const pos = [], nrm = [], uv = [], col = [], idx = [];
+    function pushEllipsoid(cx, cy, cz, rx, ry, rz, rgb) {
+      const base = pos.length / 3;
+      const uS = 8, vS = 6;
+      for (let iv = 0; iv <= vS; iv++) {
+        const phi = (iv / vS) * Math.PI;
+        const sp = Math.sin(phi), cp = Math.cos(phi);
+        for (let iu = 0; iu <= uS; iu++) {
+          const th = (iu / uS) * Math.PI * 2;
+          const nx = sp * Math.cos(th), ny = cp, nz = sp * Math.sin(th);
+          pos.push(cx + nx * rx, cy + ny * ry, cz + nz * rz);
+          nrm.push(nx, ny, nz);
+          uv.push(iu / uS, iv / vS);
+          col.push(rgb[0], rgb[1], rgb[2]);
+        }
+      }
+      const stride = uS + 1;
+      for (let iv = 0; iv < vS; iv++) {
+        for (let iu = 0; iu < uS; iu++) {
+          const a = base + iv * stride + iu, b = a + 1, c = a + stride, d = c + 1;
+          idx.push(a, c, b, b, c, d);
+        }
+      }
+    }
+    function pushStick(p0, p1, rad, rgb) {
+      const base = pos.length / 3;
+      const dx = p1[0] - p0[0], dy = p1[1] - p0[1], dz = p1[2] - p0[2];
+      const len = Math.hypot(dx, dy, dz) || 1;
+      const tx = dx / len, ty = dy / len, tz = dz / len;
+      let ux = -tz, uy = 0, uz = tx;
+      const uL = Math.hypot(ux, uy, uz);
+      if (uL < 0.01) { ux = 1; uy = 0; uz = 0; } else { ux /= uL; uz /= uL; }
+      const vx = ty * uz - tz * uy, vy = tz * ux - tx * uz, vz = tx * uy - ty * ux;
+      const segs = 4;
+      for (let s = 0; s < segs; s++) {
+        const a = (s / segs) * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+        const nx = ux * ca + vx * sa, ny = uy * ca + vy * sa, nz = uz * ca + vz * sa;
+        pos.push(p0[0] + nx * rad, p0[1] + ny * rad, p0[2] + nz * rad);
+        pos.push(p1[0] + nx * rad * 0.72, p1[1] + ny * rad * 0.72, p1[2] + nz * rad * 0.72);
+        nrm.push(nx, ny, nz, nx, ny, nz);
+        uv.push(0, 0, 1, 1);
+        col.push(rgb[0], rgb[1], rgb[2], rgb[0], rgb[1], rgb[2]);
+      }
+      for (let s = 0; s < segs; s++) {
+        const ns = (s + 1) % segs;
+        const a = base + s * 2, b = a + 1, c = base + ns * 2, d = c + 1;
+        idx.push(a, c, b, b, c, d);
+      }
+    }
+    const bodyCol = [0.032, 0.019, 0.015];
+    const darkLeg = [0.022, 0.014, 0.011];
+    // Facing +Z: head (+0.068), slender thorax (0.0), plump gaster (-0.078)
+    pushEllipsoid(0.0, 0.032, +0.066, 0.024, 0.020, 0.028, bodyCol);
+    pushEllipsoid(0.0, 0.028, +0.004, 0.016, 0.015, 0.034, bodyCol);
+    pushEllipsoid(0.0, 0.036, -0.072, 0.030, 0.026, 0.044, bodyCol);
+    // 2 elbowed antennae + 6 real ant legs splayed gracefully to ground (y=0)
+    for (const side of [-1, 1]) {
+      pushStick([side * 0.012, 0.038, +0.084], [side * 0.030, 0.052, +0.118], 0.0045, darkLeg);
+      pushStick([side * 0.014, 0.026, +0.026], [side * 0.058, 0.002, +0.062], 0.0050, darkLeg);
+      pushStick([side * 0.014, 0.026, +0.000], [side * 0.066, 0.002, -0.004], 0.0050, darkLeg);
+      pushStick([side * 0.014, 0.026, -0.026], [side * 0.058, 0.002, -0.068], 0.0050, darkLeg);
+    }
+    if (withCrumb) {
+      pushEllipsoid(0.0, 0.036, +0.104, 0.022, 0.018, 0.020, [0.92, 0.68, 0.14]);
+    }
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    const bufs = [];
+    const up = (target, data, loc, sz) => {
+      const b = gl.createBuffer(); gl.bindBuffer(target, b); gl.bufferData(target, data, gl.STATIC_DRAW);
+      if (loc !== undefined) { gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, sz, gl.FLOAT, false, 0, 0); }
+      bufs.push(b);
+    };
+    up(gl.ARRAY_BUFFER, new Float32Array(pos), 0, 3);
+    up(gl.ARRAY_BUFFER, new Float32Array(nrm), 1, 3);
+    up(gl.ARRAY_BUFFER, new Float32Array(uv), 2, 2);
+    up(gl.ARRAY_BUFFER, new Float32Array(col), 3, 3);
+    up(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx));
+    gl.bindVertexArray(null);
+    const idMat = mat4Identity();
+    return {
+      animations: [], idleAnims: [], blinkInfo: { hasBlink: false },
+      baseWorldMats: [idMat],
+      bounds: { min: [-0.07, 0, -0.12], max: [0.07, 0.065, 0.13] },
+      size: [0.14, 0.065, 0.25],
+      drawCalls: [{
+        nodeIndex: 0, worldMat: idMat,
+        prim: {
+          vao, indexed: true, mode: gl.TRIANGLES, drawCount: idx.length, indexType: gl.UNSIGNED_SHORT,
+          hasUv: false, localMin: [-0.07, 0, -0.12], localMax: [0.07, 0.065, 0.13],
+          material: {
+            name: withCrumb ? "colony_ant_crumb" : "colony_ant", baseColor: [1, 1, 1, 1],
+            metallic: 0.08, roughness: 0.42, normalScale: 0.0, normalTex: null, baseTex: null, mrTex: null,
+            emissive: [0, 0, 0], alphaMode: "OPAQUE", doubleSided: false,
+          },
+        },
+      }],
+      dispose() { gl.deleteVertexArray(vao); bufs.forEach((b) => gl.deleteBuffer(b)); },
+    };
+  }
+
+  // Exact normalized radial profile matching `_build_anthill_base` (items_structures.py) so tiny colony ants hug every mound slope!
+  function hillWobble(ang) {
+    const lobe = 0.165 * Math.exp(-Math.pow((ang - 0.31) / 0.55, 2));
+    const neTrim = -0.085 * Math.exp(-Math.pow((ang + 0.78) / 0.60, 2));
+    return 1.0 + lobe + neTrim;
+  }
+
+  function hillHeightNorm(rNorm, ang = 0) {
+    const rEff = rNorm / hillWobble(ang);
+    const stations = [
+      [0.04, 0.14], [0.118, 0.42], [0.150, 0.436], [0.255, 0.370],
+      [0.345, 0.245], [0.435, 0.125], [0.515, 0.036], [0.565, 0.0],
+    ];
+    if (rEff <= stations[0][0]) return stations[0][1];
+    for (let i = 0; i < stations.length - 1; i++) {
+      const [r0, y0] = stations[i], [r1, y1] = stations[i + 1];
+      if (rEff <= r1) return y0 + (y1 - y0) * ((rEff - r0) / (r1 - r0));
+    }
+    return 0.0;
+  }
+
+  function quatFromYawPitch(yaw, pitch) {
+    const cy = Math.cos(yaw * 0.5), sy = Math.sin(yaw * 0.5);
+    const cp = Math.cos(pitch * 0.5), sp = Math.sin(pitch * 0.5);
+    return [cy * sp, sy * cp, -sy * sp, cy * cp];
+  }
+
+  function buildColonyAntsForMap(gl, itemEntries) {
+    const HILL_IDS = new Set(["GREENHILL", "REDHILL", "BLUEHILL", "BLACKHILL"]);
+    const hills = itemEntries.filter((e) => HILL_IDS.has(e.spec.id));
+    if (!hills.length) return null;
+    const modelEmpty = buildTinyColonyAntModel(gl, false);
+    const modelCrumb = buildTinyColonyAntModel(gl, true);
+    const ants = [];
+    for (let hIdx = 0; hIdx < hills.length; hIdx++) {
+      const h = hills[hIdx];
+      const hs = h.spec.s || 3.88;
+      const m = h.inst && h.inst.model;
+      let rx = 0, rz = 0;
+      if (m && Array.isArray(m.nodes)) {
+        const rootN = m.nodes.find((n) => n && n.name === "anthill");
+        if (rootN && rootN.translation) { rx = rootN.translation[0]; rz = rootN.translation[2]; }
+      }
+      const cx = h.x + rx * hs, cz = h.z + rz * hs;
+      // 7 tiny bustling colony ants per anthill (4 carrying golden crumbs into the hole, 3 emerging out to forage!)
+      for (let k = 0; k < 7; k++) {
+        const inbound = k < 4;
+        const baseAng = (k / 7) * Math.PI * 2 + hIdx * 0.92 + (inbound ? 0.18 : 0.62);
+        const dur = 5.4 + ((k * 1.17 + hIdx * 0.83) % 3.2);
+        const phase = ((k * 0.31 + hIdx * 0.23) % 1.0) * dur;
+        const bend = ((k % 2 === 0) ? 1 : -1) * (0.28 + (k % 3) * 0.14);
+        const sc = 0.92 + (k % 3) * 0.12;
+        ants.push({
+          hx: cx, hz: cz, hs, inbound, baseAng, dur, phase, bend, sc,
+          inst: {
+            kind: "item", id: `colony_ant_${hIdx}_${k}`, isGrass: true,
+            model: inbound ? modelCrumb : modelEmpty,
+            clipName: "Idle", idleTime: 0, offsetMat: null,
+          },
+        });
+      }
+    }
+    return {
+      ants,
+      dispose() { modelEmpty.dispose(); modelCrumb.dispose(); },
+    };
+  }
+
+  function updateColonyAnts(colony, t, patrolsOn, tx, tz, visHalfSpan, visible) {
+    if (!colony) return;
+    const { mat4FromTRS } = window.__antGltf;
+    for (let i = 0; i < colony.ants.length; i++) {
+      const a = colony.ants[i];
+      if (Math.abs(a.hx - tx) > visHalfSpan + 2.5 || Math.abs(a.hz - tz) > visHalfSpan + 2.5) continue;
+      const lt = patrolsOn ? ((t + a.phase) % a.dur + a.dur) % a.dur : (a.phase % a.dur);
+      const u = lt / a.dur;
+      // Hide briefly while down inside the underground burrow tunnel!
+      if (a.inbound ? (u > 0.84) : (u < 0.16)) continue;
+      const frac = a.inbound ? (u / 0.84) : ((u - 0.16) / 0.84);
+      // Radial crawl from outer skirt (r=0.58) up mound slope -> over crater lip -> down into central hole (r=0.05)
+      const r0 = a.inbound ? 0.58 : 0.055;
+      const r1 = a.inbound ? 0.055 : 0.58;
+      const rN = r0 + (r1 - r0) * frac;
+      const rNext = r0 + (r1 - r0) * Math.min(1.0, frac + 0.025);
+      const ang = a.baseAng + Math.sin(frac * Math.PI) * a.bend + Math.sin(t * 9.0 + i * 2.1) * 0.018;
+      const angNext = a.baseAng + Math.sin(Math.min(1.0, frac + 0.025) * Math.PI) * a.bend;
+      const px = a.hx + Math.cos(ang) * rN * a.hs;
+      const pz = a.hz + Math.sin(ang) * rN * a.hs;
+      const py = hillHeightNorm(rN, ang) * a.hs + 0.018;
+      const nx = a.hx + Math.cos(angNext) * rNext * a.hs;
+      const nz = a.hz + Math.sin(angNext) * rNext * a.hs;
+      const ny = hillHeightNorm(rNext, angNext) * a.hs + 0.018;
+      const dx = nx - px, dz = nz - pz, dy = ny - py;
+      const horiz = Math.hypot(dx, dz) || 1e-4;
+      const yaw = Math.atan2(dx, dz);
+      const pitch = -Math.atan2(dy, horiz);
+      // Soft scale fade right at outer skirt & deep inside burrow throat so ants emerge/enter naturally!
+      const edgeFade = Math.min(1.0, Math.min(frac / 0.10, (1.0 - frac) / 0.10));
+      const sc = a.sc * edgeFade;
+      if (sc < 0.08) continue;
+      a.inst.offsetMat = mat4FromTRS([px, py, pz], quatFromYawPitch(yaw, pitch), [sc, sc, sc]);
+      visible.push(a.inst);
+    }
+  }
+
   window.__demoAtmo = {
     buildGroundScatterMesh,
     buildAtmoParticles,
+    buildColonyAntsForMap,
+    updateColonyAnts,
   };
 })();

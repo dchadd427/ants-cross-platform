@@ -878,10 +878,10 @@
       float crack = pow(clamp(1.0 - abs(2.0 * tgNoise(p * 4.4 + vec2(med * 1.15, -macro * 0.8)) - 1.0), 0.0, 1.0), 7.5);
       float edgeDist = min(min(p.x, u_mapSize.x - p.x), min(p.y, u_mapSize.y - p.y));
       float edgeMoss = smoothstep(3.8, 0.0, edgeDist) * smoothstep(0.42, 0.78, macro * 0.6 + med * 0.4);
-      vec3 colDirt = mix(vec3(0.195, 0.132, 0.112), vec3(0.328, 0.232, 0.190), macro * 0.62 + med * 0.38);
-      colDirt = mix(colDirt, vec3(0.39, 0.31, 0.25), peb * 0.38);
-      colDirt = mix(colDirt, vec3(0.115, 0.076, 0.058), mulch * 0.42 + crack * 0.22);
-      colDirt = mix(colDirt, vec3(0.105, 0.195, 0.055), edgeMoss * 0.32) * (0.92 + 0.16 * fine);
+      vec3 colDirt = mix(vec3(0.205, 0.140, 0.118), vec3(0.325, 0.232, 0.192), macro * 0.64 + med * 0.36);
+      colDirt = mix(colDirt, vec3(0.38, 0.30, 0.24), peb * 0.20);
+      colDirt = mix(colDirt, vec3(0.135, 0.092, 0.072), mulch * 0.14 + crack * 0.12);
+      colDirt = mix(colDirt, vec3(0.105, 0.195, 0.055), edgeMoss * 0.28) * (0.94 + 0.12 * fine);
 
       // 2. Dark matte mud road (m): organic trampled garden loam with embedded grit flecks (earthy matte, zero mirror glare!)
       float mudWet = smoothstep(0.30, 0.74, tgFbm(p * 1.35 + vec2(9.1, 3.3)));
