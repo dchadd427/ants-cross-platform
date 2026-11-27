@@ -57,6 +57,11 @@ tests/artifacts/
 # Per-user tool folders (never committed)
 .claude/
 
+# Agents' memory and private notes (they live outside this repository, AGENTS.md rule 3)
+MEMORY.md
+memory/
+CLAUDE.local.md
+
 # Process-id files of a local server or tool run
 *.pid
 
