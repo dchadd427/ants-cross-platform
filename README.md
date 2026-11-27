@@ -6,7 +6,7 @@ A faithful, deterministic C++17 engine remake and port of the 1998 real-time str
 
 The engine loads the original game's data files (`ants.chd` and `Maps/*.LVL`) directly, without pre-conversion. The game's mechanics are re-derived from the disassembly of the original program, system by system ([the original program](docs/ORIGINAL_PROGRAM.md)); the network play, the computer players, the 16:9 picture, the zoom, the touch controls and the browser build are this project's own. It runs a deterministic 20 Hz simulation, with 32-channel spatial audio, MP3 music (the original's four pieces), TrueType text and an SDL2 2D renderer (hardware-accelerated, with a software fallback).
 
-**Current version: v0.22.0** (shown on screen next to the FPS meter; in the room and the match of a network game the same corner also shows **ping** when the setting **Show ping** is on, off by default, see [Network play](docs/MULTIPLAYER.md)). The releases since v0.16.6 are in the short **[What’s new](CHANGELOG.md)** (also published at **[beta.playants.org/changelog](https://beta.playants.org/changelog)**); the releases before v0.16.6 are only in git history. How work flows from a commit to a release: [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
+**Current version: v0.22.1** (shown on screen next to the FPS meter; in the room and the match of a network game the same corner also shows **ping** when the setting **Show ping** is on, off by default, see [Network play](docs/MULTIPLAYER.md)). The releases since v0.16.6 are in the short **[What’s new](CHANGELOG.md)** (also published at **[beta.playants.org/changelog](https://beta.playants.org/changelog)**); the releases before v0.16.6 are only in git history. How work flows from a commit to a release: [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
 
 ## Play
 
@@ -58,6 +58,7 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [Alerts, invitations, mentions and follows](docs/HUB_PEOPLE.md): the account's list behind the bell, `/invite`, `@name` and `/follow`: the frames, the limits and who is never told
 - [Private messages](docs/HUB_MESSAGES.md): who may write to whom, what is kept (7 days), Block, reports and what the staff can see
 - [The chat commands](docs/HUB_COMMANDS.md): the slash commands of the chat, who may use which, the helper, `/bots` and the hub's door to the game server
+- [Counting the site's visits](docs/ANALYTICS.md): the counter with no cookie and no address kept, the day's secret, Do Not Track, the country list, what is kept for how long, and the admin page's Analytics tab
 - [Images in the chat](docs/HUB_IMAGES.md): who may post images, the converter that re-encodes them, the limits, moderation and `/noimages`, how they are stored and served
 - [Testing and CI](docs/TESTING.md): the tiers, how to run a suite, the rules for tests and mutants, the E2E runner, continuous integration
 - [What the test suites cover](docs/TESTING_SUITES.md): the table of the C++ suites by number and what each one checks

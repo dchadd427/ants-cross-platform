@@ -1,0 +1,568 @@
+{
+ "note": "Mutants of the visit counter on the hub (hub/analytics.py, hub/analyticsdoor.py, hub/analytics_events.py, hub/analytics_store.py, hub/analytics_sums.py, hub/useragent.py, hub/geodata.py, hub/limits.py, hub/config.py, the hook in hub/login.py; docs/ANALYTICS.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/test_hub_analytics.py: each breaks one rule of the counter's privacy or of its numbers on purpose, and a test must notice. The visitor's code and the secret of the day (a secret that a past day leaves in the file or its log, that is not overwritten or not made fresh, a code that does not use it, the address or the browser); what is stored (the address or the header kept as a name, a crawler counted); the browsers that asked not to be tracked (the header not heard, one of the two not heard, a visit kept with a code and a device, counted for every page, counted again too soon or never); returning (after seven days, never, with today); retention (raw events kept for ever or a day too few, the sums not made before they go, what was deleted left in the log, the counters of old days); the Pacific day and its summer time; the door (another site, no origin, any size or type, no limit for an address or for the hub, no address, a GET, a query, a crawler that is told so, a bug that tells its message, two keys the same); the fields (a path, a query, a message with its addresses, emails or quotes, another site's script, a referrer, an error's class, a timing); the sums (a visit that never ends or ends at once, a code in the sums, a referrer named by a personal address or by fewer than three visitors, a visitor counted for each visit), the hour and the second (an event or the last event kept to the second), a clock that steps back, a cut of the log file that a reader kept from happening and is not tried again, an address range with no limit, the file's limit and the room made for it, the limit of a day (none, or one that a restart gives again), the admin answer (not marked as text from visitors, any range, a range in the future), the setting, the sign-up count, the country list (any file, a private file). Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hub_analytics_mutants.json --keep-going --jobs 1; every mutant must be caught.",
+ "baseline": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest tests.scripts.test_hub_analytics"
+ },
+ "mutants": [
+  {
+   "id": "the_secret_of_a_past_day_is_not_deleted",
+   "file": "hub/analytics_store.py",
+   "old": "self.db.execute(\"DELETE FROM salt WHERE day != ?\", (day,))",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "what_was_deleted_is_not_cut_out_of_the_log",
+   "file": "hub/analytics_store.py",
+   "old": "self.db.execute(\"COMMIT\")\n        self.cut_log()\n        return salt",
+   "new": "self.db.execute(\"COMMIT\")\n        return salt",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "deleted_pages_are_not_overwritten",
+   "file": "hub/analytics_store.py",
+   "old": "PRAGMA secure_delete=ON",
+   "new": "PRAGMA secure_delete=OFF",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_new_day_keeps_the_old_secret",
+   "file": "hub/analytics.py",
+   "old": "        if day != self.day:\n            self.flush(force=True)",
+   "new": "        if self.day is None:\n            self.flush(force=True)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "the_code_does_not_use_the_secret",
+   "file": "hub/analytics.py",
+   "old": "return hmac.new(self.salt, ip.encode",
+   "new": "return hmac.new(b'fixed', ip.encode",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "the_code_leaves_out_the_browser",
+   "file": "hub/analytics.py",
+   "old": "return hmac.new(self.salt, ip.encode(\"ascii\", \"replace\") + b\"\\0\" + ua.encode(\"utf-8\", \"replace\"), hashlib.sha256)",
+   "new": "return hmac.new(self.salt, ip.encode(\"ascii\", \"replace\"), hashlib.sha256)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "the_code_leaves_out_the_address",
+   "file": "hub/analytics.py",
+   "old": "return hmac.new(self.salt, ip.encode(\"ascii\", \"replace\") + b\"\\0\" + ua.encode(\"utf-8\", \"replace\"), hashlib.sha256)",
+   "new": "return hmac.new(self.salt, ua.encode(\"utf-8\", \"replace\"), hashlib.sha256)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "the_code_is_the_whole_digest_of_nothing_secret",
+   "file": "hub/analytics.py",
+   "old": ".hexdigest()[:16]\n\n    def short",
+   "new": ".hexdigest()[:16] if False else hashlib.sha256(ip.encode()).hexdigest()[:16]\n\n    def short",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "the_address_is_kept_as_the_country",
+   "file": "hub/analytics.py",
+   "old": "country = self.geo.country(ip)",
+   "new": "country = ip",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "the_browsers_header_is_kept_as_its_name",
+   "file": "hub/analytics.py",
+   "old": "browser=names[0], system=names[1]",
+   "new": "browser=ua, system=names[1]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "the_address_is_kept_in_the_referrer",
+   "file": "hub/analytics.py",
+   "old": "self.store.add_event(second, day, event, vis=code, ret=state[0], vs=starts, lb=bin_, country=country,",
+   "new": "self.store.add_event(second, day, dict(event, ref=ip), vis=code, ret=state[0], vs=starts, lb=bin_, country=country,",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_crawler_is_counted",
+   "file": "hub/useragent.py",
+   "old": "or CRAWLER.search(ua):",
+   "new": ":",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_header_that_asks_not_to_be_tracked_is_not_heard",
+   "file": "hub/analytics.py",
+   "old": "if untracked or event[\"kind\"] == \"visit\":",
+   "new": "if event[\"kind\"] == \"visit\":",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_not_tracked_visit_is_kept_with_a_code_and_a_device",
+   "file": "hub/analytics.py",
+   "old": "self.store.add_event(second, day, dict(events.EMPTY, kind=\"visit\"), country=country)",
+   "new": "self.store.add_event(int(now), day, event, vis=self.code(ip, ua), country=country, browser=names[0], system=names[1], device=names[2])",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_not_tracked_visit_is_counted_for_every_page",
+   "file": "hub/analytics.py",
+   "old": "if self.nt_seen.get(mark, 0.0) > now:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_not_tracked_visit_is_counted_again_too_soon",
+   "file": "hub/analytics.py",
+   "old": "NT_SECONDS = 1800.0",
+   "new": "NT_SECONDS = 18000.0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_not_tracked_visit_is_counted_again_never",
+   "file": "hub/analytics.py",
+   "old": "self.nt_seen[mark] = now + NT_SECONDS",
+   "new": "self.nt_seen[mark] = now + NT_SECONDS * 0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_dnt_header_is_the_only_one_that_is_heard",
+   "file": "hub/analyticsdoor.py",
+   "old": "return headers.get(\"dnt\", \"\").strip() == \"1\" or headers.get(\"sec-gpc\", \"\").strip() == \"1\"",
+   "new": "return headers.get(\"dnt\", \"\").strip() == \"1\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_gpc_header_is_the_only_one_that_is_heard",
+   "file": "hub/analyticsdoor.py",
+   "old": "return headers.get(\"dnt\", \"\").strip() == \"1\" or headers.get(\"sec-gpc\", \"\").strip() == \"1\"",
+   "new": "return headers.get(\"sec-gpc\", \"\").strip() == \"1\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_visitor_is_returning_after_seven_days",
+   "file": "hub/analytics.py",
+   "old": "RETURN_DAYS = 6",
+   "new": "RETURN_DAYS = 8",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_visitor_is_never_returning",
+   "file": "hub/analytics.py",
+   "old": "seen = any(mark in self.week[d] for d in range(number - RETURN_DAYS, number) if d in self.week)",
+   "new": "seen = False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_day_has_no_limit",
+   "file": "hub/analytics.py",
+   "old": "if self.full or self.kept_today >= DAY_MAX:",
+   "new": "if self.full:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_restart_gives_the_day_a_new_limit",
+   "file": "hub/analytics.py",
+   "old": "self.kept_today = self.store.counter(day, \"accepted\")",
+   "new": "self.kept_today = 0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "raw_events_are_kept_for_ever",
+   "file": "hub/analytics_store.py",
+   "old": "RAW_DAYS = 30",
+   "new": "RAW_DAYS = 30000",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "raw_events_are_kept_29_days",
+   "file": "hub/analytics_store.py",
+   "old": "RAW_DAYS = 30",
+   "new": "RAW_DAYS = 29",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "the_sums_are_not_made_before_the_raw_events_go",
+   "file": "hub/analytics_store.py",
+   "old": "            self.keep(day)\n        oldest",
+   "new": "            pass\n        oldest",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "deleted_events_are_not_cut_out_of_the_log",
+   "file": "hub/analytics_store.py",
+   "old": "        if gone:\n            self.cut_log()\n        return gone",
+   "new": "        return gone",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "the_counters_of_old_days_stay",
+   "file": "hub/analytics_store.py",
+   "old": "self.db.execute(\"DELETE FROM counters WHERE day < ?\", (oldest,))",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "the_sums_hold_the_visitors_codes",
+   "file": "hub/analytics_sums.py",
+   "old": "\"vers\": dict(versions), \"signups\": signups}",
+   "new": "\"vers\": dict(versions), \"signups\": signups, \"codes\": sorted(by_visitor)}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "the_day_is_always_winter_time",
+   "file": "hub/analytics_events.py",
+   "old": "hours=-7 if start <= moment < end else -8",
+   "new": "hours=-8",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "summer_time_starts_a_week_early",
+   "file": "hub/analytics_events.py",
+   "old": "nth_sunday(moment.year, 3, 2)",
+   "new": "nth_sunday(moment.year, 3, 1)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_page_of_another_site_is_counted",
+   "file": "hub/analyticsdoor.py",
+   "old": "or h.get(\"sec-fetch-site\") != \"same-origin\":",
+   "new": ":",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "an_event_of_any_origin_is_counted",
+   "file": "hub/analyticsdoor.py",
+   "old": "if h.get(\"origin\") != self.hub.cfg.origin or not self.hub.cfg.origin",
+   "new": "if False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_body_of_any_size_is_read",
+   "file": "hub/analyticsdoor.py",
+   "old": "if int(length) > MAX_BODY:",
+   "new": "if int(length) > MAX_BODY * 100:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_body_of_any_type_is_read",
+   "file": "hub/analyticsdoor.py",
+   "old": "if h.get(\"content-type\", \"\").split(\";\")[0].strip().lower() not in TYPES:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "an_address_has_no_limit",
+   "file": "hub/analyticsdoor.py",
+   "old": "if not self.rate.take(address, self.hub.clock()) or not self.collector.admit():",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "the_hub_as_a_whole_has_no_limit",
+   "file": "hub/analyticsdoor.py",
+   "old": "if not self.rate.take(address, self.hub.clock()) or not self.collector.admit():",
+   "new": "if not self.rate.take(address, self.hub.clock()):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_request_with_no_address_is_counted",
+   "file": "hub/analyticsdoor.py",
+   "old": "if limitmod.address_key(request.headers.get(\"x-client-address\"), \"\") == \"unknown\":",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_get_is_counted",
+   "file": "hub/analyticsdoor.py",
+   "old": "if request.method != \"POST\":",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_query_is_taken",
+   "file": "hub/analyticsdoor.py",
+   "old": "if request.split()[0] != PATH or \"?\" in request.path:",
+   "new": "if request.split()[0] != PATH:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_crawler_is_told_so",
+   "file": "hub/analyticsdoor.py",
+   "old": "if answer == \"busy\":",
+   "new": "if answer in (\"busy\", \"crawler\", \"again\"):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_bug_tells_its_message_to_the_log",
+   "file": "hub/analyticsdoor.py",
+   "old": "self.hub.log.event(\"error\", kind=type(e).__name__, where=\"analytics\")\n            return self.fail(500, \"error\")",
+   "new": "self.hub.log.event(\"error\", kind=str(e), where=\"analytics\")\n            return self.fail(500, \"error\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_body_with_two_keys_the_same_is_read",
+   "file": "hub/analyticsdoor.py",
+   "old": "object_pairs_hook=no_duplicates)",
+   "new": "object_pairs_hook=None)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_path_is_kept_as_it_came",
+   "file": "hub/analytics_events.py",
+   "old": "    return \"/map\" if re.match(r\"/map/[a-z0-9-]{1,100}\\Z\", path) else OTHER",
+   "new": "    return path",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_query_is_kept_in_a_path",
+   "file": "hub/analytics_events.py",
+   "old": "path = path.split(\"?\")[0].split(\"#\")[0]\n    if path != \"/\"",
+   "new": "if path != \"/\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "an_error_message_keeps_its_addresses",
+   "file": "hub/analytics_events.py",
+   "old": "text = URL_LIKE.sub(\"<url>\", text)",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "an_error_message_keeps_its_emails",
+   "file": "hub/analytics_events.py",
+   "old": "text = EMAIL_LIKE.sub(\"<email>\", text)",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "an_error_message_keeps_what_it_quotes",
+   "file": "hub/analytics_events.py",
+   "old": "text = DOUBLE_QUOTED.sub('\"...\"', text)",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "an_error_of_another_sites_script_names_it",
+   "file": "hub/analytics_events.py",
+   "old": "if not origin or not text.startswith(origin + \"/\"):\n            return \"\"",
+   "new": "if False:\n            return \"\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_referrer_is_kept_with_its_page",
+   "file": "hub/analytics_events.py",
+   "old": "if not HOST.match(text) or NUMERIC_HOST.match(text) or text == own_host:\n        return \"\"",
+   "new": "if False:\n        return \"\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "this_site_is_its_own_referrer",
+   "file": "hub/analytics_events.py",
+   "old": "or text == own_host:",
+   "new": ":",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "an_error_is_kept_with_any_class",
+   "file": "hub/analytics_events.py",
+   "old": "not ERROR_NAME.match(name)",
+   "new": "False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_timing_of_any_size_is_kept",
+   "file": "hub/analytics_events.py",
+   "old": "or not 1 <= ms <= MAX_PERF_MS:",
+   "new": ":",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_visit_is_one_visitor_for_ever",
+   "file": "hub/analytics.py",
+   "old": "if event[\"kind\"] == \"view\" and (start is None or second - state[2] > sumsmod.GAP):",
+   "new": "if event[\"kind\"] == \"view\" and start is None:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_gap_of_a_second_is_a_new_visit",
+   "file": "hub/analytics_sums.py",
+   "old": "GAP = 1800",
+   "new": "GAP = 1",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "the_answer_is_not_marked_as_text_from_visitors",
+   "file": "hub/admindoor.py",
+   "old": "report[\"untrusted\"] = True",
+   "new": "report[\"untrusted\"] = False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_range_of_any_length_is_answered",
+   "file": "hub/analytics.py",
+   "old": "if n > RANGE_MAX_DAYS:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_range_in_the_future_is_answered",
+   "file": "hub/analytics.py",
+   "old": "or last > today:",
+   "new": ":",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "the_counter_is_off_by_default",
+   "file": "hub/config.py",
+   "old": "or \"on\"\n    if counter not in",
+   "new": "or \"off\"\n    if counter not in",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_signup_is_counted_at_every_login",
+   "file": "hub/login.py",
+   "old": "if fresh and self.hub.analytics.collector is not None:",
+   "new": "if self.hub.analytics.collector is not None:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_country_list_is_read_whatever_it_holds",
+   "file": "hub/geodata.py",
+   "old": "if magic != MAGIC or not MONTH.match(text) or len(data) != HEADER.size + n4 * 10 + n6 * 18:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "the_list_is_private_to_root",
+   "file": "hub/geodata.py",
+   "old": "os.chmod(temp, 0o644)",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "an_event_keeps_its_second",
+   "file": "hub/analytics_store.py",
+   "old": "(events.hour_of(at), day, event[\"kind\"]",
+   "new": "(at, day, event[\"kind\"]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "the_last_event_is_kept_to_the_second_in_the_file",
+   "file": "hub/analytics.py",
+   "old": "self.store.set_meta(\"last_at\", events.hour_of(self.last_at))",
+   "new": "self.store.set_meta(\"last_at\", self.last_at)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_referrer_is_kept_with_its_personal_name",
+   "file": "hub/analytics_events.py",
+   "old": "    return registered_name(text)",
+   "new": "    return text",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_rare_referrer_is_named_in_the_sums",
+   "file": "hub/analytics_sums.py",
+   "old": "if r and ref_visitors[r] < REF_MIN_VISITORS]:",
+   "new": "if r and ref_visitors[r] < 0]:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_visitor_counts_for_each_of_its_visits_from_a_referrer",
+   "file": "hub/analytics_sums.py",
+   "old": "if start.ref not in came_from:",
+   "new": "if True:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "an_address_range_has_no_limit",
+   "file": "hub/analytics.py",
+   "old": "if made >= RANGE_NEW_MAX:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_not_tracked_visit_is_not_limited_by_its_range",
+   "file": "hub/analytics.py",
+   "old": "            if not self.range_allows(ip):\n                self.pending[\"dropped\"] += 1\n                return \"limited\"\n            if len(self.nt_seen) >= NT_MAX:",
+   "new": "            if len(self.nt_seen) >= NT_MAX:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "the_range_of_an_ipv4_address_is_the_address",
+   "file": "hub/limits.py",
+   "old": "(int(ip) >> 8 << 8, 24)",
+   "new": "(int(ip), 32)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "the_range_of_an_ipv6_address_is_its_64",
+   "file": "hub/limits.py",
+   "old": "(int(ip) >> (128 - 48) << (128 - 48), 48)",
+   "new": "(int(ip) >> (128 - 64) << (128 - 64), 64)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "the_file_has_no_limit",
+   "file": "hub/analytics.py",
+   "old": "self.full = size >= DB_MAX_BYTES",
+   "new": "self.full = False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "the_oldest_raw_days_do_not_go_for_room",
+   "file": "hub/analytics_store.py",
+   "old": "while self.used_bytes() > target:",
+   "new": "while False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "yesterdays_events_go_for_room",
+   "file": "hub/analytics_store.py",
+   "old": "if oldest is None or oldest >= events.add_days(today, -1):",
+   "new": "if oldest is None:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_day_goes_for_room_without_its_sums",
+   "file": "hub/analytics_store.py",
+   "old": "            if self.db.execute(\"SELECT 1 FROM days WHERE day = ?\", (oldest,)).fetchone() is None:\n                self.keep(oldest)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_cut_of_the_log_that_did_not_happen_is_not_tried_again",
+   "file": "hub/analytics_store.py",
+   "old": "if self.log_dirty and self.clock() >= self.next_cut:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_cut_of_the_log_is_tried_at_every_tick",
+   "file": "hub/analytics_store.py",
+   "old": "self.next_cut = self.clock() + CUT_RETRY_SECONDS",
+   "new": "self.next_cut = 0.0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_cut_of_the_log_that_did_not_happen_is_forgotten",
+   "file": "hub/analytics_store.py",
+   "old": "self.log_dirty = bool(busy)",
+   "new": "self.log_dirty = False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_clock_that_steps_back_is_a_new_day",
+   "file": "hub/analytics.py",
+   "old": "if known and day < known and events.day_number(known) - events.day_number(day) <= BACK_DAYS:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_clock_that_is_far_back_is_never_a_new_day",
+   "file": "hub/analytics.py",
+   "old": "events.day_number(known) - events.day_number(day) <= BACK_DAYS:",
+   "new": "events.day_number(known) - events.day_number(day) <= 10 ** 9:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  }
+ ]
+}

@@ -210,7 +210,7 @@ class TheOnlyWayIsTheTypedAddress(unittest.TestCase):
         return out
 
     def test_no_other_file_of_the_site_names_the_address_or_the_file(self):
-        mine = {"admin.html", "admin.css", "admin_page.js", "admin_bots.js", "admin_map_pick.js"}
+        mine = {"admin.html", "admin.css", "admin_analytics.css", "admin_page.js", "admin_bots.js", "admin_analytics.js", "admin_map_pick.js"}
         for path in self.web_files():
             if os.path.basename(path) in mine and os.path.dirname(path) == os.path.join(REPO, "web"):
                 continue
@@ -237,7 +237,7 @@ class TheOnlyWayIsTheTypedAddress(unittest.TestCase):
         bar = re.search(r'<header class="sb".*?</header>', page, re.S).group(0)
         self.assertEqual(bar, re.search(r'<header class="sb".*?</header>', read("web", "legal.html"), re.S).group(0))          # (the very markup of the other pages' bar: the build stamps it)
         self.assertEqual(len(re.findall(r"<a\b", page)), len(re.findall(r"<a\b", bar)))                                 # (no link outside the bar)
-        self.assertEqual(re.findall(r'(?:href|src)="([^"]+)"', page.replace(bar, "")), ["/favicon.png?v=9ea2152a", "/front/classic.css", "/site_nav.css", "/update_notice.css", "admin.css", "/site_nav.js", "/update_notice.js", "admin_map_pick.js", "admin_bots.js", "admin_page.js"])
+        self.assertEqual(re.findall(r'(?:href|src)="([^"]+)"', page.replace(bar, "")), ["/favicon.png?v=9ea2152a", "/front/classic.css", "/site_nav.css", "/update_notice.css", "admin.css", "admin_analytics.css", "/site_nav.js", "/update_notice.js", "admin_map_pick.js", "admin_bots.js", "admin_analytics.js", "admin_page.js"])
         self.assertIn('<meta name="robots" content="noindex, nofollow">', page)
         self.assertNotRegex(page, r"<script>|<style|onclick|onload|javascript:")
         self.assertEqual(len(re.findall(r'<div id="app"></div>', page)), 1)

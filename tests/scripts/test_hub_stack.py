@@ -62,7 +62,8 @@ class TheImage(unittest.TestCase):
         cls.code = code(cls.text)
 
     def test_it_is_slim_python_and_runs_as_a_user_that_is_not_root(self):
-        self.assertRegex(self.code, r"(?m)^FROM python:3\.\d+-slim-\w+(@sha256:[0-9a-f]{64})?\s*$")
+        self.assertRegex(self.code, r"(?m)^FROM python:3\.\d+-slim-\w+(@sha256:[0-9a-f]{64})?( AS geo)?\s*$")
+        self.assertEqual(len(re.findall(r"(?m)^FROM ", self.code)), 2, "the stage that fetches the country list and the image")
         self.assertRegex(self.code, r"(?m)^USER hub\s*$")
         self.assertRegex(self.code, r"useradd --system .*--shell /usr/sbin/nologin hub")
         self.assertLess(self.code.index("useradd"), self.code.index("USER hub"))
@@ -84,16 +85,16 @@ class TheImage(unittest.TestCase):
         stack = read(os.path.join(REPO, "docker-compose.stack.yml"))
         self.assertIn("ants-hub-images:" + folder + "\n", stack)
 
-    def test_it_copies_the_code_and_nothing_else_and_makes_the_bytecode_while_it_can_write(self):
+    def test_it_copies_the_code_and_the_country_list_and_nothing_else_and_makes_the_bytecode_while_it_can_write(self):
         copies = re.findall(r"(?m)^COPY (.*)$", self.code)
-        self.assertEqual(copies, ["hub/ /app/hub/"])
-        self.assertLess(self.code.index("COPY hub/"), self.code.index("compileall"))
+        self.assertEqual(copies, ["hub/__init__.py hub/geodata.py /build/hub/", "hub/ /app/hub/", "--from=geo /geo/ /app/geo/"])           # (the first is the build stage of the country list: only the file that makes it)
+        self.assertLess(self.code.index("COPY hub/ "), self.code.index("compileall"))
         self.assertLess(self.code.index("compileall"), self.code.index("USER hub"))           # (as root: the image is run read only)
         self.assertIn("PYTHONDONTWRITEBYTECODE=1", self.code)
 
-    def test_it_has_no_build_id_so_that_nothing_but_hub_changes_the_image(self):
+    def test_it_has_no_build_id_so_that_nothing_but_hub_and_the_month_of_the_country_list_change_the_image(self):
         self.assertNotIn("ANTS_BUILD_ID", self.code)
-        self.assertNotIn("ARG ", self.code)
+        self.assertEqual(re.findall(r"(?m)^ARG (.*)$", self.code), ["GEO_MONTH="])                       # (the one argument: the month of the visit counter's country list, docs/ANALYTICS.md)
         self.assertNotIn(".git", self.code)
 
     def test_the_health_check_uses_a_command_that_the_image_has(self):
@@ -132,11 +133,12 @@ class TheServices(unittest.TestCase):
                 self.assertIn(line, hub, "%s: %s" % (name, line))
             self.assertRegex(hub, r"tmpfs:\s*\n\s+- /tmp\b")
 
-    def test_it_publishes_no_port_and_has_no_build_argument(self):
+    def test_it_publishes_no_port_and_has_no_build_argument_but_the_month_of_the_country_list(self):
         for name, text in self.files.items():
             hub = service(text, "ants-hub")
             self.assertNotIn("ports:", hub, name)
-            self.assertNotIn("args:", hub, name)
+            self.assertEqual(hub.count("args:"), 1, name)
+            self.assertEqual([l.strip() for l in code(hub[hub.index("args:"):hub.index("container_name:")]).splitlines()[1:] if l.strip()], ["GEO_MONTH: ${ANTS_GEO_MONTH:-}"], name)          # (docs/ANALYTICS.md: the month of the visit counter's list)
             self.assertNotIn("ANTS_BUILD_ID", hub, name)
             self.assertNotIn("expose:", hub, name)
 
@@ -158,7 +160,7 @@ class TheServices(unittest.TestCase):
     def test_the_settings_it_is_given(self):
         for name, text in self.files.items():
             hub = service(text, "ants-hub")
-            self.assertEqual(sorted(re.findall(r"(?m)^      (ANTS_[A-Z_]+):", hub)), ["ANTS_ADMIN_GATE_SECRET", "ANTS_HUB_ADMIN_GATE_SECRET", "ANTS_HUB_AI_KEYS", "ANTS_HUB_COUNTS_URL", "ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_DISCORD_CLIENT_ID", "ANTS_HUB_DISCORD_CLIENT_SECRET",
+            self.assertEqual(sorted(re.findall(r"(?m)^      (ANTS_[A-Z_]+):", hub)), ["ANTS_ADMIN_GATE_SECRET", "ANTS_HUB_ADMIN_GATE_SECRET", "ANTS_HUB_AI_KEYS", "ANTS_HUB_ANALYTICS", "ANTS_HUB_COUNTS_URL", "ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_DISCORD_CLIENT_ID", "ANTS_HUB_DISCORD_CLIENT_SECRET",
                                                                                      "ANTS_HUB_DISCORD_GUILD", "ANTS_HUB_GAME_ADMIN_URL", "ANTS_HUB_IMAGE_CONVERTER_URL", "ANTS_HUB_IMAGE_DIR", "ANTS_HUB_MIN_ACCOUNT_DAYS", "ANTS_HUB_OWNER", "ANTS_HUB_PUBLIC_URL",
                                                                                      "ANTS_HUB_ROLE_ADMIN", "ANTS_HUB_ROLE_IMAGES", "ANTS_HUB_ROLE_MOD", "ANTS_HUB_ROLE_RECHECK_SECONDS"], name)
             for secret in ("ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_DISCORD_GUILD", "ANTS_HUB_ROLE_ADMIN", "ANTS_HUB_ROLE_MOD", "ANTS_HUB_ROLE_IMAGES", "ANTS_HUB_OWNER", "ANTS_HUB_ADMIN_GATE_SECRET", "ANTS_ADMIN_GATE_SECRET"):
@@ -246,7 +248,7 @@ class TheServices(unittest.TestCase):
             self.assertEqual(int(hub["mem_limit"]), 256 * 1024 * 1024)
             self.assertEqual(list(hub["tmpfs"]), ["/tmp"])
             self.assertEqual(hub["build"]["dockerfile"], "Dockerfile.hub")
-            self.assertNotIn("args", hub["build"])
+            self.assertEqual(hub["build"]["args"], {"GEO_MONTH": ""}, "no argument but the month of the country list, empty unless the stack says one")
 
 
 class TheConverterService(unittest.TestCase):

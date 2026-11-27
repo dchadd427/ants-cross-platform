@@ -2,7 +2,7 @@
 // see (signed out, a player, a moderator, an admin, the owner), the shell (the chip and its menu, the four sections as tabs and as a select), the Maps section (the lists, the questions before Approve and Take down, the
 // empty states), the Chat section (the form that mutes or bans and its question, the lists, the pictures), the Log (one list, three filters), the Status (all well, trouble, a part that does not answer), what every
 // button sends and with which token, and that nothing a person typed becomes markup and no Discord id is shown or sent. tests/scripts/test_web_admin.py runs this with node (the quick tier).
-// usage: node web_admin_check.js web/admin_page.js [web/admin_bots.js [web/admin_map_pick.js]]     (exit 0: every check holds; every failure is printed)
+// usage: node web_admin_check.js web/admin_page.js [web/admin_bots.js [web/admin_map_pick.js [web/admin_analytics.js]]]     (exit 0: every check holds; every failure is printed)
 'use strict';
 const path = require('path');
 const { makeDocument } = require('./web_mapmaker_fake_dom.js');
@@ -10,6 +10,7 @@ const { makeDocument } = require('./web_mapmaker_fake_dom.js');
 // (and the list of the server's maps that it uses, the page's other file: admin_map_pick.js, loaded before it; a broken copy of that is the fourth argument)
 global.AntsAdminMapPick = require(process.argv[4] ? path.resolve(process.argv[4]) : path.join(__dirname, '..', '..', 'web', 'admin_map_pick.js'));
 global.AntsAdminBots = require(process.argv[3] ? path.resolve(process.argv[3]) : path.join(__dirname, '..', '..', 'web', 'admin_bots.js'));
+global.AntsAdminAnalytics = require(process.argv[5] ? path.resolve(process.argv[5]) : path.join(__dirname, '..', '..', 'web', 'admin_analytics.js'));      // (the section "Analytics", the page's third file: a broken copy of it is the fifth argument; the section's own checks are web_admin_analytics_check.js)
 const A = require(path.resolve(process.argv[2]));
 
 const seenUrls = [];                                  // every address that any page of this run asked for (the check at the end looks at all of them)
@@ -20,6 +21,8 @@ function same(label, got, want) { const a = JSON.stringify(got), b = JSON.string
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 async function settle() { for (let i = 0; i < 14; i++) await tick(); }
 
+
+const ANALYTICS_REPORT = require('./web_analytics_fixture.js').small;                                // (what the hub answers to the Analytics tab: made up, one day)
 
 // ---- the time as the pictures write it (Pacific) -----------------------------------------------------------------------------------------------------------------------------------------------------
 const NOW = Date.UTC(2026, 9, 18, 20, 0, 0);            // 2026-10-18 13:00 Pacific
@@ -123,7 +126,7 @@ function world(overrides) {
         audit: [{ at: at('2026-10-18T18:30:00Z'), who: 'basil', ref: '22b2222222222222', action: 'map_approved', target: 'Mossy Ridge', detail: '' },
             { at: at('2026-10-18T17:02:00Z'), who: 'tess', ref: '44d4444444444444', action: 'map_declined', target: 'Test 1', detail: 'Same as an existing map.' },
             { at: at('2026-10-17T18:00:00Z'), who: 'earlier admin', ref: '', action: 'map_taken_down', target: 'Old Bridge', detail: '' }],
-        busy: { matches: 2, players: 5 },
+        busy: { matches: 2, players: 5 }, analytics: ANALYTICS_REPORT,
         status: {
             store: { bytes: 4404019, limit: 67108864, log: 314572, free: 0, lines: 187, oldest: at('2026-10-09T18:00:00Z'), pictures: 41, pictures_max: 1000, picture_bytes: 1153434, picture_bytes_max: 25165824, off: 6, blocked: 1 },
             health: { roles: 'ok', roles_known: 14, kind: null, status: null, retry: null }, last_picture: { kind: 'ok', age: 180 }, version: { code: '9f3c1a2e', started: at('2026-10-16T16:30:00Z') }
@@ -181,6 +184,7 @@ function world(overrides) {
         if (url === '/hub/admin/api/imagesoff') return reply(200, { imagesoff: w.imagesoff, untrusted: true, untrusted_fields: ['name', 'by_name'] });
         if (url === '/hub/admin/api/modlog') return reply(200, { modlog: w.modlog, untrusted: true, untrusted_fields: ['actor_name', 'target_name'] });
         if (url === '/hub/admin/api/status') return reply(200, w.status);
+        if (method === 'POST' && url === '/hub/admin/api/analytics') return reply(200, w.analytics);
         if (method === 'POST' && url === '/hub/logout') return reply(200, { ok: true });
         if (method === 'POST' && /^\/hub\/admin\/api\/(ban|unban|mute|unmute|nopic|pic|noimages|images|del)$/.test(url)) {
             const body = JSON.parse(init.body), name = url.split('/').pop();
@@ -292,7 +296,7 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
         const w = world({ me: who('Dave', role) });
         const { app, page } = await open(w);
         same(role + ': the question who is here is asked once, with the cookie, then the list of the Maps section and the number of bot matches that go (the badge) and nothing else', [w.calls.map((c) => c.url), w.calls[0].credentials, w.calls[0].method], [['/admin/api/me', '/admin/api/maps?state=waiting', '/admin/api/bot-matches'], 'same-origin', 'GET']);
-        same(role + ': the title, the line under it and the five sections as tabs', [texts(app, 'h1'), texts(app, '.pt p'), all(app, '.atab').map((b) => b.id), page.sections()], [['Admin'], ['Maps that players sent, bans and mutes in the chat, the logs, and how the site is doing.'], ['tab-maps', 'tab-chat', 'tab-bots', 'tab-log', 'tab-status'], ['maps', 'chat', 'bots', 'log', 'status']]);
+        same(role + ': the title, the line under it and the six sections as tabs', [texts(app, 'h1'), texts(app, '.pt p'), all(app, '.atab').map((b) => b.id), page.sections()], [['Admin'], ['Maps that players sent, bans and mutes in the chat, visitors, the logs, and how the site is doing.'], ['tab-maps', 'tab-chat', 'tab-bots', 'tab-analytics', 'tab-log', 'tab-status'], ['maps', 'chat', 'bots', 'analytics', 'log', 'status']]);
         same(role + ': the chip shows the name, the role and the first letter, once', [texts(app, '.acct .wn b'), texts(app, '.acct .wn small'), texts(app, '.acct .av'), all(app, '.acct').length], [['Dave'], [roleWords], ['D'], 1]);
         same(role + ': the chip is a button that opens a menu, and the menu is closed', [all(app, '.acct')[0].tagName, all(app, '.acct')[0].getAttribute('aria-haspopup'), all(app, '.acct')[0].getAttribute('aria-expanded'), all(app, '.amenu').length, all(app, 'a').length], ['button', 'menu', 'false', 0, 0]);
         same(role + ': only the owner\'s role is in gold', all(app, '.acct .wn small')[0].className, role === 'owner' ? 'own' : '');
@@ -399,32 +403,36 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
         const w = world();
         const { app, page } = await open(w);
         same('the tabs: a tab list with its name, the Maps one chosen, the number of maps that wait on it', [all(app, '.atabs')[0].getAttribute('role'), all(app, '.atabs')[0].getAttribute('aria-label'), texts(app, '.atab'), all(app, '.atab').map((b) => b.getAttribute('aria-selected')), all(app, '.atab').map((b) => b.getAttribute('role')), texts(app, '.atab .cnt')],
-            ['tablist', 'Sections', ['Maps2', 'Chat', 'Bot matches4', 'Log', 'Status'], ['true', 'false', 'false', 'false', 'false'], ['tab', 'tab', 'tab', 'tab', 'tab'], ['2', '4']]);
-        same('the select of a phone: a label, the five sections, the Maps one chosen with its count in words', [texts(app, '.asel label'), all(app, '.asel label')[0].getAttribute('for'), all(app, 'select')[0].id, all(app, 'option').map((o) => o.value), all(app, 'option').map((o) => o.textContent), all(app, 'select')[0].value],
-            [['Section'], 'asec', 'asec', ['maps', 'chat', 'bots', 'log', 'status'], ['Maps (2 waiting)', 'Chat', 'Bot matches (4 running)', 'Log', 'Status'], 'maps']);
-        same('the section is a panel that the tabs control', [all(app, '#secpanel')[0].getAttribute('role'), all(app, '.atab').map((b) => b.getAttribute('aria-controls'))], ['tabpanel', ['secpanel', 'secpanel', 'secpanel', 'secpanel', 'secpanel']]);
+            ['tablist', 'Sections', ['Maps2', 'Chat', 'Bot matches4', 'Analytics', 'Log', 'Status'], ['true', 'false', 'false', 'false', 'false', 'false'], ['tab', 'tab', 'tab', 'tab', 'tab', 'tab'], ['2', '4']]);
+        same('the select of a phone: a label, the six sections, the Maps one chosen with its count in words', [texts(app, '.asel label'), all(app, '.asel label')[0].getAttribute('for'), all(app, 'select')[0].id, all(app, 'option').map((o) => o.value), all(app, 'option').map((o) => o.textContent), all(app, 'select')[0].value],
+            [['Section'], 'asec', 'asec', ['maps', 'chat', 'bots', 'analytics', 'log', 'status'], ['Maps (2 waiting)', 'Chat', 'Bot matches (4 running)', 'Analytics', 'Log', 'Status'], 'maps']);
+        same('the section is a panel that the tabs control', [all(app, '#secpanel')[0].getAttribute('role'), all(app, '.atab').map((b) => b.getAttribute('aria-controls'))], ['tabpanel', ['secpanel', 'secpanel', 'secpanel', 'secpanel', 'secpanel', 'secpanel']]);
         w.calls.length = 0;
         await section(app, 'Chat');
-        same('a tab shows its section: the chosen tab, the select and the content change, and Maps is gone', [all(app, '.atab').map((b) => b.getAttribute('aria-selected')), all(app, 'select')[0].value, all(app, '.cgrid').length, all(app, '.chip').length > 0 && all(app, '.arow').length > 0], [['false', 'true', 'false', 'false', 'false'], 'chat', 1, false]);
+        same('a tab shows its section: the chosen tab, the select and the content change, and Maps is gone', [all(app, '.atab').map((b) => b.getAttribute('aria-selected')), all(app, 'select')[0].value, all(app, '.cgrid').length, all(app, '.chip').length > 0 && all(app, '.arow').length > 0], [['false', 'true', 'false', 'false', 'false', 'false'], 'chat', 1, false]);
         same('the badges stay on the tabs while another section is shown: the maps that wait and the bot matches that go', texts(app, '.atab .cnt'), ['2', '4']);
         all(app, 'select')[0].value = 'log';
         all(app, 'select')[0].fire('change', {});
         await settle();
-        same('the select changes the section too', [all(app, '.atab').map((b) => b.getAttribute('aria-selected')), all(app, '.alist2').length, all(app, '.cgrid').length], [['false', 'false', 'false', 'true', 'false'], 1, 0]);
-        const tab = all(app, '.atab')[3];
+        same('the select changes the section too', [all(app, '.atab').map((b) => b.getAttribute('aria-selected')), all(app, '.alist2').length, all(app, '.cgrid').length], [['false', 'false', 'false', 'false', 'true', 'false'], 1, 0]);
+        const tab = all(app, '.atab')[4];
         const ev = { key: 'ArrowRight', prevented: false, preventDefault() { this.prevented = true; } };
         tab.fire('keydown', ev);
         await settle();
-        same('the arrow keys move between the tabs: the next one is shown and has the focus, the last one has no next', [ev.prevented, all(app, '.atab').map((b) => b.getAttribute('aria-selected')), all(app, '.sgrid').length], [true, ['false', 'false', 'false', 'false', 'true'], 1]);
+        same('the arrow keys move between the tabs: the next one is shown and has the focus, the last one has no next', [ev.prevented, all(app, '.atab').map((b) => b.getAttribute('aria-selected')), all(app, '.sgrid').length], [true, ['false', 'false', 'false', 'false', 'false', 'true'], 1]);
         const last = { key: 'ArrowRight', prevented: false, preventDefault() { this.prevented = true; } };
-        all(app, '.atab')[4].fire('keydown', last);
-        same('past the last tab nothing happens', [last.prevented, all(app, '.atab')[4].getAttribute('aria-selected')], [false, 'true']);
-        all(app, '.atab')[4].fire('keydown', { key: 'ArrowLeft', preventDefault() {} });
+        all(app, '.atab')[5].fire('keydown', last);
+        same('past the last tab nothing happens', [last.prevented, all(app, '.atab')[5].getAttribute('aria-selected')], [false, 'true']);
+        all(app, '.atab')[5].fire('keydown', { key: 'ArrowLeft', preventDefault() {} });
         await settle();
-        same('and back', all(app, '.atab').map((b) => b.getAttribute('aria-selected')), ['false', 'false', 'false', 'true', 'false']);
+        same('and back', all(app, '.atab').map((b) => b.getAttribute('aria-selected')), ['false', 'false', 'false', 'false', 'true', 'false']);
         await section(app, 'Maps');
         same('Maps again: its list is asked for again, from the first tab', [all(app, '.arow').length, all(app, '.chip.on').map((c) => c.textContent)], [2, ['Waiting (2)']]);
         same('every call of all these changes was a read', w.calls.filter((c) => c.method !== 'GET').length, 0);
+        w.calls.length = 0; await section(app, 'Analytics');
+        same('Analytics: the hub is asked for the last 30 days (Pacific days) with its token (this page has it already), and for nothing else',
+            w.calls.map((c) => [c.method, c.url, c.body, c.headers['X-Ants-Csrf']]), [['POST', '/hub/admin/api/analytics', { from: '2026-09-19', to: '2026-10-18' }, 'hub-token-1']]);
+        same('Analytics: its three views are drawn, the Overview first, with the numbers of the answer', [texts(app, '.anav .chip'), texts(app, '.tile .tb')], [['Overview', 'Visitors', 'Health'], ['3', '4', '0', '0']]);
     }
     // ---- who is not let in: the card of each of them (the role matrix: nobody, a player, a moderator, a person whose name is not known, a closed door)
     {   // GET /admin/api/me answers 401: one card with a link to the Discord login
@@ -571,8 +579,8 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
     {
         const w = world();
         const { app, page } = await open(w);
-        same('admin page: the section registry holds the five sections', page.sections(), ['maps', 'chat', 'bots', 'log', 'status']);
-        same('admin page: the title once, and the Maps tab is the chosen one', [texts(app, 'h1'), all(app, '.atab').map((b) => b.getAttribute('aria-selected'))], [['Admin'], ['true', 'false', 'false', 'false', 'false']]);
+        same('admin page: the section registry holds the six sections', page.sections(), ['maps', 'chat', 'bots', 'analytics', 'log', 'status']);
+        same('admin page: the title once, and the Maps tab is the chosen one', [texts(app, 'h1'), all(app, '.atab').map((b) => b.getAttribute('aria-selected'))], [['Admin'], ['true', 'false', 'false', 'false', 'false', 'false']]);
         same('admin page: four tabs with their counts, the first chosen', [texts(app, '.chip'), all(app, '.chip').map((c) => c.className.indexOf(' on') > 0)], [['Waiting (2)', 'Approved (1)', 'Declined (1)', 'Taken down (1)'], [true, false, false, false]]);
         check('admin page: no link anywhere (no navigation, nothing that leads out)', all(app, 'a').length === 0);
         same('admin page: the lead of the tab and its foot', [texts(app, '.alead'), texts(app, '.qfoot')], [['Maps players sent that wait for you. Approve puts a map in the lobby list.'], ['Declining asks for a short reason that the maker can read. Nothing is deleted.']]);

@@ -2,6 +2,7 @@
 describes the settings for a log line, and it names the ones that are safe."""
 import dataclasses
 import ipaddress
+import os
 import re
 from urllib.parse import urlsplit
 
@@ -53,6 +54,9 @@ class Config:
     image_converter_url: str = ""                                           # where the image converter is, `http://host:port` (hub/imgdoor.py); "" is none, and images are off for everybody
     image_dir: str = "/images"                                              # the folder of the images' files (the volume that the site's web server reads, read only)
     ai_keys: bool = False                                                   # ANTS_HUB_AI_KEYS=on: the keys that let a person's own AI work in the person's open Map Maker tab (docs/MAP_AI.md); off, every door of it answers 503 `ai_off`
+    analytics: bool = True                                                  # ANTS_HUB_ANALYTICS=off: the counter of the site's visits (docs/ANALYTICS.md) is switched off: its door answers 503 `off` and nothing is kept
+    analytics_db: str = ""                                                  # the counter's own file (ANTS_HUB_ANALYTICS_DB; analytics.db next to hub.db when not set)
+    geo_file: str = ""                                                      # the country list that the image's build made (ANTS_HUB_GEO_FILE; geo/country.bin of the program's folder when not set: docs/ANALYTICS.md); no file: every country is unknown
 
     @property
     def login_on(self):
@@ -206,4 +210,10 @@ def load(env):
     if ai not in ("on", "off"):
         raise ConfigError("ANTS_HUB_AI_KEYS must be on or off")
     cfg.ai_keys = ai == "on"
+    counter = env.get("ANTS_HUB_ANALYTICS", "").strip().lower() or "on"
+    if counter not in ("on", "off"):
+        raise ConfigError("ANTS_HUB_ANALYTICS must be on or off")
+    cfg.analytics = counter == "on"
+    cfg.analytics_db = env.get("ANTS_HUB_ANALYTICS_DB", "").strip() or os.path.join(os.path.dirname(cfg.db) or ".", "analytics.db")
+    cfg.geo_file = env.get("ANTS_HUB_GEO_FILE", "").strip() or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "geo", "country.bin")
     return cfg

@@ -64,6 +64,8 @@ class Limits:
     admin_door_refill_seconds: float = 5.0
     admin_door_new_burst: int = 2       # a second, small share for an account that the hub has never known to hold a role (so that many plain accounts cannot use up the door's share for the staff): a burst of 2, then one every 30 seconds
     admin_door_new_refill_seconds: float = 30.0
+    analytics_burst: int = 40           # the counter's door (hub/analyticsdoor.py): for each client address a burst of 40 events (a visit that opens a few pages sends a handful of them), then one every half second; nginx has wider numbers in front
+    analytics_refill_seconds: float = 0.5
     like_burst: int = 60                # the likes' gate (hub/likedoor.py): for each client address a burst of 60, then one every second (nginx asks it for each of the page's calls that count or change a like)
     like_refill_seconds: float = 1.0
     login_inflight: int = 6             # logins that wait for Discord at one time (the 7th gets the page "Login unavailable" at once, and the sockets never wait for it)
@@ -402,6 +404,30 @@ def address_key(value, peer):
             return str(ipaddress.IPv6Network((int(ip) >> 64 << 64, 64)))
         return str(ip)
     return "unknown"
+
+
+def raw_address(value, peer):
+    """The visitor's address as a text of the same rule as address_key (the X-Client-Address that the site's nginx sets, else the peer's own; an IPv4-in-IPv6 as the IPv4), whole and not cut to a /64: only for
+    a lookup that is made at once and forgotten (the country of the counter's events). "" when there is none."""
+    for candidate in [value, peer]:
+        try:
+            ip = ipaddress.ip_address((candidate or "").strip())
+        except ValueError:
+            continue
+        return str(ip.ipv4_mapped if ip.version == 6 and ip.ipv4_mapped is not None else ip)
+    return ""
+
+
+def address_range(text):
+    """The range that an address belongs to, as a text: its /24 for an IPv4 address, its /48 for an IPv6 one (an IPv4-in-IPv6 as the IPv4); "" for a text that is no address. Who holds a whole range is one
+    household, one office or one provider's customer, whatever address of it a request comes from: it is what the counter limits new visitors by, in memory and only for a day (hub/analytics.py)."""
+    try:
+        ip = ipaddress.ip_address((text or "").strip())
+    except ValueError:
+        return ""
+    if ip.version == 6 and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    return str(ipaddress.ip_network((int(ip) >> (128 - 48) << (128 - 48), 48) if ip.version == 6 else (int(ip) >> 8 << 8, 24)))
 
 
 class PerAddress:

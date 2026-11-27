@@ -75,6 +75,8 @@
 #   ANTS_HUB_IMAGE_CONVERTER_URL=http://ants-img:4050   where the hub reaches the image converter (the service ants-img below, on a private network): `http://`, a host and a port, nothing else. Set but EMPTY switches images off for everybody (no posting: the files that are there are still deleted with their lines); not set at all is the default shown here
 #   ANTS_HUB_ROLE_RECHECK_SECONDS=180               how often the role of everybody who is in the chat is asked again, 60 to 3600 (optional; this is the default)
 #   ANTS_HUB_AI_KEYS=off                            `on` or `off`, nothing else (any other value stops the hub at start): `on` lets every logged-in account make keys for its own AI and arm a Map Maker tab for it (docs/MAP_AI.md); off (the default) shuts every door of it with 503 `ai_off`. It is the kill switch of the feature and stays (no expiry) (optional)
+#   ANTS_HUB_ANALYTICS=on                           `on` or `off`, nothing else (any other value stops the hub at start): the counter of the site's visits (docs/ANALYTICS.md: no cookie, no address kept, a code that lasts a day); `off` keeps nothing and its door answers 503. It is the kill switch of the counter and stays (no expiry) (optional)
+#   ANTS_GEO_MONTH=2026-12                          the month of the counter's country list, a build argument of the hub's image (DB-IP Lite, fetched when the image is built; empty is the month of the build): pass the new month once a month so that the next build fetches the new list; a build that cannot reach db-ip.com goes on without a list (optional)
 #   ANTS_HUB_OWNER=<account id>                     one account (Discord's id, digits only) that is always an administrator, even when Discord does not answer (optional; none by default).
 #                                                   Moderation from a terminal: docker exec ants-hub python -m hub.admin list
 #   ANTS_HUB_GAME_ADMIN_URL=http://ants-server:4030  where the chat hub reaches the game server's admin door, for the administrators' `/bots` command (docs/HUB_COMMANDS.md, "The game door"): `http://`, the
@@ -177,6 +179,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.hub
+      args:
+        # the month of the visit counter's country list (docs/ANALYTICS.md): `2026-12`; empty is the month of the build. A new month is a new list in the next build; a build that cannot reach db-ip.com goes on without one
+        GEO_MONTH: ${ANTS_GEO_MONTH:-}
     container_name: ants-hub
     restart: unless-stopped
     environment:
@@ -196,6 +201,8 @@ services:
       ANTS_HUB_OWNER: ${ANTS_HUB_OWNER:-}
       # the keys of a person's AI and the relay to the armed Map Maker tab (docs/MAP_AI.md): off unless this says `on`
       ANTS_HUB_AI_KEYS: ${ANTS_HUB_AI_KEYS:-off}
+      # the counter of the site's visits (docs/ANALYTICS.md): `on` or `off`, nothing else (any other value stops the hub at start); off keeps nothing and its door answers 503
+      ANTS_HUB_ANALYTICS: ${ANTS_HUB_ANALYTICS:-on}
       # where the game server's admin door is, for `/bots` (empty: off); the call stays on this network and publishes no port
       ANTS_HUB_GAME_ADMIN_URL: ${ANTS_HUB_GAME_ADMIN_URL:-}
       # where the game server's counts door is (docs/REPLAY_COUNTS.md): Forget me takes the person's likes of replays back there first; the call stays on this network. A variable that is not set takes the default; one that is set and

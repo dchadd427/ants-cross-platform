@@ -252,8 +252,8 @@ class MadeUpFiles(unittest.TestCase):
         self.assertEqual([(l.get("rel"), l.get("href")) for l in page.links],
                          [("canonical", "@@SITE_ORIGIN@@/changelog"), ("icon", "/favicon.png?v=9ea2152a"), ("manifest", "/manifest.webmanifest"), ("apple-touch-icon", "/app/apple-touch-icon.png?v=82bef672"), ("preload", "/front/LibreFranklin-Medium.ttf"), ("stylesheet", "/front/classic.css"), ("stylesheet", "/site_nav.css"), ("stylesheet", "/update_notice.css")])
         self.assertEqual([i.get("src") for i in page.imgs], [])
-        self.assertEqual(page.scripts, ["script", "script", "script"])                             # (the one inline script that makes the pages: TheScript, below, and the site bar's file and the update notice's at the end)
-        self.assertIn('</div>\n<script src="/site_nav.js"></script>\n<script src="/update_notice.js"></script>\n</body>', self.text)
+        self.assertEqual(page.scripts, ["script", "script", "script", "script"])                             # (the one inline script that makes the pages: TheScript, below, and the site bar's file, the update notice's and the counter's at the end)
+        self.assertIn('</div>\n<script src="/site_nav.js"></script>\n<script src="/update_notice.js"></script>\n<script src="/analytics.js"></script>\n</body>', self.text)
         style = re.search(r"<style>(.*?)</style>", self.text, re.S).group(1)
         self.assertNotIn("@import", style)
         self.assertNotIn("url(", style)
@@ -457,11 +457,11 @@ class ThePagesOfThePage(unittest.TestCase):
 
     def test_one_inline_script_after_the_releases(self):
         for page in (self.real, self.long, self.short):
-            self.assertEqual(page.count("<script"), 3)                                               # (the page's own, and the site bar's file and the update notice's at the end)
-            self.assertEqual(page.count("</script>"), 3)
+            self.assertEqual(page.count("<script"), 4)                                               # (the page's own, and the site bar's file, the update notice's and the counter's at the end)
+            self.assertEqual(page.count("</script>"), 4)
             self.assertIn("</main>\n<script>\n(function () {", page)
             self.assertLess(page.index("</main>"), page.index("</script>"))
-            self.assertNotRegex(page.replace('<script src="/site_nav.js"></script>', "").replace('<script src="/update_notice.js"></script>', ""), r"<script[^>]*\b(src|type|defer|async)=")
+            self.assertNotRegex(page.replace('<script src="/site_nav.js"></script>', "").replace('<script src="/update_notice.js"></script>', "").replace('<script src="/analytics.js"></script>', ""), r"<script[^>]*\b(src|type|defer|async)=")
             self.assertNotIn("@", script_of(page))                                           # (every placeholder of the template was filled)
 
     def test_the_script_is_the_same_for_every_changelog(self):
