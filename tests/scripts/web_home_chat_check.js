@@ -1269,6 +1269,13 @@ function bring(env) {                                     // the two files arriv
     const r = rig({ chip: true });
     r.live(W({ login: true, you: { name: '\ud83d\ude00smile', mod: false } }));
     check('the circle holds the first CODE POINT of the name (a pair of surrogates is not cut in two)', one(r.chip, 'gc-av').textContent === '\ud83d\ude00');
+    same('the circle of every list holds the first code point of the NICKNAME: a name that comes with its tag ("[TAG] Nickname") gives the nickname\'s letter and never the bracket; no cut dots, no tag taken off a name that has none',
+        ['[ANT] Zoe', '[\u0420\u0423\u0421] \u0401\u0436\u0438\u043a', 'Zoe (Guest)', '[x] Zoe', '[Zoe', '[ANT]', 'ab', '\ud83d\ude00x'].map((n) => Pure.initial(n)), ['Z', '\u0401', 'Z', '[', '[', '[', 'a', '\ud83d\ude00']);
+    const tagged = rig({ chip: true });
+    tagged.live(W({ login: true, you: { name: 'Zoe', tag: 'ANT', mod: false } }));
+    const combined = rig({ chip: true });
+    combined.live(W({ login: true, you: { name: '[ANT] Zoe', mod: false } }));
+    check('the chip of a person with a tag shows the letter of the nickname, whichever way the name comes (a tag of its own, or in the name)', one(tagged.chip, 'gc-av').textContent === 'Z' && one(combined.chip, 'gc-av').textContent === 'Z');
     const q = rig({ chip: true });
     q.live(W({ login: true, you: { name: '\u3164\u2800\ufe0f', mod: false } }));
     check('a name of nothing that shows is nobody: the visitor is a reader, the account line is not shown', q.dock.slot.hidden === true && q.field().disabled === true);

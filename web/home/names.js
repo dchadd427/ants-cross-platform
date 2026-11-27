@@ -18,9 +18,9 @@
     var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     var TEXT = {
         title: 'Your name', close: 'Close', previewLabel: 'How others see you', save: 'Save',
-        nickLabel: 'Nickname', nickHint: '3 to 16 characters', nickHelp: 'Letters and digits of one alphabet, spaces and . _ - \u2019',
-        tagLabel: 'Tag', tagHint: 'optional, 2 to 5', tagHelp: 'Letters or digits. Shown as [TAG] before your name.',
-        guestLabel: 'Name', guestHelp: '',
+        nickLabel: 'Nickname', nickHint: '3 to 16 characters', nickPick: 'Pick a nickname', nickHelp: 'Letters and digits of one alphabet, spaces and . _ - \u2019',
+        tagLabel: 'Tag', tagHint: 'optional, 2 to 5', tagPick: 'ABC', tagHelp: 'Letters or digits. Shown as [TAG] before your name.',
+        guestLabel: 'Name', guestPick: 'Pick a name',
         firstNote: 'In the chat, the players list, rooms and match results.', guestNote: 'In rooms and in the game.', guestFirst: 'This is your name until you set one.',
         sinceNow: function (date) { return 'Your nickname since ' + date + '. You can change it now; after that you wait 30 days.'; }, sinceLater: function (date, free) { return 'Your nickname since ' + date + '. You can change it again on ' + free + '.'; },
         rules: ['Your nickname is yours alone: nobody else can use it.', 'You can change it once every 30 days. The old one stays yours for 30 days.', 'A tag can change once a day. Anyone can use any tag.', 'Names and tags are public and are kept with match results.'],
@@ -168,9 +168,9 @@
             put(prev, [el('span', 'nm-pl', TEXT.previewLabel), av, pn, ps]); box.appendChild(prev);
             s.av = av; s.pn = pn; s.ps = ps;
             // the fields
-            function field(label, hint, id, max, help) {
+            function field(label, hint, id, max, pick, help) {
                 var f = el('div', 'nm-f'), lab = el('label'); lab.setAttribute('for', id); lab.appendChild(doc.createTextNode(label)); lab.appendChild(el('small', '', hint)); f.appendChild(lab);
-                var wrap = el('div', 'nm-in'), input = el('input'); input.id = id; input.type = 'text'; input.setAttribute('autocomplete', 'off'); input.setAttribute('autocapitalize', 'off'); input.setAttribute('spellcheck', 'false'); input.setAttribute('maxlength', String(max * 2));
+                var wrap = el('div', 'nm-in'), input = el('input'); input.id = id; input.type = 'text'; input.setAttribute('autocomplete', 'off'); input.setAttribute('autocapitalize', 'off'); input.setAttribute('spellcheck', 'false'); input.setAttribute('placeholder', pick); input.setAttribute('maxlength', String(max * 2));
                 var count = el('span', 'nm-cnt', '0 / ' + max);
                 put(wrap, [input, count]); f.appendChild(wrap);
                 var msg = el('p', 'nm-msg'); msg.hidden = true; var helper = el('p', 'nm-h', help); helper.hidden = !help;
@@ -178,12 +178,12 @@
                 return { box: f, wrap: wrap, input: input, count: count, msg: msg, help: helper, max: max };
             }
             if (mode === 'login') {
-                s.nick = field(TEXT.nickLabel, TEXT.nickHint, 'nm-nick', NICK_MAX, TEXT.nickHelp);
-                s.tag = field(TEXT.tagLabel, TEXT.tagHint, 'nm-tag', TAG_MAX, TEXT.tagHelp);
+                s.nick = field(TEXT.nickLabel, TEXT.nickHint, 'nm-nick', NICK_MAX, TEXT.nickPick, TEXT.nickHelp);
+                s.tag = field(TEXT.tagLabel, TEXT.tagHint, 'nm-tag', TAG_MAX, TEXT.tagPick, TEXT.tagHelp);
                 s.nick.input.value = me.nick || ''; s.tag.input.value = me.tag || '';
                 put(box, [s.nick.box, s.tag.box]);
             } else {
-                s.nick = field(TEXT.guestLabel, TEXT.nickHint, 'nm-nick', NICK_MAX, TEXT.guestHelp);
+                s.nick = field(TEXT.guestLabel, TEXT.nickHint, 'nm-nick', NICK_MAX, TEXT.guestPick, TEXT.nickHelp);
                 s.nick.input.value = person.typed();
                 box.appendChild(s.nick.box);
             }

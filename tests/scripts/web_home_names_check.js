@@ -38,6 +38,7 @@ function same(label, got, want) {
 const cls = (e) => String(e.className).split(/\s+/);
 const byClass = (root, c) => root.findAll((e) => cls(e).indexOf(c) !== -1);
 const one = (root, c) => byClass(root, c)[0] || null;
+const helps = (root) => byClass(root, 'nm-h').filter((h) => !h.hidden).map((h) => h.textContent);
 const button = (root, text) => root.findAll((e) => e.tagName === 'button' && e.textContent === text)[0] || null;
 
 // 1 June 2026, 12:00 UTC (a Monday) is the fake clock's start; the page's own time zone is the machine's, so the checks that name a day use the machine's day of the same instant
@@ -266,6 +267,7 @@ const OK = { ok: true };
     r.chip().click();
     check('guest sheet: the chip opens it, the welcome card goes, there is one field (no tag) with a counter', !!r.sheet() && r.card() === null && !!r.nick() && r.tag() === null && one(r.sheet(), 'nm-cnt').textContent === '0 / 16');
     check('guest sheet: Save is off and nothing was asked yet', r.save().disabled === true && r.sent.length === 0);
+    same('guest sheet: the empty field says "Pick a name" and, under it, which letters a name may hold', [r.nick().placeholder, helps(r.sheet())], ['Pick a name', [Names.TEXT.nickHelp]]);
     check('guest sheet: it says what the others see now (the number is the name until one is set) and has the rules for guests and the login button', /Guest 550000/.test(r.preview()) && /until you set one/.test(one(r.sheet(), 'nm-ps').textContent) && byClass(r.sheet(), 'nm-rules')[0].children.length === 3 && !!button(r.sheet(), 'Log in with Discord'));
     r.type(r.nick(), 'Wr');
     r.advance(100);
@@ -281,6 +283,7 @@ const OK = { ok: true };
     check('guest sheet: an answer to an earlier question is not heard', r.msgs().length === 0 && r.save().disabled === true);
     r.tell('name', { t: 'name', r: q, ok: false, nick: { ok: false, why: 'taken' }, tag: null, shown: '', saved: false });
     same('guest sheet: a refusal is said under the field with the name that was asked', r.msgs(), ['\u00c4ngel\u00e4 is taken. Pick another one.']);
+    check('guest sheet: while the hub has something to say the line of letters is gone', helps(r.sheet()).length === 0);
     check('guest sheet: the field is red and Save stays off', cls(one(r.sheet(), 'nm-in')).indexOf('err') !== -1 && r.save().disabled === true);
     r.type(r.nick(), 'Wren');
     r.advance(400);
@@ -325,6 +328,7 @@ const OK = { ok: true };
     let r = rig({ you: ME({}) });
     r.tell('names');
     check('sheet: the dock\'s tap opens it with a nickname field and a tag field, both empty, and the rules of a nickname', !!r.sheet() && !!r.nick() && !!r.tag() && r.nick().value === '' && r.tag().value === '' && byClass(r.sheet(), 'nm-rules')[0].children.length === 4);
+    same('sheet: the empty fields say "Pick a nickname" and "ABC", and under them which letters a nickname may hold and what a tag is', [r.nick().placeholder, r.tag().placeholder, helps(r.sheet())], ['Pick a nickname', 'ABC', [Names.TEXT.nickHelp, Names.TEXT.tagHelp]]);
     check('sheet: a login has no guest\'s box and no login button', one(r.sheet(), 'nm-gbox') === null && button(r.sheet(), 'Log in with Discord') === null);
     check('sheet: it says first what the person shows as now (the login\'s name)', r.preview() === 'maple.leaf' && /chat/.test(one(r.sheet(), 'nm-ps').textContent));
     r.type(r.nick(), 'Zo\u00eb');

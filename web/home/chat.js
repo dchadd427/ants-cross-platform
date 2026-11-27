@@ -232,8 +232,9 @@
         var low = Math.max(BACKOFF.min, base * BACKOFF.low), high = Math.min(BACKOFF.max, base * BACKOFF.high);
         return Math.round(low + (high - low) * (random >= 0 && random <= 1 ? random : 0.5));
     }
-    function initial(name) {                                             // the first code point of a name, for the circle in the bar
-        var first = clip(name, 1);
+    var SHOWN = /^\[[^\]\s]{2,5}\] (.+)$/;                                // "[TAG] Nickname", a name as the game and a room write it (front/name_letters.js split reads it too)
+    function initial(name) {                                             // the first code point of the nickname, for a circle (a name with its tag gives the nickname's letter, never the bracket)
+        var shown = SHOWN.exec(name), first = clip(shown ? shown[1] : name, 1);
         return first.length > 1 && first.charAt(first.length - 1) === '…' ? first.slice(0, -1) : first;
     }
     function addressOf(loc) { return (loc.protocol === 'https:' ? 'wss://' : 'ws://') + loc.host + PATH; }
@@ -925,5 +926,5 @@
         };
     }
 
-    return { tagOf: tagOf, PATH: PATH, LIMIT: LIMIT, marksOf: marksOf, agoOf: agoOf, MS: MS, PACE: PACE, TEXT: TEXT, ERR: ERR, plain: plain, points: points, clip: clip, parse: parse, count: count, lineOf: lineOf, partsOf: partsOf, mutesOf: mutesOf, youOf: youOf, picOf: picOf, picture: picture, roleOf: roleOf, wordOfRole: wordOfRole, bansOf: bansOf, wordOfCommand: wordOfCommand, wordOf: wordOf, delayOf: delayOf, addressOf: addressOf, mount: mount };
+    return { tagOf: tagOf, PATH: PATH, LIMIT: LIMIT, marksOf: marksOf, agoOf: agoOf, MS: MS, PACE: PACE, TEXT: TEXT, ERR: ERR, plain: plain, points: points, clip: clip, parse: parse, count: count, lineOf: lineOf, partsOf: partsOf, mutesOf: mutesOf, youOf: youOf, picOf: picOf, picture: picture, roleOf: roleOf, wordOfRole: wordOfRole, bansOf: bansOf, wordOfCommand: wordOfCommand, wordOf: wordOf, delayOf: delayOf, addressOf: addressOf, initial: initial, mount: mount };
 });

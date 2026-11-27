@@ -14,7 +14,7 @@ Part of [The chat hub](HUB.md). A person who is logged in has **one nickname** (
 
 The chat and the players list show the nickname and, before it and dimmer, the tag; a guest name is shown with "(Guest)" dimmer than the name. The game has one plain string for each name (`[TAG] Nickname`, `Wren (Guest)`) and draws it in one color. A finished match keeps the names that were played with (the history pages, the replay's head), so a later change of nickname never rewrites an old match; matches from the day this ships on show the new names, earlier ones keep what they had.
 
-The top bar's chip shows the nickname only, and its round badge takes the first letter of the nickname. A guest's chip has a dashed ring.
+The top bar's chip shows the nickname only, and its round badge takes the first letter of the nickname. Every round badge does (the chip, the Players list, a conversation, the moderation card), also for a name that comes as "[TAG] Nickname": never the bracket. A guest's chip has a dashed ring.
 
 ## The rules
 

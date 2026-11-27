@@ -576,7 +576,7 @@ const buttonsOf = (root, label) => root.findAll((e) => e.tagName === 'button' &&
         t.bell.click();
         check('a guest never has the Messages tab, whatever the part says', tabs().length === 0);
         t.bell.click();
-        t = withTabs([CONV('a1b2c3d4e5f6', 'Pebble', { u: 2 }), CONV('b1b2c3d4e5f6', 'Maple', { me: true, text: 'see you', f: true, at: NOW - 7200 }), CONV('c1b2c3d4e5f6', 'Tess', { u: 120, text: '<b>x</b>' })]);
+        t = withTabs([CONV('a1b2c3d4e5f6', 'Pebble', { u: 2 }), CONV('b1b2c3d4e5f6', 'Maple', { me: true, text: 'see you', f: true, at: NOW - 7200 }), CONV('c1b2c3d4e5f6', '[ANT] Tess', { u: 120, text: '<b>x</b>' })]);
         t.tap('alerts', { rows: [MENTION(3), MSGROW(4)] });
         same('the bell counts what is not read in the alerts and in the conversations, and the message row of the hub is none of them', [t.marks(), t.bell.getAttribute('aria-label')], [['9+'], 'Alerts, 123 unread']);
         t.bell.click();
@@ -587,7 +587,7 @@ const buttonsOf = (root, label) => root.findAll((e) => e.tagName === 'button' &&
         const words2 = convRows().map((r) => r.textContent);
         check('a conversation says the person, the start of the newest message ("You: " when it is yours), how long ago and the count of what is not read (99+ above 99)', /Pebble/.test(words2[0]) && /hello there/.test(words2[0]) && /2 min ago/.test(words2[0]) && /2$/.test(words2[0]) && /You: see you/.test(words2[1]) && /2 hours? ago|2 h/.test(words2[1]) && /99\+$/.test(words2[2]));
         check('a person that is followed has the gold star, with its words; the unread have the mark', convRows()[1].findAll((e) => /al-star/.test(e.className)).length === 1 && convRows()[0].findAll((e) => /al-star/.test(e.className)).length === 0 && /unread/.test(convRows()[0].className) && !/unread/.test(convRows()[1].className));
-        same('the circle of a conversation holds the first letter of the name and nothing more (no dots of a cut)', convRows().map((r) => r.findAll((e) => /(^|\s)al-ic(\s|$)/.test(e.className))[0].textContent), ['P', 'M', 'T']);
+        same('the circle of a conversation holds the first letter of the nickname and nothing more (no dots of a cut, never the bracket of a tag)', convRows().map((r) => r.findAll((e) => /(^|\s)al-ic(\s|$)/.test(e.className))[0].textContent), ['P', 'M', 'T']);
         check('hostile text is text: no markup is written', words2[2].indexOf('<b>x</b>') !== -1 && env.innerHTMLWrites.length === 0);
         check('the line under the list says how long messages are kept', /kept for 7 days/.test(panelOf(env).textContent));
         convRows()[0].click();

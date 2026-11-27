@@ -325,6 +325,41 @@
    "old": "box.setAttribute('aria-labelledby', 'nm-wt'); ",
    "new": "",
    "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "the_guest_field_has_no_placeholder",
+   "file": "web/home/names.js",
+   "old": "NICK_MAX, TEXT.guestPick, TEXT.nickHelp);",
+   "new": "NICK_MAX, '', TEXT.nickHelp);",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "the_guest_field_has_no_line_of_letters",
+   "file": "web/home/names.js",
+   "old": "NICK_MAX, TEXT.guestPick, TEXT.nickHelp);",
+   "new": "NICK_MAX, TEXT.guestPick, '');",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "the_nickname_field_has_no_placeholder",
+   "file": "web/home/names.js",
+   "old": "NICK_MAX, TEXT.nickPick, TEXT.nickHelp);",
+   "new": "NICK_MAX, '', TEXT.nickHelp);",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "the_tag_field_has_no_placeholder",
+   "file": "web/home/names.js",
+   "old": "TAG_MAX, TEXT.tagPick, TEXT.tagHelp);",
+   "new": "TAG_MAX, '', TEXT.tagHelp);",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "the_line_of_letters_stays_under_a_message",
+   "file": "web/home/names.js",
+   "old": "f.help.hidden = !f.help.textContent || out.text !== '';",
+   "new": "f.help.hidden = !f.help.textContent;",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
   }
  ]
 }

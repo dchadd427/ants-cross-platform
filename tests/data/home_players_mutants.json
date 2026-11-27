@@ -1151,6 +1151,13 @@
    "old": "nm.appendChild(el('span', 'nm-tag', '[' + row.tag + ']'));",
    "new": "nm.appendChild(doc.createTextNode('[' + row.tag + ']'));",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_players_circle_takes_the_bracket_of_a_tag",
+   "file": "web/home/players.js",
+   "old": "av = el('span', 'pl-av', Chat.initial(row.name))",
+   "new": "av = el('span', 'pl-av', row.name.charAt(0))",
+   "test": "node tests/scripts/web_home_players_check.js web/lobby.html"
   }
  ]
 }

@@ -759,6 +759,10 @@ function bringPlayers(env) {
     same('a row with a valid picture name has one img in its circle, with the address made of the name and the attributes the page sets', [imgsOf(sage).length, img && img.attributes],
         [1, { src: '/hub/pic/' + NAME + '.png', alt: '', width: '32', height: '32', loading: 'lazy', decoding: 'async', draggable: 'false' }]);
     same('the letter is still in the circle, and a row with no picture has no img', [sage.textContent, imgsOf(circleOf(q, 'tess')).length], ['s', 0]);
+    const tg = rig();
+    tg.live(W({ you: { name: 'maple', mod: false, role: 'none' } }));
+    tg.who(FULL([row(2, 'Fern', 'look', { tag: 'FERN' }), row(3, '[ANTS1] Wolfgang', 'wait')], { n: 3 }));
+    same('the circle of a row with a tag holds the letter of the nickname (never the bracket), whether the tag comes in its own field or in the name', [circleOf(tg, '[FERN] Fern').textContent, circleOf(tg, '[ANTS1] Wolfgang').textContent], ['F', 'W']);
     check('the visitor\'s own card has the visitor\'s picture', imgsOf(one(one(q.panel(), 'pl-you'), 'pl-av')).length === 1 && imgsOf(one(one(q.panel(), 'pl-you'), 'pl-av'))[0].attributes.src === '/hub/pic/' + OTHER + '.png');
     check('the letter is not hidden before the picture has loaded', sage.getAttribute('data-pic') === null);
     img.fire('load');
