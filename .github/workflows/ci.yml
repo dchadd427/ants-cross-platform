@@ -627,10 +627,10 @@ jobs:
         run: |
           docker run -d --name ants-routes -p 127.0.0.1:18080:80 ants-beta
           for i in $(seq 1 50); do curl -fs -o /dev/null http://127.0.0.1:18080/ && break; sleep 0.2; done
-          python3 tests/scripts/web_routes_check.py --web http://127.0.0.1:18080/ || { docker logs ants-routes; docker rm -f ants-routes; exit 1; }
+          python3 tests/scripts/web_routes_check.py --web http://127.0.0.1:18080/ || { docker logs ants-routes; docker exec ants-routes sh -c 'cat /var/log/ants/web*.log'; docker rm -f ants-routes; exit 1; }
           # the six original maps are served like every map file (the Map Maker opens one as a starting point): byte for byte the files of Original-Ants/Maps
           for n in TINY SMALL MEDIUM GAUNTLET TREASURE ISLANDS; do
-            curl -fsS "http://127.0.0.1:18080/maps/files/$n.LVL" | cmp - "Original-Ants/Maps/$n.LVL" || { docker logs ants-routes; docker rm -f ants-routes; exit 1; }
+            curl -fsS "http://127.0.0.1:18080/maps/files/$n.LVL" | cmp - "Original-Ants/Maps/$n.LVL" || { docker logs ants-routes; docker exec ants-routes sh -c 'cat /var/log/ants/web*.log'; docker rm -f ants-routes; exit 1; }
           done
           docker rm -f ants-routes
 
