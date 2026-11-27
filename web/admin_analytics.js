@@ -174,7 +174,7 @@
         data.days.forEach(function (d) { ['load', 'game'].forEach(function (k) { if (d.perf && d.perf[k]) timings.push([d.day, k, d.perf[k][0], d.perf[k][1], d.perf[k][2], d.perf[k][3]]); }); });
         out.timings = ['timings.csv', csv(['day', 'what', 'count', 'p50_ms', 'p75_ms', 'p95_ms'], timings)];
         out.errors = ['errors.csv', csv(['where', 'message', 'file_and_line', 'times', 'visitors', 'first_seen', 'last_seen_day'],
-            data.errors.map(function (e) { return [e.kind, e.msg, e.src, e.n, e.visitors, e.first, e.last ? pacificDay(e.last * 1000) : '']; }))];
+            data.errors.map(function (e) { return [e.kind, e.msg, e.src, e.n, e.visitors, e.first, e.last || '']; }))];
         return out;
     }
 
@@ -635,7 +635,7 @@
                 shown.forEach(function (e) {
                     var row = el('div', 'erow'), msg = el('div', 'emsg'), fresh = ordinal(e.first) >= ordinal(today) - 1 && ordinal(e.first) > ordinal(d.from);
                     add(msg, add(el('div'), h.typed('span', 'etext', e.msg), fresh ? el('span', 'tg warn', 'New') : null), e.src ? h.typed('code', 'esrc', e.src) : el('code', 'esrc dim', 'file not named'));
-                    add(row, el('span', 'tg ' + (e.kind === 'Game' ? 'game' : 'page'), e.kind), msg, el('span', 'nc big', thousands(e.n)), el('span', 'nc', thousands(e.visitors)), el('span', null, shortDay(e.first)), el('span', null, e.last ? lastSeen(e.last) : ''));
+                    add(row, el('span', 'tg ' + (e.kind === 'Game' ? 'game' : 'page'), e.kind), msg, el('span', 'nc big', thousands(e.n)), el('span', 'nc', thousands(e.visitors)), el('span', null, shortDay(e.first)), el('span', null, e.last ? lastDay(e.last) : ''));
                     add(list, row);
                 });
                 add(p, list);
@@ -644,6 +644,7 @@
                 if (!st.all && d.errors.length > ERRORS_SHOWN) add(foot, h.button('Show all', 'sm ghost', function () { st.all = true; draw(); }));
                 return add(p, foot);
             }
+            function lastDay(day) { return day === today ? 'today' : day === addDays(today, -1) ? 'yesterday' : shortDay(day); }    // (an error keeps the day it was last seen, never the time)
             function lastSeen(seconds) { var day = pacificDay(seconds * 1000); return day === today ? 'today, ' + clock(seconds) : day === addDays(today, -1) ? 'yesterday' : shortDay(day); }
             function counterPanel(d) {
                 var c = d.counter, p = h.panel('The counter itself', 'Is the counting working?');

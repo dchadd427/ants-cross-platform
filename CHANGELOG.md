@@ -34,7 +34,7 @@ Work that is not released yet is written in the same template under a heading th
 - The Legal page has a new part, "Counting visits": no cookie and no address kept, and a browser that asks not to be tracked is counted as one visit and its country ([`docs/ANALYTICS.md`](docs/ANALYTICS.md)).
 
 **For operators:**
-- The admin page has a new tab, **Analytics**; the hub has a door for it, `POST /hub/a`, and a file, `analytics.db`; `ANTS_HUB_ANALYTICS=off` switches it off. The hub's image fetches a DB-IP country list when built: pass `ANTS_GEO_MONTH` once a month.
+- The admin page has a new tab, **Analytics**; the hub has a door for it, `POST /hub/a`, and a file, `analytics.db`; `ANTS_HUB_ANALYTICS=off` switches it off. The hub's image fetches a DB-IP country list when built: pass `ANTS_GEO_MONTH` once a month. The counter keeps no time finer than the hour and names a referrer only by its registered name (and in the permanent totals only when 3 visitors came from it); a day keeps at most 30,000 events, one address range makes at most 50 new visitors a day, and `analytics.db` is limited to 64 MiB as `hub.db` is ([`docs/ANALYTICS.md`](docs/ANALYTICS.md)).
 - For search engines the game page now names `/play` as its address (it still says `noindex`, so no `/play?...` address is listed), and a `.txt` file of the site, such as the licence text of the front page's font, sends `X-Robots-Tag: noindex` ([`docs/BUILD_AND_RUN.md`](docs/BUILD_AND_RUN.md#search-engines-and-share-cards)).
 
 ## v0.22.0 - 2026-11-26 - Nicknames, tags and guest names, a welcome for guests, a better Play of the game and Fill a box

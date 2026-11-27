@@ -418,6 +418,18 @@ def raw_address(value, peer):
     return ""
 
 
+def address_range(text):
+    """The range that an address belongs to, as a text: its /24 for an IPv4 address, its /48 for an IPv6 one (an IPv4-in-IPv6 as the IPv4); "" for a text that is no address. Who holds a whole range is one
+    household, one office or one provider's customer, whatever address of it a request comes from: it is what the counter limits new visitors by, in memory and only for a day (hub/analytics.py)."""
+    try:
+        ip = ipaddress.ip_address((text or "").strip())
+    except ValueError:
+        return ""
+    if ip.version == 6 and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    return str(ipaddress.ip_network((int(ip) >> (128 - 48) << (128 - 48), 48) if ip.version == 6 else (int(ip) >> 8 << 8, 24)))
+
+
 class PerAddress:
     def __init__(self, limit):
         self.limit = limit

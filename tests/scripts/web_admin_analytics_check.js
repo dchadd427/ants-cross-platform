@@ -78,9 +78,9 @@ function report(o) {
             countries: { US: [1270, 100], DE: [341, 20], GB: [248, 10], '': [77, 0], FR: [155, 5], CA: [186, 10], NL: [124, 5], BR: [108, 5], AU: [93, 4], PL: [77, 3], SE: [62, 2], ES: [10, 1], IT: [9, 1], JP: [8, 1] },
             widths: [316, 338, 271, 700, 632], dur: [100, 200, 300, 150, 100, 100, 300, 200, 100, 100, 100, 50, 25, 10, 5]
         },
-        errors: [{ kind: 'Game', msg: 'RuntimeError: memory access out of bounds', src: 'index.js:1', n: 25, visitors: 16, first: TODAY, last: NOW / 1000 - 600 },
-                 { kind: 'Page', msg: 'TypeError: Cannot read properties of null (reading \'classList\')', src: 'front/lobby_net.js:412', n: 20, visitors: 14, first: '2026-12-13', last: NOW / 1000 - 7200 },
-                 { kind: 'Page', msg: 'Error: <img src=x onerror=alert(1)>', src: '', n: 3, visitors: 2, first: '2026-11-20', last: NOW / 1000 - 90000 }],
+        errors: [{ kind: 'Game', msg: 'RuntimeError: memory access out of bounds', src: 'index.js:1', n: 25, visitors: 16, first: TODAY, last: TODAY },
+                 { kind: 'Page', msg: 'TypeError: Cannot read properties of null (reading \'classList\')', src: 'front/lobby_net.js:412', n: 20, visitors: 14, first: '2026-12-13', last: TODAY },
+                 { kind: 'Page', msg: 'Error: <img src=x onerror=alert(1)>', src: '', n: 3, visitors: 2, first: '2026-11-20', last: '2026-12-13' }],
         counter: { now: NOW / 1000, since: 1, first_day: '2026-09-01', last_at: NOW / 1000 - 60, accepted_today: 1184, refused_today: 3, crawlers_today: 7, raw_days: 30, oldest_raw: '2026-11-14', geo: { name: 'DB-IP Lite', month: '2026-12' } },
         untrusted: true, untrusted_fields: ['lists.refs', 'errors']
     }, o.over || {});
@@ -284,14 +284,14 @@ const view = async (p, name) => { await press(p.app, name); };
         const rows = all(p.app, '.erow').slice(1);
         same('the errors: where, the message, times, visitors, first seen, last seen', [rows.length, rows.map((r) => texts(r, '.tg')[0]), rows.map((r) => texts(r, '.etext')[0]), rows.map((r) => texts(r, '.esrc')[0]), rows.map((r) => texts(r, '.nc').join('/'))],
             [3, ['Game', 'Page', 'Page'], ['RuntimeError: memory access out of bounds', 'TypeError: Cannot read properties of null (reading \'classList\')', 'Error: <img src=x onerror=alert(1)>'], ['index.js:1', 'front/lobby_net.js:412', 'file not named'], ['25/16', '20/14', '3/2']]);
-        same('first and last seen in words', rows.map((r) => r.children.slice(4).map((c) => c.textContent)), [['14 Dec', 'today, 11:10'], ['13 Dec', 'today, 09:20'], ['20 Nov', 'yesterday']]);
+        same('first and last seen in words', rows.map((r) => r.children.slice(4).map((c) => c.textContent)), [['14 Dec', 'today'], ['13 Dec', 'today'], ['20 Nov', 'yesterday']]);
         same('a new kind is tagged New (the one that came today and yesterday, not the old ones)', rows.map((r) => all(r, '.tg.warn').length), [1, 1, 0]);
         check('what came from a browser is text with the mark of data, and no element is made of it', rows.every((r) => all(r, '[data-untrusted]').length >= 1) && all(p.app, 'img').length === 0 && texts(p.app, '.etext').indexOf('Error: <img src=x onerror=alert(1)>') >= 0);
         same('the counter itself', all(p.app, '.kv').map((r) => [texts(r, '.k')[0], texts(r, '.v')[0]]), [['Last event received', 'today, 11:19'], ['Events today', '1,184 since midnight'], ['Events refused', '3 today too big or the wrong shape'], ['Crawlers left out', '7 today not counted'], ['Raw events kept', '30 days back to 14 Nov'], ['Daily totals kept', 'since 1 Sep 2026'], ['Country list', 'DB-IP Lite updated 2026-12']]);
         check('the foot says since when, the days and where the Legal page is', /^Counted since 1 Sep 2026 · Days run from midnight to midnight, Pacific time · Updated today, 11:20 · No cookies; no address or visitor id is kept \(see the Legal page\)\.$/.test(texts(p.app, '.afoot')[0]) && all(p.app, '.afoot a')[0].getAttribute('href') === '/legal', texts(p.app, '.afoot')[0]);
     }
     {
-        const many = []; for (let i = 0; i < 60; i++) many.push({ kind: 'Page', msg: 'Error: number ' + i, src: 'a.js:' + i, n: 100 - i, visitors: 1, first: '2026-11-20', last: NOW / 1000 - 5000 });
+        const many = []; for (let i = 0; i < 60; i++) many.push({ kind: 'Page', msg: 'Error: number ' + i, src: 'a.js:' + i, n: 100 - i, visitors: 1, first: '2026-11-20', last: TODAY });
         const p = page();
         p.report = report({ over: { errors: many } });
         await p.open();

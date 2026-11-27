@@ -10,6 +10,11 @@
   TheDays                  the Pacific day, its turn at midnight and the summer time
   TheNumbers               the sums of a day: visits, visitors, entry and exit, time on the site, new and returning, timings, errors, not tracked
   TheRetention             raw events for 30 days, the sums of every day for good, made before the raw events go
+  TheHourNotTheSecond      no moment finer than the hour is kept, and the visits and their times are still told; an error keeps the day it was seen
+  TheReferrers             a referrer is kept as its registered name; the sums name a site only when three visitors came from it
+  TheRangeLimit            one address range may make only so many new visitors a day
+  TheSizeOfTheFile         the file's limit: the oldest raw days go, then new events are dropped; the memory of the counter at its caps
+  TheClockAndTheLog        a clock that steps back is not a new day; a cut of the log file that a reader kept from happening is made later
   TheDoor                  the HTTP door: method, path, origin, type, size, body, limits, and a 204 that does not say whether an event was kept
   TheAdminQuestion         the admin page's question: who may ask, what it must hold, the range
   TheSignups               the first login of an account is a number of the day and nothing of the person
@@ -114,6 +119,11 @@ class CounterTest(unittest.TestCase):
     def day(self, n=0):
         return events.add_days(events.pacific_day(self.clock.now), n)
 
+    def visitors_from(self, ref, n=3, path="/", start=0):
+        """`n` different visitors (each from a range of its own) that were sent by the site `ref`."""
+        for i in range(start, start + n):
+            self.send(view(path, r=ref), ip="9.%d.%d.1" % (i // 250 + 1, i % 250))
+
     def report(self, first=None, last=None):
         return self.c.report(first or self.day(), last or self.day())
 
@@ -177,6 +187,91 @@ class TheVisitorsCode(CounterTest):
         self.assertEqual(os.stat(self.path).st_mode & 0o777, 0o600)
 
 
+class TheClockAndTheLog(CounterTest):
+    def test_a_clock_that_steps_back_across_midnight_is_not_a_new_day(self):
+        self.clock.now += 86400
+        self.c.on_tick()
+        self.send(view())
+        code, day, salt = self.row()["vis"], self.row()["day"], self.store.db.execute("SELECT salt FROM salt").fetchone()[0]
+        self.clock.now -= 20 * 3600                           # (back into the day before)
+        self.c.on_tick()
+        self.send(view())
+        self.assertEqual((self.row(1)["vis"], self.row(1)["day"]), (code, day), "the same visitor, on the day that the counter was in")
+        self.assertEqual([bytes(r[0]) for r in self.store.db.execute("SELECT salt FROM salt")], [salt], "no new secret, and the one that is kept is not deleted")
+        self.clock.now += 20 * 3600
+        self.c.on_tick()
+        self.send(view())
+        self.assertEqual(self.row(2)["vis"], code, "and when the clock is back where it was, still the same visitor")
+
+    def test_a_hub_that_starts_with_a_clock_that_is_a_day_back_keeps_the_day_and_its_secret(self):
+        self.send(view())
+        code, salt = self.row()["vis"], self.store.db.execute("SELECT salt FROM salt").fetchone()[0]
+        self.clock.now -= 86400
+        self.reopen()
+        self.send(view())
+        self.assertEqual(self.row(1)["vis"], code)
+        self.assertEqual([bytes(r[0]) for r in self.store.db.execute("SELECT salt FROM salt")], [salt])
+
+    def test_a_clock_that_is_corrected_by_more_than_a_few_days_is_a_real_change_of_the_day(self):
+        self.send(view())
+        first = self.row()["vis"]
+        self.clock.now -= (analytics.BACK_DAYS + 3) * 86400
+        self.c.on_tick()
+        self.send(view())
+        self.assertNotEqual(self.row(1)["vis"], first)
+        self.assertEqual(self.row(1)["day"], self.day())
+        self.assertEqual(self.store.db.execute("SELECT COUNT(*) FROM salt").fetchone()[0], 1)
+
+    def hold_the_file(self):
+        reader = sqlite3.connect(self.path, isolation_level=None)
+        self.addCleanup(reader.close)
+        reader.execute("BEGIN")
+        reader.execute("SELECT COUNT(*) FROM salt").fetchone()          # (a reader that holds the file keeps its log from being cut)
+        return reader
+
+    def test_a_cut_of_the_log_that_a_reader_kept_from_happening_is_made_when_it_lets_go(self):
+        self.send(view())
+        secret = self.store.db.execute("SELECT salt FROM salt").fetchone()[0]
+        reader = self.hold_the_file()
+        self.clock.now += 86400
+        self.c.on_tick()
+        self.assertIn(secret, file_bytes(self.path), "a reader holds the file: the old secret is still in the log")
+        self.clock.now += 3 * analytics_store.CUT_RETRY_SECONDS
+        self.c.on_tick()
+        self.assertIn(secret, file_bytes(self.path), "and still while the reader holds it")
+        reader.execute("ROLLBACK")
+        self.clock.now += 3 * analytics_store.CUT_RETRY_SECONDS
+        self.c.on_tick()
+        self.assertNotIn(secret, file_bytes(self.path), "the next try cuts it")
+
+    def test_a_cut_that_did_not_happen_is_tried_again_every_few_seconds_and_not_at_every_tick(self):
+        self.send(view())
+        reader = self.hold_the_file()
+        self.clock.now += 86400
+        self.c.on_tick()
+        calls = []
+        real = self.store.cut_log
+        self.store.cut_log = lambda: calls.append(1) or real()
+        try:
+            for _ in range(5):
+                self.clock.now += 1
+                self.c.on_tick()
+            self.assertLessEqual(len(calls), 1, "within CUT_RETRY_SECONDS there is at most one more try")
+            self.clock.now += 2 * analytics_store.CUT_RETRY_SECONDS
+            self.c.on_tick()
+            self.assertGreaterEqual(len(calls), 1)
+            reader.execute("ROLLBACK")
+            self.clock.now += 2 * analytics_store.CUT_RETRY_SECONDS
+            self.c.on_tick()
+            before = len(calls)
+            for _ in range(5):
+                self.clock.now += 20
+                self.c.on_tick()
+            self.assertEqual(len(calls), before, "a log that is cut is left alone")
+        finally:
+            self.store.cut_log = real
+
+
 class NothingThatNamesAPerson(CounterTest):
     def send_many(self):
         for path in ("/", "/matches", "/play"):
@@ -197,12 +292,12 @@ class NothingThatNamesAPerson(CounterTest):
         self.send(view("/", r="discord.com"))
         row = self.row()
         self.assertEqual({k: v for k, v in row.items() if k not in ("id", "at", "vis")},
-                         {"day": self.day(), "kind": "view", "ret": 0, "country": "US", "browser": "Chrome", "system": "Windows", "device": "Desktop", "wb": 3, "lang": "en",
+                         {"day": self.day(), "kind": "view", "ret": 0, "vs": 1, "lb": 0, "country": "US", "browser": "Chrome", "system": "Windows", "device": "Desktop", "wb": 3, "lang": "en",
                           "path": "/", "ref": "discord.com", "ms": 0, "name": "", "msg": "", "src": "", "ver": ""})
         self.assertRegex(row["vis"], r"[0-9a-f]{16}\Z")
 
     def test_the_columns_of_the_events_are_these_and_no_others(self):
-        self.assertEqual(self.columns(), ["id", "at", "day", "kind", "vis", "ret", "country", "browser", "system", "device", "wb", "lang", "path", "ref", "ms", "name", "msg", "src", "ver"])
+        self.assertEqual(self.columns(), ["id", "at", "day", "kind", "vis", "ret", "vs", "lb", "country", "browser", "system", "device", "wb", "lang", "path", "ref", "ms", "name", "msg", "src", "ver"])
 
     def test_the_log_has_nothing_of_a_visitor(self):
         import io
@@ -223,7 +318,7 @@ class NothingThatNamesAPerson(CounterTest):
     def test_a_referrer_is_the_name_of_a_site_only(self):
         for ref in ("https://secret.example/path?q=1", "10.1.2.3", "Evil Site", "x" * 200, "localhost", "www.Google.com", "beta.example.org", "chat.example.org", "www.CHAT.example.org"):
             self.send(view("/", r=ref))
-        self.assertEqual([r[0] for r in self.store.db.execute("SELECT ref FROM events ORDER BY id")], ["", "", "", "", "", "google.com", "beta.example.org", "", ""], "this site itself, with or without www, is no referrer")
+        self.assertEqual([r[0] for r in self.store.db.execute("SELECT ref FROM events ORDER BY id")], ["", "", "", "", "", "google.com", "example.org", "", ""], "this site itself, with or without www, is no referrer")
 
     def test_only_a_known_set_of_fields_is_taken(self):
         self.assertEqual(self.send(dict(view(), extra="x")), "shape")
@@ -239,7 +334,7 @@ class TheBrowserThatAskedNotToBeTracked(CounterTest):
         self.assertEqual(self.send(view("/matches", r="discord.com"), ip=IP_AU, ua=UA_IPHONE, untracked=True), "ok")
         row = self.row()
         self.assertEqual({k: v for k, v in row.items() if k not in ("id", "at")},
-                         {"day": self.day(), "kind": "visit", "vis": "", "ret": 0, "country": "AU", "browser": "", "system": "", "device": "", "wb": -1, "lang": "", "path": "", "ref": "",
+                         {"day": self.day(), "kind": "visit", "vis": "", "ret": 0, "vs": 0, "lb": 0, "country": "AU", "browser": "", "system": "", "device": "", "wb": -1, "lang": "", "path": "", "ref": "",
                           "ms": 0, "name": "", "msg": "", "src": "", "ver": ""})
 
     def test_the_pages_own_word_counts_as_much_as_the_header(self):
@@ -555,8 +650,8 @@ class TheNumbers(CounterTest):
         self.clock.now += 100
         self.send({"t": "leave", "p": "/"})
         s = self.report()
-        self.assertEqual(s["lists"]["dur_sum"], 100)
         self.assertEqual(s["lists"]["dur"][sum(1 for e in sums.DURATION_EDGES if 100 >= e)], 1)
+        self.assertTrue(90 <= s["lists"]["dur_sum"] < 120, "the time is the bin that holds it (90 to 120 seconds), by its middle")
         self.assertEqual(s["lists"]["exit"], {"/": 1})
 
     def test_a_leave_whose_view_was_another_day_is_not_a_visitor(self):
@@ -588,11 +683,11 @@ class TheNumbers(CounterTest):
         self.assertEqual(lists["countries"], {"AU": [1, 0], "US": [2, 0]})
 
     def test_the_referrer_of_a_visit_is_the_one_of_its_first_page(self):
-        self.send(view("/", r="discord.com"))
+        self.visitors_from("discord.com", 3)
         self.clock.now += 5
-        self.send(view("/matches", r="google.com"))
+        self.send(view("/matches", r="google.com"), ip="9.1.0.1")
         self.send(view("/", r=""), ip=IP_AU)
-        self.assertEqual(self.report()["lists"]["refs"], {"discord.com": 1, "": 1})
+        self.assertEqual(self.report()["lists"]["refs"], {"discord.com": 3, "": 1})
 
     def test_the_timings_have_their_middle_and_their_slow_end(self):
         for ms in range(100, 2100, 100):
@@ -705,11 +800,11 @@ class TheNumbers(CounterTest):
 
     def test_the_lists_keep_their_biggest_and_say_how_many_others(self):
         for i in range(sums.LIST_MAX + 5):
-            self.send(view("/", r="site%d.example" % i), ip="8.8.%d.%d" % (i // 200, i % 200 + 1))
+            self.visitors_from("site%d.example" % i, 3, start=3 * i)
         refs = self.report()["lists"]["refs"]
         self.assertLessEqual(len(refs), sums.LIST_MAX + 1)
-        self.assertEqual(sum(refs.values()), sums.LIST_MAX + 5, "every visit is in a list: the ones that are not among the biggest are in `other`")
-        self.assertGreaterEqual(refs["other"], 5)
+        self.assertEqual(sum(refs.values()), 3 * (sums.LIST_MAX + 5), "every visit is in a list: the ones that are not among the biggest are in `other`")
+        self.assertGreaterEqual(refs["other"], 15)
 
 
 class TheRetention(CounterTest):
@@ -748,13 +843,14 @@ class TheRetention(CounterTest):
 
     def test_what_is_deleted_is_overwritten_and_cut_from_both_files(self):
         self.send(view("/matches", r="needle-referrer.example"), ip=IP_AU)
+        self.visitors_from("needle-referrer.example", 2)
         code = self.row()["vis"].encode()
         self.assertIn(code, file_bytes(self.path))
         self.assertIn(b"needle-referrer.example", file_bytes(self.path))
         self.clock.now += 86400 * 32
         self.c.on_tick()
         self.assertNotIn(code, file_bytes(self.path), "the visitor's code of a day that is past its 30 days is overwritten and cut out of both files")
-        self.assertIn("needle-referrer.example", self.store.db.execute("SELECT sums FROM days").fetchone()[0], "the sums of the day, which are kept, still have the site's name")
+        self.assertIn("needle-referrer.example", self.store.db.execute("SELECT sums FROM days").fetchone()[0], "the sums of the day, which are kept, still have the name of a site that three visitors came from")
 
     def test_the_counters_of_old_days_go_too(self):
         self.send(view())
@@ -808,6 +904,245 @@ class TheLimitOfADay(CounterTest):
             self.send(view(), ip="8.8.8.2")
             self.reopen()
             self.assertEqual(self.send(view(), ip="8.8.8.3"), "full")
+
+
+class TheHourNotTheSecond(CounterTest):
+    """The web server's own log holds the second, the address and the browser of every page that is opened, so nothing finer than the hour may be kept with an event."""
+
+    def test_an_event_is_kept_with_the_hour_and_the_last_event_in_the_file_too(self):
+        self.clock.now = DAY + 1234.567
+        self.send(view("/"))
+        self.clock.now += 61
+        self.send({"t": "leave", "p": "/"})
+        self.send({"t": "visit"}, ip=IP_AU)
+        self.c.flush(force=True)
+        hour = int(DAY + 1234) // 3600 * 3600
+        self.assertEqual({r[0] for r in self.store.db.execute("SELECT at FROM events")}, {hour})
+        self.assertEqual(int(self.store.meta("last_at")), hour, "the moment of the last event in the file is an hour too")
+        self.assertEqual(self.report()["counter"]["last_at"], int(self.clock.now), "the page that asks, a moment later, still sees the exact one: it is in memory only")
+        self.reopen()
+        self.assertEqual(self.c.last_at, hour, "a restart knows only the hour")
+
+    def test_a_visit_and_its_time_are_told_without_a_clock_in_the_file(self):
+        self.send(view("/"))
+        self.clock.now += 100
+        self.send(view("/matches"))
+        self.clock.now += 1900                                   # (more than half an hour: a second visit)
+        self.send(view("/play"))
+        self.clock.now += 30
+        self.send({"t": "leave", "p": "/play"})
+        rows = self.store.db.execute("SELECT path, vs, lb FROM events ORDER BY id").fetchall()
+        self.assertEqual(rows, [("/", 1, 0), ("/matches", 0, sums.length_bin(100)), ("/play", 1, 0), ("/play", 0, sums.length_bin(30))])
+        s = self.report()
+        self.assertEqual((s["days"][0]["visits"], s["lists"]["entry"], s["lists"]["exit"]), (2, {"/": 1, "/play": 1}, {"/matches": 1, "/play": 1}))
+        self.assertEqual(s["lists"]["dur"][sums.length_bin(100)] + s["lists"]["dur"][sums.length_bin(30)], 2)
+
+    def test_a_visit_goes_on_across_a_gap_that_a_leave_closes_and_a_restart_starts_a_new_one(self):
+        self.send(view("/"))
+        self.clock.now += 1000
+        self.send({"t": "leave", "p": "/"})
+        self.clock.now += 1000                                   # (under half an hour since the leave: still the visit)
+        self.send(view("/matches"))
+        self.assertEqual(self.report()["days"][0]["visits"], 1)
+        self.reopen()
+        self.clock.now += 10
+        self.send(view("/play"))
+        s = self.report()["days"][0]
+        self.assertEqual((s["visitors"], s["visits"]), (1, 2), "the memory of where a visit stands is not kept: a visit that a restart cuts in two is two")
+
+    def test_an_error_keeps_the_day_it_was_seen_and_never_the_time(self):
+        error = {"t": "error", "k": "Page", "n": "TypeError", "m": "x is null", "s": "front/a.js:3"}
+        self.send(error)
+        self.clock.now += 86400
+        self.c.on_tick()
+        self.send(error, ip=IP_AU)
+        today, yesterday = self.day(), self.day(-1)
+        kept = json.loads(self.store.db.execute("SELECT sums FROM days WHERE day = ?", (yesterday,)).fetchone()[0])
+        self.assertEqual(kept["errors"][0][5], yesterday, "kept for good: the day")
+        both = self.report(yesterday, today)["errors"][0]
+        self.assertEqual((both["n"], both["first"], both["last"]), (2, yesterday, today))
+        self.assertEqual(self.report(today, today)["errors"][0]["last"], today)
+
+    def test_nothing_the_sums_keep_is_a_clock(self):
+        self.clock.now = DAY + 777
+        for i in range(4):
+            self.send(view("/", r="x%d.example.com" % (i % 2)), ip="9.%d.0.1" % (i + 1))
+        self.send({"t": "error", "k": "Page", "n": "TypeError", "m": "boom", "s": "front/a.js:3"})
+        self.clock.now += 86400
+        self.c.on_tick()
+        kept = self.store.db.execute("SELECT sums FROM days").fetchone()[0]
+        for moment in (int(DAY + 777), int(DAY + 777) // 3600 * 3600):
+            self.assertNotIn(str(moment), kept)
+
+
+class TheReferrers(CounterTest):
+    def test_a_referrer_is_kept_as_the_registered_name_of_the_site_only(self):
+        for ref, kept in (("mail.google.com", "google.com"), ("google.com", "google.com"), ("www.google.com", "google.com"), ("alice.github.io", "github.io"), ("github.io", "github.io"), ("a.b.c.example.com", "example.com"),
+                          ("www.shop.example.co.uk", "example.co.uk"), ("alice.co.uk", "alice.co.uk"), ("bob.blogspot.com.br", "blogspot.com.br"), ("alice.example.org.au", "example.org.au"),
+                          ("some.unknown-ending.zz", "unknown-ending.zz"), ("co.uk", "co.uk"), ("t.co", "t.co")):
+            with self.subTest(ref):
+                self.assertEqual(events.host_of(ref, "chat.example.org"), kept)
+        self.assertEqual(events.host_of("chat.example.org", "chat.example.org"), "", "this site itself is no referrer")
+        self.assertEqual(events.host_of("example.org", "chat.example.org"), "example.org", "the front page of the same name is")
+
+    def test_the_raw_event_has_the_registered_name_and_not_the_personal_address(self):
+        self.send(view("/", r="alice-personal.github.io"))
+        self.assertEqual(self.row()["ref"], "github.io")
+        self.assertNotIn(b"alice-personal", file_bytes(self.path))
+
+    def test_the_sums_name_a_site_only_when_three_visitors_came_from_it_that_day(self):
+        self.visitors_from("often-site.com", 3)
+        self.visitors_from("seldom-site.com", 2, start=10)
+        self.send(view("/matches", r="often-site.com"), ip="9.1.0.1")           # (a second visit of a visitor counts once)
+        self.clock.now += 3000
+        self.send(view("/play", r="often-site.com"), ip="9.1.0.1")
+        self.send(view("/", r="alone-site.com"), ip="9.200.0.1")
+        s = self.report()
+        self.assertEqual(s["lists"]["refs"], {"often-site.com": 4, "other": 3}, "the visits of the sites that fewer than three visitors came from are one `other`; none of them is lost")
+        self.assertEqual(s["days"][0]["visits"], 7)
+        kept = self.store.db.execute("SELECT COUNT(*) FROM events WHERE ref = 'seldom-site.com'").fetchone()[0]
+        self.assertEqual(kept, 2, "the raw events, which go in 30 days, still have it")
+
+    def test_a_visitor_who_comes_twice_from_a_site_is_one_visitor_of_it(self):
+        self.send(view("/", r="twice-site.com"))
+        self.clock.now += 4000
+        self.send(view("/", r="twice-site.com"))
+        self.visitors_from("twice-site.com", 1, start=5)
+        self.assertEqual(self.report()["lists"]["refs"], {"other": 3})
+
+
+class TheRangeLimit(CounterTest):
+    """One address that changes its header at every request is a new visitor each time: a range of addresses may make only so many a day, so that it cannot fill the day's room for everybody."""
+
+    def header(self, i):
+        return UA_WINDOWS.replace("124.0.0.0", "124.0.0.%d" % i)
+
+    def test_one_address_that_changes_its_header_makes_only_so_many_visitors(self):
+        n = analytics.RANGE_NEW_MAX
+        answers = [self.send(view(), ua=self.header(i)) for i in range(n + 10)]
+        self.assertEqual(answers, ["ok"] * n + ["limited"] * 10)
+        self.assertEqual(self.report()["days"][0]["visitors"], n)
+        self.assertEqual(self.report()["counter"]["dropped_today"], 10, "what was dropped is counted")
+        self.assertEqual(self.c.kept_today, n, "and does not take the room of the day")
+
+    def test_a_visitor_that_is_already_counted_goes_on_and_another_range_is_not_held_back(self):
+        n = analytics.RANGE_NEW_MAX
+        for i in range(n):
+            self.send(view(), ua=self.header(i))
+        self.assertEqual(self.send({"t": "leave", "p": "/"}, ua=self.header(0)), "ok", "a browser that was counted before the limit")
+        self.assertEqual(self.send(view(), ua=self.header(n + 1)), "limited")
+        self.assertEqual(self.send(view(), ip=IP_AU, ua=self.header(n + 1)), "ok", "another range")
+
+    def test_the_range_is_a_24_of_ipv4_and_a_48_of_ipv6(self):
+        n = analytics.RANGE_NEW_MAX
+        for i in range(n):
+            self.send(view(), ip="8.8.8.%d" % (i % 250), ua=self.header(i))
+        self.assertEqual(self.send(view(), ip="8.8.8.250", ua=self.header(900)), "limited", "another address of the same /24")
+        self.assertEqual(self.send(view(), ip="8.8.9.1", ua=self.header(900)), "ok", "the next /24")
+        for i in range(n):
+            self.send(view(), ip="2001:db8:5:%x::1" % i, ua=self.header(i))
+        self.assertEqual(self.send(view(), ip="2001:db8:5:ffff::1", ua=self.header(900)), "limited", "another /64 of the same /48")
+        self.assertEqual(self.send(view(), ip="2001:db8:6::1", ua=self.header(900)), "ok", "the next /48")
+
+    def test_a_browser_that_asked_not_to_be_tracked_counts_for_its_range_too(self):
+        n = analytics.RANGE_NEW_MAX
+        answers = [self.send({"t": "visit"}, ua=self.header(i), untracked=True) for i in range(n + 3)]
+        self.assertEqual(answers, ["ok"] * n + ["limited"] * 3)
+        self.assertEqual(self.send({"t": "visit"}, ua=self.header(0), untracked=True), "again", "one that was counted a moment ago is answered as before")
+
+    def test_the_next_day_starts_again_and_nothing_of_the_range_is_written(self):
+        n = analytics.RANGE_NEW_MAX
+        for i in range(n + 1):
+            self.send(view(), ip="1.0.0.9", ua=self.header(i))
+        self.c.flush(force=True)
+        data = file_bytes(self.path)
+        for text in (b"1.0.0.", b"1.0.0.0/24"):
+            self.assertNotIn(text, data)
+        self.assertEqual(len(self.c.ranges), 1)
+        self.clock.now += 86400
+        self.c.on_tick()
+        self.assertEqual(self.c.ranges, {})
+        self.assertEqual(self.send(view(), ip="1.0.0.9"), "ok")
+
+    def test_the_memory_of_the_ranges_never_holds_more_than_the_events_of_the_day(self):
+        with mock.patch.object(analytics, "DAY_MAX", 20):
+            for i in range(40):
+                self.send(view(), ip="9.%d.%d.1" % (i // 250, i % 250))
+            self.assertLessEqual(len(self.c.ranges), 20)
+
+
+class TheSizeOfTheFile(CounterTest):
+    """The file is held to DB_MAX_BYTES as hub.db is: the oldest raw days go from 90% (their sums are made first), and at the limit new events are dropped."""
+
+    def fill_days(self, days=6, per_day=250):
+        for d in range(days):
+            for i in range(per_day):
+                self.send(view("/", r="x.example.com"), ip="9.%d.%d.1" % (d + 1, i))
+                self.clock.now += 1
+            self.clock.now = DAY + (d + 1) * 86400
+            self.c.today()                                       # (the hour's work, which makes the sums of the finished days, has not been done: only the room that the limit needs may do it)
+
+    def test_at_the_limit_new_events_are_dropped_and_counted_and_taken_again_when_there_is_room(self):
+        self.send(view())
+        with mock.patch.object(analytics, "DB_MAX_BYTES", 1):
+            self.c.watch_size()
+            self.assertEqual(self.send(view(), ip=IP_AU), "full")
+            self.assertEqual(self.send({"t": "visit"}, ip=IP_DE), "full", "a not tracked visit too")
+            self.assertEqual(self.report()["counter"]["dropped_today"], 2)
+            self.assertEqual(len(self.rows()), 1)
+        self.c.watch_size()
+        self.assertEqual(self.send(view(), ip=IP_AU), "ok")
+
+    def test_the_oldest_raw_days_go_first_with_their_sums_and_the_last_two_days_never(self):
+        self.fill_days()
+        last = self.day()
+        first = events.add_days(last, -6)
+        used = self.store.used_bytes()
+        self.assertEqual(self.store.db.execute("SELECT MIN(day) FROM events").fetchone()[0], first)
+        self.assertEqual(self.store.db.execute("SELECT COUNT(*) FROM days").fetchone()[0], 0, "no sums are kept yet")
+        with mock.patch.object(analytics, "DB_MAX_BYTES", used):
+            self.c.next_room = 0.0
+            self.c.watch_size()
+        oldest = self.store.oldest_event_day()
+        self.assertGreater(oldest, first, "the first day's raw events went")
+        self.assertLessEqual(oldest, events.add_days(last, -1), "yesterday's stayed")
+        self.assertLessEqual(self.store.used_bytes(), used * 0.8 + 4096 * 3, "down to about 80%")
+        gone = self.report(first, first)["days"][0]
+        self.assertEqual(gone["visitors"], 250, "the sums of a day whose events went are kept")
+
+    def test_the_counter_never_deletes_today_or_yesterday_for_room(self):
+        self.fill_days(days=2, per_day=100)
+        with mock.patch.object(analytics, "DB_MAX_BYTES", 4096):
+            self.c.next_room = 0.0
+            self.c.watch_size()
+        self.assertEqual([r[0] for r in self.store.db.execute("SELECT DISTINCT day FROM events")], [self.day(-1)], "the first day went, the day before today stayed, whatever the limit")
+
+    def test_a_flood_at_the_cap_costs_the_counter_a_few_tens_of_megabytes_of_memory_and_the_report_next_to_nothing(self):
+        """The memory of the counter at every one of its caps (a full day of DAY_MAX events from as many visitors, the week's codes at WEEK_MAX, a range for each), measured with tracemalloc:
+        17 MB (the hub's container has 192 MB; the caps before this, 100,000 events a day and 300,000 codes, took 36 MB, and the report made from a day's events took 65 MB more because it
+        held every row; it reads them one at a time now)."""
+        import tracemalloc
+        tracemalloc.start()
+        try:
+            base = tracemalloc.get_traced_memory()[0]
+            for i in range(analytics.DAY_MAX):
+                self.c.accept("%d.%d.%d.1" % (1 + i // 65536 % 200, i // 256 % 256, i % 256), UA_WINDOWS, False, view("/", r="site%d.example.com" % (i % 500)))
+            while self.c.week_size < analytics.WEEK_MAX:
+                self.c.week[1].add(os.urandom(12))
+                self.c.week_size += 1
+            resident = tracemalloc.get_traced_memory()[0] - base
+            self.assertEqual((self.c.kept_today, len(self.c.visitors)), (analytics.DAY_MAX, analytics.DAY_MAX), "every cap was reached")
+            self.c.flush(force=True)
+            before = tracemalloc.get_traced_memory()[0]
+            tracemalloc.reset_peak()
+            made = self.store.sums_now(self.c.day)
+            rebuild = tracemalloc.get_traced_memory()[1] - before
+        finally:
+            tracemalloc.stop()
+        self.assertEqual(made["visitors"], analytics.DAY_MAX)
+        self.assertLess(resident, 25e6, "resident at the caps: %.1f MB" % (resident / 1e6))
+        self.assertLess(rebuild, 3e6, "the report's rebuild of a full day: %.2f MB over what is resident" % (rebuild / 1e6))
+        self.assertLess(self.store.size(), analytics.DB_MAX_BYTES // 4, "a full day is a small part of the file's limit")
 
 
 # ---- the door ----------------------------------------------------------------------------------------------------------------------------
@@ -1043,7 +1378,7 @@ class TheAdminQuestion(base.DoorTest):
         body = r.json()
         day = body["days"][0]
         self.assertEqual((day["day"], day["visitors"], day["visits"], day["nt"], day["errors"]), (self.today, 1, 1, 1, 1))
-        self.assertEqual(body["lists"]["refs"], {"discord.com": 1})
+        self.assertEqual(body["lists"]["refs"], {"other": 1}, "a site that fewer than three visitors came from is not named")
         self.assertEqual(body["errors"][0]["msg"], "TypeError: x is null")
         self.assertEqual((body["from"], body["to"], body["today"]), (self.today, self.today, self.today))
         self.assertEqual(body["counter"]["accepted_today"], 4)

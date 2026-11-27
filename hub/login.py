@@ -277,7 +277,7 @@ class DiscordLogin(session.Sessions):
         display = self.display_of(shown, name)
         value = secrets.token_hex(16)
         try:
-            fresh = self.store.profile(account) is None                       # (no profile yet: a person who logs in for the first time, one more for the counter's sign-ups: a number, nothing else)
+            fresh = self.store.profile(account) is None                       # (no profile yet: a person who logs in for the first time, one more for the counter's sign-ups: a number, nothing else; a person who used Forget me has no profile and counts again, docs/ANALYTICS.md)
             self.store.set_profile(account, name, display, self.limits.profiles_total)
             self.store.add_session(digest(value), account, name, self.limits.session_seconds, self.limits.sessions_per_account, self.limits.sessions_total)
             old = cookies.get(COOKIE)

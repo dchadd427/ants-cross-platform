@@ -2,7 +2,7 @@
 plain values: a path is one of the site's own pages, a referrer is a site's name, an error is a class, a cleaned message and a file and line of the site's own scripts. Anything else is not kept.
 
 An event is a JSON object with a type `t`:
-  view   {t, p: the page's path, r: the host that sent the visitor (may be empty), w: the width of the window in pixels, l: the browser's language}
+  view   {t, p: the page's path, r: the site that sent the visitor (may be empty; kept as its registered name only), w: the width of the window in pixels, l: the browser's language}
   leave  {t, p}                                              the page was left (it ends the time of the visit)
   perf   {t, n: "load" or "game", ms: milliseconds, v: the site's version}
   error  {t, k: "Page" or "Game", n: the class of the error, m: its message, s: the file and line of the site's own script}
@@ -82,8 +82,27 @@ def page_of(path):
     return "/map" if re.match(r"/map/[a-z0-9-]{1,100}\Z", path) else OTHER
 
 
+# A site's name under which somebody may have a page of their own (`alice.github.io`, `alice.co.uk`) can name one person. Only the registered name is kept, which is the last two labels of the name, or the last
+# three when the last two are one of these public endings (a short list that is built in: a hub has no network, and a list that is not complete only keeps less, never more).
+PUBLIC_ENDINGS = frozenset(
+    "co.uk org.uk me.uk ac.uk gov.uk ltd.uk plc.uk net.uk sch.uk com.au net.au org.au edu.au gov.au id.au asn.au co.nz org.nz net.nz govt.nz ac.nz co.jp ne.jp or.jp ac.jp go.jp ed.jp "
+    "com.br net.br org.br gov.br edu.br com.cn net.cn org.cn gov.cn edu.cn com.tw org.tw net.tw edu.tw gov.tw com.hk org.hk net.hk edu.hk gov.hk co.kr or.kr ne.kr go.kr ac.kr "
+    "co.in net.in org.in ac.in gov.in res.in co.za org.za net.za ac.za gov.za com.mx org.mx net.mx gob.mx edu.mx com.ar org.ar net.ar gob.ar edu.ar com.tr org.tr net.tr gov.tr edu.tr "
+    "com.sg org.sg net.sg edu.sg gov.sg co.il org.il ac.il gov.il co.id or.id ac.id go.id web.id com.my org.my net.my gov.my edu.my co.th or.th ac.th go.th in.th "
+    "com.ua org.ua net.ua gov.ua edu.ua com.ph org.ph net.ph edu.ph gov.ph com.vn net.vn org.vn edu.vn gov.vn com.co org.co net.co com.pe org.pe net.pe com.ve com.pl org.pl net.pl edu.pl com.ru".split())
+
+
+def registered_name(host):
+    """The part of a site's name that is kept: `mail.google.com` is `google.com`, `alice.github.io` is `github.io`, `www.shop.example.co.uk` is `example.co.uk`."""
+    labels = host.split(".")
+    if len(labels) <= 2:
+        return host
+    return ".".join(labels[-3:] if ".".join(labels[-2:]) in PUBLIC_ENDINGS else labels[-2:])
+
+
 def host_of(text, own_host):
-    """The name of the site that sent a visitor, as it is kept: lower case, `www.` cut, no address, no port; "" for nothing, for this site itself and for anything that is not a plain name."""
+    """The name of the site that sent a visitor, as it is kept: lower case, no address, no port, `www.` cut, and only its registered name (registered_name); "" for nothing, for this site itself and for
+    anything that is not a plain name."""
     if not isinstance(text, str):
         return ""
     text = text.strip().lower()
@@ -91,7 +110,7 @@ def host_of(text, own_host):
         text = text[4:]
     if not HOST.match(text) or NUMERIC_HOST.match(text) or text == own_host:
         return ""
-    return text
+    return registered_name(text)
 
 
 def language_of(text):
@@ -153,6 +172,11 @@ def pacific_day(epoch):
     start = datetime.datetime.combine(nth_sunday(moment.year, 3, 2), datetime.time(10), datetime.timezone.utc)
     end = datetime.datetime.combine(nth_sunday(moment.year, 11, 1), datetime.time(9), datetime.timezone.utc)
     return (moment + datetime.timedelta(hours=-7 if start <= moment < end else -8)).date().isoformat()
+
+
+def hour_of(epoch):
+    """The moment of an event as it is kept: the start of its hour, in seconds since 1970. The days of the Pacific coast begin on a whole hour, so the hour is still the day's own."""
+    return int(epoch) // 3600 * 3600
 
 
 def day_number(day):
