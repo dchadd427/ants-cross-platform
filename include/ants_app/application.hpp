@@ -105,11 +105,9 @@ struct ApplicationConfig {
     /// --others confirmed | predicted (default confirmed; `?others=predicted` on the web page's address): how a match of the network that predicts draws the other players' ants. `confirmed`: the ants of
     /// every other player (a person, an ally, a computer player) are drawn from the confirmed engine, a lead behind and never corrected, and the player's own ants from the predicted one
     /// (ants_app/others_view.hpp). `predicted`: the whole picture is the predicted engine's, as it was before, to find out whether a trouble is this picture's (as `--prediction off` is for the prediction).
-    /// Drawing and picking only.
+    /// Drawing and picking only. `predicted` is kept for the maintainer's comparison in real matches and expires with v0.22.3 at the latest (AGENTS.md, rule 9): the switch, the tests that need the plain picture
+    /// and the code that only it uses go in the pull request that retires it.
     bool others_confirmed{true};
-    /// Only with `others_confirmed`: an attack click on another player's ant names the tile where the predicted engine has that ant (the ant is drawn a few ticks behind it), not the tile where it is
-    /// drawn. On: it is what keeps the click an attack on a walking ant. Off only for the tests that measure what the aim is worth; it has no command line option.
-    bool others_aim{true};
     /// --hud-art new | classic (the settings key `hud_art` when the command line does not say): the look of the match screen's frame, buttons and panel (hud_art.hpp): the new pictures (the default) or the
     /// original's own. `hud_art_given` is true when the command line said it (the settings key then does not count, and it is not written). `hud_art_dir`: the folder of the new pictures.
     bool hud_art_new{true};
@@ -359,6 +357,11 @@ public:
     void set_others_confirmed(bool on) { config_.others_confirmed = on; others_view_.forget(); }
     /// How many worlds of both engines were made (the cost that the tests count)
     uint64_t others_worlds_made() const noexcept { return others_view_.made(); }
+    /// Whether a world of both engines is kept for the next ask (a match's start and end let go of it: no match is shown the world of the one before; the tests look)
+    bool others_world_standing() const noexcept { return others_view_.standing(); }
+    /// Tests only: whether an attack click on another player's ant names the tile where the predicted engine has that ant (the ant is drawn a few ticks behind it; true, always in the product) or the
+    /// tile where it is drawn (false: for the tests that measure what the aim is worth). Not a setting, not a command line option, not in the configuration.
+    void set_others_aim_for_tests(bool on) noexcept { others_aim_ = on; }
     Renderer& renderer() noexcept { return *renderer_; }
     /// The geometry of the picture that the HUD, the renderer, the edge scroll and the pointer work in (screen_layout.hpp)
     const ScreenLayout& layout() const noexcept { return layout_; }
@@ -720,6 +723,7 @@ private:
     bool feed_own_view_glide();                           // with others_confirmed: only the player's own ants are the predicted engine's, so only they slide (others_view.hpp); false: not that mode
     bool aimed_tile(const ants::sim::AntSnapshot& picked, ants::sim::TileCoord& tile);       // where an attack order on a picked ant aims (others_view.hpp, aim_at_predicted_ant)
     OthersView others_view_;                              // the world of both engines (others_confirmed)
+    bool others_aim_{true};                               // an attack click aims at the predicted engine's tile (set_others_aim_for_tests)
     sim::SimulationEngine& input_sim();                   // view_sim() for the pointer and the keys: what a rebuild at this very moment moves slides before anything is picked, so that a pick is always by the frame's rule
     struct OrdersNoted {                                  // (the end of an input handler: whatever it ordered is looked at, by whichever way the handler leaves)
         Application& app;

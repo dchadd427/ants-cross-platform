@@ -230,11 +230,11 @@ public:
         cfg.settings_path = (scratch_root() / ("settings_" + std::to_string(++sessions_made) + ".ini")).string();
         cfg.prediction = p_.predict;
         cfg.others_confirmed = p_.others_confirmed;
-        cfg.others_aim = p_.others_aim;
         if (p_.local) {
             cfg.default_map_path = (maps_folder() / p_.map).string();
             cfg.play_at_once = true;
             app_ = make_application();
+            app_->set_others_aim_for_tests(p_.others_aim);
             if (!app_->init(cfg)) throw std::runtime_error("the application could not start");
             app_->hud().dismiss_match_start_modal();
             return;
@@ -261,6 +261,7 @@ public:
         cfg.player_name = "Ann";
         cfg.net_link_maker = [this]() { return make_link(p_.link); };
         app_ = make_application();
+        app_->set_others_aim_for_tests(p_.others_aim);
         if (!app_->init(cfg)) throw std::runtime_error("the application could not start");
         if (p_.use_peer) {
             run_ms(300);                                                              // (the application is in the room first: seat 0)

@@ -724,6 +724,7 @@ int main(int argc, char* argv[]) {
     } TEST_END();
 
     TEST_CASE("PA10 In The Plain Picture (--others predicted) The Frame Never Draws A Sliding Ant Of Another Team On Ground That The Fog Covers: With Fog Of War An Enemy Ant At The Edge Of The Explored Ground Whose Slide Began Two Tiles Into The Fog Is Drawn With The Part Of The Slide That Stays On Explored Ground (The Same Frame As That Shorter Slide, Nothing Where The Whole Slide Would Put It), And A Slide Over Explored Ground Is Drawn Whole") {
+        // (the plain picture, --others predicted, expires with v0.22.3 at the latest: this test goes with it, AGENTS.md rule 9)
         Application app;
         Peer bob;
         Duo duo{app, bob};
@@ -1195,6 +1196,7 @@ int main(int argc, char* argv[]) {
     } TEST_END();
 
     TEST_CASE("PA16 The Switch: Others = Confirmed Is On Unless The Command Line Says --others predicted (The Last Word Wins, A Value That Is No Choice Is Refused With The Reason), It Does Nothing Without The Prediction (Told Not To, Or In A Game Of One Machine), And Off It Changes Nothing: The Frame, The HUD And The Glide Are The Plain Ones, No World Is Made And The Match Ends In The Same State") {
+        // (the plain picture, --others predicted, expires with v0.22.3 at the latest: this test goes with it, AGENTS.md rule 9)
         std::vector<std::string> args;
         std::vector<char*> st;
         const auto parse = [&](std::vector<std::string> a) {
@@ -1205,7 +1207,7 @@ int main(int argc, char* argv[]) {
             return Application::parse_arguments(static_cast<int>(args.size()), st.data());
         };
         ApplicationConfig c = parse({"ants"});
-        ASSERT_TRUE(c.others_confirmed && c.others_aim && c.startup_error.empty());         // on by default: the command line said nothing
+        ASSERT_TRUE(c.others_confirmed && c.startup_error.empty());         // on by default: the command line said nothing
         c = parse({"ants", "--others", "confirmed"});
         ASSERT_TRUE(c.others_confirmed && c.startup_error.empty());
         c = parse({"ants", "--others", "predicted"});
@@ -1273,6 +1275,39 @@ int main(int argc, char* argv[]) {
             app.net()->freeze();
             duo.step(1500);
             ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+        }
+    } TEST_END();
+
+    TEST_CASE("PA18 The World Of Both Engines Is Let Go Of When A Match Ends And When A Match Begins, So That No Match Is Ever Shown The One Before's World For A Moment Whatever Its Stamp: It Stands, Shared By Every Ask Of A Moment, Until The Match Is Over (Or, For A New Match, Begins), And The Next Ask Makes It Again") {
+        {
+            Application app;
+            Peer bob;
+            Duo duo{app, bob};
+            ASSERT_TRUE(predicting_match(app, bob, duo));
+            ASSERT_TRUE(app.others_view_active());
+            app.shown_world();
+            ASSERT_TRUE(app.others_world_standing());                                      // the world of this moment is kept ...
+            const uint64_t made = app.others_worlds_made();
+            app.shown_world();
+            ASSERT_EQ(app.others_worlds_made(), made);                                     // ... and every ask of the moment shares it
+            sim::Command quit;                                                             // Bob leaves: the match is over
+            quit.type = sim::CommandType::Quit;
+            quit.issuer = 1;
+            ASSERT_EQ(bob.net.submit(quit).status, sim::CommandResult::Status::Applied);
+            ASSERT_TRUE(duo.until([&]() { return app.sim().is_match_over(); }, 15000));
+            ASSERT_FALSE(app.others_world_standing());                                     // the end let go of it
+        }
+        {
+            Application app;                                                               // a match begins (a game that this machine starts, after a match of the network that was left): the world
+            Peer bob;                                                                      // that the match before made is not the new match's
+            Duo duo{app, bob};
+            ASSERT_TRUE(predicting_match(app, bob, duo));
+            app.shown_world();
+            ASSERT_TRUE(app.others_world_standing());
+            app.return_to_map_select();                                                    // (a match that is left ends no match: nothing lets go of the world here)
+            ASSERT_TRUE(app.others_world_standing());
+            ASSERT_TRUE(app.start_game(maps_dir() + "SMALL.LVL"));
+            ASSERT_FALSE(app.others_world_standing());                                     // the start let go of it
         }
     } TEST_END();
 

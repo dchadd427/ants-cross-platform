@@ -13,7 +13,8 @@
 //   - the explored ground (Fog of War): the confirmed engine's (the predicted engine adopts it after every tick), so no other player's ant is drawn where the confirmed engine has not explored, and none
 //     is drawn earlier than the confirmed engine has it.
 // Drawing and picking only: the engines, the turns, the hashes, the recordings and the protocol are untouched, and nothing but this picture reads the world that is made here.
-// `--others predicted` (`?others=predicted`) leaves this picture out and draws the whole world from the predicted engine, to find out whether a trouble is this picture's.
+// `--others predicted` (`?others=predicted`) leaves this picture out and draws the whole world from the predicted engine, to find out whether a trouble is this picture's; it expires with v0.22.3 at the latest
+// (AGENTS.md, rule 9).
 
 #include <cstdint>
 #include <vector>
@@ -45,10 +46,12 @@ public:
     const sim::WorldState& compose(const sim::WorldState& shown, const sim::WorldState& confirmed, uint8_t own, const Stamp& stamp);
     /// The same, with the stamp that says "never made": always made again (the tests' reference)
     const sim::WorldState& compose_now(const sim::WorldState& shown, const sim::WorldState& confirmed, uint8_t own);
-    /// The next call makes the world again (the match ended, or the prediction stopped)
+    /// The next call makes the world again (a match begins or ends, the mode is switched, or the prediction stopped: a new match is never shown the world of the one before, whatever its stamp)
     void forget() noexcept { valid_ = false; }
     /// How many worlds were made (a call with the stamp of the world that stands makes none)
     uint64_t made() const noexcept { return made_; }
+    /// Whether a world is kept for the stamp of the next call (false after `forget`, and before the first call)
+    bool standing() const noexcept { return valid_; }
 
 private:
     sim::WorldState world_;

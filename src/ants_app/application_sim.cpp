@@ -68,7 +68,7 @@ bool Application::feed_own_view_glide() {
 
 // Where an attack order on an ant that the picture drew from the confirmed engine aims: the predicted engine's tile for that ant (others_view.hpp, aim_at_predicted_ant)
 bool Application::aimed_tile(const sim::AntSnapshot& picked, sim::TileCoord& tile) {
-    if (!others_view_active() || !config_.others_aim) return false;
+    if (!others_view_active() || !others_aim_) return false;
     return aim_at_predicted_ant(view_sim().get_world_state(), local_player_id_, picked, tile);
 }
 
@@ -251,6 +251,7 @@ void Application::post_tick() {
 void Application::check_match_over() {
     if (!sim_.is_match_over() || match_over_handled_) return;
     match_over_handled_ = true;
+    others_view_.forget();                                       // (the match is over: the world of both engines that it last showed is let go of, and no later match, or look, starts from it)
     finish_recording();                                          // (the replay is the match as it ended: every command and every tick are in it)
     live_stats_.finish(sim_, local_player_id_);                  // (the numbers of the results: counted for every tick of the match, or not at all; before the screen opens)
     const auto& world = sim_.get_world_state();

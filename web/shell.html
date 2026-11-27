@@ -1820,7 +1820,7 @@
         })();
 
         // ?prediction=off in the address switches off the prediction of the player's own orders in a match of the network (the game's --no-prediction; net::Prediction is on by default), to find out whether a
-        // trouble is the prediction's. ?others=predicted gives the earlier picture, in which the other players' ants are the predicted engine's too (the game's --others predicted; by default they are the confirmed
+        // trouble is the prediction's. ?others=predicted gives the earlier picture, in which the other players' ants are the predicted engine's too (the game's --others predicted; expires with v0.22.3 at the latest, AGENTS.md rule 9; by default they are the confirmed
         // engine's, never corrected: docs/NETWORK_PORT.md, "Drawing the other players' ants from the confirmed engine"). Nothing else of the address reaches the game through it.
         (function () {
             var wanted = null, others = null;

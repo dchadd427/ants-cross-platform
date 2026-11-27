@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the picture of others = confirmed (docs/NETWORK_PORT.md, 'Drawing the other players' ants from the confirmed engine'), for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the product rules that the view-glide, prediction-in-the-application and shaped-link tests hold: the other players' ants are the confirmed engine's and the player's own the predicted one's (an ant that only one engine has counts for the engine of its owner), the ground and the effects are the predicted engine's and what is explored the confirmed one's, the world is made again whenever an engine changes, the pointer and the cursor pick from the world that is drawn, an attack on a drawn ant is aimed at the tile of the predicted engine (and never into ground that the fog hides), only the player's own ants slide, and the picture is on by default, and only while the prediction runs.",
+  "note": "Mutants of the picture of others = confirmed (docs/NETWORK_PORT.md, 'Drawing the other players' ants from the confirmed engine'), for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the product rules that the view-glide, prediction-in-the-application and shaped-link tests hold: the other players' ants are the confirmed engine's and the player's own the predicted one's (an ant that only one engine has counts for the engine of its owner), the ground and the effects are the predicted engine's and what is explored the confirmed one's, the world is made again whenever an engine changes, the pointer and the cursor pick from the world that is drawn, an attack on a drawn ant is aimed at the tile of the predicted engine (and never into ground that the fog hides) and an attack on an ally's drawn ant asks first even when the predicted engine has lost the ant, every handler of the HUD (the rubber band, the pedestals, the keys, the step of every tick) reads the world that the picture shows and not the engine that it orders, only the player's own ants slide, the picture is on by default and only while the prediction runs, and a match's start and end let go of the world that the match before made.",
   "mutants": [
     {
       "id": "others_drawn_from_predicted",
@@ -224,7 +224,7 @@
     {
       "id": "click_not_aimed_in_the_application",
       "file": "src/ants_app/application_sim.cpp",
-      "old": "    if (!others_view_active() || !config_.others_aim) return false;",
+      "old": "    if (!others_view_active() || !others_aim_) return false;",
       "new": "    return false;",
       "build": [
         "test_prediction_link"
@@ -242,6 +242,83 @@
       ],
       "test": "ANTS_TEST_FILTER=LK12 ./build/tests/test_app/test_prediction_link",
       "expect": "LK12"
+    },
+    {
+      "id": "ally_check_ignores_the_drawn_world",
+      "file": "src/ants_app/hud_input.cpp",
+      "old": "        const sim::WorldState& drawn = world_of(sim); ",
+      "new": "        const sim::WorldState& drawn = world; ",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG12"
+    },
+    {
+      "id": "band_reads_the_engine_not_the_picture",
+      "file": "src/ants_app/hud_input.cpp",
+      "old": "                        world_of(sim), shift);",
+      "new": "                        sim.get_world_state(), shift);",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG11"
+    },
+    {
+      "id": "pedestal_reads_the_engine_not_the_picture",
+      "file": "src/ants_app/hud_input.cpp",
+      "old": "    if (over_map(x, y)) return false;\n    const auto& world = world_of(sim);",
+      "new": "    if (over_map(x, y)) return false;\n    const auto& world = sim.get_world_state();",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG11"
+    },
+    {
+      "id": "keys_read_the_engine_not_the_picture",
+      "file": "src/ants_app/hud_keys.cpp",
+      "old": "    const auto& world = world_of(sim);\n    if (view_only_ &&",
+      "new": "    const auto& world = sim.get_world_state();\n    if (view_only_ &&",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG11"
+    },
+    {
+      "id": "hud_step_reads_the_confirmed_engine",
+      "file": "src/ants_app/application_sim.cpp",
+      "old": "    const auto& world = shown_world();                      // (its world;",
+      "new": "    const auto& world = sim_.get_world_state();             // (its world;",
+      "build": [
+        "test_prediction_app"
+      ],
+      "test": "ANTS_TEST_FILTER=PA2 ./build/tests/test_app/test_prediction_app",
+      "expect": "PA2"
+    },
+    {
+      "id": "world_kept_over_a_match_start",
+      "file": "src/ants_app/application_match.cpp",
+      "old": "    others_view_.forget();                                                  // (nor the world of both engines that an earlier match last showed: a new match never starts from it, whatever its stamp)\n",
+      "new": "",
+      "build": [
+        "test_prediction_app"
+      ],
+      "test": "ANTS_TEST_FILTER=PA18 ./build/tests/test_app/test_prediction_app",
+      "expect": "PA18"
+    },
+    {
+      "id": "world_kept_over_a_match_end",
+      "file": "src/ants_app/application_sim.cpp",
+      "old": "    others_view_.forget();                                       // (the match is over: the world of both engines that it last showed is let go of, and no later match, or look, starts from it)\n",
+      "new": "",
+      "build": [
+        "test_prediction_app"
+      ],
+      "test": "ANTS_TEST_FILTER=PA18 ./build/tests/test_app/test_prediction_app",
+      "expect": "PA18"
     }
   ]
 }

@@ -848,6 +848,7 @@ int main(int argc, char* argv[]) {
     } TEST_END();
 
     TEST_CASE("LK3 In The Plain Picture (--others predicted) The Attack Click On A Walking Ant: The Order Names The Tile Of The Ant As The Screen Shows It, So That With The Prediction (The Screen Is The Engine The Order Lands In) It Is Still An Attack When It Lands, At Every Round Trip, For An Ant That Walks On And For One That Its Owner Steers; Without It The Ant Has Left The Tile Before The Order Lands, And The Click Is A Plain Move; A Game On This Computer Is The Reference") {
+        // (the plain picture, --others predicted, expires with v0.22.3 at the latest: this test goes with it, AGENTS.md rule 9)
         const std::vector<uint32_t> seeds = table_wanted() ? std::vector<uint32_t>{7u, 8u, 9u, 10u} : std::vector<uint32_t>{7u, 8u};
         const int rtts[5] = {2, 30, 100, 180, 300};
         struct Kind {
@@ -1271,6 +1272,7 @@ int main(int argc, char* argv[]) {
     };
 
     TEST_CASE("LK7 In The Plain Picture (--others predicted) What The Screen Shows When The Other Person's Orders Arrive: Their Ants Are Put Where The Engine Has Them By A Slide, Not A Jump (At RTT 180 The Frames In Which An Ant Of The Picture Moves By More Than 20 px Are None), And Without The Slide There Are Such Frames") {
+        // (the plain picture, --others predicted, expires with v0.22.3 at the latest: this test goes with it, AGENTS.md rule 9)
         Params p;
         p.others_confirmed = false;
         p.link.rtt_ms = 180;

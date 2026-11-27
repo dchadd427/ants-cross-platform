@@ -318,7 +318,7 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             } else {
                 ++i;
             }
-        } else if (std::strcmp(argv[i], "--others") == 0) {                      // --others confirmed | predicted: which engine draws the other players' ants in a match that predicts (others_view.hpp)
+        } else if (std::strcmp(argv[i], "--others") == 0) {                      // --others confirmed | predicted: which engine draws the other players' ants in a match that predicts (others_view.hpp); `predicted` expires with v0.22.3 at the latest (AGENTS.md rule 9)
             if (i + 1 >= argc || (std::strcmp(argv[i + 1], "confirmed") != 0 && std::strcmp(argv[i + 1], "predicted") != 0)) {
                 if (cfg.startup_error.empty()) cfg.startup_error = "--others needs confirmed or predicted";
                 if (i + 1 < argc) ++i;

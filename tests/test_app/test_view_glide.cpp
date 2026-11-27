@@ -602,6 +602,137 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(plain.pick_ant_at(world, ahead.px, ahead.py - 8) == nullptr);              // (the composed world has the ant where the confirmed engine has it)
     } TEST_END();
 
+    TEST_CASE("VG11 Every Handler Of The HUD Takes What The Picture Shows From The World That It Was Told The Picture Shows, Never From The Engine That It Orders: The Rubber Band Takes The Own Ants Where The Shown World Has Them, The Stop Pedestal And Ctrl+S Act On A Selection That The Shown World Has (Not On One That Only The Engine Has), Ctrl+A Selects The Own Ants Of The Shown World") {
+        using namespace ants;
+        using namespace ants::app;
+        sim::SimulationEngine engine;
+        engine.init_test_world(60, 60, 1, 600000);
+        const uint32_t a = engine.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{3, 5});
+        const uint32_t b = engine.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{6, 5});
+        const uint32_t c = engine.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{9, 5});
+        engine.tick();
+        // the world that the picture shows is not the engine's: ant `a` is 288 px to the right of where the engine has it, ant `b` is not in it (the engine has both: a world of the shown engine's own
+        // ants that the picture has not got, as the picture of two engines may have for another player's ants)
+        sim::WorldState shown = engine.get_world_state();
+        const sim::AntSnapshot a_engine = [&]() { for (const auto& x : engine.get_world_state().ants) { if (x.id == a) return x; } return sim::AntSnapshot{}; }();
+        ASSERT_TRUE(a_engine.id == a);
+        for (auto it = shown.ants.begin(); it != shown.ants.end();) {
+            if (it->id == b) {
+                it = shown.ants.erase(it);
+            } else {
+                if (it->id == a) {
+                    it->px += 288;
+                    it->tile_x = it->px / 32;
+                }
+                ++it;
+            }
+        }
+        HUD hud;
+        hud.init(0);
+        hud.set_sim_query(&engine);
+        hud.set_shown_world(&shown);
+        ViewportCamera cam;
+        cam.x = 0.0f;
+        cam.y = 0.0f;
+        cam.world_x = 0;
+        cam.world_y = 0;
+        RecordingSink sink(engine);
+        hud.set_command_sink(&sink);
+        const auto band = [&](int32_t wx1, int32_t wy1, int32_t wx2, int32_t wy2) {
+            hud.handle_mouse_down(wx1 + HUD::PLAYFIELD_X, wy1 + HUD::PLAYFIELD_Y, SDL_BUTTON_LEFT, engine, cam, 0);
+            hud.handle_mouse_motion(wx2 + HUD::PLAYFIELD_X, wy2 + HUD::PLAYFIELD_Y, engine, cam);
+            hud.handle_mouse_up(wx2 + HUD::PLAYFIELD_X, wy2 + HUD::PLAYFIELD_Y, SDL_BUTTON_LEFT, engine, cam, 0);
+        };
+        // the rubber band: around the place where the shown world has `a`, it is taken; around the place where only the engine has it, it is not
+        band(a_engine.px + 288 - 14, a_engine.py - 24, a_engine.px + 288 + 14, a_engine.py + 8);
+        ASSERT_TRUE(hud.is_ant_selected(a) && !hud.is_ant_selected(b) && !hud.is_ant_selected(c));
+        hud.clear_selection();
+        band(a_engine.px - 14, a_engine.py - 24, a_engine.px + 14, a_engine.py + 8);
+        ASSERT_FALSE(hud.is_ant_selected(a));
+        ASSERT_TRUE(hud.get_selected_ant_ids().empty());
+        // Ctrl+S gives the Stop order to a selection that the shown world has; `b` is only the engine's, so the keys do nothing for it
+        hud.select_ant(b);
+        hud.handle_key_down('s', engine, cam, KMOD_CTRL);
+        ASSERT_TRUE(sink.log.empty());
+        hud.select_ant(c);
+        hud.handle_key_down('s', engine, cam, KMOD_CTRL);
+        ASSERT_EQ(sink.log.size(), 1u);
+        ASSERT_TRUE(sink.log[0].type == sim::CommandType::Stop);
+        // Ctrl+A: the own ants of the shown world, and no other
+        hud.clear_selection();
+        hud.handle_key_down('a', engine, cam, KMOD_CTRL);
+        ASSERT_TRUE(hud.is_ant_selected(a) && hud.is_ant_selected(c) && !hud.is_ant_selected(b));
+        ASSERT_EQ(hud.get_selected_ant_ids().size(), 2u);
+        // the pedestals: the Stop pedestal does nothing for a selection that only the engine has, and stops one that the shown world has
+        hud.select_ant(b);
+        hud.handle_mouse_down(610, 190, SDL_BUTTON_LEFT, engine, cam, 0);
+        hud.handle_mouse_up(610, 190, SDL_BUTTON_LEFT, engine, cam, 0);
+        ASSERT_EQ(sink.log.size(), 1u);                                                      // (no new order: the picture shows no ant that is selected)
+        hud.select_ant(a);
+        hud.handle_mouse_down(610, 190, SDL_BUTTON_LEFT, engine, cam, 0);
+        hud.handle_mouse_up(610, 190, SDL_BUTTON_LEFT, engine, cam, 0);
+        ASSERT_EQ(sink.log.size(), 2u);
+        ASSERT_TRUE(sink.log[1].type == sim::CommandType::Stop);
+    } TEST_END();
+
+    TEST_CASE("VG12 An Attack On An Ally's Ant That The Picture Draws From The Confirmed Engine Asks First, Though The Predicted Engine Has Lost The Ant (It Died In The Ticks Ahead): The Order Waits For The Answer, No Command Goes Out, No Is Answered By Keeping The Team; An Attack On An Ant That Is No Ally's Goes Out At Once") {
+        using namespace ants;
+        using namespace ants::app;
+        sim::SimulationEngine confirmed;
+        confirmed.init_test_world(60, 60, 1, 600000);
+        const uint32_t mine = confirmed.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{18, 18});
+        confirmed.tick();
+        sim::SimulationEngine predicted(confirmed);                                          // (the predicted engine never had the other ants: they stand in the confirmed engine only)
+        const uint32_t ally_ant = confirmed.spawn_unit(1, sim::AntType::Worker, sim::TileCoord{22, 20});
+        const uint32_t foe_ant = confirmed.spawn_unit(2, sim::AntType::Worker, sim::TileCoord{26, 20});
+        confirmed.form_alliance(0, 1);
+        predicted.form_alliance(0, 1);
+        confirmed.tick();
+        predicted.tick();
+        ASSERT_TRUE(confirmed.stats_manager().are_allies(0, 1) && predicted.stats_manager().are_allies(0, 1));
+        const auto find = [](const sim::SimulationEngine& e, uint32_t id) {
+            for (const auto& x : e.get_world_state().ants) {
+                if (x.id == id) return x;
+            }
+            return sim::AntSnapshot{};
+        };
+        const sim::AntSnapshot drawn_ally = find(confirmed, ally_ant);
+        const sim::AntSnapshot drawn_foe = find(confirmed, foe_ant);
+        ASSERT_TRUE(drawn_ally.id == ally_ant && drawn_foe.id == foe_ant && find(predicted, ally_ant).id == 0 && find(predicted, foe_ant).id == 0);
+        OthersView view;
+        const sim::WorldState& world = view.compose(predicted.get_world_state(), confirmed.get_world_state(), 0, OthersView::Stamp{});
+        HUD hud;
+        hud.init(0);
+        hud.set_sim_query(&predicted);
+        hud.set_shown_world(&world);
+        hud.set_aim_tile([&](const sim::AntSnapshot& picked, sim::TileCoord& tile) { return aim_at_predicted_ant(predicted.get_world_state(), 0, picked, tile); });
+        ViewportCamera cam;
+        cam.world_x = 560;
+        cam.world_y = 500;
+        RecordingSink sink(predicted);
+        hud.set_command_sink(&sink);
+        const auto right_click = [&](const sim::AntSnapshot& at) {
+            const int32_t x = at.px - cam.world_x + HUD::PLAYFIELD_X;
+            const int32_t y = at.py - 8 - cam.world_y + HUD::PLAYFIELD_Y;
+            hud.handle_mouse_down(x, y, SDL_BUTTON_RIGHT, predicted, cam, 0);
+            hud.handle_mouse_up(x, y, SDL_BUTTON_RIGHT, predicted, cam, 0);
+        };
+        hud.select_ant(mine);
+        ASSERT_TRUE(hud.evaluate_cursor(drawn_ally.px - cam.world_x + HUD::PLAYFIELD_X, drawn_ally.py - 8 - cam.world_y + HUD::PLAYFIELD_Y, world, predicted.grid(), cam) == CursorType::Attack);
+        right_click(drawn_ally);                                                             // the ally's ant is where the picture draws it; the predicted engine has no ant there, or anywhere
+        ASSERT_EQ(hud.alliance_dialog(), HUD::AllianceDialog::BreakConfirm);
+        ASSERT_TRUE(sink.log.empty());
+        ASSERT_TRUE(predicted.stats_manager().are_allies(0, 1));
+        hud.handle_key_down('n', predicted, cam);
+        ASSERT_EQ(hud.alliance_dialog(), HUD::AllianceDialog::None);
+        ASSERT_TRUE(sink.log.empty() && predicted.stats_manager().are_allies(0, 1));
+        hud.select_ant(mine);
+        right_click(drawn_foe);                                                              // an ant of a seat that is no ally's: the order goes out, no question
+        ASSERT_EQ(hud.alliance_dialog(), HUD::AllianceDialog::None);
+        ASSERT_EQ(sink.log.size(), 1u);
+        ASSERT_TRUE(sink.log[0].type == sim::CommandType::GroupAttack && sink.log[0].tile_x == drawn_foe.tile_x && sink.log[0].tile_y == drawn_foe.tile_y);
+    } TEST_END();
+
     std::cout << "\n=======================================================\n"
               << " VIEW GLIDE TEST SUMMARY\n=======================================================\n"
               << " Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Passed:           " << (g_test_count - g_test_failures) << "\n Failed:           "
