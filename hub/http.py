@@ -11,7 +11,7 @@ MAX_HEADERS = 60
 REQUEST_LINE = re.compile(r"([A-Z]{1,10}) (/[!-~]{0,1999}) HTTP/1\.[01]\Z")
 HEADER_LINE = re.compile(r"([!#$%&'*+.^_`|~0-9A-Za-z-]+):([\t\x20-\x7e\x80-\xff]*)\Z")        # (the blanks around the value are cut after the match: a pattern that did it itself backtracked, quadratically, on a long run of blanks)
 ONCE = frozenset(("origin", "upgrade", "connection", "sec-websocket-key", "sec-websocket-version", "x-client-address", "content-length", "transfer-encoding", "host",
-                  "cookie", "x-hub-test-login", "sec-fetch-site")) | frozenset(("content-type", "x-ants-csrf", "x-ants-image", "authorization"))
+                  "cookie", "x-hub-test-login", "sec-fetch-site")) | frozenset(("content-type", "x-ants-csrf", "x-ants-image", "authorization", "user-agent", "dnt", "sec-gpc"))
 REASONS = {101: "Switching Protocols", 200: "OK", 202: "Accepted", 204: "No Content", 302: "Found", 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed", 408: "Request Timeout", 411: "Length Required", 413: "Content Too Large", 415: "Unsupported Media Type", 422: "Unprocessable Content",
            426: "Upgrade Required", 429: "Too Many Requests", 431: "Request Header Fields Too Large", 500: "Internal Server Error", 503: "Service Unavailable"}
 HEADER_NAME = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+\Z")

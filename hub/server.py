@@ -10,7 +10,7 @@ import signal
 import sys
 import time
 
-from . import admindoor, aidoor, chat as chatmod, config as configmod, gamedoor, http, images as imagesmod, imgdoor, likedoor, limits as limitmod, namepass, roles as rolesmod, session as sessionmod, store as storemod, text as textrules, ws
+from . import admindoor, aidoor, analyticsdoor, chat as chatmod, config as configmod, gamedoor, http, images as imagesmod, imgdoor, likedoor, limits as limitmod, namepass, roles as rolesmod, session as sessionmod, store as storemod, text as textrules, ws
 from .log import Log
 
 WS_PATH = "/hub/ws"
@@ -132,6 +132,7 @@ class Hub:
         self.next_deletions = self.next_forget = self.next_purge = self.next_checkpoint = self.next_crowded = self.next_room = float("-inf")
         self.pruning = False                        # True while the oldest lines are being deleted to make room (from prune_from_percent of the limit down to prune_to_percent)
         self.routes = getattr(sessions, "routes", None) or {}
+        self.analytics = analyticsdoor.make(self)        # (the counter of the site's visits and its door, /hub/a: hub/analyticsdoor.py, docs/ANALYTICS.md; Off when it is switched off)
         self.admin = admindoor.Door(self)                # (the admin page's door: hub/admindoor.py)
         self.likes = likedoor.Door(self)                 # (the likes' gate, and Forget me's call to the counts door: hub/likedoor.py)
         self.ai = aidoor.Door(self)                      # (the doors of the AI keys, and the relay to the armed tab: hub/aidoor.py, hub/airelay.py, docs/MAP_AI.md)
@@ -171,6 +172,8 @@ class Hub:
         self.chat.commands.stop()
         self.likes.stop()
         self.ai.relay.stop()
+        if self.analytics.collector is not None:
+            self.analytics.collector.stop()
         if self.server:
             self.server.close()
         for peer in list(self.chat.peers):
@@ -207,6 +210,8 @@ class Hub:
                         self.pending -= 1
                         pending = False
                 return await self.ai_page(request, reader, writer, release)
+            if request.split()[0] == analyticsdoor.PATH:                            # (the counter's door: the place of the connection is kept until it is answered)
+                return await self.analytics_page(request, reader, writer)
             if request.split()[0].startswith(admindoor.ROUTE_PREFIX):             # (the place of the connection is kept until it is answered: a body that is promised and not sent holds a place, not a free one)
                 return await self.admin_page(request, reader, writer)
             if request.split()[0].startswith(likedoor.ROUTE_PREFIX):              # (the same: the place of the connection is kept until it is answered)
@@ -262,6 +267,14 @@ class Hub:
     async def admin_page(self, request, reader, writer):
         """One request of the admin page's door: the gate, or the page's API (its POST has a body, which hub/admindoor.py reads); the answer ends the connection."""
         writer.write(await self.admin.serve(request, reader, self.address_of(request.headers, writer)))
+
+    async def analytics_page(self, request, reader, writer):
+        """One event for the counter (hub/analyticsdoor.py): its body is read there; the address for the country is the visitor's whole address, which the door forgets when it has answered."""
+        h = request.headers
+        peername = writer.get_extra_info("peername")
+        peer = peername[0] if peername else ""
+        ip = limitmod.raw_address(None if self.converter.speaks_for_nobody(peer) else h.get("x-client-address"), peer)
+        writer.write(await self.analytics.serve(request, reader, self.address_of(h, writer), ip))
 
     async def likes_page(self, request, writer):
         """One request of the likes' gate (hub/likedoor.py): it takes no body (one that is sent is refused there), and the answer ends the connection."""
@@ -431,6 +444,11 @@ class Hub:
                 pictures.sync()
             except Exception as e:
                 self.pictures_trouble(now, e)
+        if self.analytics.collector is not None:
+            try:                                         # (the counter's counters, the new day, the hour's work: hub/analytics.py)
+                self.analytics.collector.on_tick()
+            except Exception as e:
+                self.log.event("error", kind=type(e).__name__, where="analytics")
         try:                                             # (the flags that take posting of images away: read again when the counter says that they changed, here or in the command line; the pages of those accounts are told)
             if self.images.on:
                 self.chat.images_changed(self.images.sync())
@@ -465,6 +483,7 @@ class Hub:
             self.chat.messages.forget_idle(now)
             self.admin.forget_idle(now)
             self.likes.forget_idle(now)
+            self.analytics.forget_idle(now)
             self.ai.forget_idle(now)
             if hasattr(self.sessions, "forget_idle"):
                 self.sessions.forget_idle(now, wall)

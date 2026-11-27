@@ -19,6 +19,7 @@ import unittest
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DISCORD = "https://discord.gg/WaWrXQnKPj"                                             # (the Discord button of the site bar)
 GITHUB = "https://github.com/dchadd427/ants-cross-platform"
+DB_IP = "https://db-ip.com/"                                                          # (the credit of the country list: IP to Country Lite, CC BY 4.0)
 LEGAL_URL = "https://beta.playants.org/legal.html"
 
 # The notice, as the owner approved it (the page's panels in order, the first sentence of the fourth; the README's first paragraph of "License")
@@ -66,7 +67,7 @@ def addresses_that_leave_the_site(page):
         for address in ([part.split()[0] for part in value.split(",") if part.strip()] if name == "srcset" else [value]):
             if address.startswith("/") and not address.startswith("//") or address.startswith("#") or address.startswith("@@SITE_ORIGIN@@/"):      # (the site's own address, which the build writes in for the placeholder)
                 continue
-            if address == GITHUB or address.startswith(GITHUB + "/") or address == DISCORD:
+            if address == GITHUB or address.startswith(GITHUB + "/") or address == DISCORD or (address == DB_IP and name == "href"):          # (the credit that the country list's licence asks for is a link, never something that loads)
                 continue
             found.append(address)
     for style in re.findall(r"<style[^>]*>(.*?)</style>", page, re.S):
@@ -108,7 +109,7 @@ class TheLegalPage(unittest.TestCase):
         self.assertIn('<link rel="stylesheet" href="/front/classic.css">', self.page)
         self.assertIn('<div class="pt"><h1>Legal</h1><p>', self.page)
         self.assertIn('<link rel="stylesheet" href="/site_nav.css">', self.page)
-        self.assertEqual(re.findall(r"<script[^>]*>", self.page), ['<script src="/site_nav.js">', '<script src="/update_notice.js">'])               # (the site bar's Menu and the update notice: no other script)
+        self.assertEqual(re.findall(r"<script[^>]*>", self.page), ['<script src="/site_nav.js">', '<script src="/update_notice.js">', '<script src="/analytics.js">'])               # (the site bar's Menu, the update notice and the counter: no other script)
         self.assertIn('<header class="sb" data-live="menu" ', self.page)
         self.assertEqual(re.findall(r'<nav aria-label="Pages">(.*?)</nav>', self.page, re.S)[0].count('aria-current'), 0)      # (Legal is not one of the bar's five: it is in the Menu)
         self.assertEqual(sorted(set(re.findall(r"@@\w+@@", self.page)) - {"@@SITE_ORIGIN@@"}), ["@@BUILD_DATE@@", "@@BUILD_ID@@", "@@GAME_VERSION@@"])      # (what the build fills in: the bar's three stamps, for the last line of the Menu; and the site's address, which the head names)
@@ -140,7 +141,7 @@ class TheLegalPage(unittest.TestCase):
         for sentence in NOTICE:
             self.assertIn(sentence, self.text)
         self.assertIn("not legal advice", self.text)
-        self.assertEqual(re.findall(r"<strong>(.*?)</strong>", self.main), ["no warranty of any kind", "not liable", "id", "username", "display name", "profile picture", "Show my Discord picture", "Log out", "Forget me"])       # the two phrases that matter are in bold (and the words of the chat panel)
+        self.assertEqual(re.findall(r"<strong>(.*?)</strong>", self.main), ["no warranty of any kind", "not liable", "id", "username", "display name", "profile picture", "Show my Discord picture", "Log out", "Forget me", "no cookie", "Your IP address and your browser&rsquo;s identification are never written down.", "one visit and its country, once in 30 minutes, and nothing else", "Forget me has nothing to remove here"])       # the two phrases that matter are in bold (and the words of the chat panel and of the counter's)
 
     def test_it_says_what_the_readme_says_of_the_original_game(self):
         for words in ("belong to their copyright holders", "does not own them and cannot license them", "open an issue", "it will be taken out"):
@@ -153,6 +154,8 @@ class TheLegalPage(unittest.TestCase):
     def without_the_chat_panel(self):
         start = self.main.index('<section class="panel" id="chat-login">')
         text = self.main[:start] + self.main[self.main.index("</section>", start) + len("</section>"):]
+        start = text.index('<section class="panel" id="counting">')               # (the panel of the counter of the visits says what is counted, kept and for how long: its own test below)
+        text = text[:start] + text[text.index("</section>", start) + len("</section>"):]
         start = text.index('<section class="panel" id="channels">')              # (the panel of the players' channels, protocol 26, says who can see an address and that the relay's log is short-lived: its own test below)
         return plain(text[:start] + text[text.index("</section>", start) + len("</section>"):])
 
@@ -237,9 +240,34 @@ class TheLegalPage(unittest.TestCase):
                       "does not look at what is in them", "tell a moderator on the project's Discord server", "taking image posting away or giving it back, are written down in the log below"):
             self.assertIn(words, panel, words)
 
+    def test_the_panel_of_the_counter_says_what_is_counted_what_is_never_kept_and_its_numbers_are_the_numbers_of_the_code(self):
+        """The counter's promises (docs/ANALYTICS.md) in the words of the page; the days and minutes that it names are the code's own, read from where they are made."""
+        start = self.main.index('<section class="panel" id="counting">')
+        end = self.main.index("</section>", start)
+        panel, markup = plain(self.main[start:end]), self.main[start:end]
+        for words in ("no cookie", "keeps nothing in your browser", "to nobody else", "which page you opened", "the name of the site that sent you (never the page)", "the width of your window", "your browser's language",
+                      "how long the page took to load and how long the game took to start", "the class, the file and the line of an error", "cleaned of addresses and names", "search engines and monitors, are not counted",
+                      "Your IP address and your browser's identification are never written down", "drops them", "only the country is kept", "only those names are kept",
+                      "made fresh every day", "midnight to midnight, Pacific time", "destroyed when the day is over", "a code of one day cannot be matched with a code of another",
+                      "in its memory only", "never written to a disk", "a restart of the server forgets it",
+                      "Do Not Track or Global Privacy Control", "one visit and its country", "and nothing else", "no code, no page, no device, no timing and no error",
+                      "deleted for good", "hold no code and no address", "kept without an end", "log in for the first time each day: a number, with no name", "Only the administrators of the site see the numbers",
+                      "Nothing in these counts is linked to a Discord account, a name or a person", "Forget me has nothing to remove here", "IP to Country Lite by DB-IP", "licensed under CC BY 4.0"):
+            self.assertIn(words, panel, words)
+        self.assertIn('<a href="https://db-ip.com/" target="_blank" rel="noopener noreferrer">DB-IP</a>', markup, "the credit that the licence asks for is a link")
+        sys.path.insert(0, REPO)
+        try:
+            from hub import analytics, analytics_store
+        finally:
+            sys.path.pop(0)
+        self.assertIn("kept for %d days and then deleted" % analytics_store.RAW_DAYS, panel)
+        self.assertIn("for %d days at most" % (analytics.RETURN_DAYS + 1), panel)
+        self.assertIn("once in %d minutes" % (analytics.NT_SECONDS // 60), panel)
+        self.assertIn("for those %d minutes" % (analytics.NT_SECONDS // 60), panel)
+
     def test_it_links_the_licence_the_third_party_notices_and_the_issues_page_of_the_repository(self):
         hrefs = re.findall(r'<a href="([^"]*)"', self.main)
-        self.assertEqual(hrefs, [GITHUB + "/issues", GITHUB + "/blob/main/LICENSE", GITHUB + "/blob/main/THIRD_PARTY_NOTICES.md", GITHUB + "/blob/main/LICENSE"])
+        self.assertEqual(hrefs, [GITHUB + "/issues", DB_IP, GITHUB + "/blob/main/LICENSE", GITHUB + "/blob/main/THIRD_PARTY_NOTICES.md", GITHUB + "/blob/main/LICENSE"])
         for name in ("LICENSE", "THIRD_PARTY_NOTICES.md"):
             self.assertTrue(os.path.exists(os.path.join(REPO, name)), name)
 

@@ -886,14 +886,14 @@ class ThePage(unittest.TestCase):
 
     def test_the_scripts_are_loaded_in_their_order_with_the_core_first_and_the_app_last(self):
         tags = re.findall(r'<script src="([^"]+)"></script>', self.page)
-        self.assertEqual(tags[-2:], ["site_nav.js", "update_notice.js"], "the site bar's Menu and the update notice come after the editor's own scripts")
-        tags = tags[:-2]
+        self.assertEqual(tags[-3:], ["site_nav.js", "update_notice.js", "analytics.js"], "the site bar's Menu, the update notice and the counter come after the editor's own scripts")
+        tags = tags[:-3]
         wanted = ["lvl_core.js", "lvl_core_api.js"] + ["front/" + name for name in SCRIPTS]
         self.assertEqual(sorted(tags), sorted(wanted), "the page loads these scripts and no other")
         order = [tags.index(name) for name in wanted]
         self.assertEqual(order, sorted(order), "the core first, then the helpers before the dialogs, the canvas and the app (the app last)")
         self.assertEqual(tags[-1], "front/mapmaker_app.js")
-        self.assertEqual(self.page.count("<script"), len(tags) + 2, "no inline script (and the site bar's and the update notice's)")
+        self.assertEqual(self.page.count("<script"), len(tags) + 3, "no inline script (and the site bar's, the update notice's and the counter's)")
         self.assertLess(self.page.index("front/mapmaker_app.js"), self.page.index("</body>"))
 
     def test_every_id_that_the_code_asks_for_is_in_the_page_once(self):

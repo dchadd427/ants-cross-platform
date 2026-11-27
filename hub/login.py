@@ -277,6 +277,7 @@ class DiscordLogin(session.Sessions):
         display = self.display_of(shown, name)
         value = secrets.token_hex(16)
         try:
+            fresh = self.store.profile(account) is None                       # (no profile yet: a person who logs in for the first time, one more for the counter's sign-ups: a number, nothing else)
             self.store.set_profile(account, name, display, self.limits.profiles_total)
             self.store.add_session(digest(value), account, name, self.limits.session_seconds, self.limits.sessions_per_account, self.limits.sessions_total)
             old = cookies.get(COOKIE)
@@ -288,6 +289,8 @@ class DiscordLogin(session.Sessions):
             self.log.event("login_failed", kind="database", error=type(e).__name__)
             return self.page("unavailable", back, gone)
         self.log.event("login", tag=self.log.tag(address))
+        if fresh and self.hub.analytics.collector is not None:
+            self.hub.analytics.collector.signup()
         self.pictures.offer(account, avatar)                                 # (the picture is fetched after this answer, in the background: it never delays or fails a login)
         return http.response(302, headers=[("Location", back), ("Referrer-Policy", "no-referrer"), ("Set-Cookie", cookie_line(COOKIE, value, int(self.limits.session_seconds), "Strict")),
                                            ("Set-Cookie", gone[0])])

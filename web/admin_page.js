@@ -1,8 +1,9 @@
 // The admin page (docs/MAP_SUBMISSIONS.md, "The admin page"), reached only by typing /admin: the bar at the top links out of it and nothing links in. The page asks for no login of its own: the site's web server asks the chat hub
 // (the Discord login) before it passes any /admin/api call on, the game server decides again on every call, and the hub decides again on every call of /hub/admin/api (docs/HUB_ROLES.md, "The admin page's door"). The page asks who is
 // here (GET /admin/api/me) and shows only what it is told:
-//   * an Admin or an Owner: the title with the person's chip (name, role, Front page, Log out) and five sections: Maps (the maps that players sent), Chat (mute, ban, hide a picture), Bot matches (start matches of
-//     computer players and their schedules: web/admin_bots.js, loaded before this file), Log (what moderators, admins and the map and bot match decisions did) and Status (how the site is doing);
+//   * an Admin or an Owner: the title with the person's chip (name, role, Front page, Log out) and six sections: Maps (the maps that players sent), Chat (mute, ban, hide a picture), Bot matches (start matches of
+//     computer players and their schedules: web/admin_bots.js, loaded before this file), Analytics (the visits to the site: web/admin_analytics.js, loaded before this file), Log (what moderators, admins and the map
+//     and bot match decisions did) and Status (how the site is doing);
 //   * nobody logged in (401): one card with a link to the Discord login; logged in without the admin role (403 not_allowed): the same card with the person's name, Front page and Log out (a moderator is told where the
 //     moderators' tools are); anything else (a part that is off or not running, no answer): one line. The line says plainly which part is off, with the name of the setting, only when the answer proves that an
 //     admin is looking: the game server's submissions door is off (503 submissions_off), the game server does not accept the pass (403 closed), the chat hub's door is shut (the gate says door_off, and the hub's
@@ -24,6 +25,7 @@
     'use strict';
 
     var BOTS = typeof AntsAdminBots === 'object' && typeof AntsAdminMapPick === 'object' ? AntsAdminBots : null;       // the section "Bot matches" (web/admin_bots.js, with the list of maps of web/admin_map_pick.js, both loaded before this file): without them the page has four sections
+    var ANALYTICS = typeof AntsAdminAnalytics === 'object' ? AntsAdminAnalytics : null;           // the section "Analytics" (web/admin_analytics.js, loaded before this file): without it the page has no such section
     var TIME_ZONE = 'America/Los_Angeles';                 // the maintainer's times are Pacific time
     var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     var TABS = [['waiting', 'Waiting'], ['approved', 'Approved'], ['declined', 'Declined'], ['taken_down', 'Taken down']];
@@ -57,7 +59,7 @@
     var OFF_DOOR = 'The admin page’s door is shut: the chat hub has no good ANTS_ADMIN_GATE_SECRET.';                   // (the lines that an admin is given when the page can tell which part is off: names of settings, never a value)
     var OFF_SUBMISSIONS = 'The map submissions door is off or not running on the game server (it is on when ANTS_SUBMIT_PORT is 4030).';
     var OFF_KEY = 'The game server did not accept the admin page’s pass: its ANTS_ADMIN_GATE_SECRET is probably missing or is not the same as the chat hub’s.';
-    var TITLE_LINE = 'Maps that players sent, bans and mutes in the chat, the logs, and how the site is doing.';
+    var TITLE_LINE = 'Maps that players sent, bans and mutes in the chat, visitors, the logs, and how the site is doing.';
     var PRESETS = [['10 min', 10], ['1 hour', 60], ['1 day', 1440], ['1 week', 10080]];       // the minutes of a mute that the front page's chat also offers
     var MAX_MINUTES = 10080;
     var ASK_DELAY = 500;                                   // milliseconds: the confirm button of a question that has just opened ignores a press (the second click of a double click lands on it)
@@ -392,10 +394,10 @@
             { id: 'maps', title: 'Maps', render: renderMaps },
             { id: 'chat', title: 'Chat', render: renderChat },
             { id: 'bots', title: 'Bot matches', render: renderBots },
+            { id: 'analytics', title: 'Analytics', render: renderAnalytics },
             { id: 'log', title: 'Log', render: renderLog },
             { id: 'status', title: 'Status', render: renderStatus }
-        ];
-        if (!BOTS) SECTIONS.splice(2, 1);
+        ].filter(function (s) { return (s.id !== 'bots' || BOTS) && (s.id !== 'analytics' || ANALYTICS); });
 
         function paintTabs() {
             Array.prototype.slice.call(tabsBox.children).forEach(function (b, i) {
@@ -481,6 +483,16 @@
             return botTools;
         }
         function renderBots(host) { return tools().render(host); }
+
+        // ---- the section "Analytics": web/admin_analytics.js, given the helpers of this page ----
+        var analyticsTools = null;
+        function renderAnalytics(host) {
+            if (!analyticsTools) {
+                analyticsTools = ANALYTICS.make({ doc: doc, env: env, el: el, add: add, button: button, panel: panel, call: call, message: message, typed: typed, hubToken: hubToken, refused: refused, toast: toast,
+                                                  setCleanup: function (fn) { cleanup = fn; } });
+            }
+            return analyticsTools.render(host);
+        }
 
         // ---- the section "Maps" (the maps that players sent) ----
         function renderMaps(host) {

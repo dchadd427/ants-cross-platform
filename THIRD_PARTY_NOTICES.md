@@ -66,6 +66,11 @@ artwork, sounds, music and maps are not covered by it: they belong to their copy
 
 ## Not in the repository (linked or downloaded by the build)
 
+### DB-IP Lite, IP to Country Lite (the country list of the visit counter)
+
+- Used by: the chat hub's image (`Dockerfile.hub`, `hub/geodata.py`), which fetches the monthly list from <https://download.db-ip.com/free/> when it is built and turns it into a small file; never at run time, never by the game or the web page. Without the file every country is unknown.
+- Licence: Creative Commons Attribution 4.0 International (CC BY 4.0, <https://creativecommons.org/licenses/by/4.0/>). The credit that it asks for, "IP Geolocation by DB-IP" with a link to <https://db-ip.com>, is on the site's Legal page. The data is not in the repository, and no address is kept by the counter (`docs/ANALYTICS.md`).
+
 ### SDL2 and SDL2_ttf
 
 - Used by: the game program (`src/ants_app`) and its tests; not by the simulation, network or server libraries, and not by the dedicated server.
