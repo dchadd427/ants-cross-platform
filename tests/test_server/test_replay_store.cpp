@@ -1734,6 +1734,202 @@ int main() {
         ASSERT_TRUE(damaged.unindexed() == 0 && !damaged.entries().front().pending && !damaged.entries().front().readable && damaged.readable_count() == 0);
     } TEST_END();
 
+    // ---- the look at the folder: the store's own writes call for none, and a look that does run is made in slices ----------------
+
+    TEST_CASE("RS13.1 The Store's Own Writes And Deletes Call For No Look At The Folder (A Kept Match, A Removed One, The Purge: The Folder's Change Time Is Taken As Looked At When Nothing Else Had Moved It), A File That Somebody Else Puts There Is Found Whether It Came Before The Store's Own Write Or Not, And The Folder Is Looked At In Full Now And Then Whatever Its Time Says") {
+        Fixture f;
+        fs::create_directories(f.dir);
+        const std::string expiring = "ants-TINY-" + ReplayStore::time_stamp(kT0 - kDay + 100) + ".antsrep";      // (a day old in 100 seconds)
+        write_file(f.dir / expiring, make_file("TINY.LVL", 700, true, 0, 3));
+        ReplayConfig config = f.config();
+        config.keep_days = 1;
+        ReplayStore store(config);
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        // (a folder's change time can be the same for two changes that are made one after the other: the test sets it, so that every change that is not the store's own is one that a look can see)
+        int touches = 0;
+        const auto touch = [&]() { fs::last_write_time(f.dir, fs::file_time_type(std::chrono::hours(100000 + ++touches))); };
+        const auto finish = [&]() {                                                    // (the passes of the loop until the look that is under way has ended)
+            for (int pass = 0; pass < 10000 && store.rescanning(); ++pass) store.update();
+            ASSERT_FALSE(store.rescanning());
+        };
+        const auto check = [&]() {                                                     // (the loop's next check of the folder, kRescanEveryS later)
+            f.now += ReplayStore::kRescanEveryS + 1;
+            store.update();
+            finish();
+        };
+        touch();
+        ASSERT_EQ(store.rescan(), size_t{0});                                          // (the time that the test set is the time that the store has looked at)
+        const uint64_t base = store.looks();
+        // the store's own writes and deletes: a match kept, one removed again by name, the purge of the file that has just grown too old
+        const ReplaySave first = store.save(make_file());
+        ASSERT_TRUE(first.kept);
+        check();
+        ASSERT_TRUE(store.looks() == base && store.count() == 2);
+        f.now += 5;
+        const ReplaySave second = store.save(make_file("TINY.LVL", 800, true, 0, 4));
+        ASSERT_TRUE(second.kept && second.file != first.file);
+        ASSERT_TRUE(store.remove(first.file));
+        check();
+        ASSERT_TRUE(store.looks() == base && store.count() == 2 && store.find(first.file) == nullptr && store.find(second.file) != nullptr);
+        f.now += 200;
+        ASSERT_EQ(store.purge(), size_t{1});
+        check();
+        ASSERT_TRUE(store.looks() == base && store.count() == 1 && !fs::exists(f.dir / expiring));
+        // a file that somebody else puts in the folder is found at the next check
+        const std::string foreign = "ants-TINY-" + ReplayStore::time_stamp(kT0 - 3600) + ".antsrep";
+        write_file(f.dir / foreign, make_file("TINY.LVL", 900, true, 0, 5));
+        touch();
+        check();
+        ASSERT_TRUE(store.looks() == base + 1 && store.find(foreign) != nullptr && store.count() == 2);
+        // ... also when the store's own write came after it, before the next check (the write must not take the other file's change for its own)
+        const std::string before_own = "ants-TINY-" + ReplayStore::time_stamp(kT0 - 3500) + ".antsrep";
+        write_file(f.dir / before_own, make_file("TINY.LVL", 900, true, 0, 6));
+        touch();
+        ASSERT_TRUE(store.save(make_file("TINY.LVL", 810, true, 0, 7)).kept);
+        check();
+        ASSERT_TRUE(store.looks() == base + 2 && store.find(before_own) != nullptr && store.count() == 4);
+        // a change that the folder's time did not show (two changes in the grain of the time) is found by the look in full that comes every kRescanSafetyEveryS
+        const fs::file_time_type known = fs::last_write_time(f.dir);
+        const std::string unseen = "ants-TINY-" + ReplayStore::time_stamp(kT0 - 3400) + ".antsrep";
+        write_file(f.dir / unseen, make_file("TINY.LVL", 900, true, 0, 8));
+        fs::last_write_time(f.dir, known);
+        check();
+        ASSERT_TRUE(store.looks() == base + 2 && store.find(unseen) == nullptr);
+        f.now += ReplayStore::kRescanSafetyEveryS;
+        check();
+        ASSERT_TRUE(store.looks() == base + 3 && store.find(unseen) != nullptr && store.count() == 5);
+    } TEST_END();
+
+    TEST_CASE("RS13.2 A Look At A Big Folder Is Made In Slices Of About kRescanBudgetUs A Pass, Not In One Go: The Files Are Listed And Read Pass After Pass, A File That Was Taken Away Is Forgotten At The End, And A Slice Never Runs Past The Budget By More Than One File") {
+        Fixture f;
+        int64_t fake_us = 0;
+        ReplayConfig config = f.config();
+        config.clock_us = [&]() { return fake_us += 100; };                            // (every reading of the clock costs 100 microseconds: a file costs that much to list or to read)
+        ReplayStore store(config);
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        const std::vector<uint8_t> bytes = make_file("TINY.LVL", 700, true, 0, 5);
+        std::vector<std::string> names;
+        for (int i = 0; i < 300; ++i) {
+            char name[64];
+            std::snprintf(name, sizeof name, "ants-TINY-20261001-%02d%02d%02dZ.antsrep", 0, i / 60, i % 60);
+            write_file(f.dir / name, bytes);
+            names.push_back(name);
+        }
+        fs::last_write_time(f.dir, fs::file_time_type(std::chrono::hours(200000)));
+        f.now += ReplayStore::kRescanEveryS + 1;
+        const auto passes = [&](int64_t& longest) {                                    // (the loop's passes until the look has ended: how many, and the longest in microseconds)
+            int count = 0;
+            longest = 0;
+            do {
+                const int64_t before = fake_us;
+                store.update();
+                longest = std::max(longest, fake_us - before);
+                ++count;
+            } while (store.rescanning() && count < 1000);
+            return count;
+        };
+        int64_t longest = 0;
+        const int slices = passes(longest);
+        ASSERT_TRUE(!store.rescanning() && store.looks() == 1);
+        ASSERT_TRUE(slices >= 10);                                                     // (300 names at about 20 a slice, and then the 100 that a look reads)
+        ASSERT_TRUE(longest >= ReplayStore::kRescanBudgetUs && longest <= ReplayStore::kRescanBudgetUs + 300);
+        ASSERT_EQ(store.count(), ReplayStore::kRescanBatch);
+        // the files go from the disk: the next look forgets what it had listed, in slices too
+        for (const std::string& name : names) fs::remove(f.dir / name);
+        fs::last_write_time(f.dir, fs::file_time_type(std::chrono::hours(200001)));
+        f.now += ReplayStore::kRescanEveryS + 1;
+        const int forgetting = passes(longest);
+        ASSERT_TRUE(store.looks() == 2 && store.count() == 0 && store.total_bytes() == 0 && forgetting >= 1);
+        ASSERT_TRUE(longest <= ReplayStore::kRescanBudgetUs + 300);
+    } TEST_END();
+
+    TEST_CASE("RS13.3 A Match That The Store Keeps, And One That It Removes, While A Look Is Under Way Are Left As They Are By The Look (The Listing May Have Passed The File's Place Already), And The Folder's Time That The Write Moved Is Not A Reason For Another Look") {
+        Fixture f;
+        int64_t fake_us = 0;
+        ReplayConfig config = f.config();
+        config.clock_us = [&]() { return fake_us += 100; };
+        ReplayStore store(config);
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        const std::vector<uint8_t> bytes = make_file("TINY.LVL", 700, true, 0, 5);
+        for (int i = 0; i < 60; ++i) {
+            char name[64];
+            std::snprintf(name, sizeof name, "ants-TINY-20261001-%02d%02d%02dZ.antsrep", 0, i / 60, i % 60);
+            write_file(f.dir / name, bytes);
+        }
+        fs::last_write_time(f.dir, fs::file_time_type(std::chrono::hours(200000)));
+        f.now += ReplayStore::kRescanEveryS + 1;
+        store.update();                                                                // (the first slice: the listing is under way)
+        ASSERT_TRUE(store.rescanning() && store.count() == 0);
+        const ReplaySave kept = store.save(make_file("TREASURE.LVL", 720, true, 0, 9));
+        ASSERT_TRUE(kept.kept);
+        const ReplaySave removed = store.save(make_file("TREASURE.LVL", 730, true, 0, 10));
+        ASSERT_TRUE(removed.kept && store.remove(removed.file));
+        for (int pass = 0; pass < 1000 && store.rescanning(); ++pass) store.update();
+        ASSERT_FALSE(store.rescanning());
+        ASSERT_TRUE(store.count() == 61 && store.find(kept.file) != nullptr && store.find(removed.file) == nullptr);
+        ASSERT_EQ(store.readable_count(), size_t{61});
+        f.now += ReplayStore::kRescanEveryS + 1;
+        store.update();                                                                // (the folder's time that the store's own writes moved is the one that the look took: nothing to look at)
+        ASSERT_TRUE(store.looks() == 1 && !store.rescanning());
+    } TEST_END();
+
+    TEST_CASE("RS13.4 A Match That The Store Keeps While The New Files Of A Look Are Being Read (The Listing Is Over By Then) Is Not A Reason For Another Look Either, And The Files Of The Look Are All Listed Beside It") {
+        Fixture f;
+        int64_t fake_us = 0;
+        ReplayConfig config = f.config();
+        config.clock_us = [&]() { return fake_us += 100; };
+        ReplayStore store(config);
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        const std::vector<uint8_t> bytes = make_file("TINY.LVL", 700, true, 0, 5);
+        for (int i = 0; i < 60; ++i) {
+            char name[64];
+            std::snprintf(name, sizeof name, "ants-TINY-20261001-%02d%02d%02dZ.antsrep", 0, i / 60, i % 60);
+            write_file(f.dir / name, bytes);
+        }
+        fs::last_write_time(f.dir, fs::file_time_type(std::chrono::hours(200000)));
+        f.now += ReplayStore::kRescanEveryS + 1;
+        for (int pass = 0; pass < 1000 && store.count() == 0; ++pass) store.update();      // (the passes until the first file of the look is read: the listing is over)
+        ASSERT_TRUE(store.rescanning() && store.count() > 0 && store.count() < 60);
+        const ReplaySave kept = store.save(make_file("TREASURE.LVL", 720, true, 0, 9));
+        ASSERT_TRUE(kept.kept);
+        for (int pass = 0; pass < 1000 && store.rescanning(); ++pass) store.update();
+        ASSERT_TRUE(!store.rescanning() && store.count() == 61 && store.find(kept.file) != nullptr);
+        f.now += ReplayStore::kRescanEveryS + 1;
+        store.update();                                                                // (the time that the save moved is the one that the look took: nothing to look at)
+        ASSERT_TRUE(store.looks() == 1 && !store.rescanning());
+    } TEST_END();
+
+    TEST_CASE("RS13.5 rescan() Finishes A Look That Is Under Way And Then Looks Again, So That A File That Was Put In The Folder After The Look Had Listed It (The Listing Is Over, The New Files Are Being Read) Is Found By The Call, And A Call With Nothing Changed Looks At Nothing") {
+        Fixture f;
+        int64_t fake_us = 0;
+        ReplayConfig config = f.config();
+        config.clock_us = [&]() { return fake_us += 100; };
+        ReplayStore store(config);
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        const std::vector<uint8_t> bytes = make_file("TINY.LVL", 700, true, 0, 5);
+        for (int i = 0; i < 60; ++i) {
+            char name[64];
+            std::snprintf(name, sizeof name, "ants-TINY-20261001-%02d%02d%02dZ.antsrep", 0, i / 60, i % 60);
+            write_file(f.dir / name, bytes);
+        }
+        fs::last_write_time(f.dir, fs::file_time_type(std::chrono::hours(200000)));
+        f.now += ReplayStore::kRescanEveryS + 1;
+        for (int pass = 0; pass < 1000 && store.count() == 0; ++pass) store.update();      // (the passes until the first file of the look is read: the listing is over)
+        ASSERT_TRUE(store.rescanning() && store.count() > 0 && store.count() < 60);
+        const std::string foreign = "ants-TINY-" + ReplayStore::time_stamp(kT0 - 3600) + ".antsrep";
+        write_file(f.dir / foreign, make_file("TINY.LVL", 900, true, 0, 6));
+        fs::last_write_time(f.dir, fs::file_time_type(std::chrono::hours(200001)));
+        ASSERT_EQ(store.rescan(), size_t{61});                                         // (the 60 of the look that was under way, and the one that came after its listing)
+        ASSERT_TRUE(!store.rescanning() && store.count() == 61 && store.find(foreign) != nullptr && store.looks() == 2);
+        ASSERT_EQ(store.rescan(), size_t{0});                                          // (nothing changed since: no look)
+        ASSERT_TRUE(store.looks() == 2 && store.count() == 61);
+    } TEST_END();
+
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Failed:           " << g_test_failures
               << "\n=======================================================\n";
     return g_test_failures == 0 ? 0 : 1;
