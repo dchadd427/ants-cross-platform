@@ -8,6 +8,7 @@
 #include <map>
 #include <set>
 #include <system_error>
+#include <unordered_set>
 
 #include "ants_ai/bot_names.hpp"
 #include "ants_replay/player.hpp"
@@ -197,6 +198,21 @@ bool ReplayStore::time_of_name(const std::string& name, int64_t& seconds) {
     return true;
 }
 
+// The look at the folder that is under way (rescan(), look_step() below): what it has listed and what it has still to read
+struct ReplayStore::Look {
+    fs::directory_iterator it;
+    int64_t stamp{0};                                                                // the folder's change time when the look began (a file that arrives meanwhile moves it again)
+    bool listing{true};                                                              // the folder is being listed (false: the files in `todo` are being read)
+    std::unordered_set<std::string> seen;                                            // the names of the store's own kind that are regular files in the folder
+    std::vector<std::pair<std::string, uintmax_t>> todo;                             // the ones to read: not known, or known and not what was indexed
+    size_t next{0};                                                                  // the next of `todo`
+    size_t fresh{0};                                                                 // how many of `todo` count against kRescanBatch
+    bool more{false};                                                                // the batch was full: the next look goes on even if the folder did not change
+    std::set<std::string> own;                                                       // what the store itself kept or deleted while the look ran: the look has nothing to say about it
+    size_t added{0};
+    size_t changed{0};
+};
+
 ReplayStore::ReplayStore(ReplayConfig config) : cfg_(std::move(config)) {
     cfg_.keep_days = std::min<uint32_t>(std::max<uint32_t>(cfg_.keep_days, 1), 3650);
     cfg_.max_bytes = std::min<uint64_t>(std::max<uint64_t>(cfg_.max_bytes, 1024), 4096ull * 1024ull * 1024ull);
@@ -204,6 +220,8 @@ ReplayStore::ReplayStore(ReplayConfig config) : cfg_(std::move(config)) {
     cfg_.max_bot_saves_per_hour = std::min(cfg_.max_bot_saves_per_hour, cfg_.max_saves_per_hour);          // (they count among the hour's saves)
     if (!cfg_.clock_s) cfg_.clock_s = system_seconds;
 }
+
+ReplayStore::~ReplayStore() = default;
 
 uint64_t ReplayStore::bot_cap_bytes() const noexcept { return cfg_.max_bytes / 100 * cfg_.bot_share_percent + cfg_.max_bytes % 100 * cfg_.bot_share_percent / 100; }
 
@@ -310,6 +328,21 @@ int64_t ReplayStore::folder_stamp() const {
     return ec ? 0 : static_cast<int64_t>(stamp.time_since_epoch().count());
 }
 
+int64_t ReplayStore::clock_us() const {
+    if (cfg_.clock_us) return cfg_.clock_us();
+    return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+// The store itself wrote or deleted `file`: its list has the change already, so the look at the folder must not run for it. The folder's change time moved with the write; when nothing else had moved it since the last
+// look (`stamp_before`, read just before the write, is the one that was looked at), the new time is the looked-at one. When something else had (a file of the bot arena that came meanwhile), it is left as it is and the
+// next look finds that file. A look that is under way knows nothing of the file (its listing may have passed the place of it already): it is told to leave it alone.
+void ReplayStore::own_change(const std::string& file, int64_t stamp_before) {
+    const bool listing = look_ != nullptr && look_->listing;                      // (once the listing is over, folder_stamp_ holds the time that it began at)
+    if (look_ != nullptr) look_->own.insert(file);
+    int64_t& looked_at = listing ? look_->stamp : folder_stamp_;
+    if (stamp_before == looked_at) looked_at = folder_stamp();
+}
+
 namespace {
 // True when the file was written less than `settle_s` seconds ago (0: never): a write that is not finished yet, or one that may change again unseen.
 bool changed_within(const fs::path& path, uint32_t settle_s) {
@@ -332,6 +365,8 @@ bool ReplayStore::prepare(std::string& why) {
     bot_count_ = 0;
     unindexed_ = 0;
     read_since_revision_ = 0;
+    look_.reset();
+    looks_ = 0;
     if (cfg_.dir.empty()) {
         why = "no folder for the replays";
         return false;
@@ -395,6 +430,7 @@ bool ReplayStore::prepare(std::string& why) {
     ready_ = true;
     next_purge_s_ = now_s() + kPurgeEveryS;
     next_rescan_s_ = now_s() + kRescanEveryS;
+    next_safety_s_ = now_s() + kRescanSafetyEveryS;
     std::string line = "replays in " + cfg_.dir + ": " + std::to_string(entries_.size()) + " file(s), " + std::to_string(total_ / 1024) + " KiB; kept " + std::to_string(cfg_.keep_days) + " days, at most " +
                        std::to_string(cfg_.max_bytes / (1024 * 1024)) + " MiB";
     if (temps > 0) line += "; " + std::to_string(temps) + " half-written file(s) of an interrupted write deleted";
@@ -419,6 +455,7 @@ void ReplayStore::report_headroom() {
 }
 
 bool ReplayStore::delete_file(ReplayEntry& entry, bool say) {
+    const int64_t stamp_before = folder_stamp();
     std::error_code ec;
     if (cfg_.remove_file) cfg_.remove_file(path_of(entry.file), ec);
     else fs::remove(path_of(entry.file), ec);                                        // (false and no error: the file was gone already, which is what is wanted)
@@ -426,6 +463,7 @@ bool ReplayStore::delete_file(ReplayEntry& entry, bool say) {
         if (say) note("replays: " + entry.file + " could not be deleted: " + ec.message());
         return false;
     }
+    own_change(entry.file, stamp_before);
     return true;
 }
 
@@ -502,9 +540,13 @@ void ReplayStore::update() {
         report_headroom();
         next_purge_s_ = now + kPurgeEveryS;
     }
-    if (now >= next_rescan_s_ || now + kRescanEveryS < next_rescan_s_) {
-        rescan();
+    if (look_ != nullptr) {
+        look_step(kRescanBudgetUs);                                                  // (a look that is under way goes on by one slice in each pass)
+    } else if (now >= next_rescan_s_ || now + kRescanEveryS < next_rescan_s_) {
+        const bool safety = now >= next_safety_s_ || now + kRescanSafetyEveryS < next_safety_s_;
+        if (safety) next_safety_s_ = now + kRescanSafetyEveryS;
         next_rescan_s_ = now + kRescanEveryS;
+        if (look_begin(safety)) look_step(kRescanBudgetUs);
     }
     if (unindexed_ > 0) index_step();
 }
@@ -560,85 +602,144 @@ size_t ReplayStore::index_step() {
 }
 
 // A file that somebody else put in the folder (the bot arena's --save-replays, a copy by hand) is listed too, and one that was taken away is not. The folder's change time is looked at (update(), every
-// kRescanEveryS) and only a folder that changed is read again; a file that is known already is not read again, and at most kRescanBatch new ones are read at a time.
-size_t ReplayStore::rescan() {
-    if (!ready_) return 0;
+// kRescanEveryS) and only a folder that changed is read again (the store's own writes and deletes do not count: own_change); a file that is known is not read again, and at most kRescanBatch new ones are read at a
+// time. A look is made in slices (look_step): it lists the folder, then reads the new files, for about kRescanBudgetUs in each pass of the server's loop; what it forgets and finds it applies to the list as it goes
+// (a file that the store itself keeps or deletes meanwhile is left alone: own_change).
+
+namespace {
+// A known file is read again only when it cannot have been the whole file: it could not be read, or its size is not the one that was indexed (a copy that was still growing when it was found). One that waits for
+// its turn in index_step() is not read here.
+bool needs_read(const ReplayEntry* known, uint64_t size) {
+    if (known == nullptr) return true;
+    if (known->pending && known->bytes == size) return false;
+    return !known->readable || known->bytes != size;
+}
+}  // namespace
+
+bool ReplayStore::look_begin(bool force) {
+    if (!ready_ || look_ != nullptr) return false;
     const int64_t stamp = folder_stamp();
-    if (stamp == folder_stamp_ && !rescan_more_) return 0;
-    rescan_more_ = false;
+    if (!force && stamp == folder_stamp_ && !rescan_more_) return false;
     std::error_code ec;
-    const auto fs_now = fs::file_time_type::clock::now();
-    const auto settle = std::chrono::seconds(cfg_.settle_s);
-    const auto young = [&](const fs::path& path) {                                  // (changed a moment ago: it may still be growing, or change again unseen)
-        if (cfg_.settle_s == 0) return false;
-        std::error_code stat_ec;
-        const auto when = fs::last_write_time(path, stat_ec);
-        return !stat_ec && fs_now - when < settle;
-    };
-    std::set<std::string> present;                                                   // the names of the store's own kind that are regular files now
-    std::map<std::string, uintmax_t> sizes;
-    fs::directory_iterator it(cfg_.dir, ec);
-    if (ec) return 0;                                                                // (nothing is remembered of a look that did not end: the next one starts again)
-    for (const fs::directory_iterator end; it != end; it.increment(ec)) {
-        if (ec) return 0;
-        std::error_code entry_ec;
-        const fs::file_status status = it->symlink_status(entry_ec);
-        if (entry_ec || status.type() != fs::file_type::regular) continue;
-        const std::string name = it->path().filename().string();
-        ParsedName parsed;
-        if (!parse_name(name, parsed)) continue;                                     // (a half-written ".tmp" of another writer is not ours to delete or to list)
-        const uintmax_t size = it->file_size(entry_ec);
-        if (entry_ec) continue;
-        present.insert(name);
-        sizes[name] = size;
-    }
-    folder_stamp_ = stamp;
-    if (cfg_.settle_s != 0 && young(cfg_.dir)) rescan_more_ = true;                  // (the folder changed within the grain of its time: look again)
-    size_t changed = 0;
-    size_t kept = 0;
-    for (size_t i = 0; i < entries_.size(); ++i) {
-        if (present.count(entries_[i].file) == 0) {                                  // (taken away: forgotten, nothing is deleted)
-            count_out(entries_[i]);
-            ++changed;
-            continue;
+    auto look = std::make_unique<Look>();
+    look->it = fs::directory_iterator(cfg_.dir, ec);
+    if (ec) return false;                                                            // (nothing is remembered of a look that did not end: the next one starts again)
+    rescan_more_ = false;
+    look->stamp = stamp;
+    look_ = std::move(look);
+    ++looks_;
+    return true;
+}
+
+void ReplayStore::look_step(int64_t budget_us) {
+    if (look_ == nullptr) return;
+    Look& look = *look_;
+    const int64_t began = clock_us();
+    const auto spent = [&]() { return budget_us >= 0 && clock_us() - began >= budget_us; };
+    std::error_code ec;
+    if (look.listing) {
+        const auto fs_now = fs::file_time_type::clock::now();
+        const auto settle = std::chrono::seconds(cfg_.settle_s);
+        const auto young = [&](const fs::path& path) {                              // (changed a moment ago: it may still be growing, or change again unseen)
+            if (cfg_.settle_s == 0) return false;
+            std::error_code stat_ec;
+            const auto when = fs::last_write_time(path, stat_ec);
+            return !stat_ec && fs_now - when < settle;
+        };
+        const auto list_one = [&](const fs::directory_entry& entry) {
+            const std::string name = entry.path().filename().string();
+            ParsedName parsed;
+            if (!parse_name(name, parsed)) return;                                   // (a half-written ".tmp" of another writer is not ours to delete or to list)
+            std::error_code entry_ec;
+            const fs::file_status status = entry.symlink_status(entry_ec);
+            if (entry_ec || status.type() != fs::file_type::regular) return;
+            const uintmax_t size = entry.file_size(entry_ec);
+            if (entry_ec) return;
+            look.seen.insert(name);
+            const ReplayEntry* known = raw_find(name);
+            if (!needs_read(known, size)) return;
+            if (young(path_of(name))) {
+                rescan_more_ = true;                                                 // (it may still be growing: the next look)
+            } else if (known != nullptr && known->bytes == size) {
+                look.todo.emplace_back(name, size);                                  // (a damaged file of the same size: it may have been replaced by a good one of its size; it does not count against the batch)
+            } else if (look.fresh >= kRescanBatch) {
+                look.more = true;                                                    // (the rest at the next look)
+            } else {
+                ++look.fresh;
+                look.todo.emplace_back(name, size);
+            }
+        };
+        for (const fs::directory_iterator end; look.it != end;) {
+            list_one(*look.it);
+            look.it.increment(ec);
+            if (ec) {
+                look_.reset();                                                       // (a look that did not end: the next one starts again)
+                return;
+            }
+            if (spent()) return;                                                     // (the next slice goes on from here)
         }
-        if (kept != i) entries_[kept] = std::move(entries_[i]);
-        ++kept;
+        look.listing = false;
+        folder_stamp_ = look.stamp;
+        if (cfg_.settle_s != 0 && changed_within(cfg_.dir, cfg_.settle_s)) rescan_more_ = true;      // (the folder changed within the grain of its time: look again)
+        size_t kept = 0;
+        for (size_t i = 0; i < entries_.size(); ++i) {
+            if (look.seen.count(entries_[i].file) == 0 && look.own.count(entries_[i].file) == 0) {      // (taken away: forgotten, nothing is deleted)
+                count_out(entries_[i]);
+                ++look.changed;
+                continue;
+            }
+            if (kept != i) entries_[kept] = std::move(entries_[i]);
+            ++kept;
+        }
+        entries_.erase(entries_.begin() + static_cast<std::ptrdiff_t>(kept), entries_.end());
+        look.seen.clear();
+        if (spent()) return;
     }
-    entries_.erase(entries_.begin() + static_cast<std::ptrdiff_t>(kept), entries_.end());
-    size_t added = 0;
-    for (const std::string& name : present) {
+    while (look.next < look.todo.size()) {
+        const std::string name = look.todo[look.next].first;
+        const uintmax_t size = look.todo[look.next].second;
+        ++look.next;
+        if (look.own.count(name) != 0) continue;
         const ReplayEntry* known = raw_find(name);
-        if (known != nullptr && known->pending && known->bytes == sizes[name]) continue;                // (it waits for its turn in index_step())
-        // a known file is read again only when it cannot have been the whole file: it could not be read, or its size is not the one that was indexed (a copy that was still growing when it was found)
-        const bool again = known != nullptr && (!known->readable || known->bytes != sizes[name]);
-        if (known != nullptr && !again) continue;
-        if (young(path_of(name))) {
-            rescan_more_ = true;                                                     // (it may still be growing: the next look)
-            continue;
+        if (!needs_read(known, size)) continue;                                      // (something read it meanwhile)
+        ReplayEntry entry = read_entry(name, size);
+        if (known != nullptr && entry.readable == known->readable && entry.bytes == known->bytes) {
+            if (spent()) return;
+            continue;                                                                // (still the damaged file that it was: nothing changed)
         }
-        if (added >= kRescanBatch) {
-            rescan_more_ = true;                                                     // (the rest at the next look)
-            break;
-        }
-        ReplayEntry entry = read_entry(name, sizes[name]);
-        if (again && entry.readable == known->readable && entry.bytes == known->bytes) continue;      // (still the damaged file that it was: nothing changed)
-        if (again) {
+        if (known != nullptr) {
             const size_t at = static_cast<size_t>(known - entries_.data());
             count_out(entries_[at]);
             entries_.erase(entries_.begin() + static_cast<std::ptrdiff_t>(at));
         }
         count_in(entry);
         entries_.insert(std::upper_bound(entries_.begin(), entries_.end(), entry, older), std::move(entry));
-        ++added;
+        ++look.added;
+        if (spent()) return;
     }
+    look_end();
+}
+
+void ReplayStore::look_end() {
+    if (look_->more) rescan_more_ = true;
+    const size_t added = look_->added;
+    const size_t changed = look_->changed;
+    look_.reset();
+    last_look_ = added + changed;
     if (added > 0 || changed > 0) {
         ++revision_;
         note("replays: " + std::to_string(added) + " file(s) found in " + cfg_.dir + " that the store did not know" + (changed > 0 ? ", " + std::to_string(changed) + " that are not there any more" : std::string()) + "; " +
              std::to_string(entries_.size()) + " listed, " + std::to_string(total_ / 1024) + " KiB");
         purge();                                                                     // (the limits hold for files that came from outside too: a file older than keep_days that is put here is deleted again)
     }
-    return added + changed;
+}
+
+size_t ReplayStore::rescan() {
+    if (!ready_) return 0;
+    if (look_ == nullptr && !look_begin(false)) return 0;
+    last_look_ = 0;
+    while (look_ != nullptr) look_step(-1);
+    return last_look_;
 }
 
 size_t ReplayStore::bot_saves_left() const {
@@ -715,6 +816,7 @@ ReplaySave ReplayStore::save(const std::vector<uint8_t>& bytes) {
     }
     if (sequence > kMaxSameSecond) return refuse("every name for a match of this second is taken");
     // Written whole to a temporary name, then renamed: a crash leaves a whole file or none
+    const int64_t stamp_before = folder_stamp();                                 // (the folder's change time before this write: own_change)
     const std::string temp = path_of(name) + kTempExtension;
     {
         std::ofstream out(temp, std::ios::binary | std::ios::trunc);
@@ -732,6 +834,7 @@ ReplaySave ReplayStore::save(const std::vector<uint8_t>& bytes) {
         fs::remove(temp, ignored);
         return refuse("the file could not be given its name: " + ec.message());
     }
+    own_change(name, stamp_before);                                              // (the list gets the file just below: the look at the folder has nothing to find in it)
     entry.file = name;
     entry.bytes = bytes.size();
     ParsedName parsed;
