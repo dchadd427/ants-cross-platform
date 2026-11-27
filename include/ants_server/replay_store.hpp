@@ -18,12 +18,15 @@
 // and none when nothing was typed (the readers show the color: "Green"), a computer player's seat has its display name ("Bot (Medium)"). That is all a file says of the people: no address, room code,
 // key or chat. The names are public when the server's public door is on (ReplayStore is also what the public list reads).
 //
-// Single threaded like the server's loop. Opening the store reads every file once; after that nothing takes longer than one small file write or one pass over the index (the hourly purge).
+// Single threaded like the server's loop. Opening the store reads every file once; after that nothing takes longer than one small file write or one pass over the index (the hourly purge). The look at the folder for
+// files that somebody else put there (update(): every kRescanEveryS, and only when the folder's change time moved) reads the folder in slices of kRescanBudgetUs a pass, never in one go: a folder of thousands of
+// files takes tens of milliseconds to list, and the loop that runs every match of the server must not stop for that. The store's own writes and deletes keep its list as it is and do not call for a look.
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -54,6 +57,8 @@ struct ReplayConfig {
     /// A file (or the folder) that changed less than this many seconds ago is not trusted yet by rescan(): a copy that is still growing would be read as a damaged file, and a folder that changed within
     /// the time stamp's grain may change again unseen. It is looked at again at the next look. The tests set 0.
     uint32_t settle_s{2};
+    /// Microseconds on a steady clock, which the slices of the look at the folder are timed by (empty: std::chrono::steady_clock); the tests give their own
+    std::function<int64_t()> clock_us;
     /// The store only looks at a folder that another program keeps (the history service, docs/HISTORY_SERVICE.md): it makes no folder, deletes no half-written file, applies no age or size limit, and keeps and
     /// deletes nothing (save() and remove() say no). A file that the keeper deletes is forgotten at the next rescan(). keep_days and max_bytes are then only what the readers show.
     bool read_only{false};
@@ -97,6 +102,8 @@ public:
     static constexpr int64_t kPurgeEveryS = 3600;    // the age limit is looked at this often (and before every save, together with the size limit)
     static constexpr int64_t kRescanEveryS = 30;     // the folder's change time is looked at this often (update()): a file that somebody else put there, or took away, is noticed then
     static constexpr size_t kRescanBatch = 100;      // at most this many new files are read in one look (the rest at the next one: a big drop must not hold the server's loop)
+    static constexpr int64_t kRescanBudgetUs = 2000; // a pass of the loop spends at most this long on the look at the folder (the look goes on in the next pass): a slice lists or reads files until it has, and ends with the one that passes it
+    static constexpr int64_t kRescanSafetyEveryS = 600;    // the folder is looked at in full this often even when its change time did not move: a change of it that the time did not show (two changes within its grain) is found at the latest then
     static constexpr int64_t kRepeatReportEveryS = 3600;   // a line that keeps coming (a disk that refuses every match) is told once, and how often it came again at most this often
 
     static constexpr size_t kIndexBatch = 40;        // at most this many files get their head read in one pass of the loop (index_in_background)
@@ -104,6 +111,7 @@ public:
     static constexpr size_t kIndexRevisionFiles = 500;     // the index's revision moves after this many files were read in the background (and when the last one is), not at every pass
 
     explicit ReplayStore(ReplayConfig config);
+    ~ReplayStore();
 
     const ReplayConfig& config() const noexcept { return cfg_; }
     bool enabled() const noexcept { return ready_; }
@@ -120,15 +128,20 @@ public:
     /// is not played
     size_t bot_saves_left() const;
 
-    /// The ages are looked at when kPurgeEveryS have passed since the last look, and the folder when kRescanEveryS have. Call it every pass of the server's loop.
+    /// The ages are looked at when kPurgeEveryS have passed since the last look, and the folder when kRescanEveryS have. Call it every pass of the server's loop: a look at the folder that is under way goes on by one
+    /// slice (kRescanBudgetUs) in each call.
     void update();
     /// Reads the heads of files that are still `pending` (index_in_background): at most kIndexBatch and kIndexBudgetUs. update() calls it. Returns how many files it read.
     size_t index_step();
     /// How many files wait for their head to be read
     size_t unindexed() const noexcept { return unindexed_; }
     /// Reads the folder again when its change time moved: files of the store's own kind that somebody else put there (bot_arena --save-replays) are listed, files that were taken away are forgotten (nothing is deleted
-    /// from the disk), and the limits are applied. A file that is known is not read again. Returns how many files were added or forgotten. update() calls it; the tests call it too.
+    /// from the disk), and the limits are applied. A file that is known is not read again. Returns how many files were added or forgotten. This is the whole look in one go (the history service and the tests
+    /// call it; a look that update() has begun is finished first); update() makes the same look in slices.
     size_t rescan();
+    /// A look at the folder is under way (update() goes on with it in the next pass), and how many looks were begun since the store was opened (the folder was listed that many times)
+    bool rescanning() const noexcept { return look_ != nullptr; }
+    uint64_t looks() const noexcept { return looks_; }
     /// Deletes the files that are older than keep_days and, when the files together pass max_bytes, the oldest ones. Returns how many files it deleted.
     size_t purge();
 
@@ -189,6 +202,13 @@ private:
     bool summarize(const std::vector<uint8_t>& bytes, ReplayEntry& out, std::string& why) const;
     ReplayEntry read_entry(const std::string& name, uint64_t size) const;
     int64_t folder_stamp() const;                    // the folder's change time as a number (0: it cannot be asked)
+    int64_t clock_us() const;
+    // The look at the folder, in slices (replay_store.cpp)
+    struct Look;
+    bool look_begin(bool force);                     // starts a look when the folder's change time moved, a look is asked for or `force`; false: nothing to look at
+    void look_step(int64_t budget_us);               // goes on with the look for about `budget_us` (negative: to the end); the look is over (look_ is empty) when it has read everything
+    void look_end();
+    void own_change(const std::string& file, int64_t stamp_before);       // the store itself wrote or deleted `file`: the list has it already, and the folder's new change time is not a reason to look when nothing else had moved it
 
     ReplayConfig cfg_;
     bool ready_{false};
@@ -205,7 +225,11 @@ private:
     std::vector<int64_t> bot_saved_at_;              // ... and of those, the matches of computer players alone
     int64_t next_purge_s_{0};
     int64_t next_rescan_s_{0};
+    int64_t next_safety_s_{0};
     int64_t folder_stamp_{0};                        // the folder's change time when it was last read
+    std::unique_ptr<Look> look_;                     // the look that is under way
+    uint64_t looks_{0};
+    size_t last_look_{0};                            // what the look that ended last found: files added and forgotten
     bool rescan_more_{false};                        // a look stopped at kRescanBatch: the next one goes on even if the folder did not change
     std::vector<std::string> notes_;
     std::string last_note_;

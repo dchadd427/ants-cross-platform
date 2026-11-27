@@ -622,20 +622,51 @@ void RoomManager::route_hello(std::unique_ptr<net::Connection> connection, const
 // A match that a person plays is never slowed down by the counting (a whole recording takes the one thread for 0.4 - 0.5 s): the matches of computer players alone, the older recordings and the backfill, which the feeder plays a step at a time but without hurry, are
 // counted only while no room with a person in it runs or loads a match and no record of a restart is being played again. No match of computer players holds it: nobody waits on them. The match that
 // has just ended does not wait for it at all, when a person played in it: the feeder counts it in steps of about 2 ms (HistoryFeeder, docs/SERVER_REPLAYS.md "The match history").
-bool RoomManager::history_may_run() const {
-    if (!restoring_.empty()) return false;
+bool RoomManager::history_may_run() const { return !people_in_play(); }
+
+bool RoomManager::people_in_play() const {
+    if (!restoring_.empty()) return true;
     for (const auto& kv : rooms_) {
         const RoomState state = kv.second->state();
-        if ((state == RoomState::Running || state == RoomState::Loading) && !kv.second->bots_only()) return false;       // (a room that loads is about to start: it gets the thread too)
+        if ((state == RoomState::Running || state == RoomState::Loading) && !kv.second->bots_only()) return true;       // (a room that loads is about to start: it gets the thread too)
     }
+    return false;
+}
+
+bool RoomManager::bot_pass_has_headroom() const {
+    return loop_pass_ == nullptr || !people_in_play() || loop_pass_->elapsed_us() < kBotStartHeadroomUs;
+}
+
+bool RoomManager::bot_start_headroom(uint32_t now_ms) {
+    if (bot_pass_has_headroom()) {
+        bot_held_ = false;                                         // (it goes through: the next start that is held waits its own time)
+        return true;
+    }
+    if (bot_released_ && bot_released_ms_ == now_ms) return true;  // (one went through by its wait in this very pass: the others that are due go with it, or they would wait one after the other)
+    bot_held_asked_ = true;
+    if (!bot_held_) {
+        bot_held_ = true;
+        bot_held_since_ms_ = now_ms;
+    }
+    if (!net::time_reached(now_ms, bot_held_since_ms_ + kBotStartPutOffMaxMs)) return false;
+    bot_held_ = false;
+    bot_released_ = true;
+    bot_released_ms_ = now_ms;
     return true;
 }
 
 void RoomManager::update(uint32_t now_ms) {
     now_hint_ = now_ms;
-    if (replays_ != nullptr) replays_->update();                   // (the replays that are too old are deleted once an hour)
+    if (!bot_held_asked_) bot_held_ = false;                       // (no start was held in the last pass: the one that waited is gone, and a start that is due now has its wait from now)
+    bot_held_asked_ = false;
+    lap(PassPart::Other);                                          // (what the loop did before: the connections that came in)
+    if (replays_ != nullptr) {
+        replays_->update();                                        // (the replays that are too old are deleted once an hour; the folder is looked at in slices)
+        lap(PassPart::Store);
+    }
     if (history_feeder_ != nullptr) {                              // (one match of the replay store at a time is counted for the history, in steps of about 2 ms: the match with a person in it that was just played at any time, the others only while nobody plays)
         history_feeder_->step([this]() { return history_may_run(); }, now_ms);
+        lap(PassPart::History);
     }
     // 0. a record whose delete failed is tried again every 10 s (its room is over: a restart before it is deleted would bring the room back)
     if (restart_ != nullptr) {
@@ -702,10 +733,13 @@ void RoomManager::update(uint32_t now_ms) {
     }
     // 3. the gap between two matches of computer players that were made one after another is over (BotMatches asks for each match; see start_bot_match)
     if (bot_gap_pending_ && net::time_reached(now_ms, next_bot_start_ms_)) bot_gap_pending_ = false;
+    lap(PassPart::Other);
     // 4. the rooms (a lobby room whose match the rules have just ended is opened again below, the rematch)
     std::vector<std::string> rematches;
+    const Room::BeginGate begin_gate = [this, now_ms]() { return bot_start_headroom(now_ms); };      // (a room of computer players alone asks before its match begins: a start is due, and a heavy pass holds it)
     for (auto it = rooms_.begin(); it != rooms_.end();) {
-        it->second->update(now_ms);
+        it->second->update(now_ms, &begin_gate);
+        lap_room(*it->second);
         for (std::string& line : it->second->take_notes()) room_notes_.push_back(std::move(line));
         if (it->second->rematch_due()) rematches.push_back(it->first);
         if (it->second->expired(now_ms)) {
@@ -735,6 +769,16 @@ void RoomManager::update(uint32_t now_ms) {
     // 6. the limits per address: lobbies of crowded addresses that nobody sets up, and the minute's upkeep
     close_crowded_lobbies(now_ms);
     limits_upkeep(now_ms);
+    lap(PassPart::Rooms);
+}
+
+// The pass's time since the last lap was the room's update: the part of it that the room spent in a match that began and in a record that was made durable is theirs
+void RoomManager::lap_room(const Room& room) {
+    if (loop_pass_ == nullptr) return;
+    const Room::PassWork& work = room.pass_work();
+    loop_pass_->lap(PassPart::Rooms);
+    loop_pass_->move(PassPart::Rooms, PassPart::Starts, work.start_us);
+    loop_pass_->move(PassPart::Rooms, PassPart::Flush, work.flush_us);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------

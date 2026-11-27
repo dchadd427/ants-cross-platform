@@ -37,8 +37,8 @@
   {
    "id": "history_waits_for_a_room_of_computer_players",
    "file": "src/ants_server/room_manager.cpp",
-   "old": " && !kv.second->bots_only()) return false;",
-   "new": ") return false;",
+   "old": " && !kv.second->bots_only()) return true;",
+   "new": ") return true;",
    "build": [
     "test_history_rooms"
    ],
@@ -48,8 +48,8 @@
   {
    "id": "history_never_waits_for_a_room_with_a_person",
    "file": "src/ants_server/room_manager.cpp",
-   "old": " && !kv.second->bots_only()) return false;",
-   "new": " && !kv.second->bots_only() && false) return false;",
+   "old": " && !kv.second->bots_only()) return true;",
+   "new": " && !kv.second->bots_only() && false) return true;",
    "build": [
     "test_server"
    ],
