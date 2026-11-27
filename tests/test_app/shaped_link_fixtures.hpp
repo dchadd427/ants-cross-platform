@@ -209,6 +209,9 @@ struct Params {
     sim::StartTeams teams;            // the room's teams (set: a pair of seats against the other two)
     bool render{false};               // every frame of the application is drawn too (the ants' glide is fed by the frame that draws)
     bool local{false};                // a game on this computer (no room, no links, no other person): the reference that the original's feel is measured against
+    uint8_t mode{0};                  // the room's game mode (sim::GameMode as a byte: 1 is "187", the duel)
+    bool others_confirmed{true};      // the picture draws every other player's ants from the confirmed engine (ants_app/others_view.hpp), the product's picture; false: the plain predicted picture (--others predicted)
+    bool others_aim{true};            // ... and an attack click names the tile where the predicted engine has the ant (off: the tile where it is drawn)
 };
 
 class Session {
@@ -226,6 +229,8 @@ public:
         static uint32_t sessions_made = 0;                                               // (every session has a settings file of its own: no key of an earlier session is found by a later one)
         cfg.settings_path = (scratch_root() / ("settings_" + std::to_string(++sessions_made) + ".ini")).string();
         cfg.prediction = p_.predict;
+        cfg.others_confirmed = p_.others_confirmed;
+        cfg.others_aim = p_.others_aim;
         if (p_.local) {
             cfg.default_map_path = (maps_folder() / p_.map).string();
             cfg.play_at_once = true;
@@ -239,6 +244,7 @@ public:
         server::RoomSpec spec;
         spec.code = "LINK-1";
         spec.map = p_.map;
+        spec.mode = p_.mode;
         spec.players = p_.seats;
         spec.fog = p_.fog;
         spec.bots = p_.bots;
@@ -351,6 +357,12 @@ public:
         }
         return nullptr;
     }
+    static const sim::AntSnapshot* ant_in(const sim::WorldState& world, uint32_t id) {
+        for (const auto& a : world.ants) {
+            if (a.id == id) return &a;
+        }
+        return nullptr;
+    }
     static std::vector<uint32_t> ants_of(const sim::SimulationEngine& sim, uint8_t seat) {
         std::vector<uint32_t> out;
         for (const auto& a : sim.get_world_state().ants) {
@@ -359,7 +371,7 @@ public:
         return out;
     }
     const sim::AntSnapshot* confirmed_ant(uint32_t id) { return ant_in(app_->sim(), id); }
-    const sim::AntSnapshot* shown_ant(uint32_t id) { return ant_in(app_->view_sim(), id); }
+    const sim::AntSnapshot* shown_ant(uint32_t id) { return ant_in(app_->shown_world(), id); }       // (the ant as the screen draws it: the world that the frame and the pointer share)
 
     // An order that is not the person's click (a setup move: the ant to its place): the command goes through the application's NetGame like the HUD's
     void order(uint8_t seat, sim::CommandType type, const std::vector<uint32_t>& ants, int32_t tx, int32_t ty) {

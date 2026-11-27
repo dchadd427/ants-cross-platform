@@ -4,6 +4,7 @@
 #include "ants_app/view_glide.hpp"
 
 #include "ants_app/health_changes.hpp"
+#include "ants_app/others_view.hpp"
 #include "ants_app/hud.hpp"
 #include "ants_sim/command.hpp"
 
@@ -14,6 +15,7 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <random>
 #include <string>
 #include <vector>
 #include "../common/test_assert.hpp"
@@ -379,6 +381,225 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(sink.log.size(), 1u);
         ASSERT_TRUE(sink.log[0].type == sim::CommandType::GroupMove);                        // a move to the tile under the pointer
         ASSERT_TRUE(sink.log[0].tile_x == spot_x / 32 && sink.log[0].tile_y == spot_y / 32); // ... which is not the covered tile of the ant
+    } TEST_END();
+
+    TEST_CASE("VG8 The Picture Of Others = Confirmed Is One World Of Two Engines: The Viewer's Own Ants Are The Predicted Engine's, Every Other Player's The Confirmed Engine's (An Ant That Only The Engine Of Its Owner Has Is Drawn, One That Only The Other Has Is Not), In The Engine's Order; The Ground, The Effects And The Scores Are The Predicted Engine's, What Is Explored The Confirmed Engine's") {
+        using namespace ants;
+        using ants::app::OthersView;
+        const auto ant = [](uint32_t id, uint8_t player, int32_t px) {
+            sim::AntSnapshot a;
+            a.id = id;
+            a.player_id = player;
+            a.px = px;
+            a.py = 50;
+            a.tile_x = px / 32;
+            a.tile_y = 1;
+            return a;
+        };
+        sim::WorldState shown;
+        sim::WorldState confirmed;
+        for (sim::WorldState* w : {&shown, &confirmed}) {
+            w->width = 4;
+            w->height = 4;
+            w->cells.assign(16, sim::TileCell{});
+            w->player_alliances.fill(255);
+        }
+        shown.match_time_remaining_ms = 1000;
+        confirmed.match_time_remaining_ms = 2000;
+        shown.player_scores[0] = 7;
+        confirmed.player_scores[0] = 3;
+        shown.cells[5].interactive_id = 9;                                                   // a tile that only the predicted engine has changed (food taken, a bridge built)
+        sim::VisualEffect boom;
+        boom.anim_name = "bombex";
+        shown.effects.push_back(boom);
+        shown.fog_of_war_enabled = false;                                                    // the predicted engine's own fog is not what is drawn: the confirmed engine's is
+        confirmed.fog_of_war_enabled = true;
+        confirmed.fog_revealed.assign(16, 1);
+        confirmed.fog_revealed[5] = 0;
+        shown.ants = {ant(1, 0, 100), ant(2, 1, 200), ant(4, 1, 400), ant(6, 0, 600), ant(7, 2, 700)};
+        confirmed.ants = {ant(1, 0, 90), ant(2, 1, 190), ant(3, 0, 300), ant(5, 1, 500), ant(7, 2, 690)};
+        OthersView view;
+        const sim::WorldState& world = view.compose(shown, confirmed, 0, OthersView::Stamp{});
+        std::vector<uint32_t> ids;
+        for (const auto& a : world.ants) ids.push_back(a.id);
+        ASSERT_TRUE((ids == std::vector<uint32_t>{1, 2, 5, 6, 7}));                          // own 1 and 6 (6: only the predicted engine has it), others 2, 5 (only the confirmed engine has it) and 7
+        ASSERT_EQ(world.ants[0].px, 100);                                                    // the own ant: the predicted engine's place
+        ASSERT_EQ(world.ants[1].px, 190);                                                    // another player's: the confirmed engine's, never the predicted one's
+        ASSERT_EQ(world.ants[2].px, 500);
+        ASSERT_EQ(world.ants[3].px, 600);
+        ASSERT_EQ(world.ants[4].px, 690);                                                    // (an ally is another player)
+        ASSERT_EQ(world.match_time_remaining_ms, 1000u);                                     // everything that is not an ant is the predicted engine's
+        ASSERT_EQ(world.player_scores[0], 7);
+        ASSERT_EQ(world.cells[5].interactive_id, 9);
+        ASSERT_EQ(world.effects.size(), 1u);
+        ASSERT_TRUE(world.fog_of_war_enabled && world.fog_revealed == confirmed.fog_revealed);        // ... except what is explored
+        ASSERT_FALSE(world.is_tile_revealed(1, 1));
+        // a world that the same stamp made stands: the frame, the pointer and the keys of a moment share it; the engines' every change is a new stamp
+        ASSERT_EQ(view.made(), 1u);
+        const OthersView::Stamp same{};
+        view.compose(shown, confirmed, 0, same);
+        ASSERT_EQ(view.made(), 1u);
+        for (int field = 0; field < 5; ++field) {
+            OthersView::Stamp other;
+            (field == 0 ? other.shown_tick : field == 1 ? other.confirmed_tick : field == 2 ? other.rebuilds : field == 3 ? other.starts : other.orders) = 1;
+            const uint64_t before = view.made();
+            view.compose(shown, confirmed, 0, other);
+            ASSERT_EQ(view.made(), before + 1);
+            view.compose(shown, confirmed, 0, other);
+            ASSERT_EQ(view.made(), before + 1);
+            view.compose(shown, confirmed, 0, OthersView::Stamp{});                         // (back to the first stamp: made again, the world that stood was another's)
+            ASSERT_EQ(view.made(), before + 2);
+        }
+        const uint64_t made = view.made();
+        const sim::WorldState& theirs = view.compose(shown, confirmed, 1, OthersView::Stamp{});      // the same engines for another viewer: another picture
+        ASSERT_EQ(view.made(), made + 1);
+        ASSERT_EQ(theirs.ants[0].px, 90);                                                    // (seat 1's own ants are the predicted engine's: here seat 0's ant 1 is another player's)
+        view.forget();
+        view.compose(shown, confirmed, 1, OthersView::Stamp{});
+        ASSERT_EQ(view.made(), made + 2);
+        // the rule over many pairs of engines: the ids that are drawn are exactly the own ants of the predicted engine and the other players' ants of the confirmed one, once each, in order, and each is
+        // the very ant of that engine
+        std::mt19937 rng(77);
+        for (int round = 0; round < 300; ++round) {
+            sim::WorldState a;
+            sim::WorldState b;
+            const uint8_t own = static_cast<uint8_t>(rng() % 4u);
+            for (uint32_t id = 1; id <= 24; ++id) {
+                const uint8_t player = static_cast<uint8_t>(rng() % 4u);
+                if (rng() % 3u != 0u) a.ants.push_back(ant(id, player, static_cast<int32_t>(rng() % 900u)));
+                if (rng() % 3u != 0u) b.ants.push_back(ant(id, player, static_cast<int32_t>(rng() % 900u)));
+            }
+            OthersView random_view;
+            const sim::WorldState& w = random_view.compose_now(a, b, own);
+            std::vector<uint32_t> expected;
+            for (uint32_t id = 1; id <= 24; ++id) {
+                const sim::AntSnapshot* mine = nullptr;
+                const sim::AntSnapshot* theirs_ant = nullptr;
+                for (const auto& x : a.ants) if (x.id == id) mine = &x;
+                for (const auto& x : b.ants) if (x.id == id) theirs_ant = &x;
+                const sim::AntSnapshot* from = mine != nullptr && mine->player_id == own ? mine : (theirs_ant != nullptr && theirs_ant->player_id != own ? theirs_ant : nullptr);
+                if (mine != nullptr && theirs_ant != nullptr && mine->player_id != theirs_ant->player_id) from = nullptr;     // (an id with two owners cannot be: the engines agree on who an ant belongs to)
+                if (mine != nullptr && theirs_ant != nullptr && mine->player_id != theirs_ant->player_id) continue;
+                if (from == nullptr) continue;
+                expected.push_back(id);
+                const sim::AntSnapshot* drawn = nullptr;
+                for (const auto& x : w.ants) if (x.id == id) drawn = &x;
+                ASSERT_TRUE(drawn != nullptr && drawn->px == from->px);
+            }
+            ASSERT_EQ(w.ants.size(), expected.size());
+        }
+    } TEST_END();
+
+    TEST_CASE("VG9 An Attack On An Ant That Is Drawn From The Confirmed Engine Aims At The Tile Where The Predicted Engine Has It, As Far As The Picture Could Show The Ant There: Not Into Ground That The Fog Covers (The Player Has Not Seen The Ant Go There), Not When The Engine Has Lost The Ant; An Ally's Ant Is Never Hidden") {
+        using namespace ants;
+        sim::WorldState predicted;
+        predicted.width = 20;
+        predicted.height = 20;
+        predicted.player_alliances.fill(255);
+        sim::AntSnapshot there;
+        there.id = 9;
+        there.player_id = 1;
+        there.tile_x = 12;
+        there.tile_y = 5;
+        predicted.ants.push_back(there);
+        sim::AntSnapshot drawn = there;                                                      // the confirmed engine has it a tile and a half behind
+        drawn.tile_x = 11;
+        sim::TileCoord tile{11, 5};
+        ASSERT_TRUE(ants::app::aim_at_predicted_ant(predicted, 0, drawn, tile));
+        ASSERT_TRUE(tile.x == 12 && tile.y == 5);
+        predicted.fog_of_war_enabled = true;                                                 // the fog covers the tile that the predicted engine has it on
+        predicted.fog_revealed.assign(400, 1);
+        predicted.fog_revealed[static_cast<size_t>(5 * 20 + 12)] = 0;
+        tile = sim::TileCoord{11, 5};
+        ASSERT_FALSE(ants::app::aim_at_predicted_ant(predicted, 0, drawn, tile));
+        ASSERT_TRUE(tile.x == 11 && tile.y == 5);                                            // (the tile is left as it was: where the ant is drawn)
+        predicted.player_alliances[0] = 1;
+        predicted.player_alliances[1] = 0;
+        ASSERT_TRUE(ants::app::aim_at_predicted_ant(predicted, 0, drawn, tile) && tile.x == 12);      // an ally's ant is drawn wherever it is
+        predicted.player_alliances.fill(255);
+        predicted.fog_revealed[static_cast<size_t>(5 * 20 + 12)] = 1;
+        ASSERT_TRUE(ants::app::aim_at_predicted_ant(predicted, 0, drawn, tile) && tile.x == 12);      // (the ground is explored now)
+        ASSERT_TRUE(ants::app::aim_at_predicted_ant(predicted, 1, drawn, tile));             // ... and for the viewer who owns the ant the fog never matters
+        drawn.id = 10;                                                                       // an ant that the predicted engine does not have (it died in the ticks ahead)
+        tile = sim::TileCoord{11, 5};
+        ASSERT_FALSE(ants::app::aim_at_predicted_ant(predicted, 0, drawn, tile));
+        ASSERT_TRUE(tile.x == 11);
+    } TEST_END();
+
+    TEST_CASE("VG10 The Pointer Picks The Other Player's Ant Where It Is Drawn, From The Confirmed Engine (The Cursor, The Click, The Rubber Band), And An Attack On It Names The Tile Where The Predicted Engine Has It; Without The Aim It Names The Tile Where It Is Drawn, Which A Walking Ant Has Left By The Time The Order Lands; The Order Itself Is Run In The Engine That It Meets") {
+        using namespace ants;
+        using namespace ants::app;
+        sim::SimulationEngine confirmed;
+        confirmed.init_test_world(60, 60, 1, 600000);
+        const uint32_t mine = confirmed.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{18, 18});
+        const uint32_t foe = confirmed.spawn_unit(1, sim::AntType::Worker, sim::TileCoord{34, 20});
+        confirmed.tick();
+        sim::SimulationEngine predicted(confirmed);
+        sim::Command walk;                                                                   // the other player's ant walks west (an order that both engines know)
+        walk.type = sim::CommandType::GroupMove;
+        walk.issuer = 1;
+        walk.tile_x = 10;
+        walk.tile_y = 20;
+        walk.ants.assign(1u, foe);
+        confirmed.apply_command(walk);
+        predicted.apply_command(walk);
+        for (int i = 0; i < 24; ++i) {
+            confirmed.tick();
+            predicted.tick();
+        }
+        for (int i = 0; i < 12; ++i) predicted.tick();                                       // the predicted engine is 12 ticks ahead: the ant has walked about 48 px further
+        const auto snap = [](const sim::SimulationEngine& e, uint32_t id) {
+            for (const auto& a : e.get_world_state().ants) {
+                if (a.id == id) return a;
+            }
+            return sim::AntSnapshot{};
+        };
+        const sim::AntSnapshot drawn = snap(confirmed, foe);
+        const sim::AntSnapshot ahead = snap(predicted, foe);
+        ASSERT_TRUE(drawn.px - ahead.px >= 40 && drawn.tile_x != ahead.tile_x);               // (it walks west: the predicted engine has it further left, on another tile)
+        OthersView view;
+        const sim::WorldState& world = view.compose(predicted.get_world_state(), confirmed.get_world_state(), 0, OthersView::Stamp{});
+        for (const bool aimed : {true, false}) {
+            HUD hud;
+            hud.init(0);
+            hud.set_sim_query(&predicted);
+            hud.set_shown_world(&world);
+            ViewportCamera cam;
+            cam.world_x = std::max(0, drawn.px - 220);
+            cam.world_y = std::max(0, drawn.py - 200);
+            RecordingSink sink(predicted);
+            hud.set_command_sink(&sink);
+            if (aimed) hud.set_aim_tile([&](const sim::AntSnapshot& picked, sim::TileCoord& tile) { return aim_at_predicted_ant(predicted.get_world_state(), 0, picked, tile); });
+            const auto sx = [&](int32_t wx) { return wx - cam.world_x + HUD::PLAYFIELD_X; };
+            const auto sy = [&](int32_t wy) { return wy - cam.world_y + HUD::PLAYFIELD_Y; };
+            hud.select_ant(mine);
+            ASSERT_TRUE(hud.evaluate_cursor(sx(drawn.px), sy(drawn.py - 8), world, predicted.grid(), cam) == CursorType::Attack);       // the cursor over the ant as drawn
+            ASSERT_TRUE(hud.evaluate_cursor(sx(ahead.px), sy(ahead.py - 8), world, predicted.grid(), cam) == CursorType::Move);         // ... and nothing where the predicted engine has it
+            ASSERT_TRUE(hud.pick_ant_at(world, drawn.px, drawn.py - 8) != nullptr && hud.pick_ant_at(world, drawn.px, drawn.py - 8)->px == drawn.px);
+            hud.handle_mouse_down(sx(drawn.px), sy(drawn.py - 8), SDL_BUTTON_RIGHT, predicted, cam, 0);
+            hud.handle_mouse_up(sx(drawn.px), sy(drawn.py - 8), SDL_BUTTON_RIGHT, predicted, cam, 0);
+            ASSERT_EQ(sink.log.size(), 1u);
+            ASSERT_TRUE(sink.log[0].type == sim::CommandType::GroupAttack);
+            const sim::AntSnapshot want = aimed ? ahead : drawn;
+            ASSERT_TRUE(sink.log[0].tile_x == want.tile_x && sink.log[0].tile_y == want.tile_y);       // the tile of the predicted engine's ant, or of the one that is drawn
+            ASSERT_EQ(predicted.get_unit(mine).orig_order, aimed ? sim::AntUnit::kOrderAttack : sim::AntUnit::kOrderMove);       // the order ran in the predicted engine at once: an attack on the ant where it is, a plain move to the tile that it has left
+            predicted.stop_ant(mine);
+            hud.select_ant(mine);
+            hud.handle_mouse_down(sx(drawn.px), sy(drawn.py - 8), SDL_BUTTON_LEFT, predicted, cam, 0);       // the left click over the attack cursor is the same order
+            hud.handle_mouse_up(sx(drawn.px), sy(drawn.py - 8), SDL_BUTTON_LEFT, predicted, cam, 0);
+            ASSERT_EQ(sink.log.size(), 2u);
+            ASSERT_TRUE(sink.log[1].type == sim::CommandType::GroupAttack && sink.log[1].tile_x == want.tile_x && sink.log[1].tile_y == want.tile_y);
+            hud.clear_selection();
+            hud.handle_mouse_down(sx(drawn.px), sy(drawn.py - 8), SDL_BUTTON_LEFT, predicted, cam, 0);       // with nothing selected it is the inspect panel of the ant as drawn
+            hud.handle_mouse_up(sx(drawn.px), sy(drawn.py - 8), SDL_BUTTON_LEFT, predicted, cam, 0);
+            ASSERT_EQ(sink.log.size(), 2u);                                                      // (no order)
+            ASSERT_EQ(hud.get_selected_ant_id(), foe);
+        }
+        // the world is the picture's only for the HUD that was told so: another HUD, or this one when it is told no more, asks the engine
+        HUD plain;
+        plain.init(0);
+        ASSERT_TRUE(plain.pick_ant_at(predicted.get_world_state(), ahead.px, ahead.py - 8) != nullptr);
+        ASSERT_TRUE(plain.pick_ant_at(world, ahead.px, ahead.py - 8) == nullptr);              // (the composed world has the ant where the confirmed engine has it)
     } TEST_END();
 
     std::cout << "\n=======================================================\n"

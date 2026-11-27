@@ -103,11 +103,11 @@ The original has no sequencer: it is a full mesh in which every machine simulate
 
 ### Prediction of your own orders
 
-The prediction is **on by default** in every match of the network. `--no-prediction` (`--prediction off`) and `?prediction=off` on the game page's address switch it off for a game, to find out whether a trouble is the prediction's; nothing else does. There is no protocol change, and no other machine can tell.
+The prediction is **on by default** in every match of the network. `--no-prediction` (`--prediction off`) and `?prediction=off` on the game page's address switch it off for a game, to find out whether a trouble is the prediction's; nothing else does. The other players' ants (people and computer players) are drawn from the confirmed engine, a moment behind your own and never corrected, so that they do not rubber-band; `--others predicted` and `?others=predicted` draw them from the predicted engine too, as the game did before, to find out whether a trouble is the picture's. There is no protocol change, and no other machine can tell.
 
 - How the prediction works, what it shows and plays, when it is off and the limit on its work are described in [`NETWORK_PORT.md`](NETWORK_PORT.md#prediction-of-ones-own-orders-predictionhpp-cue_routerhpp-netgame-applicationview_sim).
 - [`NETWORK_PORT.md`](NETWORK_PORT.md) "Prediction of one's own orders" has the design.
-- **Hints (protocol 26).** The other players' orders, and a computer player's, can reach the prediction ahead of their sealed turns, so that their ants are corrected less: the browsers send each other their own orders through the operator's relay (a direct connection only when both players turned it on in the room), and the server sends a computer player's order the moment the bot gives it. The turns, the hashes and the record are not touched. [`P2P_HINTS.md`](P2P_HINTS.md) has the rules.
+- **Hints (protocol 26).** The other players' orders, and a computer player's, can reach the prediction ahead of their sealed turns, so that the predicted engine, which your own ants are drawn from, has theirs where they will be: the browsers send each other their own orders through the operator's relay (a direct connection only when both players turned it on in the room), and the server sends a computer player's order the moment the bot gives it. The turns, the hashes and the record are not touched. [`P2P_HINTS.md`](P2P_HINTS.md) has the rules.
 
 ## Limits
 
