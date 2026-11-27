@@ -182,7 +182,7 @@ class Store:
     def maintain(self, today):
         """The hour's work: the sums of every finished day that has raw events and none kept are made, and the raw events older than RAW_DAYS days go (with their pages overwritten and the log cut).
         Returns the number of events deleted."""
-        for (day,) in self.db.execute("SELECT day FROM events WHERE day < ?1 AND day NOT IN (SELECT day FROM days) UNION SELECT day FROM counters WHERE name = 'signups' AND day < ?1 AND day NOT IN (SELECT day FROM days)", (today,)).fetchall():
+        for (day,) in self.db.execute("SELECT day FROM events WHERE day < ? AND day NOT IN (SELECT day FROM days) UNION SELECT day FROM counters WHERE name = 'signups' AND day < ? AND day NOT IN (SELECT day FROM days)", (today, today)).fetchall():
             self.keep(day)
         oldest = events.add_days(today, -RAW_DAYS)
         gone = self.db.execute("DELETE FROM events WHERE day < ?", (oldest,)).rowcount
