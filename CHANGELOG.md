@@ -31,6 +31,7 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - **Show ping.** A new setting in the Video tab of the settings menu, off by default: switched on, the corner of a network game shows "ping NN ms" above the frame rate, and a click on it opens the list of connections as before. Off, the corner is the frame rate and the version only. The corner no longer shows "delay". On the desktop it is `show_ping=on` in the settings file or `--show-ping on` for one run.
 - **Tags keep your capitals.** A tag is now shown the way you type it ("[Ant] Zoe", "[aNt] Zoe"), no longer turned into capitals. The checks still read it in capitals (reserved, staff and rude words), tags that are already set stay as they are, and changing only the capitals counts as a tag change, so it waits a day like any other ([`docs/HUB_NICKNAMES.md`](docs/HUB_NICKNAMES.md)).
+- Smoother ants in network matches: a corrected ant moves at a walk's pace at most.
 
 **Fixes:**
 - Fewer short freezes in online matches: the server no longer lists its whole folder of replays in one go after every match it keeps, and starts the matches of computer players in a quiet moment while people play.
