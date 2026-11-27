@@ -1447,6 +1447,7 @@ void run_bot_admin_tests();
 void run_bot_rotation_tests();
 void run_bot_stagger_tests();
 void run_bot_queue_tests();
+void run_loop_pass_tests();
 void run_store_tests();
 void run_manager_tests();
 void run_demo_tests();

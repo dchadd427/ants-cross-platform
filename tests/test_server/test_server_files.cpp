@@ -8,5 +8,6 @@
 #include "bot_rotation_tests.hpp"   // (the catalog of the maps and the lists of the rotation: likewise, after the tests of the admin page, whose fixtures it uses)
 #include "bot_stagger_tests.hpp"    // (the staggered start of a batch: likewise, after the tests of the rotation, whose helpers it uses)
 #include "bot_queue_tests.hpp"      // (the queue of the batches, the summary and the loop's meter: likewise, after the tests of the staggered start, whose helpers it uses)
+#include "loop_pass_tests.hpp"      // (the slow-pass log, the pass's parts and the headroom of a bot start: likewise, after the tests of the queue, whose fixtures it uses)
 #include "state_hash_tests.hpp"      // (the seats whose state differs from the referee's: likewise, after the replay tests, whose helpers it may use)
 

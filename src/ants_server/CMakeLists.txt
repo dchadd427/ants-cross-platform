@@ -12,6 +12,7 @@ add_library(ants_server_core STATIC
     room_manager.cpp
     room_manager_limits.cpp
     room_manager_bots.cpp
+    loop_pass.cpp
     control.cpp
     control_history.cpp
     secret.cpp

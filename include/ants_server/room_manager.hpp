@@ -45,6 +45,7 @@
 #include "ants_server/bot_match_spec.hpp"
 #include "ants_server/history_store.hpp"
 #include "ants_server/loop_load.hpp"
+#include "ants_server/loop_pass.hpp"
 #include "ants_server/map_store.hpp"
 #include "ants_server/restart_record.hpp"
 #include "ants_server/room.hpp"
@@ -279,6 +280,9 @@ public:
     bool people_busy() const;
     /// The loop's meter, which the main loop feeds (loop_load.hpp); null: no guard (the tests that do not give one). A start of a match of computer players waits while its share is over kBotBusyGate
     void set_loop_load(LoopLoad* load) noexcept { loop_load_ = load; }
+    /// The pass of the loop that is running (loop_pass.hpp), which the main loop begins: update() lays its parts on it (the store's look, the history feeder, the rooms, the matches that begin, the records that are
+    /// flushed) so that a slow pass can say where it went; null: nothing is timed (the tests that do not give one)
+    void set_loop_pass(LoopPass* pass) noexcept { loop_pass_ = pass; }
     /// How many of the matches of computer players that go will be kept as replays (the slots that they hold of this hour's budget)
     size_t bot_kept_count() const;
     /// Ends one match of computer players (the room's code), or all of them: the room is closed, and a match that ran 30 seconds is kept as a replay up to where it stopped. False for a code that is no such match; the
@@ -499,6 +503,11 @@ private:
     uint32_t next_bot_start_ms_{0};
     std::vector<std::string> bot_notes_;         // what the timer did, for the log (take_notices)
     LoopLoad* loop_load_{nullptr};
+    LoopPass* loop_pass_{nullptr};
+    void lap(PassPart part) {                    // (the pass's time since its last lap is `part`'s)
+        if (loop_pass_ != nullptr) loop_pass_->lap(part);
+    }
+    void lap_room(const Room& room);             // ... and the same for a room's update, less what the room spent in a match that began and in a flush of its record
     std::set<std::string> bot_maps_skipped_;     // the maps of the lists that the last match found that a room cannot play (each is named in the log once, not at every match)
     std::vector<BotRotationEntry> bot_rotation_[2]{bot_rotation_defaults(false), bot_rotation_defaults(true)};      // the two lists of the rotation: the original's game, 187
     size_t bot_warm_at_{0};                      // where warm_bot_maps goes on in the catalog

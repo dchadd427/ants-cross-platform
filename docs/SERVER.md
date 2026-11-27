@@ -312,6 +312,10 @@ The format and the limits: [`NETWORK_PORT.md`](NETWORK_PORT.md#restart-records-a
 
 Moved to [`SERVER_REPLAYS.md`](SERVER_REPLAYS.md): the replays that the server keeps, and its own matches of computer players.
 
+## The slow-pass log
+
+The server runs every room, the replay store, the match history's counting and its doors on one thread, so a pass of the main loop that takes longer than a turn (50 ms) holds back the turn of every match that runs: a short freeze, and a burst when the missed turns are sealed. A pass that takes **more than 25 ms** puts one line in the log, `slow pass: 36.0 ms (rooms 5.1, starts 9.8, store 21.0)`, with the parts in milliseconds (a part under 0.05 ms is left out): `rooms` (the referee's turns, the computer players' ticks, the sessions), `starts` (a match that begins: its engine, restart record, recording and the bots' first look at the map), `bots` (the schedules of the server's own matches), `store` (the replay store: its look at the folder and the hourly purge), `history` (one step of counting a recording), `flush` (a restart record made durable), `doors` (the HTTP doors, the test maps, the pictures) and `other` (the connections, the Hellos, the end of a match, the statistics). At most one line in ten seconds: the slow passes in between are counted and told in one line with the longest of them (`slow pass: 3 more in the last 10 s, the longest 60.0 ms (...)`). The line has no name, code or address. Code: `loop_pass.hpp`; tests: `tests/test_server/loop_pass_tests.hpp`.
+
 ## Flood control
 
 A client that is no game can send valid messages as fast as its line allows, so every connection is limited.

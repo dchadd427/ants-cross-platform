@@ -1094,8 +1094,12 @@ int main(int argc, char** argv) {
     if (pictures) pictures->prune(picture_kept);
     ants::server::LoopLoad loop_load;                          // (how busy the loop is: the matches of computer players wait while it is over 40 %: loop_load.hpp)
     rooms.set_loop_load(&loop_load);
+    ants::server::LoopPass loop_pass;                             // (where each pass spends its time: a pass over 25 ms is told in the log with its parts, loop_pass.hpp)
+    ants::server::SlowPassLog slow_passes;
+    rooms.set_loop_pass(&loop_pass);
     while (!g_stop) {
         const auto pass_began = std::chrono::steady_clock::now();
+        loop_pass.begin();
         const uint32_t now = now_ms();
         if (tcp) {
             for (int i = 0; i < 32; ++i) {
@@ -1118,6 +1122,7 @@ int main(int argc, char** argv) {
             bot_matches->update(static_cast<int64_t>(std::time(nullptr)), now);              // (the schedules that are due start their matches)
             for (const std::string& line : bot_matches->take_notices()) log(line);          // (by the schedule's number, never its name)
         }
+        loop_pass.lap(ants::server::PassPart::Bots);
         if (http) http->update(now, [&](const ants::ctl::HttpRequest& request) { return ants::server::handle_control(rooms, request, now); });
         if (submit_http && submit_api) {
             submit_http->update(now, [&](const ants::ctl::HttpRequest& request) { return submit_api->handle(request, static_cast<int64_t>(std::time(nullptr)), now); });
@@ -1150,6 +1155,7 @@ int main(int argc, char** argv) {
             for (const std::string& line : pictures->take_notices()) log(line);
         }
         if (replay_http) replay_http->update(now, [&](const ants::ctl::HttpRequest& request) { return ants::server::handle_public_replays(rooms, request, now); });
+        loop_pass.lap(ants::server::PassPart::Doors);
         for (const ants::server::RoomStatus& s : rooms.take_ended(now)) {
             stats.count_ended(s);                                  // (a match that ran 600 ticks counts, public rooms too; a shorter one, or a room that never began, counts nothing)
             const bool demo = s.public_room;
@@ -1176,6 +1182,9 @@ int main(int argc, char** argv) {
         for (const std::string& line : rooms.take_notices()) log(line);          // (a record that the disk refused, ...)
         stats.save_if_due();
         for (const std::string& line : stats.take_notices()) log(line);
+        loop_pass.lap(ants::server::PassPart::Other);
+        const std::string slow_line = slow_passes.end(now_ms(), loop_pass);
+        if (!slow_line.empty()) log(slow_line);
         loop_load.add(now_ms(), static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - pass_began).count()));
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }

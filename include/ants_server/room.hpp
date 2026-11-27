@@ -502,6 +502,13 @@ public:
     bool rejoin(std::unique_ptr<net::Connection>& connection, const net::HelloMsg& hello, uint32_t now_ms);
 
     void update(uint32_t now_ms);
+    /// What the last update() spent its real time on besides the match's turns, in microseconds: a match that began (engine, record, recording, the bots' first look at the map) and the record that was made
+    /// durable. The room manager hands them to the loop's slow-pass log (loop_pass.hpp).
+    struct PassWork {
+        int64_t start_us{0};
+        int64_t flush_us{0};
+    };
+    const PassWork& pass_work() const noexcept { return pass_work_; }
     /// The owner closes the room: every client is dropped, the state is Failed with `reason`
     void close(const std::string& reason, uint32_t now_ms);
     RoomStatus status(uint32_t now_ms) const;
@@ -623,6 +630,7 @@ private:
     std::unique_ptr<RestartWriter> record_;
     std::string record_note_;                // why there is no record (the status says it)
     std::string stale_path_;                 // the file of a record that could not be deleted: the status says kept and stale until the store has deleted it
+    PassWork pass_work_;                     // pass_work(): reset at the start of every update()
     uint32_t next_sync_ms_{0};
     uint32_t sync_every_ms_{0};              // the interval to the next flush of the record: the configured one, doubled (to a limit) by every slow flush
     uint8_t roster_{0};                      // the seats of the match (a restored room has no lobby that knows them)

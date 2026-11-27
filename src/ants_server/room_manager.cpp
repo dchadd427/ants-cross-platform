@@ -633,9 +633,14 @@ bool RoomManager::history_may_run() const {
 
 void RoomManager::update(uint32_t now_ms) {
     now_hint_ = now_ms;
-    if (replays_ != nullptr) replays_->update();                   // (the replays that are too old are deleted once an hour)
+    lap(PassPart::Other);                                          // (what the loop did before: the connections that came in)
+    if (replays_ != nullptr) {
+        replays_->update();                                        // (the replays that are too old are deleted once an hour; the folder is looked at in slices)
+        lap(PassPart::Store);
+    }
     if (history_feeder_ != nullptr) {                              // (one match of the replay store at a time is counted for the history, in steps of about 2 ms: the match with a person in it that was just played at any time, the others only while nobody plays)
         history_feeder_->step([this]() { return history_may_run(); }, now_ms);
+        lap(PassPart::History);
     }
     // 0. a record whose delete failed is tried again every 10 s (its room is over: a restart before it is deleted would bring the room back)
     if (restart_ != nullptr) {
@@ -702,10 +707,12 @@ void RoomManager::update(uint32_t now_ms) {
     }
     // 3. the gap between two matches of computer players that were made one after another is over (BotMatches asks for each match; see start_bot_match)
     if (bot_gap_pending_ && net::time_reached(now_ms, next_bot_start_ms_)) bot_gap_pending_ = false;
+    lap(PassPart::Other);
     // 4. the rooms (a lobby room whose match the rules have just ended is opened again below, the rematch)
     std::vector<std::string> rematches;
     for (auto it = rooms_.begin(); it != rooms_.end();) {
         it->second->update(now_ms);
+        lap_room(*it->second);
         for (std::string& line : it->second->take_notes()) room_notes_.push_back(std::move(line));
         if (it->second->rematch_due()) rematches.push_back(it->first);
         if (it->second->expired(now_ms)) {
@@ -735,6 +742,16 @@ void RoomManager::update(uint32_t now_ms) {
     // 6. the limits per address: lobbies of crowded addresses that nobody sets up, and the minute's upkeep
     close_crowded_lobbies(now_ms);
     limits_upkeep(now_ms);
+    lap(PassPart::Rooms);
+}
+
+// The pass's time since the last lap was the room's update: the part of it that the room spent in a match that began and in a record that was made durable is theirs
+void RoomManager::lap_room(const Room& room) {
+    if (loop_pass_ == nullptr) return;
+    const Room::PassWork& work = room.pass_work();
+    loop_pass_->lap(PassPart::Rooms);
+    loop_pass_->move(PassPart::Rooms, PassPart::Starts, work.start_us);
+    loop_pass_->move(PassPart::Rooms, PassPart::Flush, work.flush_us);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
