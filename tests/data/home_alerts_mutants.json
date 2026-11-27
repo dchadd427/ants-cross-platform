@@ -755,7 +755,7 @@
   },
   {
    "id": "the_circle_has_no_dots_of_a_cut",
-   "file": "web/home/alerts.js",
+   "file": "web/home/chat.js",
    "old": "? first.slice(0, -1) : first;",
    "new": "? first : first;",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
