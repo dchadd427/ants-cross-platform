@@ -327,11 +327,13 @@ def _build_grass_strip(
     rad_ang = math.radians(strip_angle_deg)
     ca, sa = math.cos(rad_ang), math.sin(rad_ang)
 
-    clump_us = [(-0.47 + 0.94 * (c / float(max(1, n_culms - 1)))) for c in range(max(2, n_culms))]
+    clump_us = [(-0.48 + 0.96 * (c / float(max(1, n_culms - 1)))) for c in range(max(2, n_culms))]
     for k in range(n_blades):
         cu = clump_us[k % len(clump_us)]
-        u = float(np.clip(cu + rng.uniform(-0.12, 0.12), -0.5, 0.5))
-        v = float(rng.uniform(-0.5, 0.5))
+        # Organic feathered ends (no flat rectangular box clip!) so consecutive wall hedges weave seamlessly
+        u = float(np.clip(cu + rng.uniform(-0.14, 0.14), -0.54, 0.54))
+        end_taper = 1.0 - 0.32 * max(0.0, (abs(u) - 0.38) / 0.16)
+        v = float(rng.uniform(-0.5, 0.5)) * end_taper
         along = u * length
         across = v * thickness + curve_amp * math.sin(u * math.pi * 1.6)
         bx = along * ca - across * sa
@@ -348,9 +350,13 @@ def _build_grass_strip(
 
         height = float(rng.uniform(h_min, h_max)) * h_m * (1.05 - 0.14 * edge_frac)
         width = float(rng.uniform(0.064, 0.094)) * width_scale * w_m
-        out_yaw = math.atan2(-sa * (1.0 if v >= 0 else -1.0), ca * (1.0 if v >= 0 else -1.0)) + float(rng.uniform(-0.95, 0.95))
-        outer_flare = 0.16 + 0.68 * (edge_frac ** 1.2)
-        lean = float(rng.uniform(0.025, 0.09)) * outer_flare
+        # End-cap blades splay slightly outward along the strip axis so adjacent segments interlock smoothly
+        if abs(u) > 0.40:
+            out_yaw = math.atan2(sa * (1.0 if u > 0 else -1.0), ca * (1.0 if u > 0 else -1.0)) + float(rng.uniform(-0.85, 0.85))
+        else:
+            out_yaw = math.atan2(-sa * (1.0 if v >= 0 else -1.0), ca * (1.0 if v >= 0 else -1.0)) + float(rng.uniform(-0.95, 0.95))
+        outer_flare = 0.22 + 0.68 * (edge_frac ** 1.15)
+        lean = float(rng.uniform(0.035, 0.11)) * outer_flare
         droop = float(rng.uniform(0.025, 0.10)) * outer_flare
         twist = float(rng.uniform(-0.54, 0.54))
         sway = float(rng.uniform(-0.04, 0.04))
@@ -376,13 +382,13 @@ def _build_grass_strip(
 
 
 def build_grassmed1() -> SceneBuilder:
-    """Horizontal lush 5-tile meadow hedge matching 4.88x2.16 tile 1998 footprint (`1324:grassmed1`)."""
-    return _build_grass_strip("item_grassmed1", n_blades=246, length=1.24, thickness=0.15, strip_angle_deg=0.0, h_min=0.22, h_max=0.30, width_scale=0.90, n_culms=10, seed=1324)
+    """Horizontal lush 5-tile meadow hedge matching 5.0-tile stride (`1324:grassmed1`)."""
+    return _build_grass_strip("item_grassmed1", n_blades=256, length=1.32, thickness=0.32, strip_angle_deg=0.0, h_min=0.22, h_max=0.30, width_scale=0.94, n_culms=11, seed=1324)
 
 
 def build_grassmed2() -> SceneBuilder:
-    """Full 2-tile-wide vertical meadow grass column matching 2.03x4.00 tile 1998 footprint (`1326:grassmed2`)."""
-    return _build_grass_strip("item_grassmed2", n_blades=244, length=1.14, thickness=0.58, strip_angle_deg=90.0, h_min=0.45, h_max=0.59, width_scale=1.16, n_culms=9, seed=1326)
+    """Full 2x4-tile vertical meadow grass column matching 4.0-tile wall stride (`1326:grassmed2`)."""
+    return _build_grass_strip("item_grassmed2", n_blades=260, length=1.32, thickness=0.44, strip_angle_deg=90.0, h_min=0.32, h_max=0.42, width_scale=1.08, n_culms=11, seed=1326)
 
 
 def build_grassmed3() -> SceneBuilder:

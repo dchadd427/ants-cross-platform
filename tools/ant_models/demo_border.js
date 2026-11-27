@@ -157,48 +157,80 @@
     };
   }
 
-  // Single-mesh 2-draw-call GPU batch for dense minefield maps like `Bombz Away` (896 bombs -> ~130k tris vs 7.1M tris!).
+  // Authentic 1998 `129..132` tapered ordnance canister batch for dense minefield maps like `Bombz Away` (896 bombs in 2 draw calls!).
+  // Matches `items_structures.py::_build_team_bomb` (`blackbomb.glb`..`bluebomb.glb`): crimson foot, flared team canister,
+  // crimson warning shoulder band, signature overhanging magenta-purple blast cap, brass bushing, curved cream fuse & blazing sparkler!
   function buildBatchedMapBombsMesh(gl, bombSpecs) {
     const { mat4Identity } = window.__antGltf;
     const body = { pos: [], nrm: [], uv: [], col: [], idx: [] };
     const spark = { pos: [], nrm: [], uv: [], col: [], idx: [] };
     const teamRgb = {
-      blackbomb: [0.028, 0.030, 0.038],
-      redbomb:   [0.420, 0.032, 0.030],
-      bluebomb:  [0.038, 0.115, 0.440],
-      greenbomb: [0.048, 0.285, 0.055],
+      blackbomb: [0.036, 0.046, 0.068],
+      redbomb:   [0.520, 0.022, 0.024],
+      bluebomb:  [0.032, 0.118, 0.560],
+      greenbomb: [0.042, 0.340, 0.052],
     };
+    const crimson = [0.214, 0.004, 0.006];
+    const purple = [0.538, 0.012, 0.342];
+    const purpleTop = [0.640, 0.022, 0.420];
+    const brass = [0.711, 0.367, 0.027];
+    const fuseCol = [0.869, 0.787, 0.604];
 
-    function pushSphere(dst, cx, cy, cz, rx, ry, rz, uSegs, vSegs, rgb) {
+    function pushLathe(dst, cx, cz, sc, rings, segs) {
       const base = dst.pos.length / 3;
-      for (let v = 0; v <= vSegs; v++) {
-        const phi = (v / vSegs) * Math.PI;
-        const sp = Math.sin(phi), cp = Math.cos(phi);
-        for (let u = 0; u <= uSegs; u++) {
-          const th = (u / uSegs) * Math.PI * 2;
-          const nx = sp * Math.cos(th), ny = cp, nz = sp * Math.sin(th);
-          dst.pos.push(cx + nx * rx, cy + ny * ry, cz + nz * rz);
-          dst.nrm.push(nx, ny, nz);
-          dst.uv.push(u / uSegs, v / vSegs);
+      const nR = rings.length;
+      for (let r = 0; r < nR; r++) {
+        const [rad, y, rgb] = rings[r];
+        const prev = rings[Math.max(0, r - 1)], next = rings[Math.min(nR - 1, r + 1)];
+        const dr = next[0] - prev[0], dy = next[1] - prev[1];
+        const len = Math.hypot(dy, -dr) || 1;
+        const nr = dy / len, ny = -dr / len;
+        for (let s = 0; s < segs; s++) {
+          const a = (s / segs) * Math.PI * 2;
+          const ca = Math.cos(a), sa = Math.sin(a);
+          dst.pos.push(cx + ca * rad * sc, y * sc, cz + sa * rad * sc);
+          dst.nrm.push(ca * nr, ny, sa * nr);
+          dst.uv.push(s / segs, r / (nR - 1));
           dst.col.push(rgb[0], rgb[1], rgb[2]);
         }
       }
-      const stride = uSegs + 1;
-      for (let v = 0; v < vSegs; v++) {
-        for (let u = 0; u < uSegs; u++) {
-          const a = base + v * stride + u, b = a + 1, c = a + stride, d = c + 1;
-          dst.idx.push(a, b, c, b, d, c);
+      for (let r = 0; r < nR - 1; r++) {
+        for (let s = 0; s < segs; s++) {
+          const ns = (s + 1) % segs;
+          const a = base + r * segs + s, b = base + r * segs + ns;
+          const c = base + (r + 1) * segs + s, d = base + (r + 1) * segs + ns;
+          dst.idx.push(a, d, b, a, c, d);
         }
+      }
+      // Top cap center closing the purple blast lid cleanly
+      const topC = dst.pos.length / 3;
+      const topR = rings[nR - 1];
+      dst.pos.push(cx, topR[1] * sc, cz);
+      dst.nrm.push(0, 1, 0);
+      dst.uv.push(0.5, 0.5);
+      dst.col.push(topR[2][0], topR[2][1], topR[2][2]);
+      const lastRing = base + (nR - 1) * segs;
+      for (let s = 0; s < segs; s++) {
+        dst.idx.push(lastRing + s, topC, lastRing + ((s + 1) % segs));
       }
     }
 
-    function pushCyl(dst, x0, y0, z0, x1, y1, z1, r0, r1, segs, rgb) {
+    function pushTubeSeg(dst, p0, p1, r0, r1, segs, rgb) {
       const base = dst.pos.length / 3;
+      const dx = p1[0] - p0[0], dy = p1[1] - p0[1], dz = p1[2] - p0[2];
+      const len = Math.hypot(dx, dy, dz) || 1;
+      const tx = dx / len, ty = dy / len, tz = dz / len;
+      // Orthonormal frame (u, v) perpendicular to segment tangent
+      let ux = -tz, uy = 0, uz = tx;
+      const uL = Math.hypot(ux, uy, uz);
+      if (uL < 0.01) { ux = 1; uy = 0; uz = 0; } else { ux /= uL; uz /= uL; }
+      const vx = ty * uz - tz * uy, vy = tz * ux - tx * uz, vz = tx * uy - ty * ux;
       for (let s = 0; s < segs; s++) {
-        const a = (s / segs) * Math.PI * 2;
-        const ca = Math.cos(a), sa = Math.sin(a);
-        dst.pos.push(x0 + ca * r0, y0, z0 + sa * r0, x1 + ca * r1, y1, z1 + sa * r1);
-        dst.nrm.push(ca, 0.2, sa, ca, 0.2, sa);
+        const a = (s / segs) * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+        const nx = ux * ca + vx * sa, ny = uy * ca + vy * sa, nz = uz * ca + vz * sa;
+        dst.pos.push(p0[0] + nx * r0, p0[1] + ny * r0, p0[2] + nz * r0);
+        dst.pos.push(p1[0] + nx * r1, p1[1] + ny * r1, p1[2] + nz * r1);
+        dst.nrm.push(nx, ny, nz, nx, ny, nz);
         dst.uv.push(0, 0, 1, 1);
         dst.col.push(rgb[0], rgb[1], rgb[2], rgb[0], rgb[1], rgb[2]);
       }
@@ -209,17 +241,46 @@
       }
     }
 
+    function pushSparkStar(dst, cx, cy, cz, r, rgb) {
+      const base = dst.pos.length / 3;
+      const pts = [[0, r, 0], [r, 0, 0], [0, 0, r], [-r, 0, 0], [0, 0, -r], [0, -r, 0]];
+      for (const [px, py, pz] of pts) {
+        dst.pos.push(cx + px, cy + py, cz + pz);
+        const l = Math.hypot(px, py, pz) || 1;
+        dst.nrm.push(px / l, py / l, pz / l);
+        dst.uv.push(0.5, 0.5);
+        dst.col.push(rgb[0], rgb[1], rgb[2]);
+      }
+      const f = [0,1,2, 0,2,3, 0,3,4, 0,4,1, 5,2,1, 5,3,2, 5,4,3, 5,1,4];
+      for (const k of f) dst.idx.push(base + k);
+    }
+
     for (let i = 0; i < bombSpecs.length; i++) {
       const sp = bombSpecs[i];
       const s = sp.s || 0.715;
-      const rgb = teamRgb[sp.id] || teamRgb.blackbomb;
-      const r = 0.245 * s;
-      // Glossy metallic cannonball body + collar + curved braided fuse + glowing spark star
-      pushSphere(body, sp.x, r * 0.96, sp.z, r, r * 0.96, r, 8, 6, rgb);
-      pushCyl(body, sp.x, r * 1.84, sp.z, sp.x, r * 2.15, sp.z, r * 0.34, r * 0.30, 6, [0.16, 0.17, 0.20]);
-      const fx = sp.x + 0.08 * s, fy = r * 2.75, fz = sp.z + 0.04 * s;
-      pushCyl(body, sp.x, r * 2.12, sp.z, fx, fy, fz, r * 0.11, r * 0.08, 5, [0.42, 0.32, 0.20]);
-      pushSphere(spark, fx, fy + 0.02 * s, fz, 0.065 * s, 0.065 * s, 0.065 * s, 5, 4, [1.0, 0.78, 0.20]);
+      const bodyRgb = teamRgb[sp.id] || teamRgb.blackbomb;
+      // Exact 1:1 normalized profile of `blackbomb.glb` (`items_structures.py::_build_team_bomb`, y = 0.00..0.855):
+      const rings = [
+        [0.132, 0.000, crimson],   // riveted crimson foot base
+        [0.172, 0.068, crimson],   // crimson foot belly
+        [0.165, 0.095, bodyRgb],   // lower team canister
+        [0.211, 0.345, bodyRgb],   // flared team enamel body
+        [0.234, 0.435, crimson],   // deep crimson warning shoulder band
+        [0.222, 0.460, purple],    // underside of overhanging purple blast cap
+        [0.267, 0.510, purple],    // signature wide magenta-purple blast lid rim!
+        [0.236, 0.576, purpleTop], // domed magenta-purple blast lid crown
+        [0.052, 0.594, brass],     // brass hex fuse bushing
+      ];
+      pushLathe(body, sp.x, sp.z, s, rings, 10);
+      // Curved cream-white cotton fuse sweeping up-left then arcing up-right to `(0.104, 0.855, 0.011)`!
+      const p0 = [sp.x, 0.605 * s, sp.z];
+      const p1 = [sp.x - 0.036 * s, 0.715 * s, sp.z - 0.006 * s];
+      const p2 = [sp.x + 0.032 * s, 0.835 * s, sp.z + 0.012 * s];
+      const p3 = [sp.x + 0.102 * s, 0.848 * s, sp.z + 0.010 * s];
+      pushTubeSeg(body, p0, p1, 0.022 * s, 0.020 * s, 5, fuseCol);
+      pushTubeSeg(body, p1, p2, 0.020 * s, 0.018 * s, 5, fuseCol);
+      pushTubeSeg(body, p2, p3, 0.018 * s, 0.015 * s, 5, fuseCol);
+      pushSparkStar(spark, sp.x + 0.108 * s, 0.855 * s, sp.z + 0.010 * s, 0.072 * s, [1.0, 0.82, 0.24]);
     }
 
     const bufs = [];
@@ -255,17 +316,17 @@
         {
           nodeIndex: 0, worldMat: idMat,
           prim: uploadPrim(body, {
-            name: "batched_map_bombs", baseColor: [1, 1, 1, 1], metallic: 0.45, roughness: 0.34,
+            name: "batched_map_bombs", baseColor: [1, 1, 1, 1], metallic: 0.28, roughness: 0.36,
             normalScale: 0.0, normalTex: null, baseTex: null, mrTex: null,
-            emissive: [0, 0, 0], alphaMode: "OPAQUE", doubleSided: false,
+            emissive: [0, 0, 0], alphaMode: "OPAQUE", doubleSided: true,
           }),
         },
         {
           nodeIndex: 0, worldMat: idMat,
           prim: uploadPrim(spark, {
-            name: "batched_map_bomb_sparks", baseColor: [1, 0.85, 0.35, 1], metallic: 0.0, roughness: 0.25,
+            name: "batched_map_bomb_sparks", baseColor: [1, 0.88, 0.38, 1], metallic: 0.0, roughness: 0.20,
             normalScale: 0.0, normalTex: null, baseTex: null, mrTex: null,
-            emissive: [2.2, 1.35, 0.25], alphaMode: "OPAQUE", doubleSided: false,
+            emissive: [2.8, 1.75, 0.32], alphaMode: "OPAQUE", doubleSided: true,
           }),
         },
       ],

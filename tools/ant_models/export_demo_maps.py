@@ -221,7 +221,17 @@ def build_sprite_metrics(t4_entries, items_manifest, sprites_dir):
 
         sx, sy, sz = [max(0.08, float(v)) for v in item["size"]]
         # Match 1998 projected width (sx) & oblique Game View height (sz + 0.78*sy) onto 32px tiles
-        if low.startswith("grass"):
+        if low == "grassmed2":
+            # Vertical 2x4-tile hedge column placed on a strict 4.0-tile Z stride -> span ~4.25 tiles so walls weave seamlessly!
+            scale = max(w_tiles / sx, (h_tiles * 1.06) / sz)
+            ox = 0.5 * (min_x + max_x) / TILE_PX
+            oz = 0.5 * (min_y + max_y) / TILE_PX
+        elif low == "grassmed1":
+            # Horizontal 5x2-tile hedge wall placed on a strict 5.0-tile X stride -> span ~5.25 tiles with zero horizontal gaps!
+            scale = max((w_tiles * 1.07) / sx, h_tiles / (sz + 0.78 * sy))
+            ox = 0.5 * (min_x + max_x) / TILE_PX
+            oz = 0.5 * (min_y + max_y) / TILE_PX + 0.25 * 0.78 * sy * scale
+        elif low.startswith("grass"):
             scale_x = w_tiles / sx
             scale_y = h_tiles / (sz + 0.78 * sy)
             scale = 0.5 * (scale_x + scale_y)
