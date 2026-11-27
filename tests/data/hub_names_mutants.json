@@ -103,14 +103,20 @@
   {
    "id": "a_rude_tag_is_a_tag",
    "file": "hub/nickrules.py",
-   "old": "if is_rude(tag):\n        return None, \"rude\"",
+   "old": "if is_rude(capitals):\n        return None, \"rude\"",
    "new": ""
   },
   {
-   "id": "a_tag_in_lower_case",
+   "id": "a_tag_is_made_of_capitals",
    "file": "hub/nickrules.py",
-   "old": "up = ch.upper()",
-   "new": "up = ch"
+   "old": "return None, \"bot\"\n    return tag, None",
+   "new": "return None, \"bot\"\n    return capitals, None"
+  },
+  {
+   "id": "a_tag_is_read_as_typed_by_the_reserved_words",
+   "file": "hub/nickrules.py",
+   "old": "if capitals.lower() in TAG_RESERVED_EXACT:",
+   "new": "if tag.lower() in TAG_RESERVED_EXACT:"
   },
   {
    "id": "a_tag_of_two_alphabets",
@@ -121,19 +127,19 @@
   {
    "id": "a_reserved_tag",
    "file": "hub/nickrules.py",
-   "old": "if tag.lower() in TAG_RESERVED_EXACT:\n        return None, \"reserved\"",
+   "old": "if capitals.lower() in TAG_RESERVED_EXACT:\n        return None, \"reserved\"",
    "new": ""
   },
   {
    "id": "a_tag_like_a_staff_badge",
    "file": "hub/nickrules.py",
-   "old": "if text.squash(tag) in TAG_RESERVED_SQUASHED:\n        return None, \"staff\"",
+   "old": "if text.squash(capitals) in TAG_RESERVED_SQUASHED:\n        return None, \"staff\"",
    "new": ""
   },
   {
    "id": "a_tag_that_makes_a_bot_label",
    "file": "hub/nickrules.py",
-   "old": "if reads_as_bot(\"[%s] %s\" % (tag, nickname or \"Name\")):\n        return None, \"bot\"",
+   "old": "if reads_as_bot(\"[%s] %s\" % (capitals, nickname or \"Name\")):\n        return None, \"bot\"",
    "new": ""
   },
   {
@@ -213,6 +219,18 @@
    "file": "hub/nicknames.py",
    "old": "if row is not None and row.tag_at and row.tag_at + TAG_WAIT_SECONDS > now:\n            return field(False, \"soon\", row.tag_at + TAG_WAIT_SECONDS), None",
    "new": ""
+  },
+  {
+   "id": "a_change_of_capitals_alone_is_free",
+   "file": "hub/nicknames.py",
+   "old": "        if row is not None and row.tag == tag:\n            return field(True), tag",
+   "new": "        if row is not None and row.tag.casefold() == tag.casefold():\n            return field(True), tag"
+  },
+  {
+   "id": "a_change_of_capitals_alone_does_not_start_the_day",
+   "file": "hub/nicknames.py",
+   "old": "tag_at = row.tag_at if row is not None and row.tag == tag else",
+   "new": "tag_at = row.tag_at if row is not None and row.tag.casefold() == tag.casefold() else"
   },
   {
    "id": "a_guest_may_copy_a_nickname",

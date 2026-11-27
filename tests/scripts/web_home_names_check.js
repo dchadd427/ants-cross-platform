@@ -395,6 +395,17 @@ const OK = { ok: true };
     check('sheet: opened twice it stays one sheet', (r.tell('names'), byClass(r.doc.body, 'nm-sheet').length === 1));
     r.sheet().fire('keydown', { key: 'Escape', stopPropagation() {} });       // (a key of a field reaches the sheet: it bubbles)
     check('sheet: Escape closes it', r.sheet() === null);
+
+    // the capitals of a tag are the person's own (docs/HUB_NICKNAMES.md): the page sends them as typed, shows them as the hub answers, and a change of capitals alone is a change that can be saved
+    r = rig({ you: ME({ nick: 'Zo\u00eb', tag: '\u00c4NT', nickat: T0 / 1000 - 2 * DAY, nickfree: T0 / 1000 + 28 * DAY }) });
+    r.tell('names');
+    r.type(r.tag(), '\u00c4nT');
+    r.advance(400);
+    same('sheet: a tag goes to the hub with the capitals that were typed', [r.last().tag, r.last().save], ['\u00c4nT', false]);
+    r.tell('name', { t: 'name', r: r.last().r, ok: true, nick: OK, tag: OK, shown: '[\u00c4nT] Zo\u00eb', saved: false });
+    same('sheet: a tag that differs from the person\'s own only in capitals shows as typed in the preview, and Save is on', [r.preview(), r.save().disabled], ['[\u00c4nT] Zo\u00eb', false]);
+    r.save().click();
+    same('sheet: Save sends the tag as typed', [r.last().tag, r.last().save], ['\u00c4nT', true]);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
