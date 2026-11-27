@@ -283,6 +283,14 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
                 cfg.hud_art_new = std::strcmp(argv[++i], "new") == 0;
                 cfg.hud_art_given = true;
             }
+        } else if (std::strcmp(argv[i], "--show-ping") == 0) {                   // --show-ping on | off: "ping NN ms" in the corner of a network game (latency_corner.hpp)
+            if (i + 1 >= argc || !parse_switch(argv[i + 1], cfg.show_ping)) {
+                if (cfg.startup_error.empty()) cfg.startup_error = "--show-ping needs on or off";
+                if (i + 1 < argc) ++i;
+            } else {
+                ++i;
+                cfg.show_ping_given = true;
+            }
         } else if (std::strcmp(argv[i], "--zoom") == 0) {                        // --zoom 0.05 .. 2: the zoom of the map view that a match starts with, the nearest level that its map offers (view_zoom.hpp)
             std::string why;
             if (i + 1 >= argc) {

@@ -671,11 +671,10 @@ void Application::track_net_state() {
     if (p.resume_seconds_left == 0) back_name_.clear();                  // (the countdown is over, or there was none: a blip)
 }
 
-// The network's part of the corner (ants_app/latency_corner.hpp): "ping NN ms" and "delay NN ms" while a room or a match of a network game is on screen. A game of one
-// machine, the loading and quick help screens, a connection that is being made, one that failed or is over draw nothing here.
-// What the corner's "delay" says. With the prediction on it is what the click FEELS: from the frame that took the order to the frame that shows it (a dash until an order has been felt, and for ten
-// seconds after the last one); the network's delay, the time until the CONFIRMED engine applies the order, is what it was before, and is what the player feels when the prediction is off
-std::optional<uint32_t> Application::corner_delay_ms() const {
+// What the browser measurement of the prediction reads as the delay of the player's orders (ants_probe 7; no corner shows it). With the prediction on it is what the click FEELS: from the frame that
+// took the order to the frame that shows it (a dash until an order has been felt, and for ten seconds after the last one); the network's delay, the time until the CONFIRMED engine applies the order,
+// is what it was before, and is what the player feels when the prediction is off
+std::optional<uint32_t> Application::order_delay_ms() const {
     if (!network_active()) return std::nullopt;
     if (net_->predicting()) {
         if (felt_delay_.stale(frame_ms())) return std::nullopt;
@@ -684,20 +683,20 @@ std::optional<uint32_t> Application::corner_delay_ms() const {
     return net_->command_delay_ms();
 }
 
+// The network's part of the corner (ants_app/latency_corner.hpp): "ping NN ms" while a room or a match of a network game is on screen and the setting Show ping is on. Off, a game of one
+// machine, the loading and quick help screens, a connection that is being made, one that failed or is over draw nothing here (and the ping text that opens the list of connections is not there).
 void Application::render_latency_corner(int32_t version_x, int32_t text_y, const CornerPlate& plate) {
-    if (!network_active()) return;
+    if (!network_active() || !menu_settings_.show_ping) return;
     const CornerScreen screen = state_ == AppState::MapSelect ? CornerScreen::Setup
                                 : state_ == AppState::Playing ? (scorecard_.is_open() ? CornerScreen::Results : CornerScreen::Match)
                                                               : CornerScreen::Other;
     const std::optional<int32_t> left_limit = latency_left_limit(true, net_->phase(), screen, layout_);
     if (!left_limit) return;
-    LatencyReadout readout;
-    readout.ping_ms = net_->ping_ms();
-    readout.delay_ms = corner_delay_ms();
-    last_latency_layout_ = latency_corner_layout(*renderer_, readout, version_x, text_y, *left_limit, plate);
-    draw_latency_corner(*renderer_, readout, version_x, text_y, *left_limit, plate);
+    const std::optional<uint32_t> ping_ms = net_->ping_ms();
+    last_latency_layout_ = latency_corner_layout(*renderer_, ping_ms, version_x, text_y, *left_limit, plate);
+    draw_latency_corner(*renderer_, ping_ms, version_x, text_y, *left_limit, plate);
     if (screen == CornerScreen::Match) {                                   // the ping text opens the list of connections (a few pixels of margin: a finger's tap)
-        const int32_t w = renderer_->get_text_width(ping_text(readout.ping_ms), FontSize::Px12);
+        const int32_t w = renderer_->get_text_width(ping_text(ping_ms), FontSize::Px12);
         connections_hit_ = LayoutRect{last_latency_layout_->ping_x - 4, last_latency_layout_->ping_y - 4, w + 8, font_cell_height(FontSize::Px12) + 8};
     }
 }

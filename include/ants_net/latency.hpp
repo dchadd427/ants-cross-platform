@@ -1,14 +1,16 @@
 #pragma once
 
-// What a player feels of the network, measured on the player's own machine and shown next to the frame rate (ants_app/latency_corner.hpp):
+// What a player feels of the network, measured on the player's own machine:
 //
-//   ping   the round trip to the host: a Ping goes out once a second, the host answers with a Pong that echoes the nonce and the send time (the messages exist in both
+//   ping   the round trip to the host, shown next to the frame rate while the setting Show ping is on (ants_app/latency_corner.hpp): a Ping goes out once a second, the host
+//          answers with a Pong that echoes the nonce and the send time (the messages exist in both
 //          directions since protocol 1; the room's host and a server's room answer a guest's Ping, and so does a running match, so no protocol change is needed). The
 //          number is the mean of the last five answers, and is not shown (a dash) when the last answer is older than three seconds.
 //   delay  the real time from the moment one of the player's own commands is sent (a guest: written to the link; the host: handed to the sequencer) to the moment the
 //          tick that applies it is executed on this machine, the median of the last five commands. It is the sum of everything between the click and its effect:
-//          the way to the host, the wait for the next 50 ms turn to be sealed, the way back and the jitter buffer of the lock-step runner (lockstep.hpp). It is not shown (a
-//          dash) when the last command was applied more than ten seconds ago: orders are given now and then, so its limit is longer than the ping's.
+//          the way to the host, the wait for the next 50 ms turn to be sealed, the way back and the jitter buffer of the lock-step runner (lockstep.hpp). It is not shown to the
+//          player: the prediction sizes its lead with it (NetGame::expected_command_delay_ms) and the browser measurement reads it. It is empty when the last command was applied
+//          more than ten seconds ago: orders are given now and then, so its limit is longer than the ping's.
 //
 // Pure logic like the sequencer: no clock, no sockets, no simulation. Every call is given the time it needs, the game's millisecond clock (clock.hpp: the differences
 // are wrap-safe). That clock is the clock of the frame, so each end of a measurement is rounded to the frame it happens in (16.7 ms at 60 frames per second): the delay
@@ -184,7 +186,7 @@ public:
     /// True when the last command was applied more than `max_age_ms` before `now_ms` (the frame's clock), or none was: what the number says is no longer about now (a player who
     /// has not given an order for a while, a page that was not run). Orders are given now and then, so the limit is much longer than the ping's.
     bool stale(uint32_t now_ms, uint32_t max_age_ms = kStaleAfterMs) const noexcept { return !measured() || now_ms - last_applied_ms_ > max_age_ms; }
-    static constexpr uint32_t kStaleAfterMs = 10000;      // the corner says "delay -" when the last command was applied more than this long ago
+    static constexpr uint32_t kStaleAfterMs = 10000;      // no delay is given (NetGame::command_delay_ms) when the last command was applied more than this long ago
     /// Commands sent and neither applied nor forgotten yet
     size_t pending() const noexcept { return pending_.size(); }
 
@@ -211,7 +213,7 @@ public:
     static constexpr size_t kOrdersKept = 5;              // the number that is shown is the median of the last five orders
     static constexpr size_t kMaxPending = 16;             // orders whose effect has not been drawn yet; the oldest is forgotten beyond this
     static constexpr uint32_t kForgetAfterMs = 5000;      // an order whose effect is never drawn (the page was hidden, the prediction ended) is forgotten after this long
-    static constexpr uint32_t kStaleAfterMs = 10000;      // the corner says "delay -" when the last order was felt more than this long ago
+    static constexpr uint32_t kStaleAfterMs = 10000;      // no delay is given (Application::order_delay_ms) when the last order was felt more than this long ago
 
     /// An order of the player was taken by the predicted engine in the frame whose clock is `now_ms`
     void on_order(uint32_t now_ms) {

@@ -1042,17 +1042,16 @@ void test_net_overlay() {
     }
 }
 
-// The network's share of the corner: "ping NN ms" and "delay NN ms" next to the frame rate (latency_corner.hpp). The strings, where the readout is drawn at all, the
+// The network's share of the corner: "ping NN ms" next to the frame rate (latency_corner.hpp). The string, where the readout is drawn at all, the
 // layout on each screen at 640 x 480 (the recording renderer measures 6 px per character: the real font's geometry is checked with the application's renderer in
-// test_network_app) and the draw calls: two texts, in the frame rate's style and size, and nothing else.
+// test_network_app) and the draw call: one text, in the frame rate's style and size, and nothing else.
 void test_latency_corner(const assets::AssetArchive& arc) {
-    std::printf("[latency] ping / delay next to the frame rate: strings, which screens, layout, draw calls\n");
+    std::printf("[latency] ping next to the frame rate: string, which screens, layout, draw call\n");
     using NP = net::NetGame::Phase;
-    // the strings; nothing measured yet is "-"
-    check(ping_text(std::nullopt) == "ping -" && delay_text(std::nullopt) == "delay -", "latency: nothing measured is shown as a dash");
+    // the string; nothing measured yet is "-"
+    check(ping_text(std::nullopt) == "ping -", "latency: nothing measured is shown as a dash");
     check(ping_text(0u) == "ping 0 ms" && ping_text(42u) == "ping 42 ms" && ping_text(1234u) == "ping 1234 ms", "latency: \"ping NN ms\"");
-    check(delay_text(0u) == "delay 0 ms" && delay_text(230u) == "delay 230 ms" && delay_text(9999u) == "delay 9999 ms", "latency: \"delay NN ms\"");
-    check(ping_text(10000u) == "ping 9999 ms" && delay_text(4000000000u) == "delay 9999 ms", "latency: a number is cut at four digits (the widest text is bounded)");
+    check(ping_text(10000u) == "ping 9999 ms" && ping_text(4000000000u) == "ping 9999 ms", "latency: a number is cut at four digits (the widest text is bounded)");
 
     // which screens: only the room and the match of a network game; nothing for a game of one machine, whatever the phase and the screen
     for (const NP phase : {NP::Off, NP::Connecting, NP::Room, NP::Loading, NP::Playing, NP::Over, NP::Failed}) {
@@ -1081,70 +1080,59 @@ void test_latency_corner(const assets::AssetArchive& arc) {
     const int32_t spark_x = text_x - 36 - 6;
     const int32_t ver_x = spark_x - probe.get_text_width("v0.0.91", FontSize::Px12) - 6;
     const int32_t text_y = FPS_OVERLAY_SPARK_Y + (FPS_OVERLAY_SPARK_H - text_h) / 2;
-    const int32_t widest = probe.get_text_width(ping_text(LATENCY_SHOWN_MAX_MS), FontSize::Px12) + LATENCY_TEXT_GAP + probe.get_text_width(delay_text(LATENCY_SHOWN_MAX_MS), FontSize::Px12);
+    const int32_t widest = probe.get_text_width(ping_text(LATENCY_SHOWN_MAX_MS), FontSize::Px12);
 
-    // a number never moves the layout: for every ping and delay the choice between the row and the two lines is the same on a screen, and every text stays on the screen
+    // a number never moves the layout: for every ping the choice between the row and the line above is the same on a screen, and the text stays on the screen
     for (const int32_t limit : {LATENCY_LEFT_LIMIT_SETUP, LATENCY_LEFT_LIMIT_MATCH, LATENCY_LEFT_LIMIT_RESULTS}) {
-        const bool first_stacked = layout_latency_corner(probe.get_text_width(ping_text(0u), FontSize::Px12), probe.get_text_width(delay_text(0u), FontSize::Px12), widest, text_h, ver_x, text_y, limit).stacked;
+        const bool first_stacked = layout_latency_corner(probe.get_text_width(ping_text(0u), FontSize::Px12), widest, text_h, ver_x, text_y, limit).stacked;
         bool constant = true;
         bool on_screen = true;
         for (const uint32_t ms : {0u, 9u, 10u, 99u, 100u, 999u, 1000u, 9999u, 20000u}) {
             const std::string p = ping_text(ms);
-            const std::string d = delay_text(ms);
-            const LatencyCornerLayout l = layout_latency_corner(probe.get_text_width(p, FontSize::Px12), probe.get_text_width(d, FontSize::Px12), widest, text_h, ver_x, text_y, limit);
+            const LatencyCornerLayout l = layout_latency_corner(probe.get_text_width(p, FontSize::Px12), widest, text_h, ver_x, text_y, limit);
             constant = constant && l.stacked == first_stacked;
-            on_screen = on_screen && l.ping_x >= 0 && l.delay_x >= 0 && l.ping_x + probe.get_text_width(p, FontSize::Px12) <= 640 && l.delay_x + probe.get_text_width(d, FontSize::Px12) <= 640 &&
-                        l.ping_y >= 0 && l.delay_y + text_h <= 480;
+            on_screen = on_screen && l.ping_x >= 0 && l.ping_x + probe.get_text_width(p, FontSize::Px12) <= 640 && l.ping_y >= 0 && l.ping_y + text_h <= 480;
         }
-        check(constant, "latency: the layout does not change with the numbers");
-        check(on_screen, "latency: every text lies on the 640 x 480 screen");
+        check(constant, "latency: the layout does not change with the number");
+        check(on_screen, "latency: the text lies on the 640 x 480 screen");
     }
 
     // setup screen and results screen: one row to the left of the version, in the corner row, clear of the version and of the left limit
     for (const int32_t limit : {LATENCY_LEFT_LIMIT_SETUP, LATENCY_LEFT_LIMIT_RESULTS}) {
-        const std::string p = ping_text(1234u);
-        const std::string d = delay_text(1234u);
-        const int32_t pw = probe.get_text_width(p, FontSize::Px12);
-        const int32_t dw = probe.get_text_width(d, FontSize::Px12);
-        const LatencyCornerLayout l = layout_latency_corner(pw, dw, widest, text_h, ver_x, text_y, limit);
-        check(!l.stacked && l.ping_y == text_y && l.delay_y == text_y, "latency: where the row has room, both texts stand in the corner row, level with the frame rate");
-        check(l.ping_x >= limit && l.ping_x + pw + LATENCY_TEXT_GAP == l.delay_x && l.delay_x + dw + LATENCY_VERSION_GAP == ver_x,
-              "latency: the row ends 6 px left of the version, its texts are 8 px apart, and it begins at or right of the screen's limit");
+        const int32_t pw = probe.get_text_width(ping_text(1234u), FontSize::Px12);
+        const LatencyCornerLayout l = layout_latency_corner(pw, widest, text_h, ver_x, text_y, limit);
+        check(!l.stacked && l.ping_y == text_y, "latency: where the row has room, the text stands in the corner row, level with the frame rate");
+        check(l.ping_x >= limit && l.ping_x + pw + LATENCY_VERSION_GAP == ver_x, "latency: the row ends 6 px left of the version, and it begins at or right of the screen's limit");
     }
-    {   // the setup screen's prompt box (36 .. 329 wide, its picture to 336) is left of the row for the largest numbers
-        const LatencyCornerLayout l = layout_latency_corner(probe.get_text_width(ping_text(9999u), FontSize::Px12), probe.get_text_width(delay_text(9999u), FontSize::Px12), widest, text_h, ver_x, text_y, LATENCY_LEFT_LIMIT_SETUP);
-        check(!l.stacked && l.ping_x >= MapSelectScreen::LABEL_X + MapSelectScreen::STATUS_W + 4, "latency: on the setup screen even the largest numbers stay right of the prompt box");
+    {   // the setup screen's prompt box (36 .. 329 wide, its picture to 336) is left of the row for the largest number
+        const LatencyCornerLayout l = layout_latency_corner(probe.get_text_width(ping_text(9999u), FontSize::Px12), widest, text_h, ver_x, text_y, LATENCY_LEFT_LIMIT_SETUP);
+        check(!l.stacked && l.ping_x >= MapSelectScreen::LABEL_X + MapSelectScreen::STATUS_W + 4, "latency: on the setup screen even the largest number stays right of the prompt box");
     }
 
-    // match screen: the bottom row is the score boxes, so two lines above the corner row, right aligned with the frame rate and clear of the sparkline plate
+    // match screen: the bottom row is the score boxes, so one line above the corner row, right aligned with the frame rate and clear of the sparkline plate
     {
-        const std::string p = ping_text(42u);
-        const std::string d = delay_text(230u);
-        const int32_t pw = probe.get_text_width(p, FontSize::Px12);
-        const int32_t dw = probe.get_text_width(d, FontSize::Px12);
-        const LatencyCornerLayout l = layout_latency_corner(pw, dw, widest, text_h, ver_x, text_y, LATENCY_LEFT_LIMIT_MATCH);
-        check(l.stacked, "latency: in the match the texts stand on two lines (the score boxes take the row)");
-        check(l.ping_x + pw == LATENCY_RIGHT_EDGE && l.delay_x + dw == LATENCY_RIGHT_EDGE && LATENCY_RIGHT_EDGE == text_x + text_w, "latency: both lines end where the frame rate ends");
-        check(l.ping_y + text_h == l.delay_y && l.delay_y + text_h < FPS_OVERLAY_TOP, "latency: the lines are one above the other, one clear row above the sparkline plate");
+        const int32_t pw = probe.get_text_width(ping_text(42u), FontSize::Px12);
+        const LatencyCornerLayout l = layout_latency_corner(pw, widest, text_h, ver_x, text_y, LATENCY_LEFT_LIMIT_MATCH);
+        check(l.stacked, "latency: in the match the text stands on a line above the row (the score boxes take the row)");
+        check(l.ping_x + pw == LATENCY_RIGHT_EDGE && LATENCY_RIGHT_EDGE == text_x + text_w, "latency: the line ends where the frame rate ends");
+        check(l.ping_y + text_h < FPS_OVERLAY_TOP, "latency: one clear row above the sparkline plate");
         check(l.ping_y >= 436, "latency: and below the chat input box (rows 423 .. 436)");
     }
 
-    // draw calls: the two texts, 12 px, the frame rate's white, and nothing else (no plate, no frame, no sprite)
+    // draw call: the one text, 12 px, the frame rate's white, and nothing else (no plate, no frame, no sprite)
     {
         RecordingRenderer rr(arc);
-        LatencyReadout readout;
-        readout.ping_ms = 57u;
-        draw_latency_corner(rr, readout, ver_x, text_y, LATENCY_LEFT_LIMIT_SETUP);
-        check(rr.texts.size() == 2 && rr.sprites.empty() && rr.fills.empty() && rr.rects.empty() && rr.images.empty(), "latency: the corner draws two texts and nothing else");
-        check(rr.texts.size() == 2 && rr.texts[0].text == "ping 57 ms" && rr.texts[1].text == "delay -", "latency: the texts are ping first, then delay (a dash before the first command)");
-        bool style = rr.texts.size() == 2;
+        draw_latency_corner(rr, 57u, ver_x, text_y, LATENCY_LEFT_LIMIT_SETUP);
+        check(rr.texts.size() == 1 && rr.sprites.empty() && rr.fills.empty() && rr.rects.empty() && rr.images.empty(), "latency: the corner draws one text and nothing else");
+        check(rr.texts.size() == 1 && rr.texts[0].text == "ping 57 ms", "latency: the text is the ping");
+        bool style = rr.texts.size() == 1;
         for (const auto& t : rr.texts) style = style && t.size == FontSize::Px12 && t.color.r == 255 && t.color.g == 255 && t.color.b == 255 && t.color.a == 255;
         check(style, "latency: in the frame rate's size (12 px) and color (white)");
         RecordingRenderer match(arc);
-        readout.delay_ms = 230u;
-        draw_latency_corner(match, readout, ver_x, text_y, LATENCY_LEFT_LIMIT_MATCH);
-        check(match.texts.size() == 2 && match.texts[0].text == "ping 57 ms" && match.texts[1].text == "delay 230 ms" && match.texts[0].y < match.texts[1].y && match.texts[1].y < text_y,
-              "latency: in the match the two lines stand above the corner row");
+        draw_latency_corner(match, std::nullopt, ver_x, text_y, LATENCY_LEFT_LIMIT_MATCH);
+        check(match.texts.size() == 1 && match.texts[0].text == "ping -" && match.texts[0].y < text_y, "latency: in the match the line stands above the corner row (a dash before the first answer)");
+        for (const auto& t : rr.texts) check(t.text.find("delay") == std::string::npos, "latency: no text of the corner says delay");
+        for (const auto& t : match.texts) check(t.text.find("delay") == std::string::npos, "latency: no text of the match's corner says delay");
     }
 }
 

@@ -8,10 +8,10 @@ window's player giving its orders with the mouse (a rubber band over the hill, t
 player now and then too, so that the first one has other players' orders to correct for. The second window always has the page's address as it is (the prediction is on by default):
 
   * the first match with nothing said on the first window's address: the prediction is ON (the game says so through its `ants_probe`, src/ants_app/application.cpp), it predicted the
-    orders that were given and never went into a cool-down, the corner's "delay" (what the click FEELS: the frame that took it to the frame that shows it) is under 60 ms while the
+    orders that were given and never went into a cool-down, the felt delay (what the click FEELS: the frame that took it to the frame that shows it) is under 60 ms while the
     network's delay (the confirmed engine's, which the picture no longer waits for) is what it always was and larger (the second window predicts too);
   * the second match with ?prediction=off on the first window's address (the second window still predicts: a window that predicts and a window that does not): the prediction is OFF,
-    nothing was predicted, and the corner's delay is the network's;
+    nothing was predicted, and the delay of an order is the network's;
   * in both: the room is still running with both players at the end, and the state hashes that the two games report (the page posts one every 100 ticks on the broadcast channel
     "ants-sync") are equal tick for tick (the confirmed matches are identical, whatever a window predicts), and the game's own frame function stays cheap (a mean under 8 ms, a
     frame is 16.7 ms).
@@ -254,7 +254,7 @@ def mean(values):
 
 
 def summary(label, reading):
-    """One line of numbers for a match (the corner's delay, the network's, the frame function's cost, the prediction's counters)."""
+    """One line of numbers for a match (the felt delay, the network's, the frame function's cost, the prediction's counters)."""
     return ("  numbers %s: felt median %s mean %s ms | network median %s mean %s ms | frame mean %d longest %d us over %d frames | predicted %d (second window %d) rebuilds %d | "
             "state %d, cool-downs seen %d | hashes compared %d, mismatches %d"
             % (label, median(reading["corner"]), mean(reading["corner"]), median(reading["network"]), mean(reading["network"]), reading["frame_us"], reading["frame_max_us"],
@@ -332,7 +332,7 @@ def main():
         check(on["cooling"] == 0, "the default: the prediction never went into a cool-down in either window (%d samples)" % on["cooling"])
         check(on["predicted"] >= args.orders * 2 // 3, "the default: the orders were predicted (%d of %d given)" % (on["predicted"], args.orders))
         check(on["other_predicted"] >= 1, "the default: the second window predicted its orders too (%d)" % on["other_predicted"])
-        check(felt_on is not None and felt_on <= 60, "the default: the corner's delay is what the click feels, under 60 ms (median %s ms of %s)" % (felt_on, on["corner"]))
+        check(felt_on is not None and felt_on <= 60, "the default: the delay of an order is what the click feels, under 60 ms (median %s ms of %s)" % (felt_on, on["corner"]))
         check(net_on is not None and net_on >= 40, "the default: the network's delay is still measured and is larger (median %s ms of %s)" % (net_on, on["network"]))
         check(felt_on is not None and net_on is not None and felt_on + 20 <= net_on, "the default: the click is felt sooner than the confirmed engine applies it (%s ms against %s ms)" % (felt_on, net_on))
         check(0 < on["frame_us"] <= 8000, "the default: the game's frame function costs %d us on average (%d frames, the longest %d us)" % (on["frame_us"], on["frames"], on["frame_max_us"]))
@@ -340,7 +340,7 @@ def main():
         check(off["state"] == 0, "?prediction=off: the game says its prediction is off (%d)" % off["state"])
         check(off["predicted"] == 0, "?prediction=off: nothing was predicted (%d)" % off["predicted"])
         check(corner_off is not None and net_off is not None and abs(corner_off - net_off) <= 20 and net_off >= 40,
-              "?prediction=off: the corner's delay is the network's (%s ms against %s ms)" % (corner_off, net_off))
+              "?prediction=off: the delay of an order is the network's (%s ms against %s ms)" % (corner_off, net_off))
         check(0 < off["frame_us"] <= 8000, "?prediction=off: the game's frame function costs %d us on average (%d frames, the longest %d us)" % (off["frame_us"], off["frames"], off["frame_max_us"]))
         print("[web prediction] %d checks, %d failed" % (checks[0], len(failures)))
         return 1 if failures else 0

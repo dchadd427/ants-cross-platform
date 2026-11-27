@@ -106,6 +106,10 @@ struct ApplicationConfig {
     bool hud_art_new{true};
     bool hud_art_given{false};
     std::string hud_art_dir{"assets/hud_art"};
+    /// --show-ping on | off (the settings key `show_ping` when the command line does not say): whether the corner shows "ping NN ms" in the room and the match of a network game (latency_corner.hpp). Off by default.
+    /// `show_ping_given` is true when the command line said it (the settings key then does not count, and it is not written).
+    bool show_ping{false};
+    bool show_ping_given{false};
     bool headless{false};
     std::string chd_path{"Original-Ants/ants.chd"};
     std::string maps_dir{"Original-Ants/Maps"};     // the folder whose `*.lvl` files are the map list (the original searches its Maps folder)
@@ -514,8 +518,8 @@ public:
     void set_map_fetcher(std::unique_ptr<MapFetcher> fetcher) { map_fetcher_ = std::move(fetcher); }
     /// What the player feels of an order while the prediction is on, from the frame that took it to the end of the frame that shows it (net::FeltDelayMeter); public for the tests
     const net::FeltDelayMeter& felt_delay() const noexcept { return felt_delay_; }
-    /// The number that the corner's "delay" shows now (nothing: a dash): what the player feels of an order while the prediction is on, the network's delay otherwise
-    std::optional<uint32_t> corner_delay_ms() const;
+    /// The delay of the player's orders as the browser measurement of the prediction reads it (nothing: a dash): what the player feels of an order while the prediction is on, the network's delay otherwise
+    std::optional<uint32_t> order_delay_ms() const;
 
     /// A page that is not drawn (a hidden or minimised browser tab, the web build) runs no frames, and the browser slows its timers: but the page's WebSocket events still
     /// arrive. So while the page is hidden a ROOM or a MATCH of the network is driven by those events instead of by the frame loop: every message of the game server wakes
@@ -804,7 +808,7 @@ private:
     std::unique_ptr<net::P2pTransport> p2p_;           // the browser's data channels (protocol 26; none in a native build); declared before net_, which uses it and ends first
     std::unique_ptr<net::NetGame> net_;
     net::CueRouter cue_router_;                           // which of the two engines each cue is heard from (a match of the network that predicts); reset with every match
-    net::FeltDelayMeter felt_delay_;                      // what the player feels of an order while the prediction is on (the corner's "delay"); reset with every match
+    net::FeltDelayMeter felt_delay_;                      // what the player feels of an order while the prediction is on (order_delay_ms); reset with every match
     uint64_t prediction_cooldowns_reported_{0};           // the cool-downs of this match's prediction that the console has said so of
     uint64_t orders_seen_{0};                             // the orders that the prediction has taken and the felt delay has been told of
     double net_time_ms_{0.0};
@@ -950,7 +954,7 @@ private:
     NetOverlayMetrics net_overlay_metrics(const NetOverlayLine& line) const;    // the renderer's width of every text of the overlay
     bool handle_vote_key(const SDL_KeyboardEvent& key);   // F2 / F3 while a vote is open
     bool handle_vote_mouse(const SDL_MouseButtonEvent& button);   // a click on a button of the vote block
-    void render_latency_corner(int32_t version_x, int32_t text_y, const CornerPlate& plate);       // "ping NN ms" / "delay NN ms" next to the frame rate, in a room and a match of a network game
+    void render_latency_corner(int32_t version_x, int32_t text_y, const CornerPlate& plate);       // "ping NN ms" next to the frame rate, in a room and a match of a network game, while Show ping is on
     void render_connections();                            // the list of connections over the map view of a match of a network game, when it is open (connections_overlay.hpp)
     bool handle_connections_mouse(const SDL_MouseButtonEvent& button);   // a press and a release on the corner's ping text open and close the list (nothing of it reaches the map)
     std::optional<LatencyCornerLayout> last_latency_layout_;                                         // where the last frame put the network's readout (none: it drew none)

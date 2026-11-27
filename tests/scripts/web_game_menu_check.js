@@ -195,7 +195,7 @@ function makeDocument() {
 function makeGame(json) {
     const g = {
         where: 0, needsAnswer: 0, leave: 2, opened: false, calls: [],
-        values: { 1: 100, 2: 65, 3: 99, 4: 0, 8: 0, 9: 50, 10: 1, 11: 1, 15: 0, 16: 1 },
+        values: { 1: 100, 2: 65, 3: 99, 4: 0, 8: 0, 9: 50, 10: 1, 11: 1, 15: 0, 16: 1, 18: 0 },
         describes: 0, saves: [],
     };
     g.module = {
@@ -501,7 +501,7 @@ const outsideTouch = (() => { const o = makePage({ touch: true, touchKeys: true 
     p.game.calls.length = 0;
     p.tab('video');
     const video = p.qa('[role=radiogroup]');
-    expect('the Video section: the mouse, the two rows of the ant health, the damage and heal numbers and the HUD art are button groups (the picture\'s shape is a dropdown)', video.map((g) => g.children.map((b) => b.textContent)), [['Locked', 'Free'], ['Hurt ants', 'All ants', 'Off'], ['Bar', 'Number'], ['On', 'Off'], ['New', 'Classic']]);
+    expect('the Video section: the mouse, the two rows of the ant health, the damage and heal numbers, Show ping and the HUD art are button groups (the picture\'s shape is a dropdown)', video.map((g) => g.children.map((b) => b.textContent)), [['Locked', 'Free'], ['Hurt ants', 'All ants', 'Off'], ['Bar', 'Number'], ['On', 'Off'], ['On', 'Off'], ['New', 'Classic']]);
     const dropdown = p.qa('.pick-select');
     expect('one dropdown in the panel: the picture\'s shape, the page\'s picker (a button), in the row of its own', [dropdown.length, dropdown[0].tagName, dropdown[0].parentNode.className + '/' + dropdown[0].parentNode.parentNode.className, dropdown[0].parentNode.parentNode.parentNode.querySelector('.gm-name').textContent], [1, 'button', 'pick/gm-ctl gm-pick', 'Picture shape']);
     ok('...no native select is in the panel', !p.q('select') && p.qa('option').length === 0);
@@ -545,6 +545,11 @@ const outsideTouch = (() => { const o = makePage({ touch: true, touchKeys: true 
     expect('Off is row 16, value 0, shown pressed in, and kept at once', [p.game.calls[5], video[3].children.map((b) => b.getAttribute('aria-checked')), p.game.saves[p.game.saves.length - 1]], [['set', 16, 0], ['false', 'true'], [16, 0, 1]]);
     video[3].children[0].click();
     expect('On is value 1 of row 16', [p.game.calls[6], video[3].children.map((b) => b.getAttribute('aria-checked'))], [['set', 16, 1], ['true', 'false']]);
+    expect('Show ping is the row of its name, Off (value 0) by default, a switch after Damage & heal numbers and before the HUD art, tagged new', [p.qa('.gm-name').map((n) => n.textContent).filter((t) => /^(Damage|Show ping|HUD)/.test(t)), video[4].children.map((b) => b.getAttribute('aria-checked'))], [['Damage & heal numbers', 'Show ping', 'HUD art'], ['false', 'true']]);
+    video[4].children[0].click();
+    expect('On is row 18, value 1, shown pressed in, and kept at once', [p.game.calls[7], video[4].children.map((b) => b.getAttribute('aria-checked')), p.game.saves[p.game.saves.length - 1]], [['set', 18, 1], ['true', 'false'], [18, 1, 1]]);
+    video[4].children[1].click();
+    expect('Off is value 0 of row 18', [p.game.calls[8], video[4].children.map((b) => b.getAttribute('aria-checked'))], [['set', 18, 0], ['false', 'true']]);
 
     p.game.calls.length = 0;
     const fsButton = p.qa('.gm-act')[0];

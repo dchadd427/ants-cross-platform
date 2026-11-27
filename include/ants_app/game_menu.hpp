@@ -14,7 +14,7 @@ namespace ants::app::game_menu {
 // The settings menu that Esc opens in a match (docs/GAME_MENU.md): the model, with no window and no SDL, so that a test can run it. It is the ONE list of rows (what a row is called,
 // what it says, its range and default, which screens show it) that every skin of the menu draws: the page's panel (web/game_menu.js) gets it as one JSON text from describe_json(), and a skin of the
 // desktop app can read the same table. The values live where they always did (the original's options window, the zoom, the picture's shape, the fullscreen of the page): a row names its value, the
-// skin shows it and asks the game to change it. Six values are new: Master volume, Mute, the two of the ant health marks, the damage and heal numbers and the HUD art, kept in MenuSettings.
+// skin shows it and asks the game to change it. Seven values are new: Master volume, Mute, the two of the ant health marks, the damage and heal numbers, Show ping and the HUD art, kept in MenuSettings.
 
 enum RowId : int {
     kMaster = 1,            // Master volume: multiplies every sound and the music; the original's Sound Volume and Music Volume stay as they are
@@ -34,6 +34,7 @@ enum RowId : int {
     kHealthStyle = 15,      // what the mark looks like (Bar, Number: health::Style), remembered
     kHealthChanges = 16,    // the damage and heal numbers over the ants (On, Off), remembered; no key
     kHudArt = 17,           // the look of the match screen's frame, buttons and pedestals (New, Classic: hud_art.hpp), remembered; no key
+    kShowPing = 18,         // "ping NN ms" in the corner of a network game (On, Off: latency_corner.hpp), remembered; no key; in a match of a seat, not in a recording
 };
 
 // What the skin may ask of the game besides reading and changing a row (ants_menu_do)
@@ -100,11 +101,12 @@ struct MenuSettings {
     health::Setting ant_health{};   // which ants wear a mark and how: hurt ants, a bar, for everybody until they choose
     bool health_changes{true};      // the damage and heal numbers (docs/VIEW_AND_HUD.md, "Damage and heal numbers"): on until a player switches them off
     bool hud_art_new{true};         // the HUD art (docs/VIEW_AND_HUD.md, "HUD art"): the new pictures until a player chooses the original's own
+    bool show_ping{false};          // "ping NN ms" in the corner of a network game (docs/MULTIPLAYER.md): off until a player switches it on
 
-    static const char* key(int row_id) noexcept;                        // "master", "mute", "ant_health", "ant_health_style", "health_changes", "hud_art" ("" for any other row)
+    static const char* key(int row_id) noexcept;                        // "master", "mute", "ant_health", "ant_health_style", "health_changes", "show_ping", "hud_art" ("" for any other row)
     /// An old `hp_numbers=off` (the numbers that this setting replaces) is read as Off when `ant_health` was never written; every other old value, and none, is the default (hurt ants, a bar)
     void load(const ConfigStore& store);
-    void write(ConfigStore& store, int row_id) const;                   // writes one of the six
+    void write(ConfigStore& store, int row_id) const;                   // writes one of the seven
     /// The gain that master and mute give the whole mix: 0 when muted, else master (99 and 100 are the full volume) over 99
     float gain() const noexcept;
 };

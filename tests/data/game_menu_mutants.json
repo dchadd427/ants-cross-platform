@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the settings menu for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the page's script web/game_menu.js against tests/scripts/web_game_menu_check.js (node, on a strict fake of the DOM), and the game's side (src/ants_app/game_menu.cpp, application_game_menu.cpp, the HUD's Esc, the event loop's gate, the mixer's gain) against tests/test_app/test_game_menu.cpp and the mixer's case 4.5b of test_app_integration. Run from the checkout: tools/mutate.py tests/data/game_menu_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_game_menu.py runs the script's mutants, the scrolling's and the style's on a copy of the files.",
+  "note": "Mutants of the settings menu for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the page's script web/game_menu.js against tests/scripts/web_game_menu_check.js (node, on a strict fake of the DOM), and the game's side (src/ants_app/game_menu.cpp, application_game_menu.cpp, the HUD's Esc, the event loop's gate, the mixer's gain) against tests/test_app/test_game_menu.cpp and the mixer's case 4.5b of test_app_integration, and the corner's ping (Show ping: application_net.cpp, latency_corner.cpp) against N5.29b and N5.103 of test_network_app and test_hud_layout. Run from the checkout: tools/mutate.py tests/data/game_menu_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_game_menu.py runs the script's mutants, the scrolling's and the style's on a copy of the files.",
   "mutants": [
     {
       "id": "held_esc_closes",
@@ -1707,6 +1707,116 @@
       "old": "/* the dimmed screen and the panel */",
       "new": ".rbar.over .gm-bar { position: fixed; top: 8px; right: 8px; }\n\n/* the dimmed screen and the panel */",
       "test": "python3 tests/scripts/test_web_game_menu.py TheStyle"
+    },
+    {
+      "id": "ping_on_when_the_file_is_silent",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "show_ping = store.get_string(key(kShowPing), \"off\", 8) == \"on\";",
+      "new": "show_ping = store.get_string(key(kShowPing), \"on\", 8) != \"off\";",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "ping_not_remembered",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "        case kShowPing:  store.set_string(key(kShowPing), show_ping ? \"on\" : \"off\"); break;\n",
+      "new": "",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "ping_row_on_by_default",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "{kShowPing, \"show_ping\", Section::Video, Kind::Switch, 0, 1, 0,",
+      "new": "{kShowPing, \"show_ping\", Section::Video, Kind::Switch, 0, 1, 1,",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "ping_row_in_recordings",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "kBoth | kShowNew, \"Show ping\"",
+      "new": "kBoth | kShowWatch | kShowNew, \"Show ping\"",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "ping_option_ignored",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "    if (config_.show_ping_given) menu_settings_.show_ping = config_.show_ping;",
+      "new": "",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "ping_change_not_written",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "            menu_settings_.show_ping = value != 0;\n            menu_settings_.write(config_store_, id);\n",
+      "new": "            menu_settings_.show_ping = value != 0;\n",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "ping_other_words_taken",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "        case gm::kShowPing:\n            if (value != 0 && value != 1) return false;                                  // (neither On nor Off)\n",
+      "new": "        case gm::kShowPing:\n",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "ping_list_stays_when_off",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "                connections_open_ = false;\n                connections_press_ = false;\n",
+      "new": "",
+      "build": [
+        "test_network_app"
+      ],
+      "test": "timeout 900 env ANTS_TEST_FILTER=N5.103 ./build/tests/test_app/test_network_app"
+    },
+    {
+      "id": "ping_drawn_when_off",
+      "file": "src/ants_app/application_net.cpp",
+      "old": "if (!network_active() || !menu_settings_.show_ping) return;",
+      "new": "if (!network_active()) return;",
+      "build": [
+        "test_network_app"
+      ],
+      "test": "timeout 900 env ANTS_TEST_FILTER=N5.29b ./build/tests/test_app/test_network_app"
+    },
+    {
+      "id": "delay_text_back",
+      "file": "src/ants_app/latency_corner.cpp",
+      "old": "    renderer.draw_text(ping_text(ping_ms), layout.ping_x, layout.ping_y, white, FontSize::Px12);\n",
+      "new": "    renderer.draw_text(ping_text(ping_ms), layout.ping_x, layout.ping_y, white, FontSize::Px12);\n    renderer.draw_text(\"delay -\", layout.ping_x, layout.ping_y - 14, white, FontSize::Px12);\n",
+      "build": [
+        "test_hud_layout"
+      ],
+      "test": "./build/tests/test_app/test_hud_layout"
+    },
+    {
+      "id": "ping_layout_moves_with_the_number",
+      "file": "src/ants_app/latency_corner.cpp",
+      "old": "layout.stacked = row_right - widest_w < left_limit;",
+      "new": "layout.stacked = (static_cast<void>(widest_w), row_right - ping_w < left_limit);",
+      "build": [
+        "test_hud_layout"
+      ],
+      "test": "./build/tests/test_app/test_hud_layout"
     }
   ]
 }

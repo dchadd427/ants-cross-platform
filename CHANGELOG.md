@@ -29,6 +29,7 @@ Work that is not released yet is written in the same template under a heading th
 ## Next
 
 **For players:**
+- **Show ping.** A new setting in the Video tab of the settings menu, off by default: switched on, the corner of a network game shows "ping NN ms" above the frame rate, and a click on it opens the list of connections as before. Off, the corner is the frame rate and the version only. The corner no longer shows "delay". On the desktop it is `show_ping=on` in the settings file or `--show-ping on` for one run.
 - The Legal page has a new part, "Counting visits": no cookie and no address kept, and a browser that asks not to be tracked is counted as one visit and its country ([`docs/ANALYTICS.md`](docs/ANALYTICS.md)).
 
 **For operators:**
