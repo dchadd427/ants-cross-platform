@@ -1045,7 +1045,7 @@ int main(int argc, char* argv[]) {
         }
     };
 
-    TEST_CASE("LK15 A Whole Match Followed Frame By Frame In The Picture That The Game Draws (Others = Confirmed, The Default): Two People Play 40 s At RTT 180 With Jitter And At RTT 300 And Are Corrected Hundreds Of Times, And Not One Frame Draws Another Player's Ant Anywhere But Where The Confirmed Engine Has It (Never Corrected, Never Slid, Never On Ground That The Fog Covers), While Every Frame Draws The Player's Own Ants As The Predicted Engine Has Them; The Match Is The Referee's") {
+    TEST_CASE("LK15 A Whole Match Followed Frame By Frame In The Picture That The Game Draws (Others = Confirmed, The Default): Two People Play 40 s At RTT 180 With Jitter And At RTT 300 (One Match With Fog), And A Person Plays 40 s Against A Hard Computer Player, And Are Corrected Many Times, And Not One Frame Draws Another Player's Ant Anywhere But Where The Confirmed Engine Has It (Never Corrected, Never Slid, Never On Ground That The Fog Covers), While Every Frame Draws The Player's Own Ants As The Predicted Engine Has Them; The Match Is The Referee's") {
         for (const int rtt : {180, 300}) {
             Params p;
             p.link.rtt_ms = static_cast<uint32_t>(rtt);
@@ -1083,6 +1083,38 @@ int main(int argc, char* argv[]) {
             s.run_ms(2000);
             ASSERT_EQ(s.app().sim().state_hash().total, s.referee_hash());
             ASSERT_FALSE(s.app().net()->desynced() || s.peer().net.desynced());
+        }
+        {                                                                                   // the same against a Hard computer player, whose orders the server sends ahead of their turns (hints): the predicted engine takes them, the picture of the computer player's ants does not
+            Params p;
+            p.seats = 2;
+            p.use_peer = false;
+            ai::BotSpec bot;
+            bot.seat = 1;
+            bot.level = ai::Level::Hard;
+            p.bots.push_back(bot);
+            p.link.rtt_ms = 150;
+            p.link.jitter_ms = 30;
+            p.render = true;
+            p.seed = 73;
+            Session s(p);
+            ASSERT_TRUE(s.begin());
+            Followed f;
+            s.on_frame_end = [&]() { f.look(s); };
+            Players players(s);
+            players.peer = false;
+            players.play(40000);
+            ASSERT_TRUE(s.app().net()->predicting());
+            const net::Prediction::Stats st = s.app().net()->prediction()->stats();
+            std::printf("\n    against a Hard computer player, rtt 150: %d frames; its ants: %d drawn, %d off the confirmed engine's, %d slid, %d where the predicted engine has them elsewhere; the player's own: %d drawn, %d off the predicted engine's; %d missing; %llu hints taken",
+                        f.frames, f.others_drawn, f.others_off, f.others_slid, f.others_ahead, f.own_drawn, f.own_off, f.missing, static_cast<unsigned long long>(st.hints_accepted));
+            ASSERT_TRUE(f.frames > 1500 && f.others_drawn > 5000 && f.own_drawn > 5000);
+            ASSERT_TRUE(st.hints_accepted > 10u);                                           // (the server's hints reached the prediction: its engine moved the computer player's ants by them)
+            ASSERT_TRUE(f.others_ahead > 500);
+            ASSERT_EQ(f.others_off, 0);
+            ASSERT_EQ(f.others_slid, 0);
+            ASSERT_EQ(f.own_off, 0);
+            ASSERT_EQ(f.missing, 0);
+            s.on_frame_end = nullptr;
         }
         std::printf("\n");
     } TEST_END();
@@ -1392,79 +1424,82 @@ int main(int argc, char* argv[]) {
         }
     } TEST_END();
 
-    TEST_CASE("LK8 Four People In Teams With Fog Of War (Seats 0 And 1 Against 2 And 3, Round Trips Of 120 And 50 ms): Everything The Picture Of The Application Explores Is Explored By The Confirmed Engine When It Gets To That Tick, The Orders Of Its Ally Are Corrections Like Any Other's, And The Match Ends In The Referee's State With A Recording That Plays To It") {
-        Params p;
-        p.map = "SHORT.LVL";
-        p.link.rtt_ms = 120;
-        p.link.jitter_ms = 30;
-        p.peer_link.rtt_ms = 50;
-        p.peer_link.jitter_ms = 10;
-        p.seats = 4;
-        p.peers = 3;
-        p.fog = true;
-        p.teams = sim::StartTeams{true, 0, 1};
-        p.render = true;
-        p.seed = 61;
-        Session s(p);
-        ASSERT_TRUE(s.begin());
-        std::map<uint64_t, std::vector<uint8_t>> shown;                                      // the ground that the picture had explored at each tick that it showed
-        std::map<uint64_t, std::vector<std::pair<int32_t, int32_t>>> shown_enemies;           // the tiles of the ants of other teams that the picture drew at each tick that it showed
-        int checked = 0;
-        int explored_by_picture_only = 0;
-        int enemies_drawn_early = 0;
-        int enemies_drawn_unexplored = 0;
-        int enemy_frames = 0;
-        s.on_frame_end = [&]() {
-            const sim::SimulationEngine& view = s.app().view_sim();
-            const sim::WorldState& drawn = s.app().shown_world();                              // (the world that the frame draws: with others = confirmed the other players' ants are the confirmed engine's)
-            const uint64_t tick = view.current_tick();
-            if (shown.find(tick) == shown.end()) {
-                shown[tick] = drawn.fog_revealed;
-                auto& tiles = shown_enemies[tick];
-                for (const auto& a : drawn.ants) {
-                    if (a.player_id > 1 && ants::app::health::ant_drawn(drawn, 0, a)) tiles.emplace_back(a.tile_x, a.tile_y);       // (seats 2 and 3: the ally, seat 1, is always drawn)
+    TEST_CASE("LK8 Four People In Teams With Fog Of War (Seats 0 And 1 Against 2 And 3, Round Trips Of 120 And 50 ms): Everything The Picture Of The Application Explores Is Explored By The Confirmed Engine When It Gets To That Tick, The Orders Of Its Ally Are Corrections Like Any Other's, And The Match Ends In The Referee's State With A Recording That Plays To It (In Both Pictures: In The Plain One Because The Predicted Engine Adopts The Confirmed Engine's Explored Ground, In The Default One Because The Picture Takes It From There)") {
+        for (const bool others : {false, true}) {
+            Params p;
+            p.others_confirmed = others;
+            p.map = "SHORT.LVL";
+            p.link.rtt_ms = 120;
+            p.link.jitter_ms = 30;
+            p.peer_link.rtt_ms = 50;
+            p.peer_link.jitter_ms = 10;
+            p.seats = 4;
+            p.peers = 3;
+            p.fog = true;
+            p.teams = sim::StartTeams{true, 0, 1};
+            p.render = true;
+            p.seed = 61;
+            Session s(p);
+            ASSERT_TRUE(s.begin());
+            std::map<uint64_t, std::vector<uint8_t>> shown;                                      // the ground that the picture had explored at each tick that it showed
+            std::map<uint64_t, std::vector<std::pair<int32_t, int32_t>>> shown_enemies;           // the tiles of the ants of other teams that the picture drew at each tick that it showed
+            int checked = 0;
+            int explored_by_picture_only = 0;
+            int enemies_drawn_early = 0;
+            int enemies_drawn_unexplored = 0;
+            int enemy_frames = 0;
+            s.on_frame_end = [&]() {
+                const sim::SimulationEngine& view = s.app().view_sim();
+                const sim::WorldState& drawn = s.app().shown_world();                              // (the world that the frame draws: with others = confirmed the other players' ants are the confirmed engine's)
+                const uint64_t tick = view.current_tick();
+                if (shown.find(tick) == shown.end()) {
+                    shown[tick] = drawn.fog_revealed;
+                    auto& tiles = shown_enemies[tick];
+                    for (const auto& a : drawn.ants) {
+                        if (a.player_id > 1 && ants::app::health::ant_drawn(drawn, 0, a)) tiles.emplace_back(a.tile_x, a.tile_y);       // (seats 2 and 3: the ally, seat 1, is always drawn)
+                    }
                 }
-            }
-            for (const auto& a : drawn.ants) {                                                 // an ant of another team that the frame draws stands on ground that the confirmed engine has explored THIS very moment (the picture is no tick ahead of it)
-                if (a.player_id > 1 && ants::app::health::ant_drawn(drawn, 0, a)) {
-                    ++enemy_frames;
-                    if (!s.app().sim().get_world_state().is_tile_revealed(a.tile_x, a.tile_y)) ++enemies_drawn_unexplored;
+                for (const auto& a : drawn.ants) {                                                 // an ant of another team that the frame draws stands on ground that the confirmed engine has explored THIS very moment (the picture is no tick ahead of it)
+                    if (a.player_id > 1 && ants::app::health::ant_drawn(drawn, 0, a)) {
+                        ++enemy_frames;
+                        if (!s.app().sim().get_world_state().is_tile_revealed(a.tile_x, a.tile_y)) ++enemies_drawn_unexplored;
+                    }
                 }
-            }
-            const uint64_t now_tick = s.app().sim().current_tick();
-            const auto it = shown.find(now_tick);                                              // the confirmed engine has got to a tick that the picture showed some frames ago
-            if (it == shown.end()) return;
-            const sim::WorldState& confirmed_world = s.app().sim().get_world_state();
-            const std::vector<uint8_t>& confirmed = confirmed_world.fog_revealed;
-            ++checked;
-            for (size_t i = 0; i < it->second.size() && i < confirmed.size(); ++i) {
-                if (it->second[i] != 0 && confirmed[i] == 0) ++explored_by_picture_only;
-            }
-            for (const auto& tile : shown_enemies[now_tick]) {                                 // a tile that the picture drew an ant of another team on: the confirmed engine has explored it by now
-                if (!confirmed_world.is_tile_revealed(tile.first, tile.second)) ++enemies_drawn_early;
-            }
-            shown.erase(shown.begin(), std::next(it));
-            shown_enemies.erase(shown_enemies.begin(), shown_enemies.find(now_tick) == shown_enemies.end() ? shown_enemies.begin() : std::next(shown_enemies.find(now_tick)));
-        };
-        Players players(s);
-        players.play(25000);
-        ASSERT_TRUE(players.rounds > 10);
-        ASSERT_TRUE(checked > 300);
-        std::printf("\n    ground explored by the picture and not by the engine at that tick: %d tiles over %d frames; enemy ants drawn on ground that the engine had not explored: %d\n", explored_by_picture_only, checked, enemies_drawn_early);
-        std::printf("    frames of an enemy ant drawn: %d, on ground that the confirmed engine had not explored at that moment: %d\n", enemy_frames, enemies_drawn_unexplored);
-        ASSERT_EQ(enemies_drawn_early, 0);
-        ASSERT_EQ(explored_by_picture_only, 0);                                                // (the picture never explored ground that the engine had not explored when it got to that tick)
-        ASSERT_TRUE(enemy_frames > 0);                                                         // (the fog was lifted in the match: the check was asked)
-        ASSERT_EQ(enemies_drawn_unexplored, 0);                                                // (nothing of another team is drawn that the confirmed engine does not show: not a tick ahead of it either)
-        ASSERT_TRUE(s.app().net()->predicting());
-        ASSERT_EQ(s.app().net()->prediction()->stats().commands_lost, 0u);
-        ASSERT_TRUE(s.run_until([&]() { return s.room_finished(); }, 90000));
-        s.run_ms(1500);
-        ASSERT_EQ(s.app().sim().state_hash().total, s.referee_hash());
-        for (size_t k = 0; k < s.peer_count(); ++k) ASSERT_TRUE(s.app().sim().state_hash() == s.peer(k).sim.state_hash());
-        ASSERT_FALSE(s.app().net()->desynced());
-        std::string why;
-        ASSERT_TRUE(recording_plays_to(s, why));
+                const uint64_t now_tick = s.app().sim().current_tick();
+                const auto it = shown.find(now_tick);                                              // the confirmed engine has got to a tick that the picture showed some frames ago
+                if (it == shown.end()) return;
+                const sim::WorldState& confirmed_world = s.app().sim().get_world_state();
+                const std::vector<uint8_t>& confirmed = confirmed_world.fog_revealed;
+                ++checked;
+                for (size_t i = 0; i < it->second.size() && i < confirmed.size(); ++i) {
+                    if (it->second[i] != 0 && confirmed[i] == 0) ++explored_by_picture_only;
+                }
+                for (const auto& tile : shown_enemies[now_tick]) {                                 // a tile that the picture drew an ant of another team on: the confirmed engine has explored it by now
+                    if (!confirmed_world.is_tile_revealed(tile.first, tile.second)) ++enemies_drawn_early;
+                }
+                shown.erase(shown.begin(), std::next(it));
+                shown_enemies.erase(shown_enemies.begin(), shown_enemies.find(now_tick) == shown_enemies.end() ? shown_enemies.begin() : std::next(shown_enemies.find(now_tick)));
+            };
+            Players players(s);
+            players.play(25000);
+            ASSERT_TRUE(players.rounds > 10);
+            ASSERT_TRUE(checked > 300);
+            std::printf("\n    %s picture: ground explored by the picture and not by the engine at that tick: %d tiles over %d frames; enemy ants drawn on ground that the engine had not explored: %d\n", others ? "default" : "plain", explored_by_picture_only, checked, enemies_drawn_early);
+            std::printf("    frames of an enemy ant drawn: %d, on ground that the confirmed engine had not explored at that moment: %d\n", enemy_frames, enemies_drawn_unexplored);
+            ASSERT_EQ(enemies_drawn_early, 0);
+            ASSERT_EQ(explored_by_picture_only, 0);                                                // (the picture never explored ground that the engine had not explored when it got to that tick)
+            ASSERT_TRUE(enemy_frames > 0);                                                         // (the fog was lifted in the match: the check was asked)
+            ASSERT_EQ(enemies_drawn_unexplored, 0);                                                // (nothing of another team is drawn that the confirmed engine does not show: not a tick ahead of it either)
+            ASSERT_TRUE(s.app().net()->predicting());
+            ASSERT_EQ(s.app().net()->prediction()->stats().commands_lost, 0u);
+            ASSERT_TRUE(s.run_until([&]() { return s.room_finished(); }, 90000));
+            s.run_ms(1500);
+            ASSERT_EQ(s.app().sim().state_hash().total, s.referee_hash());
+            for (size_t k = 0; k < s.peer_count(); ++k) ASSERT_TRUE(s.app().sim().state_hash() == s.peer(k).sim.state_hash());
+            ASSERT_FALSE(s.app().net()->desynced());
+            std::string why;
+            ASSERT_TRUE(recording_plays_to(s, why));
+        }
     } TEST_END();
 
     TEST_CASE("LK9 Soak (ANTS_LINK_SOAK=N sessions of a few minutes over links of every kind, with bots, teams and fog where they go together; skipped without it): The Confirmed Match Is The Referee's, The Recording Plays To It, Nothing Is Lost, The Prediction Never Gives Up, And A Rebuild Is Cheap") {
