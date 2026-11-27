@@ -28,11 +28,15 @@ START_MARKERS = {"BSTART": "black", "GSTART": "green", "USTART": "blue", "RSTART
 HILL_TEAMS = {"BLACKHILL": "black", "GREENHILL": "green", "BLUEHILL": "blue", "REDHILL": "red"}
 
 MAPS_TO_EXPORT = [
-    ("treasure", "Treasure Map", "Original-Ants/Maps/TREASURE.LVL"),
-    ("popcorn",  "Popcorn",      "Community-Maps/POPcOrN.lvl"),
-    ("tiny",     "Tiny Arena",   "Original-Ants/Maps/TINY.LVL"),
-    ("small",    "Small Map",    "Original-Ants/Maps/SMALL.LVL"),
-    ("islands",  "Islands",      "Original-Ants/Maps/ISLANDS.LVL"),
+    ("treasure",   "Treasure Map", "Original-Ants/Maps/TREASURE.LVL"),
+    ("gauntlet",   "Gauntlet",     "Original-Ants/Maps/GAUNTLET.LVL"),
+    ("medium",     "Medium",       "Original-Ants/Maps/MEDIUM.LVL"),
+    ("small",      "Small Map",    "Original-Ants/Maps/SMALL.LVL"),
+    ("tiny",       "Tiny Arena",   "Original-Ants/Maps/TINY.LVL"),
+    ("islands",    "Islands",      "Original-Ants/Maps/ISLANDS.LVL"),
+    ("popcorn",    "Popcorn",      "Community-Maps/POPcOrN.lvl"),
+    ("bombz_away", "Bombz Away",   "Community-Maps/Bombz Away.lvl"),
+    ("hellraiser", "Hellraiser",   "Community-Maps/HELLRAISER.lvl"),
 ]
 
 # Canonical RGB centroids (0..255) for the 5 original 1998 ground terrain materials

@@ -6,7 +6,7 @@
     DEG, TEAMS, validLighting, wrapAngleDeg, AntRenderer, installToolbarRovingTabindex,
   } = window.__antRender;
   const { buildCarriedLunchboxMat, buildHeistsForMap, updateHeists } = window.__demoHeist;
-  const { buildBorderGrassMesh } = window.__demoBorder;
+  const { buildBorderGrassMesh, buildBatchedMapBombsMesh } = window.__demoBorder;
   const { buildGroundScatterMesh, buildAtmoParticles } = window.__demoAtmo;
   const { ACTION_ANT_CLASSES, ACTION_ITEM_IDS, buildActionVignettes, updateActionVignettes } = window.__demoActions;
 
@@ -78,6 +78,35 @@
       { id: "heist",    label: "Thief Base Heist",  target: [24.1, 0.35, 24.8], zoom: 0.44 },
       { id: "full",     label: "Full 60×60 Map",    target: [30.0, 0.2, 30.0], zoom: 2.55 },
     ],
+    gauntlet: [
+      { id: "center",   label: "Toy Gauntlet",      target: [30.0, 0.35, 30.0], zoom: 0.96 },
+      { id: "dropper",  label: "Power-Up Dropper",  target: [ 3.5, 1.5,   6.2], zoom: 0.56 },
+      { id: "deposit",  label: "Food Deposit",      target: [ 9.5, 0.45, 31.0], zoom: 0.42 },
+      { id: "jello",    label: "Jello & Feast",     target: [48.5, 0.45, 48.5], zoom: 0.68 },
+      { id: "bridge",   label: "Swimmer Bridge",    target: [53.5, 0.25, 41.5], zoom: 0.46 },
+      { id: "heist",    label: "Thief Base Heist",  target: [31.2, 0.35,  9.5], zoom: 0.44 },
+      { id: "full",     label: "Full 60×60 Map",    target: [30.0, 0.2, 30.0], zoom: 2.55 },
+    ],
+    medium: [
+      { id: "center",   label: "Center Dropper",    target: [29.5, 1.3, 29.0], zoom: 0.72 },
+      { id: "deposit",  label: "Food Deposit",      target: [29.0, 0.45, 11.2], zoom: 0.42 },
+      { id: "bridge",   label: "Swimmer Bridge",    target: [30.5, 0.25, 41.0], zoom: 0.46 },
+      { id: "heist",    label: "Thief Base Heist",  target: [30.2, 0.35, 48.2], zoom: 0.44 },
+      { id: "full",     label: "Full 60×60 Map",    target: [30.0, 0.2, 30.0], zoom: 2.55 },
+    ],
+    bombz_away: [
+      { id: "center",   label: "Minefield Arena",   target: [15.5, 0.3, 15.5], zoom: 1.25 },
+      { id: "bomber",   label: "Bomber Blast",      target: [15.5, 0.35, 15.5], zoom: 0.40 },
+      { id: "deposit",  label: "Food Deposit",      target: [24.2, 0.45, 24.4], zoom: 0.42 },
+      { id: "full",     label: "Full 31×31 Map",    target: [15.5, 0.2, 15.5], zoom: 1.48 },
+    ],
+    hellraiser: [
+      { id: "center",   label: "Bolt Fortress",     target: [15.5, 0.3, 15.5], zoom: 1.28 },
+      { id: "bomber",   label: "Bomber Blast",      target: [15.5, 0.35,  8.5], zoom: 0.40 },
+      { id: "deposit",  label: "Food Deposit",      target: [24.2, 0.45, 24.4], zoom: 0.42 },
+      { id: "heist",    label: "Thief Base Heist",  target: [ 6.4, 0.35,  6.6], zoom: 0.44 },
+      { id: "full",     label: "Full 31×31 Map",    target: [15.5, 0.2, 15.5], zoom: 1.48 },
+    ],
   };
 
   // Extra active ants placed around Treasure Map's signature landmarks (strict 8-way tile grid paths!).
@@ -117,7 +146,7 @@
     { cls: "combat", team: "black", clip: "Attack",    x:  6.5, z: 28.5, face: [5.5, 29.5], phase: 0.55 },
   ];
 
-  const MAP_ORDER = ["treasure", "popcorn", "tiny", "small", "islands"];
+  const MAP_ORDER = ["treasure", "gauntlet", "medium", "small", "tiny", "islands", "popcorn", "bombz_away", "hellraiser"];
   const START_CLASS_CYCLE = ["worker", "combat", "worker", "thief", "bomber", "fire"];
 
   // --- Strict 8-Way Compass Movement (Exact 45-Degree Grid Legs + Smooth Corner Turning & Natural Cadence) ---
@@ -564,10 +593,13 @@
         renderer.uploadMaskAtlas(maskImg);
       }
 
+      const bombSpecs = mapData.objects.filter((o) => o.id.endsWith("bomb"));
+      const batchBombs = bombSpecs.length > 40;
       const itemEntries = [];
       for (let i = 0; i < mapData.objects.length; i++) {
         const spec = mapData.objects[i];
-        const useAnimatedDropper = spec.id === "flower1" && (mapData.id === "small" || mapData.id === "islands");
+        if (batchBombs && spec.id.endsWith("bomb")) continue;
+        const useAnimatedDropper = spec.id === "flower1" && (mapData.id === "small" || mapData.id === "islands" || mapData.id === "gauntlet" || mapData.id === "medium");
         const model = await modelCache.get(`item:${useAnimatedDropper ? "dflower1" : spec.id}`);
         const radius = 0.65 * Math.max(model.size[0], model.size[2], 0.8) * spec.s;
         const inst = {
@@ -586,9 +618,11 @@
         if (activeMap.scene.groundScatter) activeMap.scene.groundScatter.dispose();
         if (activeMap.scene.atmoParticles) activeMap.scene.atmoParticles.dispose();
       }
+      if (activeMap && activeMap.batchedBombs) activeMap.batchedBombs.dispose();
       if (activeMap && activeMap.actions && activeMap.actions.bridgeModel) {
         activeMap.actions.bridgeModel.dispose();
       }
+      const batchedBombs = batchBombs ? buildBatchedMapBombsMesh(renderer.gl, bombSpecs) : null;
       const borderGrass = buildBorderGrassMesh(renderer.gl, mapData, mapsCatalog.water_tile_index);
       const groundScatter = buildGroundScatterMesh(renderer.gl, mapData, mapsCatalog.water_tile_index);
       const atmoParticles = buildAtmoParticles(renderer.gl, mapData);
@@ -637,6 +671,7 @@
       activeMap = {
         mapData,
         itemEntries,
+        batchedBombs,
         antEntries,
         heists,
         actions,
@@ -711,6 +746,7 @@
       updateActionVignettes(activeMap.actions, t, state.patrols, tx, tz, visHalfSpan, visible, ripples, dynGlows);
     }
 
+    if (activeMap.batchedBombs) visible.push(activeMap.batchedBombs.inst);
     for (let i = 0; i < itemEntries.length; i++) {
       const e = itemEntries[i];
       if (Math.abs(e.x - tx) > visHalfSpan + e.radius || Math.abs(e.z - tz) > visHalfSpan + e.radius) continue;

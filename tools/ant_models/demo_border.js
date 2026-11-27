@@ -157,7 +157,128 @@
     };
   }
 
+  // Single-mesh 2-draw-call GPU batch for dense minefield maps like `Bombz Away` (896 bombs -> ~130k tris vs 7.1M tris!).
+  function buildBatchedMapBombsMesh(gl, bombSpecs) {
+    const { mat4Identity } = window.__antGltf;
+    const body = { pos: [], nrm: [], uv: [], col: [], idx: [] };
+    const spark = { pos: [], nrm: [], uv: [], col: [], idx: [] };
+    const teamRgb = {
+      blackbomb: [0.028, 0.030, 0.038],
+      redbomb:   [0.420, 0.032, 0.030],
+      bluebomb:  [0.038, 0.115, 0.440],
+      greenbomb: [0.048, 0.285, 0.055],
+    };
+
+    function pushSphere(dst, cx, cy, cz, rx, ry, rz, uSegs, vSegs, rgb) {
+      const base = dst.pos.length / 3;
+      for (let v = 0; v <= vSegs; v++) {
+        const phi = (v / vSegs) * Math.PI;
+        const sp = Math.sin(phi), cp = Math.cos(phi);
+        for (let u = 0; u <= uSegs; u++) {
+          const th = (u / uSegs) * Math.PI * 2;
+          const nx = sp * Math.cos(th), ny = cp, nz = sp * Math.sin(th);
+          dst.pos.push(cx + nx * rx, cy + ny * ry, cz + nz * rz);
+          dst.nrm.push(nx, ny, nz);
+          dst.uv.push(u / uSegs, v / vSegs);
+          dst.col.push(rgb[0], rgb[1], rgb[2]);
+        }
+      }
+      const stride = uSegs + 1;
+      for (let v = 0; v < vSegs; v++) {
+        for (let u = 0; u < uSegs; u++) {
+          const a = base + v * stride + u, b = a + 1, c = a + stride, d = c + 1;
+          dst.idx.push(a, b, c, b, d, c);
+        }
+      }
+    }
+
+    function pushCyl(dst, x0, y0, z0, x1, y1, z1, r0, r1, segs, rgb) {
+      const base = dst.pos.length / 3;
+      for (let s = 0; s < segs; s++) {
+        const a = (s / segs) * Math.PI * 2;
+        const ca = Math.cos(a), sa = Math.sin(a);
+        dst.pos.push(x0 + ca * r0, y0, z0 + sa * r0, x1 + ca * r1, y1, z1 + sa * r1);
+        dst.nrm.push(ca, 0.2, sa, ca, 0.2, sa);
+        dst.uv.push(0, 0, 1, 1);
+        dst.col.push(rgb[0], rgb[1], rgb[2], rgb[0], rgb[1], rgb[2]);
+      }
+      for (let s = 0; s < segs; s++) {
+        const ns = (s + 1) % segs;
+        const a = base + s * 2, b = a + 1, c = base + ns * 2, d = c + 1;
+        dst.idx.push(a, c, b, b, c, d);
+      }
+    }
+
+    for (let i = 0; i < bombSpecs.length; i++) {
+      const sp = bombSpecs[i];
+      const s = sp.s || 0.715;
+      const rgb = teamRgb[sp.id] || teamRgb.blackbomb;
+      const r = 0.245 * s;
+      // Glossy metallic cannonball body + collar + curved braided fuse + glowing spark star
+      pushSphere(body, sp.x, r * 0.96, sp.z, r, r * 0.96, r, 8, 6, rgb);
+      pushCyl(body, sp.x, r * 1.84, sp.z, sp.x, r * 2.15, sp.z, r * 0.34, r * 0.30, 6, [0.16, 0.17, 0.20]);
+      const fx = sp.x + 0.08 * s, fy = r * 2.75, fz = sp.z + 0.04 * s;
+      pushCyl(body, sp.x, r * 2.12, sp.z, fx, fy, fz, r * 0.11, r * 0.08, 5, [0.42, 0.32, 0.20]);
+      pushSphere(spark, fx, fy + 0.02 * s, fz, 0.065 * s, 0.065 * s, 0.065 * s, 5, 4, [1.0, 0.78, 0.20]);
+    }
+
+    const bufs = [];
+    const vaos = [];
+    function uploadPrim(dst, mat) {
+      const vao = gl.createVertexArray();
+      gl.bindVertexArray(vao);
+      const up = (target, data, loc, sz) => {
+        const b = gl.createBuffer(); gl.bindBuffer(target, b); gl.bufferData(target, data, gl.STATIC_DRAW);
+        if (loc !== undefined) { gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, sz, gl.FLOAT, false, 0, 0); }
+        bufs.push(b);
+      };
+      up(gl.ARRAY_BUFFER, new Float32Array(dst.pos), 0, 3);
+      up(gl.ARRAY_BUFFER, new Float32Array(dst.nrm), 1, 3);
+      up(gl.ARRAY_BUFFER, new Float32Array(dst.uv), 2, 2);
+      up(gl.ARRAY_BUFFER, new Float32Array(dst.col), 3, 3);
+      up(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(dst.idx));
+      gl.bindVertexArray(null);
+      vaos.push(vao);
+      return {
+        vao, indexed: true, mode: gl.TRIANGLES, drawCount: dst.idx.length, indexType: gl.UNSIGNED_INT,
+        hasUv: false, localMin: [0, 0, 0], localMax: [60, 2, 60], material: mat,
+      };
+    }
+
+    const idMat = mat4Identity();
+    const model = {
+      animations: [], idleAnims: [], blinkInfo: { hasBlink: false },
+      baseWorldMats: [idMat],
+      bounds: { min: [0, 0, 0], max: [60, 2, 60] },
+      size: [60, 2, 60],
+      drawCalls: [
+        {
+          nodeIndex: 0, worldMat: idMat,
+          prim: uploadPrim(body, {
+            name: "batched_map_bombs", baseColor: [1, 1, 1, 1], metallic: 0.45, roughness: 0.34,
+            normalScale: 0.0, normalTex: null, baseTex: null, mrTex: null,
+            emissive: [0, 0, 0], alphaMode: "OPAQUE", doubleSided: false,
+          }),
+        },
+        {
+          nodeIndex: 0, worldMat: idMat,
+          prim: uploadPrim(spark, {
+            name: "batched_map_bomb_sparks", baseColor: [1, 0.85, 0.35, 1], metallic: 0.0, roughness: 0.25,
+            normalScale: 0.0, normalTex: null, baseTex: null, mrTex: null,
+            emissive: [2.2, 1.35, 0.25], alphaMode: "OPAQUE", doubleSided: false,
+          }),
+        },
+      ],
+      dispose() { vaos.forEach((v) => gl.deleteVertexArray(v)); bufs.forEach((b) => gl.deleteBuffer(b)); },
+    };
+    return {
+      inst: { kind: "item", id: "batched_bombs", isGrass: true, model, clipName: "Idle", idleTime: 0, offsetMat: idMat },
+      dispose() { model.dispose(); },
+    };
+  }
+
   window.__demoBorder = {
     buildBorderGrassMesh,
+    buildBatchedMapBombsMesh,
   };
 })();

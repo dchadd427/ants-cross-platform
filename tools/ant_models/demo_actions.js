@@ -13,7 +13,7 @@
   const ACTION_ANT_CLASSES = ["worker", "combat", "bomber", "swimmer", "fire"];
   const DROPPER_FD_IDS = ["FD_BOMB", "FD_FIRE", "FD_SWIM", "FD_COMB", "FD_THIEF"];
   const ACTION_ITEM_IDS = ["wallup04", "redbomb", "bluebomb", "greenbomb", "blackbomb", "lunchbox", "dflower1", ...DROPPER_FD_IDS];
-  const BOMB_SCALE = 0.72;
+  const BOMB_SCALE = 0.58; // Matches `bomber_held_bomb` inside `PlantBomb` for a seamless 1:1 ground handoff!
   const FIRE_SCALE = 1.06;
   const FD_DROP_SCALE = 2.45;
   const HILL_ID_BY_TEAM = { red: "REDHILL", blue: "BLUEHILL", green: "GREENHILL", black: "BLACKHILL" };
@@ -214,18 +214,154 @@
     return best;
   }
 
+  // Authentic 1998 `133:bombex` (680 ms) 3D Bomb Explosion Models:
+  // 1. `flash`: blazing white-gold / crimson jagged 3D starburst core (`bombex[0..2]`)
+  // 2. `ring`: fiery glowing orange-yellow hollow blast shockwave torus (`bombex[3..5]`)
+  // 3. `smoke`: chunky warm cream-grey billowing 3D cloud puff arranged in an expanding hollow ring (`bombex[2..9]`)
+  function buildBombExplosionModels(gl) {
+    const idMat = mat4Identity();
+    function makeModel(pos, nrm, uv, col, idx, mat, rad) {
+      const vao = gl.createVertexArray();
+      gl.bindVertexArray(vao);
+      const bufs = [];
+      const up = (target, data, loc, sz) => {
+        const b = gl.createBuffer(); gl.bindBuffer(target, b); gl.bufferData(target, data, gl.STATIC_DRAW);
+        if (loc !== undefined) { gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, sz, gl.FLOAT, false, 0, 0); }
+        bufs.push(b);
+      };
+      up(gl.ARRAY_BUFFER, new Float32Array(pos), 0, 3);
+      up(gl.ARRAY_BUFFER, new Float32Array(nrm), 1, 3);
+      up(gl.ARRAY_BUFFER, new Float32Array(uv), 2, 2);
+      up(gl.ARRAY_BUFFER, new Float32Array(col), 3, 3);
+      up(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx));
+      gl.bindVertexArray(null);
+      return {
+        animations: [], idleAnims: [], blinkInfo: { hasBlink: false },
+        baseWorldMats: [idMat],
+        bounds: { min: [-rad, -rad, -rad], max: [rad, rad, rad] },
+        size: [rad * 2, rad * 2, rad * 2],
+        drawCalls: [{
+          nodeIndex: 0, worldMat: idMat,
+          prim: {
+            vao, indexed: true, mode: gl.TRIANGLES, drawCount: idx.length, indexType: gl.UNSIGNED_SHORT,
+            hasUv: false, localMin: [-rad, -rad, -rad], localMax: [rad, rad, rad], material: mat,
+          },
+        }],
+        dispose() { gl.deleteVertexArray(vao); bufs.forEach((b) => gl.deleteBuffer(b)); },
+      };
+    }
+
+    // 1. Spiky fiery 3D starburst core (`bombex[0..2]`)
+    function buildStarburst() {
+      const pos = [], nrm = [], uv = [], col = [], idx = [];
+      const uS = 18, vS = 10;
+      for (let v = 0; v <= vS; v++) {
+        const phi = (v / vS) * Math.PI, sp = Math.sin(phi), cp = Math.cos(phi);
+        for (let u = 0; u <= uS; u++) {
+          const th = (u / uS) * Math.PI * 2;
+          const spike = 0.56 + 0.44 * Math.pow(Math.abs(Math.sin(th * 3.0 + phi * 2.0) * Math.cos(phi * 2.5 - th * 2.0)), 0.7);
+          const nx = sp * Math.cos(th), ny = cp, nz = sp * Math.sin(th);
+          pos.push(nx * spike, ny * spike * 0.85, nz * spike);
+          nrm.push(nx, ny, nz); uv.push(u / uS, v / vS);
+          const hot = clamp01(1.15 - spike * 0.65);
+          col.push(1.0, lerp(0.28, 0.96, hot), lerp(0.06, 0.75, hot));
+        }
+      }
+      const st = uS + 1;
+      for (let v = 0; v < vS; v++) for (let u = 0; u < uS; u++) {
+        const a = v * st + u, b = a + 1, c = a + st, d = c + 1;
+        idx.push(a, b, c, b, d, c);
+      }
+      return makeModel(pos, nrm, uv, col, idx, {
+        name: "bombex_flash", baseColor: [1, 1, 1, 1], metallic: 0.0, roughness: 0.25,
+        normalScale: 0.0, normalTex: null, baseTex: null, mrTex: null,
+        emissive: [2.6, 1.85, 0.55], alphaMode: "OPAQUE", doubleSided: true,
+      }, 1.0);
+    }
+
+    // 2. Jagged fiery hollow shockwave torus (`bombex[3..5]`)
+    function buildRing() {
+      const pos = [], nrm = [], uv = [], col = [], idx = [];
+      const maj = 24, minS = 10, R = 0.78, rTube = 0.22;
+      for (let i = 0; i <= maj; i++) {
+        const a = (i / maj) * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+        const jag = 1.0 + 0.22 * Math.sin(a * 7.0) + 0.14 * Math.cos(a * 5.0);
+        for (let j = 0; j <= minS; j++) {
+          const b = (j / minS) * Math.PI * 2, cb = Math.cos(b), sb = Math.sin(b);
+          const rr = R * jag + cb * rTube * (0.8 + 0.35 * Math.sin(a * 6.0));
+          pos.push(ca * rr, sb * rTube * 0.85, sa * rr);
+          nrm.push(ca * cb, sb, sa * cb); uv.push(i / maj, j / minS);
+          const top = 0.5 + 0.5 * sb;
+          col.push(1.0, lerp(0.32, 0.92, top), lerp(0.05, 0.30, top));
+        }
+      }
+      const st = minS + 1;
+      for (let i = 0; i < maj; i++) for (let j = 0; j < minS; j++) {
+        const a = i * st + j, b = a + 1, c = a + st, d = c + 1;
+        idx.push(a, c, b, b, c, d);
+      }
+      return makeModel(pos, nrm, uv, col, idx, {
+        name: "bombex_ring", baseColor: [1, 1, 1, 1], metallic: 0.0, roughness: 0.30,
+        normalScale: 0.0, normalTex: null, baseTex: null, mrTex: null,
+        emissive: [2.4, 1.10, 0.16], alphaMode: "OPAQUE", doubleSided: true,
+      }, 1.2);
+    }
+
+    // 3. Chunky billowing warm cream-grey smoke puff (`bombex[2..9]` sprites 308..315!)
+    function buildSmokePuff(topRgb, botRgb, name) {
+      const pos = [], nrm = [], uv = [], col = [], idx = [];
+      const uS = 14, vS = 9;
+      for (let v = 0; v <= vS; v++) {
+        const phi = (v / vS) * Math.PI, sp = Math.sin(phi), cp = Math.cos(phi);
+        for (let u = 0; u <= uS; u++) {
+          const th = (u / uS) * Math.PI * 2;
+          const billow = 0.82 + 0.22 * Math.sin(th * 3.0 + phi * 2.0) * Math.cos(phi * 3.0) + 0.10 * Math.cos(th * 5.0);
+          const nx = sp * Math.cos(th), ny = cp, nz = sp * Math.sin(th);
+          pos.push(nx * billow, ny * billow * 0.86, nz * billow);
+          nrm.push(nx, ny, nz); uv.push(u / uS, v / vS);
+          const up = 0.5 + 0.5 * ny;
+          col.push(lerp(botRgb[0], topRgb[0], up), lerp(botRgb[1], topRgb[1], up), lerp(botRgb[2], topRgb[2], up));
+        }
+      }
+      const st = uS + 1;
+      for (let v = 0; v < vS; v++) for (let u = 0; u < uS; u++) {
+        const a = v * st + u, b = a + 1, c = a + st, d = c + 1;
+        idx.push(a, b, c, b, d, c);
+      }
+      return makeModel(pos, nrm, uv, col, idx, {
+        name, baseColor: [1, 1, 1, 1], metallic: 0.0, roughness: 0.94,
+        normalScale: 0.0, normalTex: null, baseTex: null, mrTex: null,
+        emissive: [0.06, 0.05, 0.04], alphaMode: "OPAQUE", doubleSided: false,
+      }, 1.0);
+    }
+
+    const flash = buildStarburst();
+    const ring = buildRing();
+    const smoke = buildSmokePuff([0.62, 0.56, 0.50], [0.24, 0.21, 0.19], "bombex_smoke");
+    const dudSmoke = buildSmokePuff([0.34, 0.31, 0.29], [0.10, 0.09, 0.09], "bombex_dud_smoke");
+    return {
+      flash, ring, smoke, dudSmoke,
+      dispose() { flash.dispose(); ring.dispose(); smoke.dispose(); dudSmoke.dispose(); },
+    };
+  }
+
   function buildActionVignettes(gl, mapData, models, waterTile, antScale, itemEntries) {
     const bridgeStages = [1, 2, 3, 4].map((st) => buildMudBridgeStage(gl, st));
-    const bridgeModel = { dispose() { bridgeStages.forEach((m) => m.dispose()); } };
-    const v = { bridgeModel, bridgeStages, bridges: [], waterBridges: [], bombers: [], combats: [], fires: [], brawls: [], deposits: [], droppers: [] };
+    const blastModels = buildBombExplosionModels(gl);
+    const bridgeModel = { dispose() { bridgeStages.forEach((m) => m.dispose()); blastModels.dispose(); } };
+    const v = { bridgeModel, bridgeStages, blastModels, bridges: [], waterBridges: [], bombers: [], combats: [], fires: [], brawls: [], deposits: [], droppers: [] };
     const mid = mapData.id;
 
     // 1A. Land-Digging Swimmers (`asbbl` / `Shovel`): build 3-tile dark-mud bridges (`bridge1`..`bridge4`) from shore!
     const bridgeSpots = mid === "treasure"
       ? [[13.45, 28.5, "blue", 0.0], [27.45, 42.5, "green", 4.5]]
-      : (mid === "islands"
-        ? [[27.45, 29.5, "blue", 0.5]]
-        : (mid === "small" ? [[15.45, 24.5, "blue", 0.2]] : []));
+      : (mid === "gauntlet"
+        ? [[51.45, 40.5, "blue", 0.3]]
+        : (mid === "medium"
+          ? [[26.45, 41.5, "blue", 0.4]]
+          : (mid === "islands"
+            ? [[27.45, 29.5, "blue", 0.5]]
+            : (mid === "small" ? [[15.45, 24.5, "blue", 0.2]] : []))));
     for (const [px, pz, team, ph] of bridgeSpots) {
       const sh = findBridgeShore(mapData, waterTile, px, pz);
       if (!sh || !models.swimmer) continue;
@@ -239,13 +375,16 @@
     // 1B. Underwater-Digging Swimmers (`asbbw` / `ShovelWater` + `Swim`): swim in pond & dig mud bridges RIGHT FROM UNDERWATER!
     const waterDigSpots = mid === "treasure"
       ? [[16.0, 30.5, "green", 1.1, -1], [30.5, 42.5, "blue", 4.2, +1]]
-      : (mid === "islands"
-        ? [[30.5, 30.5, "green", 0.9, +1]]
-        : (mid === "small" ? [[20.0, 16.5, "green", 0.7, +1]] : []));
+      : (mid === "gauntlet"
+        ? [[54.5, 42.5, "green", 1.0, -1]]
+        : (mid === "medium"
+          ? [[30.5, 41.5, "green", 0.9, -1]]
+          : (mid === "islands"
+            ? [[30.5, 30.5, "green", 0.9, +1]]
+            : (mid === "small" ? [[20.0, 16.5, "green", 0.7, +1]] : []))));
     for (const [px, pz, team, ph, dir] of waterDigSpots) {
       const sp = findWaterDigSpan(mapData, waterTile, px, pz);
       if (!sp || !models.swimmer) continue;
-      // 4 contiguous water tiles: [x0, x0+1, x0+2, x0+3]
       v.waterBridges.push({
         x0: sp[0], sz: sp[1], dir, phase: ph, antScale,
         swimmer: makeAntInst("swimmer", team, models.swimmer, ph, true),
@@ -253,23 +392,32 @@
       });
     }
 
-    // 2. Bomber placing sizzling Red Bomb -> running clear -> BOOM + BlownUp knockback
-    if (models.bomber && models.worker && models.redbomb && models.wallup04 && (mid === "treasure" || mid === "popcorn" || mid === "small")) {
-      const bx = mid === "treasure" ? 38.6 : (mid === "popcorn" ? 15.5 : 29.0);
-      const bz = mid === "treasure" ? 29.0 : (mid === "popcorn" ? 12.2 : 16.5);
+    // 2. Bomber seamlessly planting Red Bomb -> 1998 `bombex` explosion + `BlownBack` flight (alternating with Dud `BlownUp`!)
+    const bomberSpotMap = {
+      treasure: [38.6, 29.0], gauntlet: [39.5, 19.5], medium: [39.5, 19.5],
+      small: [29.0, 16.5], popcorn: [15.5, 12.2], bombz_away: [15.5, 15.5], hellraiser: [15.5, 8.5],
+    };
+    if (models.bomber && models.worker && models.redbomb && bomberSpotMap[mid]) {
+      const [bx, bz] = bomberSpotMap[mid];
       v.bombers.push({
         x: bx, z: bz, phase: 1.0, antScale,
         bomber: makeAntInst("bomber", "red", models.bomber, 0.3),
         victim: makeAntInst("worker", "blue", models.worker, 0.7),
         bomb: makePropInst("redbomb", models.redbomb),
-        blast: makePropInst("wallup04", models.wallup04),
+        flash: makePropInst("bombex_flash", blastModels.flash),
+        ring: makePropInst("bombex_ring", blastModels.ring),
+        puffs: Array.from({ length: 10 }, (_, k) => makePropInst(`bombex_puff_${k}`, blastModels.smoke)),
+        dudPuffs: Array.from({ length: 5 }, (_, k) => makePropInst(`bombex_dud_${k}`, blastModels.dudSmoke)),
       });
     }
 
     // 3. Combat Ant power-hitting Worker -> huge BlownBack launch + Stunned + Hit roll recovery
+    const combatSpotMap = {
+      treasure: [30.2, 22.2], gauntlet: [22.5, 22.5], medium: [21.0, 21.0],
+      islands: [23.0, 20.0], small: [11.5, 15.0], bombz_away: [15.5, 9.5], hellraiser: [8.5, 15.5],
+    };
     if (models.combat && models.worker) {
-      const cx = mid === "treasure" ? 30.2 : (mid === "islands" ? 23.0 : (mid === "small" ? 11.5 : (mapData.cols * 0.5 - 1.2)));
-      const cz = mid === "treasure" ? 22.2 : (mid === "islands" ? 20.0 : (mid === "small" ? 15.0 : (mapData.rows * 0.5 - 2.2)));
+      const [cx, cz] = combatSpotMap[mid] || [mapData.cols * 0.5 - 1.2, mapData.rows * 0.5 - 2.2];
       v.combats.push({
         x: cx, z: cz, phase: 0.4, antScale,
         attacker: makeAntInst("combat", "green", models.combat, 0.1),
@@ -277,10 +425,13 @@
       });
     }
 
-    // 4. Fire Ant igniting a 3-tile Fire Wall with magnifying glass & walking right through the fire!
+    // 4. Fire Ant seamlessly igniting 3-tile Fire Wall right under magnifying glass & walking right through the flames!
+    const fireSpotMap = {
+      treasure: [30.2, 36.0], gauntlet: [36.5, 36.5], medium: [39.0, 39.0],
+      islands: [37.2, 33.0], small: [28.0, 32.5], bombz_away: [15.5, 21.5], hellraiser: [15.5, 22.5],
+    };
     if (models.fire && models.worker && models.wallup04) {
-      const fx = mid === "treasure" ? 30.2 : (mid === "islands" ? 37.2 : (mid === "small" ? 28.0 : (mapData.cols * 0.5)));
-      const fz = mid === "treasure" ? 36.0 : (mid === "islands" ? 33.0 : (mid === "small" ? 32.5 : (mapData.rows * 0.5 + 3.0)));
+      const [fx, fz] = fireSpotMap[mid] || [mapData.cols * 0.5, mapData.rows * 0.5 + 3.0];
       v.fires.push({
         x: fx, z: fz, phase: 2.2, antScale,
         fireAnt: makeAntInst("fire", "red", models.fire, 0.2),
@@ -290,9 +441,12 @@
     }
 
     // 5. Regular Worker Ants brawling 1v1 with mutual strikes & Hit knockback-roll recoveries
+    const brawlSpotMap = {
+      treasure: [21.4, 29.0], gauntlet: [17.5, 32.5], medium: [20.5, 38.0],
+      islands: [37.0, 21.5], small: [11.0, 25.5], bombz_away: [9.5, 15.5], hellraiser: [22.5, 15.5],
+    };
     if (models.worker) {
-      const rx = mid === "treasure" ? 21.4 : (mid === "islands" ? 37.0 : (mid === "small" ? 11.0 : (mapData.cols * 0.5 + 2.8)));
-      const rz = mid === "treasure" ? 29.0 : (mid === "islands" ? 21.5 : (mid === "small" ? 25.5 : (mapData.rows * 0.5)));
+      const [rx, rz] = brawlSpotMap[mid] || [mapData.cols * 0.5 + 2.8, mapData.rows * 0.5];
       v.brawls.push({
         x: rx, z: rz, phase: 0.8, antScale,
         a: makeAntInst("worker", "blue", models.worker, 0.2),
@@ -302,7 +456,7 @@
 
     // 6. Food-Depositing Worker Ants: carry swinging lunchbox -> climb anthill -> Enter crater hole -> Hatch out empty-handed!
     if (models.worker && models.lunchbox && Array.isArray(itemEntries)) {
-      const depSpecs = mid === "treasure"
+      const depSpecs = (mid === "treasure" || mid === "gauntlet" || mid === "medium")
         ? [["red", 0.0, -0.34], ["red", 4.8, +0.34], ["blue", 2.4, 0.0]]
         : (mid === "small"
           ? [["red", 0.2, -0.34], ["red", 5.0, +0.34], ["blue", 2.6, 0.0]]
@@ -320,7 +474,6 @@
         const minY = m && m.bounds && m.bounds.min ? m.bounds.min[1] : 0;
         const hx = hill.x + rx * s, hz = hill.z + rz * s;
         const rimY = (0.436 - minY) * s;
-        // Approach from the open front/inward side toward the map center (rotated slightly per paired worker)
         const baseAng = Math.atan2(mapData.rows * 0.5 - hz, mapData.cols * 0.5 - hx) + angOff;
         const ux = Math.cos(baseAng), uz = Math.sin(baseAng);
         v.deposits.push({
@@ -331,15 +484,17 @@
       }
     }
 
-    // 7. Authentic 1998 Groucho Daisy Power-Up Droppers on Small & Islands (`dflower1` + 820 ms `FD_*` golden nectar drops!)
-    if ((mid === "small" || mid === "islands") && Array.isArray(itemEntries)) {
+    // 7. Authentic 1998 Groucho Daisy Power-Up Droppers on Small, Islands, Gauntlet & Medium (`dflower1` + 820 ms `FD_*` drops!)
+    if ((mid === "small" || mid === "islands" || mid === "gauntlet" || mid === "medium") && Array.isArray(itemEntries)) {
       const fdPool = DROPPER_FD_IDS.filter((id) => Boolean(models[id]));
       const flowers = itemEntries.filter((e) => e.spec.id === "flower1");
       if (fdPool.length && flowers.length) {
-        const orders = [
-          ["FD_BOMB", "FD_FIRE", "FD_SWIM", "FD_COMB", "FD_THIEF"],
-          ["FD_SWIM", "FD_THIEF", "FD_BOMB", "FD_FIRE", "FD_COMB"],
-        ];
+        const orders = mid === "gauntlet"
+          ? [["FD_COMB", "FD_FIRE", "FD_BOMB", "FD_SWIM", "FD_THIEF"]]
+          : [
+              ["FD_BOMB", "FD_FIRE", "FD_SWIM", "FD_COMB", "FD_THIEF"],
+              ["FD_SWIM", "FD_THIEF", "FD_BOMB", "FD_FIRE", "FD_COMB"],
+            ];
         flowers.forEach((fl, fi) => {
           fl.managedAnim = true;
           const fdInsts = {};
@@ -374,112 +529,113 @@
       visible.push(inst);
     }
 
-    // --- 1A. Land-Digging Swimmers (`Shovel` / `asbbl`): 4-Stage Dark-Mud Bridges Built from Shore ---
+    // --- 1A. Land-Digging Swimmers (`Shovel` / `asbbl`): Seamless 1:1 Shovel-Toss onto Growing Mud Bridge ---
+    // Measured `swimmer_dirt_toss` in `swimmer.glb`: clods land at `+0.74 * antScale` (`~0.85` tiles ahead) at `t = 0.36 s`.
     const mudH = 0.064;
     for (const b of v.bridges) {
       if (!inView(b.sx + 1.5, b.sz)) continue;
       const dur = 11.4;
       const lt = patrolsOn ? ((t + b.phase) % dur + dur) % dur : 4.85;
-      let ax = b.sx, ay = 0, az = b.sz, yaw = Math.PI * 0.5;
+      const reach = 0.72 * b.antScale; // Exact shovel-toss landing offset (~0.83 tiles) so mud lands dead-center on target tile!
+      const tX = [b.sx + 1.0, b.sx + 2.0, b.sx + 3.0];
+      const digX = [tX[0] - reach, tX[1] - reach, tX[2] - reach];
+      let ax = digX[0], ay = 0, az = b.sz, yaw = Math.PI * 0.5;
       const prog = [0, 0, 0];
       if (lt < 1.0) {
         const u = smooth(lt / 1.0);
-        ax = lerp(b.sx - 0.85, b.sx, u);
+        ax = lerp(b.sx - 0.85, digX[0], u);
         b.swimmer.clipName = "Walk"; b.swimmer.animTime = lt * 1.4;
-      } else if (lt < 3.0) {
-        const u = (lt - 1.0) / 2.0;
-        b.swimmer.clipName = "Shovel"; b.swimmer.animTime = lt;
-        prog[0] = clamp01((u - 0.06) / 0.88);
-        if (ripples.length < 8) ripples.push([b.sx + 1.0, b.sz, b.phase, 0.85]);
-      } else if (lt < 3.7) {
-        const u = smooth((lt - 3.0) / 0.7);
-        ax = lerp(b.sx, b.sx + 1.0, u); ay = lerp(0.0, mudH, u); prog[0] = 1;
+      } else if (lt < 2.92) {
+        // 4 crisp `Shovel` scoops (4 x 0.48 s = 1.92 s) tossing mud directly onto tile #0 (`bridge1..bridge4`)!
+        const dtS = lt - 1.0;
+        ax = digX[0];
+        b.swimmer.clipName = "Shovel"; b.swimmer.animTime = dtS;
+        prog[0] = clamp01((dtS - 0.24) / 1.60);
+        if (ripples.length < 8) ripples.push([tX[0], b.sz, b.phase, 0.85]);
+      } else if (lt < 3.62) {
+        const u = smooth((lt - 2.92) / 0.70);
+        ax = lerp(digX[0], digX[1], u); ay = lerp(0.0, mudH, smooth(clamp01((u - 0.2) / 0.8))); prog[0] = 1;
         b.swimmer.clipName = "Walk"; b.swimmer.animTime = lt * 1.4;
-      } else if (lt < 5.7) {
-        const u = (lt - 3.7) / 2.0;
-        ax = b.sx + 1.0; ay = mudH; prog[0] = 1; prog[1] = clamp01((u - 0.06) / 0.88);
-        b.swimmer.clipName = "Shovel"; b.swimmer.animTime = lt;
-        if (ripples.length < 8) ripples.push([b.sx + 2.0, b.sz, b.phase + 0.3, 0.85]);
-      } else if (lt < 6.4) {
-        const u = smooth((lt - 5.7) / 0.7);
-        ax = lerp(b.sx + 1.0, b.sx + 2.0, u); ay = mudH; prog[0] = 1; prog[1] = 1;
+      } else if (lt < 5.54) {
+        const dtS = lt - 3.62;
+        ax = digX[1]; ay = mudH; prog[0] = 1; prog[1] = clamp01((dtS - 0.24) / 1.60);
+        b.swimmer.clipName = "Shovel"; b.swimmer.animTime = dtS;
+        if (ripples.length < 8) ripples.push([tX[1], b.sz, b.phase + 0.3, 0.85]);
+      } else if (lt < 6.24) {
+        const u = smooth((lt - 5.54) / 0.70);
+        ax = lerp(digX[1], digX[2], u); ay = mudH; prog[0] = 1; prog[1] = 1;
         b.swimmer.clipName = "Walk"; b.swimmer.animTime = lt * 1.4;
-      } else if (lt < 8.4) {
-        const u = (lt - 6.4) / 2.0;
-        ax = b.sx + 2.0; ay = mudH; prog[0] = 1; prog[1] = 1; prog[2] = clamp01((u - 0.06) / 0.88);
-        b.swimmer.clipName = "Shovel"; b.swimmer.animTime = lt;
-        if (ripples.length < 8) ripples.push([b.sx + 3.0, b.sz, b.phase + 0.6, 0.85]);
-      } else if (lt < 10.2) {
-        const u = smooth((lt - 8.4) / 1.4);
-        ax = lerp(b.sx + 2.0, b.sx + 3.0, u); ay = mudH; prog[0] = 1; prog[1] = 1; prog[2] = 1;
+      } else if (lt < 8.16) {
+        const dtS = lt - 6.24;
+        ax = digX[2]; ay = mudH; prog[0] = 1; prog[1] = 1; prog[2] = clamp01((dtS - 0.24) / 1.60);
+        b.swimmer.clipName = "Shovel"; b.swimmer.animTime = dtS;
+        if (ripples.length < 8) ripples.push([tX[2], b.sz, b.phase + 0.6, 0.85]);
+      } else if (lt < 10.1) {
+        const u = smooth((lt - 8.16) / 1.40);
+        ax = lerp(digX[2], tX[2], u); ay = mudH; prog[0] = 1; prog[1] = 1; prog[2] = 1;
         b.swimmer.clipName = u < 0.95 ? "Walk" : "Idle"; b.swimmer.animTime = lt * 1.4;
       } else {
-        const u = smooth((lt - 10.2) / 1.2);
-        ax = lerp(b.sx + 3.0, b.sx - 0.85, u); yaw = -Math.PI * 0.5;
+        const u = smooth((lt - 10.1) / 1.30);
+        ax = lerp(tX[2], b.sx - 0.85, u); yaw = -Math.PI * 0.5;
         ay = lerp(mudH, 0.0, clamp01(u * 1.4));
         const fade = 1 - smooth(clamp01((u - 0.35) / 0.65));
         prog[0] = fade; prog[1] = fade; prog[2] = fade;
         b.swimmer.clipName = "Walk"; b.swimmer.animTime = lt * 1.8;
       }
-      for (let i = 0; i < 3; i++) pushMudBridgeTile(b.tiles[i], v.bridgeStages, prog[i], b.sx + 1.0 + i, b.sz, i);
+      for (let i = 0; i < 3; i++) pushMudBridgeTile(b.tiles[i], v.bridgeStages, prog[i], tX[i], b.sz, i);
       b.swimmer.offsetMat = buildAntMat(b.swimmer.model, ax, ay, az, b.antScale, yaw);
       visible.push(b.swimmer);
     }
 
-    // --- 1B. Underwater-Digging Swimmers (`Swim` + `ShovelWater` / `asbbw`): Digging Dark-Mud Bridges from INSIDE the Water! ---
+    // --- 1B. Underwater-Digging Swimmers (`Swim` + `ShovelWater` / `asbbw`): Seamless Underwater Shovel-Toss! ---
     for (const uwb of v.waterBridges) {
       if (!inView(uwb.x0 + 1.5, uwb.sz)) continue;
       const dur = 10.2;
       const lt = patrolsOn ? ((t + uwb.phase) % dur + dur) % dur : 3.25;
-      const d = uwb.dir; // +1 faces East, -1 faces West
-      // 4 water cells along x0..x0+3: dig tile 0 & tile 1 while submerged in adjacent water tile!
+      const d = uwb.dir;
       const t0x = d > 0 ? (uwb.x0 + 2.0) : (uwb.x0 + 1.0);
       const t1x = d > 0 ? (uwb.x0 + 1.0) : (uwb.x0 + 2.0);
-      const dig0x = t0x - d * 1.12; // submerged dig stance beside tile 0 (clear of mud rim!)
-      const dig1x = t1x - d * 1.12; // submerged dig stance beside tile 1 (still in pure water!)
-      const startX = dig0x - d * 0.72;
+      const reach = 0.76 * uwb.antScale; // Exact `swimmer_water_toss` spray/mud landing offset (~0.87 tiles ahead)
+      const dig0x = t0x - d * reach;
+      const dig1x = t1x - d * reach;
+      const startX = dig0x - d * 0.75;
       const subSwimY = -1.05 * uwb.antScale;
-      const subDigY = -0.46 * uwb.antScale; // chest-deep underwater: goggles, yellow snorkel, swinging yellow shovel & aqua spray burst out!
+      const subDigY = -0.46 * uwb.antScale;
       let ax = dig0x, ay = subSwimY, yaw = d > 0 ? Math.PI * 0.5 : -Math.PI * 0.5;
       const prog = [0, 0];
 
       if (lt < 1.35) {
-        // Swim smoothly underwater toward bridge spot 1 (yellow snorkel + water ripples!)
         const u = smooth(lt / 1.35);
         ax = lerp(startX, dig0x, u);
         ay = lerp(subSwimY, subDigY, smooth(clamp01((u - 0.65) / 0.35))) + Math.sin(lt * 5.0) * 0.025;
         uwb.swimmer.clipName = "Swim"; uwb.swimmer.animTime = lt * 1.4;
-      } else if (lt < 3.55) {
-        // Dig mud bridge tile #1 right from UNDERWATER (`ShovelWater` / `asbbw` + splashing water spray!)
-        const u = (lt - 1.35) / 2.20;
+      } else if (lt < 3.35) {
+        const dtS = lt - 1.35;
         ax = dig0x; ay = subDigY + Math.sin(lt * 6.5) * 0.02;
-        uwb.swimmer.clipName = "ShovelWater"; uwb.swimmer.animTime = lt;
-        prog[0] = clamp01((u - 0.06) / 0.88);
+        uwb.swimmer.clipName = "ShovelWater"; uwb.swimmer.animTime = dtS;
+        prog[0] = clamp01((dtS - 0.25) / 1.65);
         if (ripples.length < 8) ripples.push([t0x, uwb.sz, uwb.phase + 0.1, 0.92]);
-      } else if (lt < 4.80) {
-        // Swim back 1 water tile underwater (`Swim`) to extend the bridge from the water!
-        const u = smooth((lt - 3.55) / 1.25);
+      } else if (lt < 4.65) {
+        const u = smooth((lt - 3.35) / 1.30);
         ax = lerp(dig0x, dig1x, u);
         ay = lerp(subDigY, subSwimY, Math.sin(u * Math.PI)) + Math.sin(lt * 5.0) * 0.025;
         yaw = d > 0 ? -Math.PI * 0.5 : Math.PI * 0.5;
         prog[0] = 1;
         uwb.swimmer.clipName = "Swim"; uwb.swimmer.animTime = lt * 1.4;
-      } else if (lt < 7.00) {
-        // Dig mud bridge tile #2 right from UNDERWATER (`ShovelWater`!)
-        const u = (lt - 4.80) / 2.20;
+      } else if (lt < 6.65) {
+        const dtS = lt - 4.65;
         ax = dig1x; ay = subDigY + Math.sin(lt * 6.5) * 0.02;
-        uwb.swimmer.clipName = "ShovelWater"; uwb.swimmer.animTime = lt;
-        prog[0] = 1; prog[1] = clamp01((u - 0.06) / 0.88);
+        uwb.swimmer.clipName = "ShovelWater"; uwb.swimmer.animTime = dtS;
+        prog[0] = 1; prog[1] = clamp01((dtS - 0.25) / 1.65);
         if (ripples.length < 8) ripples.push([t1x, uwb.sz, uwb.phase + 0.4, 0.92]);
-      } else if (lt < 8.80) {
-        // Tread / swim playfully underwater beside his finished 2-tile dark-mud bridge!
-        const u = smooth((lt - 7.00) / 1.80);
+      } else if (lt < 8.70) {
+        const u = smooth((lt - 6.65) / 2.05);
         ax = lerp(dig1x, startX, u);
         ay = lerp(subDigY, subSwimY, clamp01(u * 2.2)) + Math.sin(lt * 5.0) * 0.028;
         prog[0] = 1; prog[1] = 1;
         uwb.swimmer.clipName = "Swim"; uwb.swimmer.animTime = lt * 1.3;
       } else {
-        const u = smooth((lt - 8.80) / 1.40);
+        const u = smooth((lt - 8.70) / 1.50);
         ax = startX; ay = subSwimY + Math.sin(lt * 4.8) * 0.028;
         const fade = 1 - smooth(u);
         prog[0] = fade; prog[1] = fade;
@@ -493,61 +649,74 @@
       visible.push(uwb.swimmer);
     }
 
-    // --- 2. Bomber Planting Sizzling Bomb -> Detonation & BlownUp Knockback ---
+    // --- 2. Seamless Bomber (`PlantBomb` 1:1 ground handoff) -> 1998 `bombex` Explosion + `BlownBack` Flight (vs Dud `BlownUp`!) ---
+    // Measured `bomber_held_bomb` in `bomber.glb`: touches down at exact local `+0.348 * antScale` (`t = 1.08..1.32 s`), hides at `1.36 s`.
     for (const m of v.bombers) {
       if (!inView(m.x, m.z)) continue;
-      const dur = 9.4;
-      const lt = patrolsOn ? ((t + m.phase) % dur + dur) % dur : 5.45;
-      let bx = m.x - 1.1, by = 0, byaw = Math.PI * 0.5;
-      let vx = m.x + 2.6, vy = 0, vyaw = -Math.PI * 0.5;
-      let showBomb = false, bombScale = BOMB_SCALE, showBlast = false, blastScale = 1.0;
+      const roundDur = 9.4;
+      const fullDur = roundDur * 2.0; // Round 0: Live Bomb (`bombex` + `BlownBack` flight); Round 1: Dud Bomb (fizzle + `BlownUp` straight up!)
+      const ft = patrolsOn ? ((t + m.phase) % fullDur + fullDur) % fullDur : 5.20;
+      const isDud = ft >= roundDur;
+      const lt = ft % roundDur;
+      const plantX = m.x - 0.348 * m.antScale; // EXACT 1:1 coordinate so `bomber_held_bomb` touches down squarely on `(m.x, 0, m.z)`!
+      let bx = plantX, by = 0, byaw = Math.PI * 0.5;
+      let vx = m.x + 2.8, vy = 0, vz = m.z, vyaw = -Math.PI * 0.5;
+      let showBomb = false, bombScale = BOMB_SCALE, blastT = -1;
 
-      if (lt < 1.3) {
-        const u = smooth(lt / 1.3);
-        bx = lerp(m.x - 2.9, m.x - 0.95, u);
+      if (lt < 1.30) {
+        const u = smooth(lt / 1.30);
+        bx = lerp(m.x - 2.6, plantX, u);
         m.bomber.clipName = "Walk"; m.bomber.animTime = lt * 1.5;
-      } else if (lt < 2.66) {
-        bx = m.x - 0.95;
-        m.bomber.clipName = "PlantBomb"; m.bomber.animTime = lt - 1.3;
-        if (lt > 2.05) { showBomb = true; bombScale = BOMB_SCALE * smooth((lt - 2.05) / 0.35); }
-      } else if (lt < 4.95) {
-        const u = smooth((lt - 2.66) / 1.65);
-        bx = lerp(m.x - 0.95, m.x - 3.1, u); byaw = u < 0.95 ? -Math.PI * 0.5 : Math.PI * 0.5;
-        m.bomber.clipName = u < 0.95 ? "Walk" : "Idle"; m.bomber.animTime = lt * 1.8;
+      } else if (lt < 2.63) {
+        // `PlantBomb` plays cleanly (`0.00 -> 1.33 s`): ONLY `bomber_held_bomb` is shown as he sets it on `(m.x, 0, m.z)`!
+        bx = plantX;
+        m.bomber.clipName = "PlantBomb"; m.bomber.animTime = lt - 1.30;
+        showBomb = false;
+      } else if (lt < 4.90) {
+        // Exact frame `lt = 2.63`: `redbomb` takes over AT THE EXACT SAME `(m.x, 0, m.z)` where his hands set it down!
+        const u = smooth((lt - 2.63) / 1.55);
+        bx = lerp(plantX, m.x - 2.9, u); byaw = u < 0.94 ? -Math.PI * 0.5 : Math.PI * 0.5;
+        m.bomber.clipName = u < 0.94 ? "Walk" : "Idle"; m.bomber.animTime = lt * 1.8;
         showBomb = true;
-        // Rapid tension pulse right before detonation!
-        const pulse = lt > 4.25 ? (1.0 + 0.16 * Math.sin((lt - 4.25) * 34.0)) : 1.0;
-        bombScale = BOMB_SCALE * pulse;
-        dynGlows.push([m.x, m.z, 2.2, lt > 4.25 ? 1.5 : 0.75, 1.8, 0.72, 0.16]);
+        const settle = smooth(clamp01((lt - 2.63) / 0.14));
+        const pulse = lt > 4.25 ? (1.0 + 0.14 * Math.sin((lt - 4.25) * 34.0)) : 1.0;
+        bombScale = lerp(0.44, BOMB_SCALE, settle) * pulse;
+        dynGlows.push([m.x, m.z, 2.2, lt > 4.25 ? 1.45 : 0.72, 1.8, 0.72, 0.16]);
       } else {
-        bx = m.x - 3.1; byaw = Math.PI * 0.5;
+        bx = m.x - 2.9; byaw = Math.PI * 0.5;
         m.bomber.clipName = "Idle"; m.bomber.animTime = lt;
       }
 
-      // Victim Blue Worker approaches bomb -> gets launched sky-high by explosion -> Stunned!
-      if (lt < 2.8) {
+      // Victim Blue Worker walks directly ONTO the bomb `(m.x, m.z)`!
+      if (lt < 2.85) {
         vx = m.x + 2.8; m.victim.clipName = "Idle"; m.victim.animTime = lt;
-      } else if (lt < 4.95) {
-        const u = smooth((lt - 2.8) / 1.75);
-        vx = lerp(m.x + 2.8, m.x + 0.78, u);
-        m.victim.clipName = u < 0.94 ? "Walk" : "Idle"; m.victim.animTime = lt * 1.4;
-      } else if (lt < 6.10) {
-        // EXPLOSION + DRAMATIC BLOWNUP PARABOLIC LAUNCH!
-        const u = (lt - 4.95) / 1.15;
-        vx = lerp(m.x + 0.78, m.x + 3.45, Math.pow(u, 0.72));
-        vy = u < 0.76 ? (Math.sin((u / 0.76) * Math.PI) * 1.55) : (Math.sin(((u - 0.76) / 0.24) * Math.PI) * 0.26);
-        m.victim.clipName = "BlownUp"; m.victim.animTime = lt - 4.95;
-        if (u < 0.72) {
-          showBlast = true;
-          blastScale = FIRE_SCALE * (u < 0.18 ? lerp(0.5, 1.55, u / 0.18) : lerp(1.55, 0.15, (u - 0.18) / 0.54));
-          dynGlows.push([m.x, m.z, 5.2, (1.0 - u / 0.72) * 3.0, 2.2, 0.86, 0.22]);
-        }
+      } else if (lt < 4.90) {
+        const u = smooth((lt - 2.85) / 2.05);
+        vx = lerp(m.x + 2.8, m.x + 0.12, u);
+        m.victim.clipName = "Walk"; m.victim.animTime = lt * 1.5;
+      } else if (!isDud && lt < 5.95) {
+        // ROUND 1 — LIVE BOMB: 1998 `bombex` explosion (680 ms) + Victim FLYING 3.8 TILES THROUGH THE AIR (`BlownBack`)!
+        blastT = lt - 4.90;
+        const u = clamp01((lt - 4.90) / 1.05);
+        vx = lerp(m.x + 0.12, m.x + 3.85, Math.pow(u, 0.70));
+        vy = u < 0.78 ? (Math.sin((u / 0.78) * Math.PI) * 0.58) : (Math.sin(((u - 0.78) / 0.22) * Math.PI) * 0.16);
+        m.victim.clipName = "BlownBack"; m.victim.animTime = Math.min(0.89, (lt - 4.90) * 0.90);
+      } else if (isDud && lt < 6.08) {
+        // ROUND 2 — DUD BOMB: Smoky dud fizzle + Victim blasted STRAIGHT UP & TOWARD THE CAMERA (`BlownUp`)!
+        blastT = lt - 4.90;
+        const u = clamp01((lt - 4.90) / 1.15);
+        vx = m.x + 0.12;
+        vz = m.z + Math.sin(u * Math.PI) * 0.65; // Pops toward the front/camera (+Z) while rocketing straight up!
+        vy = u < 0.78 ? (Math.sin((u / 0.78) * Math.PI) * 0.45) : (Math.sin(((u - 0.78) / 0.22) * Math.PI) * 0.12);
+        vyaw = lerp(-Math.PI * 0.5, 0.0, smooth(clamp01(u * 2.5)));
+        m.victim.clipName = "BlownUp"; m.victim.animTime = Math.min(1.14, lt - 4.90);
       } else if (lt < 8.15) {
-        vx = m.x + 3.45;
-        m.victim.clipName = "Stunned"; m.victim.animTime = lt - 6.10;
+        vx = isDud ? (m.x + 0.12) : (m.x + 3.85);
+        m.victim.clipName = "Stunned"; m.victim.animTime = lt - (isDud ? 6.08 : 5.95);
       } else {
         const u = smooth((lt - 8.15) / 1.25);
-        vx = lerp(m.x + 3.45, m.x + 2.8, u);
+        vx = lerp(isDud ? (m.x + 0.12) : (m.x + 3.85), m.x + 2.8, u);
+        vyaw = isDud ? Math.PI * 0.5 : -Math.PI * 0.5;
         m.victim.clipName = "Walk"; m.victim.animTime = lt * 1.4;
       }
 
@@ -556,13 +725,63 @@
         m.bomb.offsetMat = buildPropMat(m.bomb.model, m.x, 0, m.z, bombScale, bombScale, bombScale, 0.35);
         visible.push(m.bomb);
       }
-      if (showBlast) {
-        m.blast.idleTime = t * 1.8;
-        m.blast.offsetMat = buildPropMat(m.blast.model, m.x, 0, m.z, blastScale, blastScale * 1.25, blastScale, 0);
-        visible.push(m.blast);
+
+      // Authentic 1998 3D `bombex` Explosion (or compact Dud fizzle smoke) — ZERO `wallup04` fire!
+      if (blastT >= 0 && !isDud && blastT < 0.76) {
+        const eu = blastT / 0.76;
+        // 1. Blazing white-gold starburst core (`bombex[0..2]`: 0.00..0.28 s)
+        if (eu < 0.42) {
+          const fu = eu / 0.42;
+          const fs = fu < 0.32 ? lerp(0.35, 1.35, fu / 0.32) : lerp(1.35, 0.05, (fu - 0.32) / 0.68);
+          m.flash.offsetMat = mat4FromTRS([m.x, 0.32 + fu * 0.28, m.z], quatY(blastT * 4.5), [fs, fs, fs]);
+          visible.push(m.flash);
+        }
+        // 2. Expanding hollow fiery orange-yellow shockwave ring (`bombex[3..5]`: 0.10..0.52 s)
+        if (eu > 0.12 && eu < 0.68) {
+          const ru = (eu - 0.12) / 0.56;
+          const rRad = lerp(0.55, 2.05, Math.pow(ru, 0.65));
+          const rH = lerp(0.95, 0.10, ru * ru);
+          m.ring.offsetMat = mat4FromTRS([m.x, 0.24 + ru * 0.22, m.z], quatY(-blastT * 2.2), [rRad, rH, rRad]);
+          visible.push(m.ring);
+        }
+        // 3. Expanding hollow ring of 10 chunky billowing warm cream-grey smoke clouds (`bombex[2..9]`: 0.06..0.76 s)
+        if (eu > 0.06) {
+          const su = (eu - 0.06) / 0.94;
+          const ringR = lerp(0.28, 2.15, Math.pow(su, 0.62));
+          const puffSc = su < 0.38 ? lerp(0.24, 0.64, su / 0.38) : lerp(0.64, 0.04, (su - 0.38) / 0.62);
+          for (let k = 0; k < m.puffs.length; k++) {
+            const ang = (k / m.puffs.length) * Math.PI * 2 + 0.3 * Math.sin(k * 2.1);
+            const rJ = ringR * (0.86 + 0.26 * Math.sin(k * 3.7));
+            const px = m.x + Math.cos(ang) * rJ;
+            const pz = m.z + Math.sin(ang) * rJ;
+            const py = 0.20 + su * 0.68 + 0.14 * Math.sin(k * 4.3);
+            const sc = puffSc * (0.82 + 0.32 * Math.cos(k * 2.9));
+            m.puffs[k].offsetMat = mat4FromTRS([px, py, pz], quatY(ang + su * 1.4), [sc, sc * 0.88, sc]);
+            visible.push(m.puffs[k]);
+          }
+        }
+        dynGlows.push([m.x, m.z, 5.4, (1.0 - eu) * 3.2, 2.3, 1.15, 0.30]);
+      } else if (blastT >= 0 && isDud && blastT < 0.72) {
+        // Compact Dud Bomb smoky fizzle puff (`sputter`)!
+        const du = blastT / 0.72;
+        if (du < 0.24) {
+          const fs = lerp(0.22, 0.52, Math.sin((du / 0.24) * Math.PI));
+          m.flash.offsetMat = mat4FromTRS([m.x, 0.22, m.z], quatY(blastT * 6.0), [fs, fs * 0.7, fs]);
+          visible.push(m.flash);
+        }
+        for (let k = 0; k < m.dudPuffs.length; k++) {
+          const ang = (k / m.dudPuffs.length) * Math.PI * 2 + 0.4;
+          const rJ = lerp(0.10, 0.68, Math.pow(du, 0.65));
+          const py = 0.18 + du * 1.15 + k * 0.08;
+          const sc = du < 0.35 ? lerp(0.14, 0.38, du / 0.35) : lerp(0.38, 0.03, (du - 0.35) / 0.65);
+          m.dudPuffs[k].offsetMat = mat4FromTRS([m.x + Math.cos(ang) * rJ, py, m.z + Math.sin(ang) * rJ], quatY(ang), [sc, sc, sc]);
+          visible.push(m.dudPuffs[k]);
+        }
+        dynGlows.push([m.x, m.z, 2.6, (1.0 - du) * 1.2, 1.8, 0.85, 0.25]);
       }
+
       m.bomber.offsetMat = buildAntMat(m.bomber.model, bx, by, m.z, m.antScale, byaw);
-      m.victim.offsetMat = buildAntMat(m.victim.model, vx, vy, m.z, m.antScale, vyaw);
+      m.victim.offsetMat = buildAntMat(m.victim.model, vx, vy, vz, m.antScale, vyaw);
       visible.push(m.bomber, m.victim);
     }
 
@@ -639,66 +858,81 @@
       visible.push(c.attacker, c.victim);
     }
 
-    // --- 4. Fire Ant Igniting a 3-Tile Fire Wall & Fearlessly Walking RIGHT THROUGH the Flames! ---
+    // --- 4. Seamless Fire Ant (`StartFire` 1:1 focal alignment under magnifying glass) + Walking RIGHT THROUGH the Flames! ---
+    // Measured `fire_sunbeam` & `fire_spark` in `fire.glb`: focused at exact local `+0.546 * antScale` (`t_spark = 1.30..1.70 s`).
     for (const f of v.fires) {
       if (!inView(f.x, f.z)) continue;
-      const dur = 11.6;
-      const lt = patrolsOn ? ((t + f.phase) % dur + dur) % dur : 7.4;
-      let fx = f.x - 1.8, fyaw = Math.PI * 0.5;
+      const dur = 13.8;
+      const lt = patrolsOn ? ((t + f.phase) % dur + dur) % dur : 8.6;
+      const focusOff = 0.546 * f.antScale; // Exact sunbeam focal point directly ahead of the Fire Ant!
+      const flX = [f.x - 0.95, f.x, f.x + 0.95];
+      const igX = [flX[0] - focusOff, flX[1] - focusOff, flX[2] - focusOff];
+      let fx = igX[0] - 0.9, fyaw = Math.PI * 0.5;
       const fSc = [0, 0, 0];
       let bx = f.x + 2.8, by = 0, byaw = -Math.PI * 0.5;
 
-      if (lt < 1.0) {
-        const u = smooth(lt / 1.0);
-        fx = lerp(f.x - 2.6, f.x - 1.75, u);
+      if (lt < 0.95) {
+        const u = smooth(lt / 0.95);
+        fx = lerp(igX[0] - 0.9, igX[0], u);
         f.fireAnt.clipName = "Walk"; f.fireAnt.animTime = lt * 1.5;
-      } else if (lt < 2.76) {
-        // Pulls out brass magnifying glass (`StartFire`) to ignite Flame #1!
-        fx = f.x - 1.75;
-        f.fireAnt.clipName = "StartFire"; f.fireAnt.animTime = lt - 1.0;
-        if (lt > 2.05) fSc[0] = smooth((lt - 2.05) / 0.55);
-      } else if (lt < 3.45) {
-        const u = smooth((lt - 2.76) / 0.69);
-        fx = lerp(f.x - 1.75, f.x - 0.75, u); fSc[0] = 1;
+      } else if (lt < 2.71) {
+        // Ignites Flame #1 RIGHT ON THE EXACT SUNBEAM FOCAL POINT `flX[0]`!
+        const dtF = lt - 0.95;
+        fx = igX[0];
+        f.fireAnt.clipName = "StartFire"; f.fireAnt.animTime = dtF;
+        if (dtF > 1.30) fSc[0] = smooth((dtF - 1.30) / 0.36);
+      } else if (lt < 3.36) {
+        const u = smooth((lt - 2.71) / 0.65);
+        fx = lerp(igX[0], igX[1], u); fSc[0] = 1;
         f.fireAnt.clipName = "Walk"; f.fireAnt.animTime = lt * 1.5;
-      } else if (lt < 5.21) {
-        // Ignites Flame #2 & Flame #3 into a blazing 3-tile fire line!
-        fx = f.x - 0.75; fSc[0] = 1;
-        f.fireAnt.clipName = "StartFire"; f.fireAnt.animTime = lt - 3.45;
-        if (lt > 4.20) fSc[1] = smooth((lt - 4.20) / 0.55);
-        if (lt > 4.55) fSc[2] = smooth((lt - 4.55) / 0.55);
-      } else if (lt < 9.40) {
-        // FIRE-WALKING: Fire Ant struts back and forth RIGHT ON TOP OF / THROUGH the roaring flames!
+      } else if (lt < 5.12) {
+        // Ignites Flame #2 RIGHT ON THE EXACT SUNBEAM FOCAL POINT `flX[1]`!
+        const dtF = lt - 3.36;
+        fx = igX[1]; fSc[0] = 1;
+        f.fireAnt.clipName = "StartFire"; f.fireAnt.animTime = dtF;
+        if (dtF > 1.30) fSc[1] = smooth((dtF - 1.30) / 0.36);
+      } else if (lt < 5.77) {
+        const u = smooth((lt - 5.12) / 0.65);
+        fx = lerp(igX[1], igX[2], u); fSc[0] = 1; fSc[1] = 1;
+        f.fireAnt.clipName = "Walk"; f.fireAnt.animTime = lt * 1.5;
+      } else if (lt < 7.53) {
+        // Ignites Flame #3 RIGHT ON THE EXACT SUNBEAM FOCAL POINT `flX[2]`!
+        const dtF = lt - 5.77;
+        fx = igX[2]; fSc[0] = 1; fSc[1] = 1;
+        f.fireAnt.clipName = "StartFire"; f.fireAnt.animTime = dtF;
+        if (dtF > 1.30) fSc[2] = smooth((dtF - 1.30) / 0.36);
+      } else if (lt < 11.55) {
+        // FIRE-WALKING: Fire Ant struts fearlessly back and forth RIGHT ON TOP OF / THROUGH the roaring flames!
         fSc[0] = 1; fSc[1] = 1; fSc[2] = 1;
-        const pU = (lt - 5.21) / 4.19;
-        if (pU < 0.50) {
-          fx = lerp(f.x - 1.05, f.x + 1.55, smooth(pU / 0.50)); fyaw = Math.PI * 0.5;
+        const pU = (lt - 7.53) / 4.02;
+        if (pU < 0.45) {
+          fx = lerp(igX[2], flX[2] + 0.55, smooth(pU / 0.45)); fyaw = Math.PI * 0.5;
         } else {
-          fx = lerp(f.x + 1.55, f.x - 1.75, smooth((pU - 0.50) / 0.50)); fyaw = -Math.PI * 0.5;
+          fx = lerp(flX[2] + 0.55, igX[0], smooth((pU - 0.45) / 0.55)); fyaw = -Math.PI * 0.5;
         }
         f.fireAnt.clipName = "Walk"; f.fireAnt.animTime = lt * 1.65;
-      } else if (lt < 10.60) {
-        // Extinguishes flames smoothly (`Extinguish` 1.20 s)
-        fx = f.x - 1.75; fyaw = Math.PI * 0.5;
-        f.fireAnt.clipName = "Extinguish"; f.fireAnt.animTime = lt - 9.40;
-        const rem = 1.0 - smooth((lt - 9.60) / 0.85);
+      } else if (lt < 12.75) {
+        // Extinguishes flames cleanly (`Extinguish` 1.20 s)
+        fx = igX[0]; fyaw = Math.PI * 0.5;
+        f.fireAnt.clipName = "Extinguish"; f.fireAnt.animTime = lt - 11.55;
+        const rem = 1.0 - smooth((lt - 11.75) / 0.85);
         fSc[0] = rem; fSc[1] = rem; fSc[2] = rem;
       } else {
-        const u = smooth((lt - 10.60) / 1.0);
-        fx = lerp(f.x - 1.75, f.x - 2.6, u); fyaw = -Math.PI * 0.5;
+        const u = smooth((lt - 12.75) / 1.05);
+        fx = lerp(igX[0], igX[0] - 0.9, u); fyaw = -Math.PI * 0.5;
         f.fireAnt.clipName = "Walk"; f.fireAnt.animTime = lt * 1.4;
       }
 
       // Bystander Green Worker wanders near the blaze, gets singed (`Hit` jump back!), and retreats!
-      if (lt > 5.8 && lt < 7.1) {
-        const u = smooth((lt - 5.8) / 1.3);
+      if (lt > 7.8 && lt < 9.1) {
+        const u = smooth((lt - 7.8) / 1.3);
         bx = lerp(f.x + 3.2, f.x + 1.85, u);
         f.bystander.clipName = "Walk"; f.bystander.animTime = lt * 1.4;
-      } else if (lt >= 7.1 && lt < 7.9) {
-        const u = (lt - 7.1) / 0.80;
+      } else if (lt >= 9.1 && lt < 9.9) {
+        const u = (lt - 9.1) / 0.80;
         bx = lerp(f.x + 1.85, f.x + 3.15, Math.pow(u, 0.68));
         by = u < 0.58 ? (Math.sin((u / 0.58) * Math.PI) * 0.42) : 0;
-        f.bystander.clipName = "Hit"; f.bystander.animTime = lt - 7.1;
+        f.bystander.clipName = "Hit"; f.bystander.animTime = lt - 9.1;
       } else {
         bx = f.x + 3.2; f.bystander.clipName = "Idle"; f.bystander.animTime = lt;
       }
@@ -708,7 +942,7 @@
         if (fSc[i] > 0.03) {
           const sc = FIRE_SCALE * fSc[i];
           f.flames[i].idleTime = t + i * 0.43;
-          f.flames[i].offsetMat = buildPropMat(f.flames[i].model, f.x - 0.95 + i * 0.95, 0, f.z, sc, sc, sc, 0);
+          f.flames[i].offsetMat = buildPropMat(f.flames[i].model, flX[i], 0, f.z, sc, sc, sc, 0);
           visible.push(f.flames[i]);
           fireGlow = Math.max(fireGlow, fSc[i]);
         }
