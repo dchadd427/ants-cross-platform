@@ -686,13 +686,9 @@
         vec3 flatGrass = tgToSrgb(tgAces(lawnAlb * 1.25)) * mix(1.0 - u_shadowStrength * 0.55, 1.0, sh);
         outCol = mix(outCol, flatGrass, u_lightMix.w);
       }
-      // Atmospheric perspective: gentle depth air veil in Game View (ortho) and rich warm sunlit aerial haze in 3D persp!
-      float camDist = length(v_worldPos - u_cameraPos);
-      vec3 airCol = mix(skyMatch, tgToSrgb(tgAces((u_skyColor * 0.65 + u_keyColor * 0.32) * u_lightMix.z)), 0.42);
-      float orthoAir = smoothstep(0.32, 1.0, suv.y) * 0.13 * (1.0 - u_lightMix.w);
-      float perspAir = clamp(smoothstep(14.0, 58.0, camDist) * 0.42 + smoothstep(22.0, 54.0, dOut) * 0.55, 0.0, 0.94);
-      float fade = (u_isOrtho != 0) ? orthoAir : perspAir;
-      fragColor = vec4(mix(outCol, airCol, fade), 1.0);
+      // Clean outer horizon blend far beyond the playable map (zero haze on the map itself!)
+      float fade = (u_isOrtho != 0) ? 0.0 : smoothstep(34.0, 62.0, dOut);
+      fragColor = vec4(mix(outCol, skyMatch, fade), 1.0);
       return;
     }
 
@@ -956,16 +952,6 @@
     }
 
     vec3 outCol = tgToSrgb(tgAces(lit * 1.06 * u_lightMix.z));
-    if (u_lightMix.w < 0.5) {
-      vec3 airCol = mix(skyMatch, tgToSrgb(tgAces((u_skyColor * 0.65 + u_keyColor * 0.32) * u_lightMix.z)), 0.45);
-      float haze = (u_isOrtho == 0)
-        ? smoothstep(14.0, 62.0, length(v_worldPos - u_cameraPos)) * 0.38
-        : smoothstep(0.36, 1.0, suv.y) * 0.12;
-      outCol = mix(outCol, airCol, haze);
-      // Ultra-subtle organic optical film-grain breaking up sterile digital smoothness
-      float grain = (tgHash(floor(gl_FragCoord.xy) + fract(u_time * 0.3) * 17.0) - 0.5) * 0.014;
-      outCol = clamp(outCol + grain, 0.0, 1.0);
-    }
     if (u_lightMix.w > 0.001) {
       vec3 flatCol = (u_pbrFloor != 0 ? tgToSrgb(tgAces(albedo * 1.25)) : texSrgb) * mix(1.0 - u_shadowStrength * 0.62, 1.0, sh);
       outCol = mix(outCol, flatCol, u_lightMix.w);
@@ -1083,25 +1069,20 @@
   uniform float u_time;
   out vec3 v_nrm;
   out vec3 v_col;
-  out float v_air;
   void main() {
     float bend = a_col.a * a_col.a;
     float w = sin(u_time * 1.9 + a_pos.x * 0.45 + a_pos.z * 0.36) * 0.095
             + cos(u_time * 1.3 - a_pos.x * 0.24 + a_pos.z * 0.52) * 0.045;
     vec3 wp = a_pos + vec3(w * bend, -abs(w) * bend * 0.24, w * 0.58 * bend);
-    vec4 cp = u_viewProj * vec4(wp, 1.0);
-    gl_Position = cp;
+    gl_Position = u_viewProj * vec4(wp, 1.0);
     v_nrm = a_nrm;
     v_col = a_col.rgb;
-    // Perspective depth (cp.w > 1.5) -> real distance aerial haze; Ortho (cp.w ~ 1) -> gentle top-of-frame air lift
-    v_air = (cp.w > 1.5) ? smoothstep(15.0, 62.0, cp.w) * 0.38 : smoothstep(0.25, 1.0, cp.y * 0.5 + 0.5) * 0.11;
   }`;
 
   const BORDER_GRASS_FS = `#version 300 es
   precision highp float;
   in vec3 v_nrm;
   in vec3 v_col;
-  in float v_air;
   uniform vec3 u_keyDir, u_fillDir, u_keyColor, u_fillColor, u_skyColor, u_groundColor;
   uniform vec4 u_lightMix;
   out vec4 fragColor;
@@ -1116,10 +1097,6 @@
     vec3 hemi = mix(u_groundColor, u_skyColor, N.y * 0.5 + 0.5);
     vec3 lit = v_col * (u_keyColor * (NoL * 0.28 + wrapL * 0.11) + u_fillColor * NoF * 0.14 + hemi * 0.25 * u_lightMix.x);
     vec3 outCol = bgSrgb(bgAces(lit * 1.08 * u_lightMix.z));
-    if (u_lightMix.w < 0.5 && v_air > 0.005) {
-      vec3 airCol = bgSrgb(bgAces((u_skyColor * 0.65 + u_keyColor * 0.30) * u_lightMix.z));
-      outCol = mix(outCol, airCol, v_air);
-    }
     if (u_lightMix.w > 0.001) outCol = mix(outCol, bgSrgb(bgAces(v_col * 1.18)), u_lightMix.w);
     fragColor = vec4(outCol, 1.0);
   }`;

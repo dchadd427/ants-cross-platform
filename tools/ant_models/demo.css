@@ -88,35 +88,27 @@
   box-shadow: 0 0 6px rgba(224, 83, 83, 0.55);
 }
 
-/* Optical camera lens vignette + subtle sunlit atmospheric air veil (imperfect real-camera depth!) */
+/* Subtle optical camera lens corner vignette (no atmospheric haze wash) */
 .demo-optics {
   position: absolute;
   inset: 0;
   z-index: 2;
   pointer-events: none;
-  background:
-    radial-gradient(ellipse 84% 78% at 50% 52%, transparent 52%, rgba(10, 14, 18, 0.24) 84%, rgba(6, 9, 13, 0.48) 100%),
-    radial-gradient(ellipse 70% 42% at 18% 0%, rgba(255, 240, 198, 0.14), transparent 72%);
+  background: radial-gradient(ellipse 84% 78% at 50% 52%, transparent 58%, rgba(10, 14, 18, 0.16) 86%, rgba(6, 9, 13, 0.36) 100%);
   transition: opacity 0.25s ease;
 }
 
 .demo-optics[data-lighting="golden"] {
-  background:
-    radial-gradient(ellipse 84% 78% at 50% 52%, transparent 48%, rgba(24, 12, 6, 0.28) 82%, rgba(12, 6, 4, 0.56) 100%),
-    radial-gradient(ellipse 75% 48% at 14% 2%, rgba(255, 178, 86, 0.22), transparent 74%);
+  background: radial-gradient(ellipse 84% 78% at 50% 52%, transparent 54%, rgba(24, 12, 6, 0.20) 84%, rgba(12, 6, 4, 0.42) 100%);
 }
 
 .demo-optics[data-lighting="night"],
 .demo-optics[data-lighting="moonlight"] {
-  background:
-    radial-gradient(ellipse 82% 76% at 50% 52%, transparent 44%, rgba(4, 8, 18, 0.34) 80%, rgba(2, 4, 12, 0.62) 100%),
-    radial-gradient(ellipse 68% 40% at 80% 4%, rgba(110, 155, 235, 0.14), transparent 70%);
+  background: radial-gradient(ellipse 82% 76% at 50% 52%, transparent 50%, rgba(4, 8, 18, 0.26) 82%, rgba(2, 4, 12, 0.50) 100%);
 }
 
 .demo-optics[data-lighting="neon"] {
-  background:
-    radial-gradient(ellipse 82% 76% at 50% 52%, transparent 46%, rgba(8, 4, 22, 0.30) 82%, rgba(4, 2, 14, 0.58) 100%),
-    radial-gradient(ellipse 64% 40% at 22% 4%, rgba(64, 215, 255, 0.12), transparent 70%);
+  background: radial-gradient(ellipse 82% 76% at 50% 52%, transparent 52%, rgba(8, 4, 22, 0.22) 84%, rgba(4, 2, 14, 0.46) 100%);
 }
 
 .demo-optics[data-lighting="classic"] {
