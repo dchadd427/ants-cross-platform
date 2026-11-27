@@ -39,6 +39,7 @@ Work that is not released yet is written in the same template under a heading th
 **Rules / network:** network protocol 29 (a name is UTF-8, and a name that is not a guest's carries the hub's signature, [`docs/HUB_NICKNAMES.md`](docs/HUB_NICKNAMES.md)): an older page or game cannot join a room of this version, so reload the page. The rules and the recordings are unchanged.
 
 **Fixes:**
+- The live match cards of the Games list and their scoreboard name a computer player "Kit (bot)", never with its level.
 - A connected AI's `put_ants` puts the ant type that it names, and `get_region` names the types right (they were mixed up: asking for a combat ant gave a bomber, and a swimmer gave a combat ant).
 
 **For operators:**

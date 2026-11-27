@@ -665,6 +665,27 @@
    "old": "s.li.classList.toggle('gopen', on);",
    "new": "s.li.className = on ? 'gitem glive gopen' : 'gitem glive';",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_card_says_the_level_of_a_computer_player",
+   "file": "web/home/games.js",
+   "old": "var names = e.who.map(seatName).join(', ') || TEXT.nobodyNamed,",
+   "new": "var names = e.who.map(function (w) { return w.name; }).join(', ') || TEXT.nobodyNamed,",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_board_says_the_level_of_a_computer_player",
+   "file": "web/home/games.js",
+   "old": "function sideNames(x) { return x.who.map(seatName).join(' + '); }",
+   "new": "function sideNames(x) { return x.who.map(function (w) { return w.name; }).join(' + '); }",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_card_does_not_say_that_a_player_is_a_computer",
+   "file": "web/home/games.js",
+   "old": "function seatName(w) { return plainName(w.name) + (BOT_NAME.test(w.name) ? TEXT.bot : ''); }",
+   "new": "function seatName(w) { return plainName(w.name); }",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   }
  ]
 }
