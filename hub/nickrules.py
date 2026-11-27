@@ -1,7 +1,7 @@
 """The rules of a nickname, a tag and a guest's name (docs/HUB_NICKNAMES.md, "The rules"): pure functions of text, no store and no clock. hub/nicknames.py adds who has what, how often it may change, and the frames.
 
 A nickname is 3 to 16 characters: the letters of ONE alphabet (Latin or Cyrillic, hub/name_letters.py: exactly what the game's font draws), the digits 0 to 9, spaces and `. _ - '`; it starts and ends with a letter or a digit,
-has a letter in it and never two signs in a row. A tag is 2 to 5 letters and digits of one alphabet, shown in capitals. A guest's name is a nickname that nobody owns. Every refusal is a word (the page owns the sentences):
+has a letter in it and never two signs in a row. A tag is 2 to 5 letters and digits of one alphabet, shown as it was typed ("Ant", "ANT" and "aNt" are three tags, all read as one word by the checks). A guest's name is a nickname that nobody owns. Every refusal is a word (the page owns the sentences):
 
   empty, short, long   the length (in characters, after the rules below have been applied)
   chars                a character that is no letter of the table, digit, space or `. _ - '`, or a sign where none may be
@@ -87,7 +87,8 @@ def check_nickname(raw):
 
 
 def check_tag(raw, nickname=""):
-    """(tag, None) for text that may be a tag (shown in capitals), else (None, why); '' is no tag and always fine. `nickname` is the one that the tag will stand before: the whole name has to be a name the room takes."""
+    """(tag, None) for text that may be a tag (kept as it was typed: its capitals are the person's), else (None, why); '' is no tag and always fine. `nickname` is the one that the tag will stand before: the whole name has to be a name the room takes.
+    Every check that compares a tag with a word (reserved, staff, rude, a computer player's label) reads it in capitals, so a tag cannot get past them by its case."""
     if raw is None or raw == "":
         return "", None
     tag = normalize(raw)
@@ -98,26 +99,20 @@ def check_tag(raw, nickname=""):
     why = _characters(tag, False)
     if why:
         return None, why
-    capitals = []
-    for ch in tag:
-        up = ch.upper()
-        if len(up) != 1 or not (name_letters.is_letter(up) or name_letters.is_digit(up)):
-            return None, "chars"
-        capitals.append(up)
-    tag = "".join(capitals)
     if len(tag) < TAG_MIN:
         return None, "short"
     if len(tag) > TAG_MAX:
         return None, "long"
     if len(alphabets_of(tag)) > 1:
         return None, "alphabets"
-    if tag.lower() in TAG_RESERVED_EXACT:
+    capitals = tag.upper()
+    if capitals.lower() in TAG_RESERVED_EXACT:
         return None, "reserved"
-    if text.squash(tag) in TAG_RESERVED_SQUASHED:
+    if text.squash(capitals) in TAG_RESERVED_SQUASHED:
         return None, "staff"
-    if is_rude(tag):
+    if is_rude(capitals):
         return None, "rude"
-    if reads_as_bot("[%s] %s" % (tag, nickname or "Name")):
+    if reads_as_bot("[%s] %s" % (capitals, nickname or "Name")):
         return None, "bot"
     return tag, None
 

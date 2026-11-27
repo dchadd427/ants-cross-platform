@@ -360,6 +360,20 @@
    "old": "f.help.hidden = !f.help.textContent || out.text !== '';",
    "new": "f.help.hidden = !f.help.textContent;",
    "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "a_tag_is_sent_in_capitals",
+   "file": "web/home/names.js",
+   "old": "tag: s.typed.tag, save: !!save }",
+   "new": "tag: s.typed.tag.toUpperCase(), save: !!save }",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
+  },
+  {
+   "id": "a_change_of_capitals_alone_is_no_change",
+   "file": "web/home/names.js",
+   "old": "(me.tag || '') === (parts.tag ? parts.tag.slice(1, -1) : '')",
+   "new": "(me.tag || '').toLowerCase() === (parts.tag ? parts.tag.slice(1, -1) : '').toLowerCase()",
+   "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
   }
  ]
 }
