@@ -287,6 +287,8 @@ COPY web/site_nav.js /usr/share/nginx/html/site_nav.js
 # The update notice (docs/SITE_NAV.md "The update notice"): the strip and the "What's new" window that every page with the version stamped loads (update_notice.js, update_notice.css); the data file whats_new.json is made below, with the changelog
 COPY web/update_notice.css /usr/share/nginx/html/update_notice.css
 COPY web/update_notice.js /usr/share/nginx/html/update_notice.js
+# The counter of the site's visits (docs/ANALYTICS.md): the one small script that every public page loads after the update notice; it sends a few beacons to the chat hub's door /hub/a and keeps nothing in the browser
+COPY web/analytics.js /usr/share/nginx/html/analytics.js
 # The bar of the game page (docs/SITE_NAV.md "The game page"): the game page's own rules for the site bar and its part of the bar's script (the links that ask first during a match, the keys, the Menu's own lines)
 COPY web/game_bar.css /usr/share/nginx/html/game_bar.css
 COPY web/game_bar.js /usr/share/nginx/html/game_bar.js
@@ -370,6 +372,8 @@ COPY --from=builder /src/web/admin.html /usr/share/nginx/html/admin.html
 COPY web/admin.css /usr/share/nginx/html/admin.css
 COPY web/admin_map_pick.js /usr/share/nginx/html/admin_map_pick.js
 COPY web/admin_bots.js /usr/share/nginx/html/admin_bots.js
+COPY web/admin_analytics.js /usr/share/nginx/html/admin_analytics.js
+COPY web/admin_analytics.css /usr/share/nginx/html/admin_analytics.css
 COPY web/admin_page.js /usr/share/nginx/html/admin_page.js
 
 # Copy custom Nginx configuration, and the list of the reverse proxies whose X-Forwarded-For is believed (the private addresses that a proxy connects from, docs/SERVER.md "Behind a reverse proxy"; the stack files

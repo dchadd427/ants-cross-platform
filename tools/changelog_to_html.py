@@ -262,6 +262,7 @@ PAGE = """<!DOCTYPE html>
 </div>
 <script src="/site_nav.js"></script>
 <script src="/update_notice.js"></script>
+<script src="/analytics.js"></script>
 </body>
 </html>
 """

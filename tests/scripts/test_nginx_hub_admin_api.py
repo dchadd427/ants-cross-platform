@@ -5,7 +5,7 @@ Run by ./run_tests.sh --fast and by the CI; the blocks are RUN where the program
   - the text: one prefix location, and a map that lets a call through only when its method and its name are ones that the hub has (the lists are read from hub/admindoor.py, so a call that the hub gains
     is not forgotten here); the checks (the name, the query, the page's own request) come before the allowance and before anything is passed on; the visitor's request is passed on as nothing but the
     few headers that the hub needs; the allowance is the zone of the admin API, and nginx's number is below the hub's bucket for an address;
-  - the real blocks in front of a stand-in hub that writes down what arrives: each of the thirteen calls goes through with its headers and body; every other name, method, path and query is a 404; a request
+  - the real blocks in front of a stand-in hub that writes down what arrives: each of the seventeen calls goes through with its headers and body; every other name, method, path and query is a 404; a request
     that the page did not make (no Sec-Fetch-Site, cross-site, same-site) is a 403 and the hub is not asked; a body of 513 bytes is refused; a flood is a 429 and the hub is not asked; a visitor's other
     cookies, address headers, Authorization and a pass of his own never reach the hub; a hub that is not there is the JSON 503 of the chat door; nothing is written to the access log;
   - the whole way, in front of the real hub, a fake Discord and the real Discord login: the owner's account reads the six lists through nginx, a change carries the page's token and the site's Origin (without
@@ -41,7 +41,7 @@ HEAD = CONF[:CONF.index("server {")]
 DOOR = stats.block_of(CONF, "location ^~ /hub/admin/api/ ")
 MAP = stats.block_of(HEAD, 'map "$request_method $uri" $hub_admin_call ')
 COOKIE = "__Host-ants_hub=" + "a" * 32
-READS, WRITES = sorted(admindoor.READS), sorted(admindoor.WRITES)
+READS, WRITES = sorted(admindoor.READS), sorted(admindoor.WRITES | admindoor.QUERIES)          # (a POST of the map's second word: the changes and the Analytics tab's question, which changes nothing)
 SECRET = "testing-gate-key-0b8e2d71a4c6f395-z"
 OWNER, PLAIN, TARGET = fd.snowflake(910), fd.snowflake(911), fd.snowflake(912)               # (made-up ids: what a login by Discord has)
 MINI_CONF = hl.mini_conf
@@ -62,7 +62,7 @@ class TheText(unittest.TestCase):
         self.assertEqual(sorted(writes.group(1).split("|")), WRITES)
         self.assertIn('default "";', MAP)
         self.assertEqual(len(re.findall(r'"~\^', MAP)), 2)
-        self.assertEqual((len(READS), len(WRITES)), (7, 9))
+        self.assertEqual((len(READS), len(WRITES)), (7, 10))
 
     def test_the_checks_come_before_the_allowance_and_before_anything_is_passed_on(self):
         self.assertIn('if ($hub_admin_call = "") { return 404; }', DOOR)

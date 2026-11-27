@@ -58,6 +58,7 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [Alerts, invitations, mentions and follows](docs/HUB_PEOPLE.md): the account's list behind the bell, `/invite`, `@name` and `/follow`: the frames, the limits and who is never told
 - [Private messages](docs/HUB_MESSAGES.md): who may write to whom, what is kept (7 days), Block, reports and what the staff can see
 - [The chat commands](docs/HUB_COMMANDS.md): the slash commands of the chat, who may use which, the helper, `/bots` and the hub's door to the game server
+- [Counting the site's visits](docs/ANALYTICS.md): the counter with no cookie and no address kept, the day's secret, Do Not Track, the country list, what is kept for how long, and the admin page's Analytics tab
 - [Images in the chat](docs/HUB_IMAGES.md): who may post images, the converter that re-encodes them, the limits, moderation and `/noimages`, how they are stored and served
 - [Testing and CI](docs/TESTING.md): the tiers, how to run a suite, the rules for tests and mutants, the E2E runner, continuous integration
 - [What the test suites cover](docs/TESTING_SUITES.md): the table of the C++ suites by number and what each one checks

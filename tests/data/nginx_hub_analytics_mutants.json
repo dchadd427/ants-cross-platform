@@ -1,0 +1,105 @@
+{
+ "note": "Mutants of the counter's door in docker/nginx.conf (POST /hub/a: the checks, the headers that go on, the body's size, the allowance and the log; docs/ANALYTICS.md) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose, and tests/scripts/test_nginx_hub_analytics.py (and, for the admin API's map, test_nginx_hub_admin_api.py) must notice. The text tests catch them without nginx; where the program nginx is installed the real block is run too. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/nginx_hub_analytics_mutants.json --keep-going --jobs 1.",
+ "defaults": {
+  "test": "python3 -I tests/scripts/test_nginx_hub_analytics.py && python3 -I tests/scripts/test_nginx_hub_admin_api.py",
+  "build": []
+ },
+ "mutants": [
+  {
+   "id": "the_log_is_on",
+   "file": "docker/nginx.conf",
+   "old": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n",
+   "new": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n"
+  },
+  {
+   "id": "the_error_log_names_the_visitor",
+   "file": "docker/nginx.conf",
+   "old": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n",
+   "new": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n"
+  },
+  {
+   "id": "any_method_goes_through",
+   "file": "docker/nginx.conf",
+   "old": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n",
+   "new": "location = /hub/a {\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n"
+  },
+  {
+   "id": "a_query_goes_through",
+   "file": "docker/nginx.conf",
+   "old": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n",
+   "new": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n"
+  },
+  {
+   "id": "a_page_of_another_site_goes_through",
+   "file": "docker/nginx.conf",
+   "old": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n",
+   "new": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n"
+  },
+  {
+   "id": "there_is_no_allowance",
+   "file": "docker/nginx.conf",
+   "old": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n",
+   "new": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /dev/stderr crit;\n"
+  },
+  {
+   "id": "the_body_may_be_a_megabyte",
+   "file": "docker/nginx.conf",
+   "old": "limit_req zone=ants_hub_a burst=60 nodelay;\n        limit_req_status 429;\n        client_max_body_size 1k;",
+   "new": "limit_req zone=ants_hub_a burst=60 nodelay;\n        limit_req_status 429;\n        client_max_body_size 1m;"
+  },
+  {
+   "id": "the_cookie_goes_on",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header User-Agent $http_user_agent;\n        proxy_set_header DNT $http_dnt;",
+   "new": "        proxy_set_header User-Agent $http_user_agent;\n        proxy_set_header Cookie $http_cookie;\n        proxy_set_header DNT $http_dnt;"
+  },
+  {
+   "id": "the_referrer_goes_on",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header User-Agent $http_user_agent;\n        proxy_set_header DNT $http_dnt;",
+   "new": "        proxy_set_header User-Agent $http_user_agent;\n        proxy_set_header Referer $http_referer;\n        proxy_set_header DNT $http_dnt;"
+  },
+  {
+   "id": "the_language_goes_on",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header User-Agent $http_user_agent;\n        proxy_set_header DNT $http_dnt;",
+   "new": "        proxy_set_header User-Agent $http_user_agent;\n        proxy_set_header Accept-Language $http_accept_language;\n        proxy_set_header DNT $http_dnt;"
+  },
+  {
+   "id": "do_not_track_is_not_passed_on",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header DNT $http_dnt;\n",
+   "new": ""
+  },
+  {
+   "id": "global_privacy_control_is_not_passed_on",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header Sec-GPC $http_sec_gpc;\n",
+   "new": ""
+  },
+  {
+   "id": "the_browser_is_not_passed_on",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header User-Agent $http_user_agent;\n        proxy_set_header DNT $http_dnt;",
+   "new": "        proxy_set_header DNT $http_dnt;"
+  },
+  {
+   "id": "a_visitors_own_address_header_is_believed",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header X-Client-Address $remote_addr;\n        proxy_redirect off;\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 10s;",
+   "new": "        proxy_set_header X-Client-Address $http_x_client_address;\n        proxy_redirect off;\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 10s;"
+  },
+  {
+   "id": "the_visitors_headers_all_go_on",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Origin $http_origin;\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header Content-Type $content_type;",
+   "new": "        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Origin $http_origin;\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header Content-Type $content_type;"
+  },
+  {
+   "id": "the_analytics_question_is_not_a_known_name",
+   "file": "docker/nginx.conf",
+   "old": "|del|analytics)\\z\" change;",
+   "new": "|del)\\z\" change;"
+  }
+ ]
+}
