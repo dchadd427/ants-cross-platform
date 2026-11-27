@@ -1085,11 +1085,10 @@
 
       if (showAnt) {
         const ax = d.hx + d.ux * r, az = d.hz + d.uz * r;
-        const bob = walking ? Math.abs(Math.sin(animT * 5.2)) * 0.022 : 0;
-        d.worker.offsetMat = buildAntMat(d.worker.model, ax, y + bob, az, d.antScale, yaw);
+        d.worker.offsetMat = buildAntMat(d.worker.model, ax, y, az, d.antScale, yaw);
         visible.push(d.worker);
         if (showBox && buildLunchMat) {
-          d.lunchbox.offsetMat = buildLunchMat(d.lunchbox.model, ax, y + bob + boxDropY, az, yaw, animT, walking, d.antScale * boxScaleMul, false);
+          d.lunchbox.offsetMat = buildLunchMat(d.lunchbox.model, ax, y + boxDropY, az, yaw, animT, walking, d.antScale * boxScaleMul, false);
           visible.push(d.lunchbox);
         }
       }

@@ -269,14 +269,16 @@ def _add_walk_clip(scene: SceneBuilder, ant_class: str, node_verts: Dict[str, "n
     n_steps = 24
     times = [round(dur * (i / n_steps), 5) for i in range(n_steps + 1)]
 
-    # Per-class gait flavor (stride_z, lift_y, bounce_y, sway_x, lean_rx, twist_ry, roll_rz, arm_swing).
+    # Authentic 1998 `*wg` gait measured directly from `agwg..afwg` sprites: crisp upright vertical march,
+    # minimal side-to-side waddle/roll, forward-tracking parallel feet, and per-class bounce (e.g. Fire's jaunty hop).
+    # Tuple: (stride_z, lift_y, bounce_y, sway_x, lean_rx, twist_ry, roll_rz, arm_swing).
     gait_cfg = {
-        "worker": (0.064, 0.052, 0.017, 0.013, 0.11, 0.11, 0.055, 0.42),
-        "combat": (0.068, 0.048, 0.015, 0.017, 0.08, 0.12, 0.060, 0.34),
-        "thief": (0.058, 0.042, 0.013, 0.012, 0.13, 0.13, 0.050, 0.38),
-        "bomber": (0.058, 0.046, 0.016, 0.014, 0.11, 0.10, 0.055, 0.36),
-        "swimmer": (0.056, 0.050, 0.017, 0.017, 0.09, 0.11, 0.065, 0.34),
-        "fire": (0.062, 0.050, 0.016, 0.013, 0.10, 0.11, 0.055, 0.38),
+        "worker": (0.070, 0.050, 0.024, 0.003, 0.08, 0.055, 0.012, 0.44),
+        "combat": (0.072, 0.048, 0.020, 0.006, 0.11, 0.085, 0.020, 0.36),
+        "thief": (0.064, 0.042, 0.018, 0.002, 0.12, 0.055, 0.009, 0.36),
+        "bomber": (0.062, 0.046, 0.022, 0.004, 0.09, 0.055, 0.016, 0.34),
+        "swimmer": (0.060, 0.048, 0.018, 0.003, 0.07, 0.050, 0.014, 0.32),
+        "fire": (0.066, 0.052, 0.036, 0.003, 0.08, 0.050, 0.012, 0.38),
     }
     stride_z, lift_y, bounce_y, sway_x, lean_rx, twist_ry, roll_rz, arm_amp = gait_cfg.get(ant_class, gait_cfg["worker"])
 
@@ -315,10 +317,10 @@ def _add_walk_clip(scene: SceneBuilder, ant_class: str, node_verts: Dict[str, "n
         ub_ts.append((float(t_ub[0]), float(t_ub[1]), float(t_ub[2])))
         ub_rs.append(q_ub)
 
-        # Head counter-stabilizes walk yaw/roll while bobbing briskly.
-        hd_rs.append(quat_mul(r_hd0, quat_from_euler_xyz(rx=-0.06 - 0.04 * s2, ry=-0.55 * twist_ry * s1, rz=0.50 * roll_rz * s1)))
+        # Head stays crisp, upright & forward-locked matching the steady 1998 `*wg` walk sprites.
+        hd_rs.append(quat_mul(r_hd0, quat_from_euler_xyz(rx=-0.04 - 0.03 * s2, ry=-0.75 * twist_ry * s1, rz=0.80 * roll_rz * s1)))
         if r_gs0 is not None:
-            gs_rs.append(quat_mul(r_gs0, quat_from_euler_xyz(rx=-0.05 + 0.09 * c2, ry=-0.10 * s1)))
+            gs_rs.append(quat_mul(r_gs0, quat_from_euler_xyz(rx=-0.04 + 0.07 * c2, ry=-0.04 * s1)))
 
         # Natural opposite-arm counter-swing with elbow pump!
         for a_n, f_n, side in arms:
@@ -345,8 +347,8 @@ def _add_walk_clip(scene: SceneBuilder, ant_class: str, node_verts: Dict[str, "n
             swing = max(0.0, math.sin(psi))
             z_off = -stride_z * math.cos(psi)
             y_off = lift_y * (swing ** 1.15)
-            # Slight outward foot arc during swing so mid & rear legs never brush each other!
-            x_off = side * 0.010 * swing
+            # Keep feet tracking straight forward in tight lanes (no wide duck-waddle kick!)
+            x_off = side * 0.003 * swing
             t_cur = np.array([lt0[0] + x_off, lt0[1] + y_off, lt0[2] + z_off], dtype=np.float64)
             s_cur = ls0.copy()
             q_cur = lr0

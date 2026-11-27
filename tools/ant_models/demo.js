@@ -780,16 +780,14 @@
         } else {
           inst.clipName = spec.cls === "worker" ? "Harvest" : (spec.cls === "thief" ? "IdleLookout" : "Idle");
         }
-        // Subtle natural gait bounce while walking + gentle snorkel bobbing while submerged underwater
-        const bob = spec.submerged
-          ? Math.sin(t * 4.6 + (spec.phase || 0) * 6.28) * 0.028
-          : (isWalking ? Math.abs(Math.sin(e.walkDist * 14.5)) * 0.024 : 0);
+        // Gentle snorkel bobbing while submerged underwater; land walks rely on the grounded IK `Walk` clip (no floating feet!)
+        const bob = spec.submerged ? Math.sin(t * 4.6 + (spec.phase || 0) * 6.28) * 0.028 : 0;
         inst.offsetMat = buildWorldMat(inst.model, e.x, e.z, ANT_SCALE, e.renderYaw, (spec.yLift || 0) + bob);
       }
       if (Math.abs(e.x - tx) > visHalfSpan + 2.0 || Math.abs(e.z - tz) > visHalfSpan + 2.0) continue;
-      // Sync leg stride animation cadence directly to ground distance traveled (eliminates stiff foot sliding!)
+      // Sync leg stride cadence to authentic 1998 600 ms Walk speed (~1.0x real cadence at 1.25 tiles/s!)
       inst.idleTime = (pathData && isWalking && !spec.submerged)
-        ? ((spec.phase || 0) * 0.6 + e.walkDist * 1.65)
+        ? ((spec.phase || 0) * 0.6 + e.walkDist * 0.82)
         : (t * (spec.submerged ? 1.25 : 1.0) + (spec.phase || 0) * 1.4);
       if (spec.submerged && ripples.length < 8) {
         // Place animated water splash collar & wake ring dead-center on the protruding yellow snorkel!
@@ -817,9 +815,8 @@
       }
       visible.push(inst);
       if (e.lunchboxInst && activeMap.lunchboxModel) {
-        const lbBob = isWalking ? Math.abs(Math.sin(e.walkDist * 14.5)) * 0.024 : 0;
         const lbAnimT = (state.playing && !state.fixedTime) ? (inst.idleTime || 0) : t;
-        e.lunchboxInst.offsetMat = buildCarriedLunchboxMat(activeMap.lunchboxModel, e.x, lbBob, e.z, e.renderYaw, lbAnimT, isWalking, ANT_SCALE, false);
+        e.lunchboxInst.offsetMat = buildCarriedLunchboxMat(activeMap.lunchboxModel, e.x, 0, e.z, e.renderYaw, lbAnimT, isWalking, ANT_SCALE, false);
         visible.push(e.lunchboxInst);
       }
     }

@@ -202,10 +202,10 @@
         yaw = snapYaw8(Math.atan2(stand[0] - away[0], stand[1] - away[1]));
         walkDist = u * Math.hypot(stand[0] - away[0], stand[1] - away[1]);
         walking = true;
-        y = Math.abs(Math.sin(walkDist * 14.5)) * 0.024;
+        y = 0;
         inst.clipName = "Walk";
         inst.animTime = undefined;
-        inst.idleTime = walkDist * 1.65;
+        inst.idleTime = walkDist * 0.85;
         hillEntry.inst.clipName = "Idle";
         hillEntry.inst.animTime = undefined;
       } else if (lt < 5.20) {
@@ -316,9 +316,9 @@
           walkDist = u * Math.hypot(away[0] - stash[0], away[1] - stash[1]);
           walking = true;
         }
-        y = walking ? Math.abs(Math.sin(walkDist * 14.5)) * 0.024 : 0;
+        y = 0;
         inst.clipName = walking ? "Walk" : "IdleLookout";
-        inst.idleTime = walking ? walkDist * 1.75 : t * 1.2;
+        inst.idleTime = walking ? walkDist * 0.90 : t * 1.2;
         inst.animTime = walking ? inst.idleTime : undefined;
       }
 
