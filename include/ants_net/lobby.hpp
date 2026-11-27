@@ -196,6 +196,9 @@ public:
         /// all zero, that equals the key of another guest, or a maker that returns false, gives the guest NO key (the zero key in its Welcome: no way back for it); the lobby tries a few
         /// times before it gives up. Unset (the default: a LAN or direct host): no guest has a key.
         std::function<bool(SeatKey&)> make_key;
+        /// Protocol 29: a dedicated server that has the hub's key (ants_server/name_pass.hpp) sets this: true when `pass` is a good pass for exactly `name`. A name that it does not vouch for is a guest's (accepted_name).
+        /// Unset (the default: a LAN or direct host, a server with no key): every name that the wire takes is taken as it is.
+        std::function<bool(const std::string& name, const std::string& pass)> name_gate;
     };
     enum class Phase : uint8_t { Room, Loading, Begun };
     struct Event {
@@ -486,7 +489,8 @@ private:
     std::string not_ready_notice() const;                                  // protocol 27: the leader's notice of a START that waits for the persons who have not said Ready
     bool open_color(uint8_t seat) const noexcept;                          // nobody holds the color and the plan calls it Open
     void watch_idle(uint32_t now_ms);                                      // protocol 22: a public room in which nothing has been done for public_idle_ms becomes private
-    void rename(uint8_t seat, const std::string& raw);                    // protocol 16: the person of `seat` goes by this name (a name that looks like a bot's is not taken)
+    void rename(uint8_t seat, const std::string& raw, const std::string& pass);       // protocol 16: the person of `seat` goes by this name (a name that looks like a bot's is not taken; protocol 29: nor one without the pass that a server with the hub's key asks for)
+    std::string accepted_name(const std::string& raw, const std::string& pass, const std::string& fallback, bool is_hello) const;
     uint8_t joiner_seat(uint8_t want) const noexcept;
     bool plan_asks_bots() const noexcept;
     bool everyone_in_game() const noexcept;
@@ -557,6 +561,7 @@ public:
                                              // server gives the seat back. All zero: a new player. Its turns (Hello::have_turns) are 0: this lobby starts from nothing
         uint8_t platform{0};                 // protocol 15: what this machine runs on, told in the Hello (valid_platform; 0: not told)
         uint8_t client_kind{kClientGame};    // protocol 16: what this machine is, told in the Hello: a game (kClientGame), or the front page's lobby (kClientPage), which cannot play a match and is only seated in a lobby room
+        std::string name_pass;               // protocol 29: the hub's pass for `name` (valid_pass_shape; "" for none), told in the Hello
         std::optional<CreateBlock> create;   // protocol 15: the choices of the room that this Hello makes when the room does not exist (a server's public rooms); none: the Hello joins a room
     };
     enum class Phase : uint8_t { Connecting, Joining, InRoom, Loading, Loaded, Begun, Rejected, Closed };
@@ -597,10 +602,10 @@ public:
     /// The leader of a lobby room (protocol 16) tells the server its plan: the map, what each color is, the teams (PlanMsg). False (nothing is sent) unless this machine leads an open room that the last Room
     /// message shows as a lobby room. True means the request was sent, not that the server did it: the Room message shows the plan that the room has (it says nothing to a plan that it cannot hear).
     bool request_plan(const PlanMsg& plan);
-    /// A person of a lobby room (protocol 16) tells the server the name they go by from now on (NameMsg): printable ASCII, at most kMaxNameChars characters, no space at either end (a longer or
-    /// otherwise written name is cut or cleaned by the same rule as the Hello's, and an empty one sends nothing). False (nothing is sent) unless this machine sits in an open room that the last Room message shows as
+    /// A person of a lobby room (protocol 16) tells the server the name they go by from now on (NameMsg): UTF-8 of the name_rules.hpp table, at most kMaxNameChars characters, no space at either end (a longer or
+    /// otherwise written name is cut or cleaned by the same rule as the Hello's, and an empty one sends nothing), with the hub's pass for it when it has one (protocol 29). False (nothing is sent) unless this machine sits in an open room that the last Room message shows as
     /// a lobby room. True means the request was sent, not that the server did it: the Room message shows the name that the room has (it says nothing to a name that it cannot hear).
-    bool request_name(const std::string& name);
+    bool request_name(const std::string& name, const std::string& pass = std::string());
     /// The leader of a lobby room (protocol 16) asks the server to take the person of `seat` out of the room (RemoveMsg, with the guard of the seating as this machine shows it). False (nothing is sent) unless
     /// this machine leads an open room that the last Room message shows as a lobby room and the seat holds a person who is not this machine's own (a bot's and an empty seat hold nobody). True means the request
     /// was sent, not that the server did it: the Room message shows the seat free when it did (it says nothing to a request that it cannot honour: the seating has changed, a match loads).

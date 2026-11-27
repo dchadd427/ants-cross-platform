@@ -10,7 +10,7 @@ import signal
 import sys
 import time
 
-from . import admindoor, aidoor, chat as chatmod, config as configmod, gamedoor, http, images as imagesmod, imgdoor, likedoor, limits as limitmod, roles as rolesmod, session as sessionmod, store as storemod, text as textrules, ws
+from . import admindoor, aidoor, chat as chatmod, config as configmod, gamedoor, http, images as imagesmod, imgdoor, likedoor, limits as limitmod, namepass, roles as rolesmod, session as sessionmod, store as storemod, text as textrules, ws
 from .log import Log
 
 WS_PATH = "/hub/ws"
@@ -112,6 +112,8 @@ class Hub:
         self.clock = clock
         self.chat = chatmod.Chat(store, roles or rolesmod.Roles(cfg, self.limits, clock, log), self.limits, clock, sessions.login)
         self.chat.on_store_error = self.store_trouble
+        if cfg.admin_gate_on:
+            self.chat.nicknames.pass_maker = namepass.Maker(cfg.admin_gate_secret)      # (the game server takes a name only with the pass that the key it shares with the hub signs: hub/namepass.py)
         self.chat.on_command_error = self.command_trouble
         self.chat.end_ai = lambda account: self.ai.relay.end(account=account)         # (a kick and a ban disarm the person's Map Maker tab: hub/airelay.py)
         self.chat.end_logins = self.end_logins            # (a switch of the shown name closes the account's sockets with the call that a logout uses)
@@ -382,7 +384,7 @@ class Hub:
         try:
             who = await asyncio.wait_for(self.sessions.identify(headers), self.limits.identify_seconds)
             if who is not None and self.believable(who):
-                return who
+                return self.chat.nicknames.dress(who)             # (a nickname and a tag, when the account has them: docs/HUB_NICKNAMES.md)
         except Exception as e:                                       # (a login that fails or is late, or hands out what is not an identity: the visitor reads, and cannot write)
             self.log.event("error", kind=type(e).__name__, where="session")
         return None
@@ -459,6 +461,7 @@ class Hub:
             self.chat.commands.forget_idle(now)
             self.chat.people.forget_idle(now)
             self.chat.follows.forget_idle(now)
+            self.chat.nicknames.forget_idle(now)
             self.chat.messages.forget_idle(now)
             self.admin.forget_idle(now)
             self.likes.forget_idle(now)

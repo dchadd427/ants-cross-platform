@@ -17,6 +17,9 @@
     var HILL_LETTER = { green: 'G', red: 'R', blue: 'B', black: 'K' };
     var LEGEND = { ground: { g: 'gravel', d: 'dirt', s: 'slate', m: 'mud', w: 'water', '?': 'ground tile of no kind' },
                    objects: { '.': 'nothing', G: 'green hill', R: 'red hill', B: 'blue hill', K: 'black hill', P: 'power-up', b: 'bomb', f: 'fire wall', '=': 'bridge', p: 'plant', F: 'food', O: 'bigger object', o: 'object' } };
+    var ANT_TYPE_NUMBER = { combat: 4, thief: 3, bomber: 1, swimmer: 5, fire: 2 };          // the type of a starting ant by name, as the file counts them (docs/MAP_FORMAT.md, "Limits"; the Ants box lists the same)
+    var ANT_TYPE_NAME = {};
+    Object.keys(ANT_TYPE_NUMBER).forEach(function (k) { ANT_TYPE_NAME[ANT_TYPE_NUMBER[k]] = k; });
     var WAIT_MS = 50, WAIT_TRIES = 40;
     var OUT_OF_MAP = 'That cell is outside the map.';
 
@@ -57,7 +60,7 @@
         }
         return out;
     }
-    function antsOf(f) { return f.markers.map(function (m) { var o = { team: m.team, row: m.row, column: m.column }; if (m.antType) o.type = Props.TYPES[m.antType].key; return o; }); }
+    function antsOf(f) { return f.markers.map(function (m) { var o = { team: m.team, row: m.row, column: m.column }; if (m.antType) o.type = ANT_TYPE_NAME[m.antType]; return o; }); }
     function pilesOf(f) {
         var lay = Blocks.layout(f);
         return lay.ok2 ? lay.piles.map(function (p) { return { row: p.row, column: p.column, stages: p.stages.length, bites: p.units, points: p.points }; }) : f.food.map(function (p) { return { row: p.row, column: p.column }; });
@@ -92,7 +95,7 @@
     // ---- the tools ----
 
     // env: core, limits (MapSizes.limitsOf), win, file(), name(), editor() (the editor of mapmaker_tools.js), changed(dirty) (what the page does after the editor changed the map), rebase(bytes), stroking(), later(fn, ms),
-    // isSaved(), numbered(name), keep(name, done(error)) (a new draft of the map as it is), keepBefore(done(error)) (the safety copy), newMap(kind, rows, columns, name) (an error sentence, or ''), mini(file, w, h) (a canvas), makeCanvas(w, h), library() (the entries of the library), fetchMap(name, done(error, bytes)), fetchText(url, done(error, text)), note(text) (a line for the strip), onAct(text)
+    // isSaved(), numbered(name), keep(name, done(error)) (a new draft of the map as it is), keepBefore(done(error)) (the safety copy), newMap(kind, rows, columns, name) (an error sentence, or ''), mini(file, w, h) (a canvas), makeCanvas(w, h), library() (the entries of the library), fetchMap(name, done(error, bytes)), fetchText(url, done(error, text)), note(text) (a line for the strip), loadFill(done(part or null)) (mapmaker_fill.js, for fill_area), onAct(text)
     // (what the strip says that the AI did), edges() ({MapEdges, MapGround} or null)
     function create(env) {
         var ver = 1, own = [], redoOwn = [], copied = false, tools = {};
@@ -314,7 +317,7 @@
             guarded(args, done, function () { return put(Blocks.placeHill(env.file(), TEAMS.indexOf(args.team), args.row, args.column), 'Put the ' + args.team + ' hill at row ' + args.row + ', column ' + args.column, { row: args.row - 1, column: args.column - 1, rows: 4, columns: 4 }); });
         };
         tools.put_ants = function (args, done) {
-            var type = args.type ? Props.TYPES.map(function (t) { return t.key; }).indexOf(args.type) : 0;
+            var type = ANT_TYPE_NUMBER[args.type] || 0;
             if (type > 0 && env.file().kind !== 'extended') return done(refuse('refused', 'Ant types are for Extended maps: this map is a Classic map.'));
             guarded(args, done, function () {
                 var f = env.file(), before = Blocks.facts(f, false).ants[TEAMS.indexOf(args.team)], change = Blocks.placeStart(f, TEAMS.indexOf(args.team), args.row, args.column, args.count, type);
@@ -335,6 +338,36 @@
             var item = Palette.itemOf('plants', args.tile);
             if (!item) return done(refuse('bad_args', 'Tile ' + args.tile + ' is not a plant: see list_tiles (plants).'));
             guarded(args, done, function () { return put(Blocks.placePlant(env.file(), args.row, args.column, args.tile, args.dropper || 0), 'Put ' + item.label + ' at row ' + args.row + ', column ' + args.column, { row: args.row, column: args.column, rows: 1, columns: 1 }); });
+        };
+        // A box filled with one thing on the cells of a pattern, as the page's "Fill a box" does it (mapmaker_fill.js has the plan and the change): one step, the cells that cannot take the thing skipped and counted
+        function fillThing(Fill, args, f) {
+            var a = args.ants, food = args.food, item = food && food.food ? Palette.itemOf('food', food.food) : null, stages;
+            if (args.object !== undefined) return Fill.objectThing(args.object) || refuse('bad_args', 'Tile ' + args.object + ' is not a one-cell object (plants are `plant`, bigger objects put_object): see list_tiles (objects).');
+            if (args.plant) return Fill.plantThing(args.plant.tile, args.plant.dropper) || refuse('bad_args', 'Tile ' + args.plant.tile + ' is not a plant: see list_tiles (plants).');
+            if (food) {
+                if (food.food && !item) return refuse('bad_args', 'Tile ' + food.food + ' is not a food item: see list_tiles (food).');
+                stages = food.stages || (item ? item.stages : 3);
+                return Fill.pileThing(stages, item || food.bites || food.points ? { id: item ? item.id : 0, units: food.bites || (item ? item.units : Blocks.FOOD[stages].units), points: food.points || (item ? item.points : Blocks.FOOD[stages].points) } : null);
+            }
+            if (ANT_TYPE_NUMBER[a.type] && f.kind !== 'extended') return refuse('refused', 'Ant types are for Extended maps: this map is a Classic map.');
+            return Fill.antThing(TEAMS.indexOf(a.team), ANT_TYPE_NUMBER[a.type] || 0);
+        }
+        tools.fill_area = function (args, done) {
+            env.loadFill(function (Fill) {
+                if (!Fill) return done(refuse('refused', 'The part of the page that fills a box did not load. Try again in a moment.'));
+                var f = env.file(), q = args.rect, box = { r0: q.row, c0: q.column, r1: q.row + q.rows - 1, c1: q.column + q.columns - 1 }, thing = fillThing(Fill, args, f);
+                if (thing.ok === false) return done(thing);
+                if (!inside(f, box.r0, box.c0) || !inside(f, box.r1, box.c1)) return done(refuse('refused', 'That box is not inside the map (' + f.rows + ' rows, ' + f.columns + ' columns). ' + OUT_OF_MAP));
+                guarded(args, done, function () {
+                    var g = env.file(), p = Fill.plan(g, thing, box, { pattern: args.pattern || 'all', n: args.n, density: args.density, seed: args.seed });
+                    if (!p.cells.length) return refuse('refused', Fill.nothingText(p));
+                    var change = Fill.changeOf(g, p.thing, p.cells);
+                    if (change.error) return refuse('refused', change.error);
+                    var dirty = applyChange(change), n = p.cells.length, rect = { row: q.row, column: q.column, rows: q.rows, columns: q.columns };
+                    if (dirty) said('Put ' + Fill.countText(p) + ' in a box of ' + q.rows + ' x ' + q.columns + ' at row ' + q.row + ', column ' + q.column);
+                    return okay({ version: ver, changed: n, placed: n, skipped: { water: p.skips.water, dry: p.skips.dry, rock: p.skips.rock, in_the_way: p.skips.taken }, left_out: p.extra.length, seed: p.pat.seed, rect: rect }, n);
+                });
+            });
         };
         tools.set_properties = function (args, done) {
             guarded(args, done, function () {

@@ -16,6 +16,7 @@
 // tests/scripts/test_web_lobby.py runs this with node (the quick tier). usage: node web_lobby_check.js web/shell.html web/lobby.html     (exit 0: every check holds; failures are printed)
 'use strict';
 const fs = require('fs');
+globalThis.AntsNameLetters = require(require('path').resolve(__dirname, '..', '..', 'web', 'front', 'name_letters.js'));       // (the pages' name block reads the letters of a name: front/name_letters.js, a script tag of the page)
 const path = require('path');
 // the pages load web/shapes.js (the one table of the shapes) before their own code: it is the global AntsShapes of the code that is run here
 globalThis.AntsShapes = require(path.resolve(__dirname, '..', '..', 'web', 'shapes.js'));
@@ -303,9 +304,9 @@ try {
 
     // the name
     same('the name of the address', local('?map=tiny&name=Bob').slice(-2), ['--name', 'Bob']);
-    same('the name is cut like the game\'s own: printable ASCII only, the blanks at both ends gone, 32 characters at most', [local('?map=tiny&name=' + encodeURIComponent('  Zoë Ann  ')).slice(-2), local('?map=tiny&name=' + 'x'.repeat(40)).slice(-2), local('?map=tiny&name=' + encodeURIComponent('a\tb\nc')).slice(-2)],
-         [['--name', 'Zo Ann'], ['--name', 'x'.repeat(32)], ['--name', 'abc']]);
-    same('a name with other characters than ASCII only is cleaned, and one of nothing but those is none', [local('?map=tiny&name=' + encodeURIComponent('名前')), local('?map=tiny&name=' + encodeURIComponent('   '))], [['--map', 'Original-Ants/Maps/TINY.LVL', '--play', '--alone'], ['--map', 'Original-Ants/Maps/TINY.LVL', '--play', '--alone']]);
+    same('the name is cut like the game\'s own: printable ASCII and the letters of name_letters.js, the blanks at both ends gone, 32 characters at most', [local('?map=tiny&name=' + encodeURIComponent('  Zoë Ann  ')).slice(-2), local('?map=tiny&name=' + 'x'.repeat(40)).slice(-2), local('?map=tiny&name=' + encodeURIComponent('a\tb\nc')).slice(-2)],
+         [['--name', 'Zo\u00eb Ann'], ['--name', 'x'.repeat(32)], ['--name', 'abc']]);
+    same('a name with a letter that the game cannot draw is cleaned of it, and one of nothing but those is none', [local('?map=tiny&name=' + encodeURIComponent('名前')), local('?map=tiny&name=' + encodeURIComponent('   '))], [['--map', 'Original-Ants/Maps/TINY.LVL', '--play', '--alone'], ['--map', 'Original-Ants/Maps/TINY.LVL', '--play', '--alone']]);
     same('with no name in the address no name is given here (the page puts the person\'s own in, by the gate; a reload keeps it because the page strips the name from its address bar and asks again)', [local('?map=tiny&bots=easy').indexOf('--name'), P.localArguments('?map=tiny&bots=easy').nameless], [-1, true]);
     same('the address\'s name is the game\'s name, and an empty address name (a name that was chosen: none) is none and asks for none', [local('?map=tiny&name=Bob').slice(-2), local('?map=tiny&name=').indexOf('--name'), P.localArguments('?map=tiny&name=').nameless], [['--name', 'Bob'], -1, false]);
     same('the name alone (no map, no bots) is given to the game: the setup screen under that name', local('?name=Bob'), ['--name', 'Bob']);
@@ -328,7 +329,7 @@ try {
             const got = local(search, rnd(2) ? 'Bob' : null);
             for (let k = 0; k < got.length; k++) {
                 const prev = got[k - 1];
-                const ok = allowed.has(got[k]) ? true : prev === '--name' && /^[\x20-\x7e]{1,32}$/.test(got[k]) && got[k] === got[k].trim();
+                const ok = allowed.has(got[k]) ? true : prev === '--name' && got[k].length >= 1 && AntsNameLetters.isWireName(got[k], 32) && got[k] === got[k].trim();
                 if (!ok) { wrong++; if (!sample) sample = search + ' -> ' + JSON.stringify(got); }
             }
             // the rules between the arguments: a seat has at most one bot, in the order of the seats; --teams comes once, with a seat that has a bot
@@ -477,7 +478,7 @@ try {
             const tests = {
                 '--join-url': (v) => /^wss:\/\/play\.test\/ws(\/[A-Za-z0-9._~\/-]*)?$/.test(v), '--room': (v) => /^[A-Za-z0-9_-]{1,32}$/.test(v), '--room-map': (v) => Object.keys(FILES).indexOf(v) !== -1, '--room-seats': (v) => /^[2-4]$/.test(v),
                 '--room-teams': (v) => /^[0-3]\+[0-3]$/.test(v) && v[0] !== v[2], '--platform': (v) => /^(browser-)?(windows|macos|linux|android|ios|other)$/.test(v), '--seat': (v) => /^[0-3]$/.test(v), '--fill-bots': (v) => /^(easy|medium|hard)$/.test(v) || (/^(none|easy|medium|hard)(,(none|easy|medium|hard)){3}$/.test(v) && v !== 'none,none,none,none'),
-                '--teams': (v) => /^[0-3]\+[0-3]$/.test(v) && v[0] !== v[2], '--start-when': (v) => /^[1-4]$/.test(v), '--name': (v) => /^[\x20-\x7e]{1,32}$/.test(v) && v === v.trim(),
+                '--teams': (v) => /^[0-3]\+[0-3]$/.test(v) && v[0] !== v[2], '--start-when': (v) => /^[1-4]$/.test(v), '--name': (v) => v.length >= 1 && AntsNameLetters.isWireName(v, 32) && v === v.trim(),
             };
             let seed = 11;
             const rnd = (n) => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) % n; };

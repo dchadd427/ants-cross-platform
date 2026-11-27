@@ -128,7 +128,7 @@ function rig(o) {
     const html = new El(env, 'html', '');
     html.style.setProperty = (k, v) => { html.style[k] = v; }; html.style.removeProperty = (k) => { delete html.style[k]; };
     const body = new El(env, 'body', '');
-    const doc = { hidden: false, listeners: {}, capturing: {}, documentElement: html, body, createElement: (t) => new El(env, t), addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); }, activeElement: null };
+    const doc = { hidden: false, listeners: {}, capturing: {}, documentElement: html, body, createElement: (t) => new El(env, t), createTextNode: (t) => ({ isText: true, textContent: String(t), parent: null }), addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); }, activeElement: null };
     env.doc = doc; env.root = body;
     const buzzes = [];
     const win = { innerWidth: o.size ? o.size[0] : 1280, innerHeight: o.size ? o.size[1] : 800, location: { protocol: 'https:', host: 'play.test' }, listeners: {}, addEventListener(t, fn) { (win.listeners[t] = win.listeners[t] || []).push(fn); }, navigator: { language: 'en-US' } };
@@ -255,7 +255,7 @@ function rig(o) {
     n.dock.say('/mutes'); n.dock.command('/del 148', (c) => typed.push(c));
     same('a command that was typed and waits is a command that waits: `rate`', typed, ['rate']);
     const u = rig({ noMod: true });
-    same('you(): the name and the role (nothing else)', u.dock.you(), { name: 'Me', role: 'admin' });
+    same('you(): the name and the role, and the nickname side of the person (none for a person who has not set one: nothing else)', u.dock.you(), { name: 'Me', role: 'admin', nick: '', tag: '', nickat: 0, nickfree: 0, tagfree: 0 });
     same('line(id): a copy of a person\'s line, with the role it says and whether it is one\'s own (no account key)', [u.dock.line(148), u.dock.line(150).own, u.dock.line(147).sys, u.dock.line(999), u.dock.line(null)],
         [{ id: 148, who: 'Clover', text: 'FREE ant gold!!! see my page', role: 'none', sys: false, u: 'clover.4782', img: false, own: false, k: 'k-clover' }, true, true, null, null]);
     check('line(id) is a copy: changing it changes nothing', (() => { const l = u.dock.line(148); l.text = 'x'; return u.dock.line(148).text === 'FREE ant gold!!! see my page'; })());
@@ -1136,6 +1136,10 @@ const answer = (r, code) => (code === 'ok' ? r.recv({ t: 'ok', c: 'x' }) : r.rec
     check('no answer in 8 s: the same, "Check again"', q.names()[0] === 'Check again');
     const k = withPeople('admin');
     k.popen(4); k.mutes([]); k.press('Kick Clover');
+    const kt = withPeople('admin');
+    kt.who(ROWS.map((x) => (x.i === 4 ? Object.assign({}, x, { name: '[ANT] Clover' }) : x)));
+    kt.popen(4); kt.mutes([]); kt.press('Kick [ANT] Clover');
+    check('the circle of the card holds the letter of the nickname of a person who has a tag, in capitals', one(one(kt.box(), 'gm-chip'), 'gc-av').textContent === 'C');
     check('Kick asks once more: the card names the person (no username: the list has none), and nothing is sent', k.mod.state() === 'confirm' && one(one(k.box(), 'gm-chip'), 'gm-cn').textContent === 'Clover' && k.said().length === 1);
     k.press('Kick');
     check('...the red button takes no press for 400 ms', k.said().length === 1);

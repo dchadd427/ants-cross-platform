@@ -4,7 +4,7 @@
 //   search: the address's query; stored: what local storage holds (THROWS: a browser that refuses its storage); options: session (what this tab's session storage holds), noSession, clipboard (false:
 //   none), copyResult, share, fetch, noFetch, me (what the hub's /hub/me answers, below: none, 'guest', a body, 'fail', 'hang' or a function), ua, random (what Math.random() says: 0.5), hash (the address's #...), innerHeight and innerWidth, historyThrows (a sandboxed frame: the history takes no
 //   entry), picker (the map list's script is loaded too), noWebSocket, WebSocket, realTime, noHome (without web/home/home.js: the page says that it could not load all of
-//   its parts), label (the site label that the Dockerfile stamps into the footer, as a labelled build has it: Home is the same either way), win (an object: more of the window: matchMedia, MutationObserver), popover (the Games list is mounted with no dock: the popover under the Games button, which Home itself never asks for), stayHome (the page opens on Home and nobody presses My room: without it, a plain visit presses My room, as a person does, so that the checks of the room itself have a room),
+//   its parts), label (the site label that the Dockerfile stamps into the footer, as a labelled build has it: Home is the same either way), win (an object: more of the window: matchMedia, MutationObserver), popover (the Games list is mounted with no dock: the popover under the Games button, which Home itself never asks for), layout (a function (element, 'clientHeight' | 'scrollHeight') that says the height of an element: the fake has no layout of its own, so an element has no such number unless this does; tests/scripts/web_home_games_rig.js has the Games list's), stayHome (the page opens on Home and nobody presses My room: without it, a plain visit presses My room, as a person does, so that the checks of the room itself have a room),
 //   fakeClock (Date.now() of the scripts that the page loads is the fake clock's: env.advance(ms) moves it, so the pace of the client's requests and the waits of web/home/games.js follow the clock that the
 //   timers follow), lazy (what the page loads after its first paint, web/home/games.js, games.css, alerts.js and alerts.css: true loads them when the page asks, which is when env.advance(0) runs the page's own
 //   timer; without it nothing comes, as a page whose script is slow; 'script': the script fails to load; an object: what the script puts on the window, for a script that is broken). env.hide(true | false) hides the tab or shows it (visibilitychange).
@@ -22,8 +22,10 @@ const lobbyMarkup = lobbyText.slice(lobbyText.indexOf('<body'), lobbyText.indexO
 const lobbyScript = lobbyScripts[lobbyScripts.length - 1][2];
 
 // The scripts of front/ are run as they are, in a sandbox that has the fake WebSocket and the fake clock of one page (they are ES5 with no module system: a page gets a global, node gets module.exports)
+const NAME_LETTERS = (() => { const root = {}; new Function('self', fs.readFileSync(path.join(lobbyDir, 'front', 'name_letters.js'), 'utf8'))(root); return root.AntsNameLetters; })();       // (the letters of a name: every page loads front/name_letters.js before the scripts that read it)
+globalThis.AntsNameLetters = NAME_LETTERS;       // (for the scripts that a check loads with require: they read the letters from the global, as a page does)
 function loadFile(rel, scope) {
-    const root = {};
+    const root = rel === 'front/name_letters.js' ? {} : { AntsNameLetters: NAME_LETTERS };
     new Function('self', 'WebSocket', 'setTimeout', 'clearTimeout', 'Date', 'Math', fs.readFileSync(path.join(lobbyDir, rel), 'utf8'))(root, scope.WebSocket, scope.setTimeout, scope.clearTimeout, scope.Date || Date, scope.Math || Math);
     return root;
 }
@@ -55,7 +57,7 @@ function roomMessage(seats, o) {
 }
 // What the page's Hello says: its name, its room, whether it brings a key and a lobby block (a page that makes the room, or one that only joins)
 const helloBytes = (name, room, o) => NET0.encodeHello({ name, room, key: (o && o.key) || null, platform: 0x13, create: o && o.join ? null : { map: 'TREASURE.LVL' } });
-const helloName = (b) => String.fromCharCode(...b.slice(4, 4 + b[3]));
+const helloName = (b) => Buffer.from(b.slice(4, 4 + b[3])).toString('utf8');       // (a name is UTF-8 on the wire: protocol 29)
 const helloRoom = (b) => { const at = 4 + b[3] + 2 + 1; return String.fromCharCode(...b.slice(at + 1, at + 1 + b[at])); };
 const CODE = /^[a-z2-9]{6}$/;
 const grouped = (code) => code.slice(0, 3) + ' ' + code.slice(3);
@@ -86,6 +88,10 @@ class El {
     get innerHTML() { return this._text; }
     get firstChild() { return this.children[0] || null; }
     getBoundingClientRect() { return { top: 0, bottom: 100, left: 0, right: 100, width: 100, height: 100 }; }
+    get clientHeight() { return this.env.layout ? this.env.layout(this, 'clientHeight') : undefined; }       // (no layout, no height: a page that asks sees a number only where a test gave it)
+    get scrollHeight() { return this.env.layout ? this.env.layout(this, 'scrollHeight') : undefined; }
+    set clientHeight(v) { Object.defineProperty(this, 'clientHeight', { value: v, writable: true, configurable: true, enumerable: true }); }       // (a check that sets a number by hand, as the chat's log does, keeps it as before)
+    set scrollHeight(v) { Object.defineProperty(this, 'scrollHeight', { value: v, writable: true, configurable: true, enumerable: true }); }
     appendChild(c) { if (c.parent && c.parent.children) c.parent.children = c.parent.children.filter((x) => x !== c); c.parent = this; this.children.push(c); return c; }       // (a node that is somewhere moves, as in a browser)
     insertBefore(c, ref) {
         if (ref === c) return c;                       // (a node put before itself stays where it is, as in a browser)
@@ -175,6 +181,7 @@ function runLobby(search, stored, options) {
     const made = [];
     const env = { innerHTMLWrites: [], assigned: [], replaced: [], scrolled: [], opened: [], copied: [], commanded: [], shared: [], elements: {}, focused: null, confirms: [], reloads: 0, sockets: [], timers: [], clock: 0, nextTimer: 1 };
     env.root = new El(env, 'html', '');
+    env.layout = options.layout || null;
     const markup = options.label ? lobbyMarkup.replace('@@SITE_FOOTER@@', '<strong id="site-label">' + options.label + '</strong>&#8197;&bull;&#8197;') : lobbyMarkup;       // (options.label: a labelled build, as the Dockerfile stamps it: the footer holds the label; none is the production site's)
     for (const m of markup.matchAll(/<(\w+)([^>]*)>/g)) {
         const idm = /\bid="([^"]+)"/.exec(m[2]);
@@ -308,6 +315,7 @@ function runLobby(search, stored, options) {
     };
     win.AntsRejoinKey = loadFile('rejoin_key.js', scope).AntsRejoinKey;
     win.AntsAlertCore = loadFile('alert_core.js', scope).AntsAlertCore;       // (a script tag of the page: the switches, the tab alert and the sound table of web/alert_core.js)
+    win.AntsNameLetters = loadFront('name_letters.js', scope).AntsNameLetters;
     win.AntsLobbyRules = loadFront('lobby_rules.js', scope).AntsLobbyRules;
     win.AntsPlayerName = loadFront('player_name.js', scope).AntsPlayerName;
     win.AntsLobbyNet = loadFront('lobby_net.js', scope).AntsLobbyNet;

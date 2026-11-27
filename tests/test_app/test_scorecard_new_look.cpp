@@ -56,7 +56,7 @@ sim::MatchResult sample(bool allied = true) {
     return mr;
 }
 
-/// A match that was counted: 12:40 long, the damage of each team, the honors and a bomb at 7:41 that took out six ants
+/// A match that was counted: 12:40 long, the damage of each team, the honors and a moment at 7:41 in which seat 1 killed three ants in 8 seconds and saved its hill
 MatchReport counted(bool with_play = true) {
     MatchReport r;
     r.ok = true;
@@ -77,7 +77,7 @@ MatchReport counted(bool with_play = true) {
     r.first_blood = MatchReport::Honor{true, 2, 0, 840};
     r.top_thief = MatchReport::Honor{true, 0, 3, 0};
     r.last_stand = MatchReport::Honor{true, 3, 0, 2600};
-    if (with_play) r.play = MatchReport::Play{true, 1, MatchReport::PlayKind::Bomb, 6, 9220, 10, 20};
+    if (with_play) r.play = MatchReport::Play{true, 1, 3, 55, 8, MatchReport::kSavedHill, 0, 9220, 10, 20};
     return r;
 }
 
@@ -116,6 +116,14 @@ bool fitted_thief_line(const ArtSpy& spy, const std::string& raids, const std::s
             const std::string tail = points + unit;
             if (f.text.size() >= tail.size() && f.text.compare(f.text.size() - tail.size(), tail.size(), tail) == 0) return true;
         }
+    }
+    return false;
+}
+
+/// Is there a line of the face that has all of these pieces in it (the wording of the Play of the game's card is the card's to choose: the test names the numbers and names that it must say)
+bool has_line_with(const ArtSpy& spy, std::initializer_list<std::string> pieces) {
+    for (const ArtSpy::Face& f : spy.face_lines) {
+        if (std::all_of(pieces.begin(), pieces.end(), [&](const std::string& piece) { return f.text.find(piece) != std::string::npos; })) return true;
     }
     return false;
 }
@@ -225,7 +233,15 @@ void test_podium(const assets::AssetArchive& arc, const hud_art::Art& art) {
     const std::string win = card.rows()[0].name;
     check(win.find(" & ") != std::string::npos, "the first row is the alliance (" + win + ")");
     check(has_ink(*spy, win + " win the match."), "the sentence names the winners (an alliance win), with no time while nothing was counted");
-    check(has_line(*spy, card.rows()[0].numbers[0]) && has_line(*spy, win), "the winner's name and score are drawn");
+    check(has_line(*spy, card.rows()[0].numbers[0]), "the winner's score is drawn");
+    {   // an alliance is two lines, "A &" over "B" (protocol 29: names of up to 24 characters each: two long names never fit one line)
+        const ScorecardModal::Row& alliance = card.rows()[0];
+        const ArtSpy::Face* first = spy->face(alliance.name_first + " &");
+        const ArtSpy::Face* second = spy->face(alliance.name_second);
+        check(first != nullptr && second != nullptr && !has_line(*spy, win), "the winners' names are two lines, the first ends in \" &\", and not one line (" + win + ")");
+        check(first != nullptr && second != nullptr && first->x == second->x && first->baseline < second->baseline && first->baseline == card.scale().y(card.podium().name_pair_base[0]) && second->baseline == card.scale().y(card.podium().name_pair_base[1]),
+              "...one under the other at the left edge of the name's room, at the places that the layout gives them");
+    }
     check(has_line(*spy, "Lost") && has_line(*spy, "Killed") && has_line(*spy, "Hatched") && !has_line(*spy, "Damage"), "...with a tile for each of the others' numbers, and no damage: nothing was counted");
     const ArtSpy::Face* killed_tile = spy->face("Killed");
     const ArtSpy::Face* lost_tile = spy->face("Lost");
@@ -273,6 +289,108 @@ void test_podium(const assets::AssetArchive& arc, const hud_art::Art& art) {
         if (line.text.find("Bartholomew") != 0) continue;
         check(line.x + spyl->dialog_text_width(line.text, line.em_tenths) <= longname.scale().x(longname.podium().sentence_x + longname.podium().sentence_w), "...and the sentence that names it ends before its room does");
     }
+    // two long names of an alliance (a tag and a nickname each): each line ends in three dots when it is long and stays in the winner's room, and the others' alliance of long names takes two lines
+    {
+        const std::string long_a = "[ANTS1] Wolfgang Amadeus", long_b = "[WWWWW] MMMMMMMMMMMMMMMM";
+        ScorecardModal pair;
+        pair.set_player_names({long_a, long_b, "[FERN] Fern", "Wren (Guest)"});
+        open(pair, &art, kWide720, sample(true));
+        const auto spyp = draw(arc, pair, kWide720);
+        const ScorecardModal::Row& w = pair.rows()[0];
+        check(w.name_first == long_a && w.name_second == long_b && w.has_second(), "an alliance row keeps its two names apart (" + w.name + ")");
+        const int32_t room = pair.scale().x(pair.podium().name_x + pair.podium().name_w);
+        int32_t lines = 0;
+        for (const ArtSpy::Face& f : spyp->face_lines) {
+            if (f.text.find("[ANTS1]") != 0 && f.text.find("[WWWWW]") != 0) continue;
+            lines += 1;
+            check(f.x + spyp->face_text_width(f.text, f.em_tenths) <= room, "a winner's name stays in the room of the name: " + f.text);
+        }
+        check(lines >= 2, "both long names are drawn (" + std::to_string(lines) + " lines)");
+        // the others: an alliance of the third and the fourth team, names that do not fit one line
+        sim::MatchResult others = sample(true);
+        others.ally = {sim::ALLIANCE_NONE, sim::ALLIANCE_NONE, 3, 2};
+        others.decide_winners();
+        ScorecardModal dup;
+        dup.set_player_names({"Ann", "Bea", "[ANTS1] Wolfgang Amadeus", "[WWWWW] MMMMMMMMMMMMMMMM"});
+        open(dup, &art, kWide720, others);
+        const auto spyd = draw(arc, dup, kWide720);
+        size_t pair_row = 99;
+        for (size_t i = 1; i < dup.rows().size(); ++i) { if (dup.rows()[i].has_second()) pair_row = i; }
+        check(pair_row != 99, "the others have an alliance row");
+        if (pair_row != 99) {
+            const ScorecardModal::Row& r = dup.rows()[pair_row];
+            const sl::OtherRow& o = dup.podium().other[pair_row - 1];
+            const ArtSpy::Face* top = nullptr;
+            const ArtSpy::Face* bottom = nullptr;
+            for (const ArtSpy::Face& f : spyd->face_lines) {
+                if (f.text.find("[ANTS1]") == 0) top = &f;
+                if (f.text.find("[WWWWW]") == 0) bottom = &f;
+            }
+            check(top != nullptr && bottom != nullptr && top->baseline == dup.scale().y(o.pair_base[0]) && bottom->baseline == dup.scale().y(o.pair_base[1]) && top->x == bottom->x, "an alliance of long names takes two lines in its row, one under the other (" + r.name + ")");
+            check(top != nullptr && ((top->text.size() >= 2 && top->text.compare(top->text.size() - 2, 2, " &") == 0) || top->text.find("...") != std::string::npos), "...the first ends in \" &\" (or in dots when it was cut)");
+            check(o.pair_bar.y > o.pair_base[1] && o.pair_small_base > o.pair_bar.y, "...and the bar and the little numbers are below them");
+            {   // ...and they are drawn there: the bar's track is a fill at the lower place, the little numbers' line has its baseline at the lower place
+                const auto fills = spyd->of(Spy::Kind::Fill);
+                bool bar_low = false, bar_one_line = false;
+                for (const auto& f : fills) {
+                    bar_low = bar_low || f.y == dup.scale().rect(o.pair_bar).y;
+                    bar_one_line = bar_one_line || f.y == dup.scale().rect(o.bar).y;
+                }
+                check(bar_low && !bar_one_line, "...the bar of an alliance on two lines is drawn at its lower place, not at the place of one line");
+                bool small_low = false, small_one_line = false;
+                for (const ArtSpy::Face& f : spyd->face_lines) {
+                    if (f.text.rfind("Killed ", 0) == 0 && f.x == dup.scale().x(o.name_x)) {
+                        small_low = small_low || f.baseline == dup.scale().y(o.pair_small_base);
+                        small_one_line = small_one_line || f.baseline == dup.scale().y(o.small_base);
+                    }
+                }
+                check(small_low && !small_one_line, "...and so are the little numbers");
+                check(has_line(*spyd, r.name_second + " (you)") == false && has_line(*spyd, r.name_second) == true, "...the second line is the second name (no \"(you)\" for a team that is not the person's)");
+            }
+        }
+        // the person's own alliance: "(you)" is at the end of the second line, and only there
+        {
+            ScorecardModal mine;
+            mine.set_player_names({"Ann", "Bea", "[ANTS1] Wolfgang Amadeus", "[FERN] Fern"});
+            open(mine, &art, kWide720, others, sim::GameMode::HighestScore, true, nullptr, 3);
+            const auto spy_mine = draw(arc, mine, kWide720);
+            int with_you = 0;
+            bool at_the_end = false, on_the_second_line = false;
+            for (const ArtSpy::Face& f : spy_mine->face_lines) {
+                if (f.text.find("(you)") == std::string::npos) continue;
+                with_you += 1;
+                at_the_end = f.text.size() > 6 && f.text.compare(f.text.size() - 6, 6, " (you)") == 0;
+                for (size_t k = 1; k < mine.rows().size(); ++k) {
+                    if (mine.rows()[k].has_second() && f.baseline == mine.scale().y(mine.podium().other[k - 1].pair_base[1])) on_the_second_line = true;
+                }
+            }
+            check(with_you == 1 && at_the_end && on_the_second_line, "the person's own alliance on two lines has (you) at the end of the second line and nowhere else (" + std::to_string(with_you) + ")");
+        }
+        // a long name of one team is one line, cut with dots: only an alliance takes two
+        {
+            sim::MatchResult one = sample(true);
+            one.ally = {sim::ALLIANCE_NONE, sim::ALLIANCE_NONE, sim::ALLIANCE_NONE, sim::ALLIANCE_NONE};
+            one.decide_winners();
+            ScorecardModal lone;
+            lone.set_player_names({"Ann", "Bea", "[ANTS1] Wolfgang Amadeus Mozart", "Dot"});
+            open(lone, &art, kWide720, one);
+            const auto spy_lone = draw(arc, lone, kWide720);
+            bool halved = false, drawn = false;
+            for (const ArtSpy::Face& f : spy_lone->face_lines) {
+                if (f.text.find("[ANTS1]") == 0) {
+                    drawn = true;
+                    if (f.text.size() >= 2 && f.text.compare(f.text.size() - 2, 2, " &") == 0) halved = true;
+                }
+            }
+            check(drawn && !halved, "a long name of one team is one line, never the first half of an alliance");
+        }
+        // an alliance whose two short names fit one line stays on one line
+        ScorecardModal brief;
+        brief.set_player_names({"Ann", "Bea", "Cy", "Dot"});
+        open(brief, &art, kWide720, others);
+        const auto spyb = draw(arc, brief, kWide720);
+        check(has_line(*spyb, "Cy & Dot"), "an alliance of short names stays one line in the others' well");
+    }
     // a number of ten digits is set smaller and stays in its place
     sim::MatchResult big = sample(false);
     big.stats[0].score = 2000000000;
@@ -313,7 +431,7 @@ void test_counted(const assets::AssetArchive& arc, const hud_art::Art& art) {
     check(count(*spy, art, "sc_k_mvp") == 1 && count(*spy, art, "sc_k_blood") == 1 && count(*spy, art, "sc_k_thief") == 1 && count(*spy, art, "sc_k_stand") == 0 && count(*spy, art, "sc_k_play") == 1, "the labels of the three honors and of the Play of the game");
     check(has_line(*spy, "62% of the play") && has_line(*spy, "at 0:42") && fitted_thief_line(*spy, "3 raids", "100"), "the honors' numbers: the MVP's share of the play, First blood's time, the Top Thief's raids home and their points (the wording that fits the card)");
     check(has_line(*spy, card.seat_name(0)) && has_line(*spy, card.seat_name(2)), "...and who earned them");
-    check(has_line(*spy, card.seat_name(1) + "'s bomb takes out") && has_line(*spy, "6 ants") && has_line(*spy, "at 7:41"), "the Play of the game says what happened and when (\"... bomb takes out\", \"6 ants\", \"at 7:41\")");
+    check(has_line_with(*spy, {card.seat_name(1), "triple kill in 8 s"}) && has_line_with(*spy, {"saved the hill"}) && has_line(*spy, "at 7:41"), "the Play of the game says who, how many kills in how many seconds, the big moment and when");
     check(count(*spy, art, "sc_watch_up") == 1, "Watch is there");
     // no still of the moment: the picture is the ants of the seat that made it, on a dark ground
     check(card.podium().play_picture.w > 0, "...with the picture's place");
@@ -332,7 +450,7 @@ void test_counted(const assets::AssetArchive& arc, const hud_art::Art& art) {
     blind.set_on_watch([&](uint32_t, int32_t, int32_t) { ++blind_watched; });
     const auto spyw = draw(arc, blind, kWide720);
     click(blind, blind.scale().rect(blind.podium().watch));
-    check(count(*spyw, art, "sc_watch_up") == 0 && blind.watch_rect().w == 0 && blind_watched == 0 && count(*spyw, art, "sc_k_play") == 1 && has_line(*spyw, "6 ants"), "no recording to open: the play is there, Watch is not, and a click where it would be does nothing");
+    check(count(*spyw, art, "sc_watch_up") == 0 && blind.watch_rect().w == 0 && blind_watched == 0 && count(*spyw, art, "sc_k_play") == 1 && has_line_with(*spyw, {"triple kill"}), "no recording to open: the play is there, Watch is not, and a click where it would be does nothing");
     ScorecardModal sighted;
     open(sighted, &art, kWide720, sample(), sim::GameMode::HighestScore, true, &rep);
     sighted.set_watch_available(false);
@@ -420,6 +538,61 @@ void test_counted(const assets::AssetArchive& arc, const hud_art::Art& art) {
     late.show_page(ScorecardModal::Page::Stats);
     late.set_report(failed);
     check(late.page() == ScorecardModal::Page::Results && count(*draw(arc, late, kWide720), art, "sc_sm_m_up") == 0, "...and one that was not takes the second page away");
+}
+
+/// The card of the Play of the game for one moment on one screen: the lines of its words (the ones that name kills or a big moment) and every line that has "..." in it
+struct PlayCard {
+    std::vector<std::string> lines;
+    bool cut_number{false};
+};
+PlayCard play_card_of(const assets::AssetArchive& arc, const hud_art::Art& art, const Screen& screen, const MatchReport::Play& play) {
+    MatchReport rep = counted();
+    rep.play = play;
+    ScorecardModal card;
+    open(card, &art, screen, sample(), sim::GameMode::HighestScore, true, &rep);
+    const auto spy = draw(arc, card, screen);
+    PlayCard out;
+    for (const ArtSpy::Face& f : spy->face_lines) {
+        if (f.text.find("kill") == std::string::npos && f.text.find("knock") == std::string::npos && f.text.find("hill") == std::string::npos && f.text.find("group") == std::string::npos && f.text.find("Thief") == std::string::npos &&
+            f.text.find("a knockout") == std::string::npos) {
+            continue;
+        }
+        if (f.text.find("Killed") != std::string::npos) continue;                                        // (a ranked row's small numbers)
+        out.lines.push_back(f.text);
+        const size_t dots = f.text.find("...");
+        if (dots != std::string::npos && f.text.find_first_of("0123456789", dots) != std::string::npos) out.cut_number = true;
+    }
+    return out;
+}
+
+void test_play_card(const assets::AssetArchive& arc, const hud_art::Art& art) {
+    group("play", "the card of the Play of the game says the kills and the seconds, and names the big moments that fit; a number is never cut");
+    using Play = MatchReport::Play;
+    for (const Screen& screen : {kWide720, kSmall43, kUltra, kPhoneUp}) {
+        const std::string at = std::string(" (") + screen.name + ")";
+        const PlayCard one = play_card_of(arc, art, screen, Play{true, 2, 1, 10, 0, 0, 0, 3000, 5, 5});
+        check(one.lines.size() == 1 && one.lines[0].find(": 1 kill") != std::string::npos && one.lines[0].find("second") == std::string::npos && one.lines[0].find(" s") == std::string::npos, "one kill: \"1 kill\" and no seconds" + at);
+        const Play everything{true, 1, 6, 200, 9, MatchReport::kKnockedOut | MatchReport::kSavedHill | MatchReport::kWipedGroup | MatchReport::kStoppedLoot, 3, 3000, 5, 5};
+        const PlayCard all = play_card_of(arc, art, screen, everything);
+        bool kills_line = false, moments_line = false;
+        for (const std::string& line : all.lines) {
+            kills_line = kills_line || line.find("6-kill streak in 9 s") != std::string::npos;                  // ("9 seconds" begins the same way)
+            moments_line = moments_line || line.find("knock") != std::string::npos || line.find("saved the hill") != std::string::npos;
+        }
+        check(kills_line && moments_line && !all.cut_number, "six kills in nine seconds with every bonus: both numbers, and the big moments that fit" + at);
+        // a streak is called by its name from two kills on, and by its number from five: "double kill", "triple kill", "quad kill", "5-kill streak"
+        const struct { uint32_t kills; const char* called; } streaks[] = {{2, "double kill in 4 s"}, {3, "triple kill in 4 s"}, {4, "quad kill in 4 s"}, {5, "5-kill streak in 4 s"}, {12, "12-kill streak in 4 s"}};
+        for (const auto& streak : streaks) {
+            const PlayCard named_streak = play_card_of(arc, art, screen, Play{true, 1, streak.kills, 10 * streak.kills, 4, 0, 0, 3000, 5, 5});
+            bool called = false;
+            for (const std::string& line : named_streak.lines) called = called || line.find(streak.called) != std::string::npos;
+            check(called && !named_streak.cut_number, std::string("the kills of a moment are called \"") + streak.called + "\"" + at);
+        }
+        const PlayCard each = play_card_of(arc, art, screen, Play{true, 1, 2, 45, 4, MatchReport::kWipedGroup, 0, 3000, 5, 5});
+        bool named = false;
+        for (const std::string& line : each.lines) named = named || line.find("group") != std::string::npos;
+        check(named && !each.cut_number, "a wiped out group is named" + at);
+    }
 }
 
 void test_waiting(const assets::AssetArchive& arc, const hud_art::Art& art) {
@@ -1134,6 +1307,7 @@ void test_scorecard_look(const assets::AssetArchive& arc, const hud_art::Art& ar
     test_switch(arc, art);
     test_podium(arc, art);
     test_counted(arc, art);
+    test_play_card(arc, art);
     test_waiting(arc, art);
     test_187(arc, art);
     test_reflow(arc, art);

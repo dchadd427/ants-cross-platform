@@ -156,6 +156,9 @@ struct OtherRow {
     int32_t score_base{0};
     LayoutRect bar;                     // the bar of the score
     int32_t small_base{0};              // the line of the little numbers under the bar
+    int32_t pair_base[2]{0, 0};         // an alliance: its two names on two lines (the first ends in " &"), then the bar and the little numbers a little lower
+    LayoutRect pair_bar;
+    int32_t pair_small_base{0};
 };
 
 struct Podium {
@@ -190,6 +193,7 @@ struct Podium {
     int32_t ants_y{0};
     int32_t name_x{0};                  // the name, the score and the tiles stand right of the ants
     int32_t name_base{0};
+    int32_t name_pair_base[2]{0, 0};    // an alliance: its two names on two lines (the first ends in " &")
     int32_t name_w{0};
     int32_t score_base{0};
     std::array<Tile, 4> tile{};

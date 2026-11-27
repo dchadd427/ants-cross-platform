@@ -45,7 +45,7 @@ OTHER = session.Identity(OTHER_ID, "pine.cone", False)
 OWNER = session.Identity(OWNER_ID, "the.boss", False)
 UNKNOWN = {"t": "reply", "c": "unknown", "r": "unknown"}
 EVERYONE = ["/help", "/invite", "/msg", "/follow", "/unfollow", "/ignore", "/unignore"]
-MODERATORS = ["/mute", "/unmute", "/del", "/kick", "/mutes"]
+MODERATORS = ["/mute", "/unmute", "/del", "/kick", "/rename", "/mutes"]
 ADMINISTRATORS = ["/ban", "/unban", "/bans", "/nopic", "/pic", "/noimages", "/images", "/bots"]
 LIMITS = limitmod.Limits()
 FAST = dataclasses.replace(LIMITS, door_seconds=1.0, door_connect_seconds=0.5, roles_urgent_actor_burst=100)
@@ -85,7 +85,7 @@ class TheTable(unittest.TestCase):
                 self.assertTrue(row["w"].startswith("/") and row["d"] and len(row["d"]) <= 40, row)
         groups = {r["w"]: r["g"] for r in cmds.lines_for("admin")}
         self.assertEqual([groups[w] for w in EVERYONE], ["Everyone"] * len(EVERYONE))
-        self.assertEqual([groups[w] for w in MODERATORS], ["Moderators"] * 5)
+        self.assertEqual([groups[w] for w in MODERATORS], ["Moderators"] * 6)
         self.assertEqual([groups[w] for w in ADMINISTRATORS], ["Administrators"] * len(ADMINISTRATORS))
 
     def test_the_group_of_a_row_is_the_rank_that_the_table_of_powers_reads(self):
@@ -149,7 +149,7 @@ class TheAnswerForWhatIsNotYours(unittest.TestCase):
 
     def test_a_stray_word_and_a_command_of_a_higher_role_get_the_very_same_bytes(self):
         stray = ["/frobnicate", "/", "/ ", "/x y z", "/BOTS5", "/bot", "/k\u0131ck bob", "/ban\u0131 bob"]       # (a dotless i is not an i)
-        above = {"none": ["/mute bob 5", "/unmute bob", "/del 1", "/kick bob", "/mutes", "/ban bob", "/unban bob", "/bans", "/nopic bob", "/pic bob", "/bots 5", "/bots status", "/BOTS stop"],
+        above = {"none": ["/mute bob 5", "/unmute bob", "/del 1", "/kick bob", "/rename bob", "/mutes", "/ban bob", "/unban bob", "/bans", "/nopic bob", "/pic bob", "/bots 5", "/bots status", "/BOTS stop"],
                  "mod": ["/ban bob", "/unban bob", "/bans", "/nopic bob", "/pic bob", "/bots 5", "/bots status", "/Bots stop"]}
         for who, peer in (("none", self.player), ("mod", self.mod)):
             mine = [self.w.chat.commands.unknown_frame]

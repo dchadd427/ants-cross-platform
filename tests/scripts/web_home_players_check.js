@@ -86,7 +86,7 @@ function rig(o) {
     const env = { elements: {}, innerHTMLWrites: [] };
     const clock = makeClock();
     const Players = loadPlayers(clock);
-    const doc = { hidden: false, listeners: {}, activeElement: null, createElement: (t) => new El(env, t), getElementById: () => null, addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); } };
+    const doc = { hidden: false, listeners: {}, activeElement: null, createElement: (t) => new El(env, t), createTextNode: (t) => ({ isText: true, textContent: String(t), parent: null }), getElementById: () => null, addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); } };
     env.doc = doc;
     const state = { client: o.client || null, count: o.count || null, handing: !!o.handing };       // (count: { people, size } stands for the Room's model: that many persons, then open colors up to size, then Closed ones)
     const modelOf = (c) => (c ? { slots: [0, 1, 2, 3].map((i) => ({ kind: i < c.people ? 'person' : i < c.size ? 'open' : 'nobody' })) } : null);
@@ -136,7 +136,7 @@ function rig(o) {
 {
     const P = Pure;
     const rowOf = (raw) => P.rowOf(raw, Chat, Rules);
-    same('a plain row: the name, where, no mark, no details', rowOf({ i: 4, name: 'sage', at: 'look' }), { id: 4, name: 'sage', at: 'look', mod: false, role: 'none', pic: '', pub: false, priv: false, solo: false, map: '', mapName: '', guess: '', n: -1, of: -1, code: '' });
+    same('a plain row: the name, where, no mark, no details', rowOf({ i: 4, name: 'sage', at: 'look' }), { id: 4, name: 'sage', tag: '', at: 'look', mod: false, role: 'none', pic: '', pub: false, priv: false, solo: false, map: '', mapName: '', guess: '', n: -1, of: -1, code: '' });
     same('the mark of a moderator is exactly true (a string or a number is none)', [rowOf(row(1, 'a1', 'look', { mod: true })).mod, rowOf(row(1, 'a1', 'look', { mod: 'true' })).mod, rowOf(row(1, 'a1', 'look', { mod: 1 })).mod], [true, false, false]);
     same('a name loses the invisible and bidirectional characters and is cut at 32 code points', [rowOf(row(1, '‮alice​⁦')).name, rowOf(row(1, 'x'.repeat(40))).name], ['alice', 'x'.repeat(32) + '…']);
     same('markup in a name stays text', rowOf(row(1, '<img src=x onerror=1>')).name, '<img src=x onerror=1>');
@@ -523,6 +523,20 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     r.live(); r.who(FULL([row(1, 'maple'), row(2, 'pat', 'wait'), row(3, 'quinn', 'play'), row(4, 'rae', 'wait', { pub: true, code: 'c0mm00' })], { n: 4 }));
     same('in the lines under the names of others: "In a room" and "In a game", and no word "Private"', [r.metaOf('pat'), r.metaOf('quinn'), r.metaOf('rae'), JSON.stringify(texts(r.panel(), 'pl-card')).indexOf('Private')], ['In a room', 'In a game', 'Public room', -1]);
 }
+{   // the tag of a name (docs/HUB_NICKNAMES.md): a row carries the person's tag, drawn before the name in its own dimmer node, and the visitor's own row too
+    const r = rig();
+    r.live(W({ you: { name: 'Zo\u00eb', tag: '\u00c4NT', mod: false, role: 'none', nick: 'Zo\u00eb' }, me: 1 }));
+    r.who(FULL([row(1, 'Zo\u00eb'), Object.assign(row(2, 'Wren (Guest)'), { tag: undefined }), Object.assign(row(3, 'Fern'), { tag: 'FERN' }), Object.assign(row(4, 'Eve'), { tag: '<b>' })], { n: 5 }));
+    const names = byClass(r.panel(), 'pl-nm');
+    same('every row has its name as text; a tag is its own node with its brackets, before the name; a tag that is no tag is none', names.map((n) => n.textContent), ['[\u00c4NT] Zo\u00eb', 'Eve', '[FERN] Fern', 'Wren (Guest)']);       // (the visitor first, then the people by name)
+    same('...in a node of the class nm-tag, not in the name', names.map((n) => byClass(n, 'nm-tag').map((t) => t.textContent)), [['[\u00c4NT]'], [], ['[FERN]'], []]);
+    const mine = byClass(r.panel(), 'pl-card')[0];
+    check('the visitor\'s own row is the first and has the tag of the visitor (the page\'s word, not the hub\'s last)', !!mine && byClass(mine, 'pl-nm')[0].textContent === '[\u00c4NT] Zo\u00eb' && byClass(mine, 'pl-tag')[0].textContent === 'you');
+    const plain = rig();
+    plain.live(W({ you: { name: 'maple', mod: false, role: 'none' }, me: 1 }));
+    plain.who(FULL([row(1, 'maple')], { n: 1 }));
+    check('a visitor who has no tag has a row of the name alone', byClass(plain.panel(), 'pl-nm')[0].textContent === 'maple' && byClass(plain.panel(), 'nm-tag').length === 0);
+}
 {   // the visitor's own row is the one that the hub's welcome names, not a row with the visitor's name
     const youAnd = (r) => r.names().filter((n) => n === 'maple').length;
     const twins = [row(1, 'maple'), row(2, 'maple', 'wait'), row(3, 'sage')];
@@ -745,6 +759,10 @@ function bringPlayers(env) {
     same('a row with a valid picture name has one img in its circle, with the address made of the name and the attributes the page sets', [imgsOf(sage).length, img && img.attributes],
         [1, { src: '/hub/pic/' + NAME + '.png', alt: '', width: '32', height: '32', loading: 'lazy', decoding: 'async', draggable: 'false' }]);
     same('the letter is still in the circle, and a row with no picture has no img', [sage.textContent, imgsOf(circleOf(q, 'tess')).length], ['s', 0]);
+    const tg = rig();
+    tg.live(W({ you: { name: 'maple', mod: false, role: 'none' } }));
+    tg.who(FULL([row(2, 'Fern', 'look', { tag: 'FERN' }), row(3, '[ANTS1] Wolfgang', 'wait')], { n: 3 }));
+    same('the circle of a row with a tag holds the letter of the nickname (never the bracket), whether the tag comes in its own field or in the name', [circleOf(tg, '[FERN] Fern').textContent, circleOf(tg, '[ANTS1] Wolfgang').textContent], ['F', 'W']);
     check('the visitor\'s own card has the visitor\'s picture', imgsOf(one(one(q.panel(), 'pl-you'), 'pl-av')).length === 1 && imgsOf(one(one(q.panel(), 'pl-you'), 'pl-av'))[0].attributes.src === '/hub/pic/' + OTHER + '.png');
     check('the letter is not hidden before the picture has loaded', sage.getAttribute('data-pic') === null);
     img.fire('load');

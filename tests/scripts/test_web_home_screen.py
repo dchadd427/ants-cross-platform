@@ -46,6 +46,7 @@ TALK_FILES = ("talk.js", "talk.css")                  # the emoji and microphone
 ROOM_FILES = ("room.css", "roomchat.js", "roomchat.css")   # the room inside Home (its layout, and the room's tab of the chat box): the budgets and the tests of these are in tests/scripts/test_web_home_room.py
 MOD_FILES = ("mod.js", "mod.css")                     # the moderation sheet of the chat, loaded after the dock for a visitor with a role only: its own budgets and tests are tests/scripts/test_web_home_mod.py
 CMDS_FILES = ("cmds.js", "cmds.css")                   # the helper of the chat's commands, loaded after the dock once the hub sends it a command to list: its own budgets and tests are tests/scripts/test_web_home_cmds.py
+NAMES_FILES = ("names.js", "names.css")            # the sheet "Your name", the guest's chip and the welcome card, loaded after the dock: its own budget and tests are tests/scripts/test_web_home_names.py
 sys.path.insert(0, os.path.join(REPO, "tools"))
 from size_limits import HOME_BUDGET, HOME_GZIP_BUDGET  # noqa: E402  (every byte budget: tools/size_limits.py)
 
@@ -113,7 +114,7 @@ class ThePage(unittest.TestCase):
         self.assertIn("leave: function () { if (handing) return; var old = client;", mount, "a page that is on its way to the game gives its seat up to nobody")
         self.assertIn("if (old) old.leave(); forgetSession(); leaveBack(); hideBanner(); render();", mount)
         self.assertEqual(sorted(set(re.findall(r"\b(info|make|leave|how|stalled|holds):", mount))), ["holds", "how", "info", "leave", "make", "stalled"])
-        self.assertIn("client: function () { return client; }, join: probe, typed: joinTyped, name: myName, handing: function () { return handing; }, cancel: function () { if (lastProbe && lastProbe !== client) lastProbe.leave(); },", mount, "what the Games list reads of the page (docs/HOME_SCREEN.md): its client, the look at a room, a typed code, the name, whether the page is on its way to a game, and the way to give a look up")
+        self.assertIn("client: function () { return client; }, join: probe, typed: joinTyped, name: myName, person: person, handing: function () { return handing; }, cancel: function () { if (lastProbe && lastProbe !== client) lastProbe.leave(); },", mount, "what the Games list reads of the page (docs/HOME_SCREEN.md): its client, the look at a room, a typed code, the name, whether the page is on its way to a game, and the way to give a look up")
 
     def test_the_words_that_said_that_a_page_makes_a_room_when_it_opens_are_corrected(self):
         page = self.page
@@ -142,7 +143,7 @@ class ThePage(unittest.TestCase):
 
 class TheFolder(unittest.TestCase):
     def test_it_holds_the_two_screens_the_games_list_the_chat_dock_and_the_players_list_and_nothing_else(self):
-        self.assertEqual(sorted(n for n in os.listdir(HOME) if not n.endswith(".mutbak")), sorted(FILES + LATER + CHAT_FILES + PLAYERS_FILES + TALK_FILES + IMAGES_FILES + MOD_FILES + CMDS_FILES + SPLIT_FILES + ALERTS_FILES + MESSAGES_FILES + VP_FILES + ROOM_FILES))      # (tools/mutate.py keeps FILE.mutbak while it changes a file)
+        self.assertEqual(sorted(n for n in os.listdir(HOME) if not n.endswith(".mutbak")), sorted(FILES + LATER + CHAT_FILES + PLAYERS_FILES + TALK_FILES + IMAGES_FILES + MOD_FILES + CMDS_FILES + NAMES_FILES + SPLIT_FILES + ALERTS_FILES + MESSAGES_FILES + VP_FILES + ROOM_FILES))      # (tools/mutate.py keeps FILE.mutbak while it changes a file)
 
     def test_it_is_under_its_budgets(self):
         raw = zipped = 0
@@ -155,7 +156,7 @@ class TheFolder(unittest.TestCase):
         self.assertLess(zipped, HOME_GZIP_BUDGET, "and %d bytes gzipped" % zipped)
 
     def test_nothing_of_it_is_in_the_folder_that_has_its_cap_already(self):
-        for name in FILES + LATER + CHAT_FILES + PLAYERS_FILES + TALK_FILES + IMAGES_FILES + MOD_FILES + CMDS_FILES + SPLIT_FILES + ALERTS_FILES + ("home",):
+        for name in FILES + LATER + CHAT_FILES + PLAYERS_FILES + TALK_FILES + IMAGES_FILES + MOD_FILES + CMDS_FILES + NAMES_FILES + SPLIT_FILES + ALERTS_FILES + ("home",):
             self.assertNotIn(name, os.listdir(FRONT))
 
     def test_the_script_is_plain_es5_and_names_no_other_site(self):
@@ -334,7 +335,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_screen_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
-    FILES = ["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/alert_core.js", "web/front/player_name.js", "web/home/home.js", "web/home/home.css", "web/home/room.css", "web/home/roomchat.js", "web/home/roomchat.css", "web/home/chat.js", "web/home/chat.css", "web/home/games.js", "web/home/alerts.js", "web/home/alerts.css", "web/home/messages.js", "web/home/messages.css", "web/home/games.css", "web/home/players.js", "web/home/players.css", "web/home/talk.js", "web/home/talk.css", "web/home/mod.js", "web/home/mod.css", "web/home/split.js", "web/home/split.css", "web/home/cmds.js", "web/home/cmds.css", "web/home/pics.js", "web/home/pics.css", "web/home/post.js", "web/home/post.css", "web/home/vp.js", "web/shapes.js", "tests/scripts/test_web_home_screen.py", "tests/scripts/web_home_screen_check.js", "tests/scripts/web_page_harness.js",
+    FILES = ["tools/size_limits.py", "web/lobby.html", "web/front/name_letters.js", "web/home/names.js", "web/home/names.css", "web/rejoin_key.js", "web/alert_core.js", "web/front/player_name.js", "web/home/home.js", "web/home/home.css", "web/home/room.css", "web/home/roomchat.js", "web/home/roomchat.css", "web/home/chat.js", "web/home/chat.css", "web/home/games.js", "web/home/alerts.js", "web/home/alerts.css", "web/home/messages.js", "web/home/messages.css", "web/home/games.css", "web/home/players.js", "web/home/players.css", "web/home/talk.js", "web/home/talk.css", "web/home/mod.js", "web/home/mod.css", "web/home/split.js", "web/home/split.css", "web/home/cmds.js", "web/home/cmds.css", "web/home/pics.js", "web/home/pics.css", "web/home/post.js", "web/home/post.css", "web/home/vp.js", "web/shapes.js", "tests/scripts/test_web_home_screen.py", "tests/scripts/web_home_screen_check.js", "tests/scripts/web_page_harness.js",
              "tests/scripts/web_home_check.py", "tests/scripts/fake_media.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml", "docker/nginx.conf", "docs/PLAY_IN_BROWSER.md"] + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "room_fog.js", "room_sheet.js", "seat_menu.js", "map_picker.js", "map_maker_link.js")]
 
     SPEC = "home_screen_mutants.json"

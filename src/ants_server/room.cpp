@@ -3,6 +3,7 @@
 #include "ants_ai/bot_names.hpp"
 
 #include "ants_net/clock.hpp"
+#include "ants_net/name_rules.hpp"
 #include "ants_server/secret.hpp"
 
 #include <algorithm>
@@ -44,6 +45,7 @@ static net::HostLobby::Config lobby_config(const RoomSpec& spec) {
     cfg.leader_starts = spec.leader_starts && spec.early_start;      // (the lead is what starts such a room: a room without a leader never would)
     cfg.load_timeout_ms = spec.load_ms;
     cfg.bot_name_key = ai::bot_name_key(spec.code);                  // (protocol 20: the names of the room's bots come from its code, which a restart keeps; a lobby room shows a planned bot's name before START)
+    cfg.name_gate = spec.name_gate;                                  // (protocol 29: a server that has the hub's key takes a name as it is only with the hub's pass; every other name is a guest's)
     cfg.lobby_room = spec.lobby;                                     // (protocol 16: the lobby checks that the room can be one, see HostLobby::Config)
     cfg.no_persons = spec.bots_only;                                 // (a match of computer players alone starts with nobody in the room)
     cfg.hold_ms = spec.hold_ms;
@@ -74,7 +76,7 @@ ai::Level ai_level_of(net::FillLevel fill) noexcept {
     }
 }
 
-// A text for the head of a replay file: printable ASCII only (anything else becomes a '?': the reader refuses other texts), at most `limit` characters
+// A text for the head of a replay file (a version, a build id, a bot's name): printable ASCII only (anything else becomes a '?': the reader refuses other texts), at most `limit` characters; a person's name is clipped by net::clip_wire_name
 std::string ascii_text(const std::string& raw, size_t limit) {
     std::string out;
     for (const char c : raw) {
@@ -89,7 +91,7 @@ std::string ascii_text(const std::string& raw, size_t limit) {
 
 // (see room.hpp) A name that the game itself gives to a seat without one is not what a person typed, and a file that kept it would show "Green (Player 1)" for a person who gave no name.
 std::string replay_person_name(const std::string& shown) {
-    const std::string text = ascii_text(shown, replay::kMaxTextBytes / 2);
+    const std::string text = net::clip_wire_name(shown);                 // (protocol 29: the letters of a name stay: the head holds UTF-8 names)
     const size_t first = text.find_first_not_of(' ');
     if (first == std::string::npos) return std::string();                   // (nothing, or only blanks)
     const std::string name = text.substr(first, text.find_last_not_of(' ') - first + 1);
@@ -333,10 +335,10 @@ std::vector<std::string> Room::take_notes() {
 
 namespace {
 
-// "<before><name><after>" as a line of chat: the name is cut when the line would be longer than kMaxChatChars (a name of 32 characters with the sentence of an old game is 101)
+// "<before><name><after>" as a line of chat: the name is cut, at a whole letter, when the line would be longer than kMaxChatChars characters (a name of 32 characters with the sentence of an old game is 101)
 std::string name_line(std::string name, const std::string& before, const char* after) {
-    const size_t fixed = before.size() + std::char_traits<char>::length(after);
-    if (fixed < net::kMaxChatChars && name.size() > net::kMaxChatChars - fixed) name.resize(net::kMaxChatChars - fixed);
+    const size_t fixed = before.size() + std::char_traits<char>::length(after);       // (ASCII: a byte is a character)
+    if (fixed < net::kMaxChatChars && net::utf8_length(name) > net::kMaxChatChars - fixed) name = net::clip_wire_name(name, net::kMaxChatChars - fixed);       // (at a whole letter: a notice with half a letter is no text that a page takes)
     return before + name + after;
 }
 

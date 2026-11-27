@@ -184,6 +184,7 @@ struct ApplicationConfig {
     /// --audio-focus: a window that does not have the input focus is silent (four games on one machine: you hear the one you play)
     bool audio_follows_focus{false};
     std::string player_name;                    // this player's name (--name); empty: the system user, or "Player" in a network game
+    std::string name_pass;                      // the hub's pass for that name (--name-pass; protocol 29, docs/HUB_NICKNAMES.md "The pass"): told in the Hello of a game on a server, which takes the name as it is only with it (else the name is a guest's)
     std::array<std::string, 4> team_names{};    // names of the teams of a local game (-N<team><name> as in the original, --team-name)
     /// false: a local game shows a score label only for the teams that have a name (and the local player's own). The browser build sets it: there are no
     /// other players in it (no multiplayer yet), so the color words "Red:", "Blue:", "Black:" would only be placeholders. The original draws a label only for

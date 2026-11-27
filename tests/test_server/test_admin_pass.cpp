@@ -15,6 +15,7 @@
 #include "ants_server/admin_pass.hpp"
 #include "ants_server/crypto.hpp"
 #include "ants_server/map_names.hpp"
+#include "ants_server/name_pass.hpp"
 #include "ants_server/submissions.hpp"
 #include "ants_server/submissions_http.hpp"
 #include "history_fixtures.hpp"
@@ -640,6 +641,55 @@ int main() {
         everything += t.get("/admin/api/audit", t.maker.make(t.now, kRefDave, fake_id)).body + t.get("/admin/api/maps", t.maker.make(t.now), "state=approved").body;
         for (const std::string& line : t.api->take_notices()) everything += line;
         ASSERT_TRUE(everything.find(fake_id) == std::string::npos);
+    } TEST_END();
+
+    TEST_CASE("ADM1.8 The pass of a name (protocol 29, name_pass.hpp): made from the one key of the hub with a label of its own, good for exactly its name until it ends, and the known answers of the hub's twin (tests/scripts/test_hub_names.py ThePass)") {
+        const std::string secret = "name-pass-test-secret-7f3a9c1e5b2d4086-q";
+        const NameGate gate(secret);
+        ASSERT_TRUE(gate.open());
+        ASSERT_EQ(hex_encode(hmac_sha256(secret, "ants-name-pass-v1")), "f5228536a05a361af0ebf40b199c7ed718846d787662cf3bb472e228c11c1525");
+        const std::string zoe = "[\xC3\x84NT] Zo\xC3\xAB";
+        ASSERT_EQ(gate.make(zoe, 1700000000), "1700000000.58ab4380a2403bd62cf97b71020684ad");                  // (the words of the hub's twin: hub/namepass.py)
+        ASSERT_EQ(gate.make("Wren", 1700000000), "1700000000.a5d465711484ee0192b99f6c66d3f172");
+        ASSERT_EQ(gate.make("\xD0\x81\xD0\xB6\xD0\xB8\xD0\xBA", 1700000000), "1700000000.a847a6f3c846156fcbe82c2943c6c912");
+        const int64_t now = 1700000000 - kNamePassSeconds;
+        ASSERT_TRUE(gate.check(zoe, "1700000000.58ab4380a2403bd62cf97b71020684ad", now));
+        ASSERT_TRUE(gate.check("Wren", gate.make("Wren", now + kNamePassSeconds), now));
+        ASSERT_TRUE(gate.check("Wren", gate.make("Wren", now + 1), now));                                   // (it ends at its time: one second before it, it is good)
+        ASSERT_FALSE(gate.check("Wren", gate.make("Wren", now), now));                                      // (and at it, it is not)
+        ASSERT_FALSE(gate.check("Wren", gate.make("Wren", now + kNamePassSeconds + kNamePassSlackSeconds + 1), now));      // (a pass that claims to last longer than the hub makes them)
+        ASSERT_TRUE(gate.check("Wren", gate.make("Wren", now + kNamePassSeconds + kNamePassSlackSeconds), now));
+        const std::string good = gate.make("Wren", now + 60);
+        ASSERT_FALSE(gate.check("wren", good, now) || gate.check("Wren ", good, now) || gate.check("", good, now) || gate.check("Wre", good, now));      // (exactly its name)
+        ASSERT_FALSE(gate.check("Wren", "", now) || gate.check("Wren", good + "0", now) || gate.check("Wren", good.substr(1), now) || gate.check("Wren", "x" + good, now));
+        std::string upper = good;
+        for (char& c : upper) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        ASSERT_FALSE(gate.check("Wren", upper, now));                                                       // (lower-case hex only)
+        ASSERT_FALSE(NameGate(secret + "x").check("Wren", good, now));                                      // (another key)
+        ASSERT_FALSE(NameGate("").open() || NameGate("short").open() || NameGate("canary-gate-key-5d8f0c1e7a9b4263-q").open());      // (no key, a short one and the sample key of the documents: no passes)
+        ASSERT_EQ(NameGate("").make("Wren", 1700000000), std::string());
+        ASSERT_FALSE(NameGate("").check("Wren", good, now));
+        ASSERT_EQ(NameGate(" " + secret + "\n").make("Wren", 1700000000), gate.make("Wren", 1700000000));       // (the blanks that Python's strip() cuts are cut from the setting)
+        const std::string admin_like = sign_with(hub_key(secret), payload_json(kRefDave, "dave", "admin", now + 60, nonce_of(1)));
+        ASSERT_FALSE(gate.check("dave", admin_like, now));                                                  // (a pass of another kind is never a name's)
+        // the numbers of the contract, as numbers (the hub's twin makes a pass for 120 seconds; the server forgives 30 more)
+        ASSERT_EQ(kNamePassSeconds, 120);
+        ASSERT_EQ(kNamePassSlackSeconds, 30);
+        ASSERT_TRUE(gate.check("Wren", gate.make("Wren", now + 150), now));
+        ASSERT_FALSE(gate.check("Wren", gate.make("Wren", now + 151), now));
+        ASSERT_EQ(gate.make("", now + 60), std::string());                                                  // (no pass for no name, nor for a time that is none)
+        ASSERT_EQ(gate.make("Wren", 0), std::string());
+        // a pass that is made by the contract's own words, without the gate: for no name it is no pass, and a gate with no key takes none, whatever key it was made with
+        const auto by_hand = [](const std::string& key, const std::string& name, int64_t exp) {
+            std::string message = std::string("name1\0", 6) + std::to_string(exp);
+            message.push_back('\0');
+            message += name;
+            return std::to_string(exp) + "." + hex_encode(hmac_sha256(key, message)).substr(0, 32);
+        };
+        const std::string key = hmac_sha256(secret, "ants-name-pass-v1");
+        ASSERT_TRUE(gate.check("Wren", by_hand(key, "Wren", now + 60), now));                              // (the words of the contract are what the gate checks)
+        ASSERT_FALSE(gate.check("", by_hand(key, "", now + 60), now));
+        ASSERT_FALSE(NameGate("").check("Wren", by_hand(std::string(), "Wren", now + 60), now));
     } TEST_END();
 
     std::cout << "\n" << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";

@@ -2212,10 +2212,10 @@ void run_lobby_rooms_tests() {
                     WelcomeMsg w;
                     if (peek_type(m) == MsgType::Welcome && decode(m, w)) seat = w.player;
                 }
-                // the room either refuses the Hello (no seat) or seats the person under the cleaned name: never under a name that is a bot's, never with a byte outside the table
+                // the room either refuses the Hello (no seat) or seats the person under the cleaned name: never under a name that is a bot's, never with a byte that is no part of a name's table
                 for (const RoomMsg::Slot& slot : raw_room.host.room().slots) {
                     ASSERT_FALSE(slot.state == SlotState::Client && ai::is_reserved_bot_name(slot.name));
-                    for (const char c : slot.name) ASSERT_TRUE(static_cast<unsigned char>(c) >= 0x20 && static_cast<unsigned char>(c) <= 0x7E);
+                    ASSERT_TRUE(valid_wire_name(slot.name));                                       // (protocol 29: UTF-8 of printable ASCII and the letters of the table, nothing else)
                 }
                 (void)seat;
             }

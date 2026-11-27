@@ -456,6 +456,7 @@
         return {
             painter: painter,
             show: function (on) {
+                if (on && env.antType) st.antType = env.antType();          // (the ant type is the tools' own: "Fill a box" may have changed it)
                 shown = !!on; panel.hidden = !on; place();
                 if (!on) { clearBox(); } else render();
                 drawOver(); watch();

@@ -621,8 +621,8 @@
     }
 
     return {
-        EMPTY2: EMPTY2, MIN_ANTS: MIN_ANTS, MAX_ANTS: MAX_ANTS, MAX_RECORDS: MAX_RECORDS, MIN_STAGES: MIN_STAGES, MAX_STAGES: MAX_STAGES, HILL: HILL, TEAMS: TEAMS, FOOD: FOOD, FOOD_NAMES: FOOD_NAMES, FOOD_ITEMS: FOOD_ITEMS, PLANT_NAMES: PLANT_NAMES,
-        team: team, teamOfMarker: teamOfMarker, typeOfMarker: typeOfMarker, markerTile: markerTile, teamOfHill: teamOfHill, clampTo: clampTo, foodItem: foodItem,
+        EMPTY2: EMPTY2, MIN_ANTS: MIN_ANTS, MAX_ANTS: MAX_ANTS, MAX_RECORDS: MAX_RECORDS, MIN_STAGES: MIN_STAGES, MAX_STAGES: MAX_STAGES, HILL: HILL, TEAMS: TEAMS, FOOD: FOOD, FOOD_NAMES: FOOD_NAMES, FOOD_ITEMS: FOOD_ITEMS, PLANT_NAMES: PLANT_NAMES, POWERUP_NAMES: POWERUP_NAMES,
+        team: team, teamOfMarker: teamOfMarker, typeOfMarker: typeOfMarker, markerTile: markerTile, teamOfHill: teamOfHill, clampTo: clampTo, foodItem: foodItem, customPile: customPile,
         layout: layout, block1Bytes: block1Bytes, block2Bytes: block2Bytes, block4Bytes: block4Bytes, diffSplice: diffSplice,
         hillCells: hillCells, placeHill: placeHill, startCells: startCells, appendStarts: appendStarts, placeStart: placeStart, clumpOf: clumpOf, eraseStart: eraseStart, placePile: placePile, placePlant: placePlant,
         eraseAt: eraseAt, resizeMap: resizeMap, inTheWay: inTheWay, blockedText: blockedText, facts: facts

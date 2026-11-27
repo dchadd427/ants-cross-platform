@@ -30,7 +30,6 @@
     // ---- the pure parts ----
     function whole(v, low, high) { return typeof v === 'number' && v === Math.floor(v) && v >= low && v <= high; }
     function clean(Chat, s, max, strict) { return typeof s === 'string' ? Chat.clip(Chat.plain(s.slice(0, max * 4), strict), max) : ''; }
-    function initial(name, Chat) { var first = Chat.clip(name, 1); return first.length > 1 && first.charAt(first.length - 1) === '\u2026' ? first.slice(0, -1) : first; }
     function handleOf(v) { return typeof v === 'string' && HANDLE.test(v); }
     // One conversation of the list, cleaned: { h, name, at, text, me (the newest is the visitor's own), u (not read), f (followed), b (blocked) }, or null
     function convOf(raw, Chat) {
@@ -172,7 +171,7 @@
             tag = put(el('span', 'pm-tag'), [icon('lock'), el('span', '', TEXT.tag)]);
             moreBtn = iconButton('pm-more', TEXT.more, 'more', function () { menuOn = !menuOn; if (!menuOn) disarm(); paintMenu(); });
             moreBtn.setAttribute('aria-haspopup', 'menu'); moreBtn.setAttribute('aria-expanded', 'false');
-            put(top, [iconButton('pm-back', TEXT.back, 'back', function () { closePanel(); toList(); }), el('span', 'pm-av', initial(name, Chat)),
+            put(top, [iconButton('pm-back', TEXT.back, 'back', function () { closePanel(); toList(); }), el('span', 'pm-av', Chat.initial(name)),
                 put(el('span', 'pm-who'), [el('bdi', 'pm-nm', name), tag]), moreBtn, iconButton('pm-x', TEXT.close, 'x', closePanel)]);
             logBox = el('div', 'pm-log'); logBox.setAttribute('role', 'log'); logBox.setAttribute('aria-live', 'polite'); logBox.setAttribute('aria-label', TEXT.title); logBox.setAttribute('tabindex', '0');
             status = el('p', 'pm-status'); status.setAttribute('role', 'status');
@@ -433,5 +432,5 @@
         };
     }
 
-    return { LIMIT: LIMIT, TEXT: TEXT, DMX: DMX, convOf: convOf, msgOf: msgOf, listOf: listOf, threadOf: threadOf, initial: initial, mount: mount };
+    return { LIMIT: LIMIT, TEXT: TEXT, DMX: DMX, convOf: convOf, msgOf: msgOf, listOf: listOf, threadOf: threadOf, mount: mount };
 });

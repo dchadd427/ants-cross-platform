@@ -612,6 +612,27 @@
    "old": "    location = /hub/ai/v1/call {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        limit_req zone=ants_hub_ai burst=200 nodelay;\n        limit_req_status 429;\n        limit_conn ants_hub_aicalls 24;\n",
    "new": "    location = /hub/ai/v1/call {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        limit_req zone=ants_hub_ai burst=200 nodelay;\n        limit_req_status 429;\n        limit_conn ants_hub_aicalls 4;\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_nginx_hub_ai.TheText"
+  },
+  {
+   "id": "a_fill_may_have_two_things",
+   "file": "hub/aitools.py",
+   "old": "    if len(names) != 1:\n        return \"bad_args\", \"give exactly one of object, plant, food or ants",
+   "new": "    if len(names) < 1:\n        return \"bad_args\", \"give exactly one of object, plant, food or ants",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheTools"
+  },
+  {
+   "id": "a_fill_may_be_a_million_cells",
+   "file": "hub/aitools.py",
+   "old": "if rect[\"rows\"] * rect[\"columns\"] > MAX_CELLS:\n        return \"too_big\", \"one call changes at most %d cells: split the box\"",
+   "new": "if rect[\"rows\"] * rect[\"columns\"] > MAX_CELLS * 1000:\n        return \"too_big\", \"one call changes at most %d cells: split the box\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheTools"
+  },
+  {
+   "id": "a_fill_may_name_a_step_without_its_pattern",
+   "file": "hub/aitools.py",
+   "old": "if \"n\" in args and args.get(\"pattern\") not in (\"rows\", \"cols\"):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheTools"
   }
  ]
 }

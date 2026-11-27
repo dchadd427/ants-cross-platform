@@ -56,13 +56,31 @@ const row = (code, host, o) => Object.assign({ code, host, map: 'TREASURE.LVL', 
 // a row of a private room (a locked card): no code, no age
 const locked = (host, o) => Object.assign({ private: true, host, map: 'TREASURE.LVL', mode: 'highest-score', people: 2, bots: 0, free: 2, size: 4 }, o || {});
 const listOf = (rows) => ({ format: 1, lobbies: rows, count: rows.length });
-// One page on Home with its fake site; the page's lazy load runs (env.advance(0)) unless options.lazy says no; env.site is the site, env.looks() how many looks at the list there were
+// The fake has no layout, so the docked list's is given here as numbers (web/home/home.css; web_home_games_browser.js measures the same ones in a real browser and asserts the same counts): the grid is
+// repeat(auto-fill, minmax(290px, 1fr)) with a gap of 12 px, beside the players' column in a window that is wide and high enough; a card is `card` px high, the box of matches has a heading of `head` px and cards of `liveCard`
+// px; the body of the list is `body` px high and holds what is in it, or scrolls when that is higher. A page's spec is `env.spec` (a check changes it, and the window's innerWidth, and tells the page that its size changed).
+const GAP = 12;
+const SIZES = { phone: { w: 390, h: 844, body: 530, card: 89 }, d1000: { w: 1000, h: 800, body: 352, card: 94 }, d1366: { w: 1366, h: 768, body: 329, card: 94 } };       // (the sizes of the real browser's pictures, as measured there)
+const DEFAULT_SPEC = { body: 329, card: 94, head: 46, liveCard: 120 };
+const columnsOf = (width, height) => (width <= 700 ? 1 : Math.max(1, Math.floor((width - (height <= 500 ? 50 : 378) + GAP) / (290 + GAP))));
+function layoutOf(spec) {
+    return (el, prop) => {
+        if (String(el.className).split(/\s+/).indexOf('gpbody') === -1) return undefined;
+        if (prop === 'clientHeight') return spec.body;
+        const win = el.env.win, cols = columnsOf(win.innerWidth, win.innerHeight), list = el.findAll((e) => String(e.className) === 'glist')[0], box = el.findAll((e) => String(e.className) === 'glivebox')[0];
+        const cards = list.children.filter((c) => String(c.className).indexOf('gmore') === -1).length, rows = Math.ceil(cards / cols) + (list.children.length - cards), n = !box || box.hidden ? 0 : box.findAll((e) => String(e.className) === 'glist glivelist')[0].children.length;
+        return Math.max(spec.body, (rows ? rows * spec.card + (rows - 1) * GAP : 0) + (n ? spec.head + n * spec.liveCard + (n - 1) * GAP : 0));
+    };
+}
+// One page on Home with its fake site; the page's lazy load runs (env.advance(0)) unless options.lazy says no; env.site is the site, env.looks() how many looks at the list there were; o.layout says the sizes (above)
 async function page(o) {
     o = o || {};
     const site = o.site || fakeSite();
-    const env = runLobby(o.search || '', o.stored || { 'ants.name': 'Maya' }, Object.assign({ stayHome: true, fakeClock: true, lazy: true, fetch: site.fetch, popover: process.env.YL === undefined || process.env.YL === 'staging' }, o.options || {}));
+    const spec = Object.assign({}, DEFAULT_SPEC, o.layout || {});
+    const env = runLobby(o.search || '', o.stored || { 'ants.name': 'Maya' }, Object.assign({ stayHome: true, fakeClock: true, lazy: true, fetch: site.fetch, layout: layoutOf(spec), popover: process.env.YL === undefined || process.env.YL === 'staging' }, o.options || {}));
     site.clock = () => env.clock;
     env.site = site;
+    env.spec = spec;
     env.looks = () => site.calls.length;
     env.advance(0);
     await flush();
@@ -120,6 +138,6 @@ const roomAs = (names, me, flags, o) => roomMessage(seatsOf(names), Object.assig
 
 const done = (title) => { console.log(title + ': ' + checks + ' checks, ' + failures + ' failed'); process.exit(failures === 0 ? 0 : 1); };
 const broke = (e) => { console.log('FAIL the check itself broke: ' + (e && e.stack || e)); process.exit(1); };
-return { GUEST, check, same, flush, fakeSite, row, locked, lockedCards, listOf, page, wait, classes, find, first, home, tap, hostCard, chooseHost, pressEscape, pressElsewhere, popOf, rowsOf, slotsOf, joinOf, textOf, toastOf, toastTextOf, toastButtons, pillOf, dialogOf, visibilities, leaves, seatsOf,
+return { SIZES, GAP, DEFAULT_SPEC, columnsOf, GUEST, check, same, flush, fakeSite, row, locked, lockedCards, listOf, page, wait, classes, find, first, home, tap, hostCard, chooseHost, pressEscape, pressElsewhere, popOf, rowsOf, slotsOf, joinOf, textOf, toastOf, toastTextOf, toastButtons, pillOf, dialogOf, visibilities, leaves, seatsOf,
          PUBLIC, PRIVATE, STARTING, myRoom, guestRoom, roomAs, Games, PopoverGames, H, NET0, KEY, E, C, hex, roomMessage, welcome, reject, helloBytes, helloName, helloRoom, grouped, runLobby, RULES0, lobbyDir, done, broke };
 };

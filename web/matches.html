@@ -28,6 +28,7 @@
         :root { --clay: #db4b13; --ink: #0c0805; --teal: #2b6357; --teal-hi: #2f6f5a; --teal-lo: #17382f; --edge: #050a08; --cream: #f4ece2; --inset: #070b0f; }
         :root { --frame: #2b6b4f; --frame-hi: #3b976f; --frame-lo: #13634b; --shadow: #9d0d17; --gold: #f6d058; --bad-bg: #3b0d10; --bad-ink: #ffe4de; --bad-edge: #ff7a6b; }
     </style>
+    <link rel="stylesheet" href="front/name_parts.css">
     <link rel="stylesheet" href="matches.css">
     <link rel="stylesheet" href="site_nav.css">
     <link rel="stylesheet" href="update_notice.css">
@@ -68,6 +69,7 @@
 
 </div>
 
+<script src="front/name_letters.js"></script>
 <script src="site_nav.js"></script>
 <script src="replay_page.js"></script>
 <script src="front/map_picker.js"></script>
@@ -156,7 +158,7 @@
         H.sidesOf(rec).forEach(function (sd) {
             var x = el('li', 'side' + (sd.winner ? ' w' : '')); x.title = H.sideName(sd);
             var sq = el('span', 'sq'); sd.seats.forEach(function (m) { var i = el('i'); i.setAttribute('data-c', H.colorOf(m)); sq.appendChild(i); }); x.appendChild(sq);
-            x.appendChild(el('span', 'nm', H.sideName(sd)));
+            x.appendChild(H.paintSide(document, el('span', 'nm'), sd));
             if (sd.left) x.appendChild(el('span', 'left', 'Left')); else x.appendChild(el('span', 'sc', H.scoreText(rec, sd)));
             if (sd.winner && rec.draw !== true) x.appendChild(el('span', 'won', 'Won'));
             sides.appendChild(x);

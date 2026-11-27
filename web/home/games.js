@@ -8,7 +8,7 @@
 //   * Matches that run now (GET /live, docs/REPLAYS.md "Live") stand in the list below the open rooms as rows with a Live mark and Watch (/play?live=<id>: the same tab, a new one only while the page holds a room); they are always shown (the open rooms first; nothing is kept in
 //     this browser). The door carries no room code and a room that is listed is waiting, so a running match is never a room's row. /live is looked at every 5 s (and at once, 1.5 s apart at the least, when a room of the list has gone: it may have started its match, which is listed from its start), only while the list shows, and a
 //     server without that door (404) or a failed look only hides the section. The same answer carries the score boxes of each match (live, no delay: only what every player sees): a row shows them as a strip, and a press on it opens a scoreboard (docs/HOME_GAMES.md).
-//   * The empty cards (lobby slots): while the list is on, it is padded with dashed "Open lobby" cards, two rows of its grid (one row while matches are in progress; 3 cards on a phone), real rooms taking the first places. Each card's button is Quick host.
+//   * The empty cards (lobby slots): while the list is on, it is padded with dashed "Open lobby" cards, as many as leave the list nothing to scroll (the real rooms, the locked cards and the matches first), counted from the list as it is drawn; the card's plus and its Host here button are Quick host.
 //   * The list is polled (30 s closed, 5 s open, never while the tab is hidden or the Room shows, +-20 % of jitter, doubled after a failure). Nothing that goes wrong here reaches Home, the Room or the hand-off:
 //     every call out of this file is guarded, and a failed look is only "the list is off".
 (function (root, factory) {
@@ -41,8 +41,8 @@
     var LIVE_EVERY = 5000, LIVE_SOON = 1500, LIVE_CAP = 300000;           // ms between two looks at /live (never less: the page's own door asks no faster), the shortest wait when a room has gone (it may have started its match), the longest wait after failures
     var LIVE_MAX = 50;                                   // matches that are shown (the door lists 50 at the most)
     var BOX_MAX = 999999;                                // the most that a score box shows (the door cuts to it; so does this page)
-    var CARD_MIN = 290, CARD_GAP = 12;                   // the grid's cards: at least 290 px wide, 12 px apart (home.css)
-    var SLOT_ROWS = 2, SLOT_ROWS_LIVE = 1, SLOT_PHONE = 3, SLOT_PHONE_LIVE = 2;       // the empty cards: rows of the grid (a row while matches are in progress), and the cards of a one-column list
+    var SLOT_MAX = 150;                                  // the most empty cards that are ever tried (a window of 4K holds about 130)
+    var SLOT_PHONE = 3, SLOT_PHONE_LIVE = 2;             // the empty cards of the popover, which has no height to fill (one card wide; two while matches are in progress)
     var LIVE_ID = /^[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?$/;           // the shape of a match's id (docs/SERVER.md "Live matches"): nothing else is ever put into an address
     var BOT_NAME = /^Bot \(|\(bot(, [^()]+)?\)$/;           // a computer player's name as a server writes it ("Pip (bot, Hard)", "Kit (bot, idle)"; the older "Bot (Medium)"): the rule of the lobby's name check, which keeps these names from people
     var SEATS = ['Green', 'Red', 'Blue', 'Black'];       // the colors of seats 0 - 3, in the words of the door's players strings
@@ -139,13 +139,6 @@
         sides.forEach(function (x) { x.lead = ties === 1 && top > 0 && x.n === top; });
         return { sides: sides, top: top, scored: !!e.scores, label: e.mode187 ? TEXT.kills : TEXT.score, team: sides.some(function (x) { return x.who.length > 1; }) };
     }
-    // The columns that the docked grid has in a window of `width` x `height` when there is no layout to ask (a covered list, a fake browser): the grid is repeat(auto-fill, minmax(290px, 1fr)) with a gap of 12 px (web/home/home.css) on the dock's
-    // width. A phone (up to 700 px wide) is one column; a short window (up to 500 px high) has no players column, so the dock is the window less the page's margins and its own padding (50 px); else the players column (280 px at the most), its gap
-    // and the margins stand beside the dock (378 px in all, with the dock's padding). Where there is a layout the grid's own count is read instead (columns() in mount).
-    function columnsFor(width, height) {
-        if (width <= 700) return 1;
-        return Math.max(1, Math.floor((width - (height <= 500 ? 50 : 378) + CARD_GAP) / (CARD_MIN + CARD_GAP)));
-    }
     // The wait before the next look at /live: 5 s doubled for every failure in a row up to 5 minutes, then 0 to +20 % (random: 0 to 1): never under 5 s
     function liveDelay(failures, random) {
         var wait = Math.min(LIVE_CAP, LIVE_EVERY * Math.pow(2, Math.min(failures, 10)));
@@ -207,7 +200,7 @@
         var docked = !!env.dock, rows = [], loaded = false, off = false, failures = 0, isOpen = docked, polling = false, round = 0, pollTimer = null, gone = !!env.handoff, joining = false, joinButtons = [];
         var tracked = null, lastRoom = null, lastSent = 0, refreshTimer = null, refreshFor = null, pending = null, pendingTimer = null, askedAt = 0, locked = false, lockTimer = null, hint = '', lastInput = now(), lastLook = 0, floorTimer = null, joinSeq = 0, cancelTimer = null, paintedSig = null;
         var dialog = null, noticeKind = '', quiet = [], finding = false, priv = [];             // priv: the locked rows (private rooms) of the last good answer
-        var live = [], liveLoaded = false, liveOff = false, liveFails = 0, liveTimer = null, liveBusy = false, liveRound = 0, lastLive = 0, liveSig = null, liveLens = [], opened = Object.create(null), hostFrom = null, lastCols = 0;       // opened: the ids of the matches whose scoreboard the visitor opened (nothing is kept past the page)
+        var live = [], liveLoaded = false, liveOff = false, liveFails = 0, liveTimer = null, liveBusy = false, liveRound = 0, lastLive = 0, liveSig = null, liveLens = [], opened = Object.create(null), hostFrom = null, slotPool = [], slotsOn = 0, lockAnchor = null, fitFrame = null;       // opened: the ids of the matches whose scoreboard the visitor opened (nothing is kept past the page)
         var sided = [], matches = false, talk = null;                   // sided: the ids of matches whose Watch the page showed while it held a room; matches: it held a room, so its Matches links were new tabs; talk: the channel of those tabs
 
         function el(tag, cls, text) {
@@ -576,7 +569,7 @@
         function rowNode(row, onList, best, yours, lock) {
             var li = el(onList ? 'li' : 'div', lock ? 'gitem gpriv' : 'gitem'), seats = seatsOf(row), pic = picOf(row), text = el('span', 'gtxt'), top = el('span', 'gtop'), line = el('span', 'gline'), dots = el('span', 'gdots');
             dots.setAttribute('aria-hidden', 'true');
-            top.appendChild(el('span', 'gname', row.host)); top.appendChild(el('span', 'gmapname', row.mapName));
+            top.appendChild(paintName(el('span', 'gname'), row.host)); top.appendChild(el('span', 'gmapname', row.mapName));
             seats.dots.forEach(function (kind, i) { dots.appendChild(el('i', 'gdot ' + kind + ' c' + i)); });
             line.appendChild(dots); line.appendChild(el('span', 'gcount', seats.count)); line.appendChild(el('span', 'gbots', seats.bots));
             if (lock) {
@@ -616,7 +609,7 @@
         // player on it in this tab, or in a NEW one while the page holds a room, so that its seat stays (markWatch)
         function liveNode(e) {
             var li = el('li', 'gitem glive'), text = el('span', 'gtxt'), top = el('span', 'gtop'), line = el('span', 'gline'), dots = el('span', 'gdots'), who = el('span', 'gwho'), len = el('span', 'glen', lengthWords(e));
-            var names = e.who.map(function (w) { return w.name; }).join(', ') || TEXT.nobodyNamed, go = el('a', 'btn gwatch', TEXT.watch), marks = el('span', 'gmarks'), kind = e.mode187 ? TEXT.mode187 + ' match' : 'match';
+            var names = e.who.map(seatName).join(', ') || TEXT.nobodyNamed, go = el('a', 'btn gwatch', TEXT.watch), marks = el('span', 'gmarks'), kind = e.mode187 ? TEXT.mode187 + ' match' : 'match';
             dots.setAttribute('aria-hidden', 'true');
             e.who.forEach(function (w) { var d = el('i', 'gdot ' + (BOT_NAME.test(w.name) ? 'bot' : 'player')); d.className += w.seat < 0 ? ' cn' : ' c' + w.seat; dots.appendChild(d); });          // (a computer player is a ring, as in the open rooms; a color that the door does not know is a neutral dot)
             who.textContent = names; who.setAttribute('title', names);
@@ -655,7 +648,9 @@
         }
         function seatClass(w) { return w.seat < 0 ? 'n' : String(w.seat); }                  // (the color of a seat; a color that the door does not know is the neutral one)
         function sideColors(x) { return 'c' + seatClass(x.who[0]) + (x.who.length > 1 ? ' two d' + seatClass(x.who[1]) : ''); }        // (a team's bar is its two colors)
-        function sideNames(x) { return x.who.map(function (w) { return plainName(w.name) + (BOT_NAME.test(w.name) ? TEXT.bot : ''); }).join(' + '); }
+        function paintName(node, name) { var L = win.AntsNameLetters; if (L && L.paint) L.paint(doc, node, name); else node.textContent = name; return node; }       // (a name with its tag and "(Guest)" dimmer: front/name_letters.js)
+        function seatName(w) { return plainName(w.name) + (BOT_NAME.test(w.name) ? TEXT.bot : ''); }       // (a computer player is "Kit (bot)" everywhere a card names the players: the mark stays, its level never shows)
+        function sideNames(x) { return x.who.map(seatName).join(' + '); }
         function squareOf(w) { var q = el('i', 'gsq'); q.className += ' c' + seatClass(w) + (BOT_NAME.test(w.name) ? ' bot' : ''); return q; }                 // (a computer player is a ring, as its dot is)
         function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
         function numberText(x) { return x.n === null ? '\u2013' : groupDigits(x.n); }
@@ -725,41 +720,48 @@
             paintLive();
             paintPill();
             popLoad.hidden = loaded; popOff.hidden = !(loaded && off);
-            popList.hidden = !(loaded && !off); popLegend.hidden = popList.hidden;          // (a list that is on always has cards: the empty ones fill what the rooms leave)
+            popList.hidden = !(loaded && !off); popLegend.hidden = popList.hidden;          // (a list that is on has the empty cards that fit: fitSlots below)
             popNote.hidden = !popNote.textContent;
-            var slots = loaded && !off ? slotCount(shown.length) : 0, focusSlot = active && active.getAttribute ? active.getAttribute('data-slot') : null;
-            var sig = JSON.stringify(shown.map(function (r) { return [r.code, r.host, r.map, r.people, r.bots, r.free, r.size, r.fog]; }).concat(lead, locks.map(function (l) { return [l.row.host, l.row.map, l.row.mode187, l.row.people, l.row.bots, l.row.free, l.row.size, l.yours, l.row.fog]; }), slots));       // (the rows are made again only when what they show changed: a press that straddles a repaint is not lost, and a focus stays)
-            if (sig === paintedSig) return;
-            paintedSig = sig;
-            while (popList.firstChild) popList.removeChild(popList.firstChild);
-            joinButtons = [];
-            shown.forEach(function (r, n) { popList.appendChild(rowNode(r, true, n === lead && shown.length - lead > 1, n < lead)); });
-            for (var k = 0; k < slots; k++) popList.appendChild(slotNode(k));          // (after the rooms and before the locked cards, which take no place)
-            locks.slice(0, LOCKED_SHOWN).forEach(function (l) { popList.appendChild(rowNode(l.row, true, false, false, l.yours ? 'yours' : 'private')); });
-            if (locks.length > LOCKED_SHOWN) { var more = locks.length - LOCKED_SHOWN; popList.appendChild(el('li', 'gmore', 'and ' + (locks.length >= ROWS_MAX ? (ROWS_MAX - LOCKED_SHOWN) + '+' : more) + ' more invite-only room' + (more === 1 ? '' : 's'))); }
-            busy(joining, popJoinText.textContent);
-            if (focusCode) { var again = popList.querySelector('[data-code="' + focusCode + '"]'); if (again && again.focus) again.focus(); }
-            if (focusSlot !== null) { var slot = popList.querySelector('[data-slot="' + focusSlot + '"]'); if (slot && slot.focus) slot.focus(); }
+            var focusSlot = active && active.getAttribute ? active.getAttribute('data-slot') : null;
+            var sig = JSON.stringify(shown.map(function (r) { return [r.code, r.host, r.map, r.people, r.bots, r.free, r.size, r.fog]; }).concat(lead, locks.map(function (l) { return [l.row.host, l.row.map, l.row.mode187, l.row.people, l.row.bots, l.row.free, l.row.size, l.yours, l.row.fog]; })));       // (the rows are made again only when what they show changed: a press that straddles a repaint is not lost, and a focus stays)
+            if (sig !== paintedSig) {
+                paintedSig = sig;
+                while (popList.firstChild) popList.removeChild(popList.firstChild);
+                joinButtons = []; lockAnchor = null; slotsOn = 0;          // (the empty cards were taken out with the rest: they come back below, the same cards, as many as fit)
+                shown.forEach(function (r, n) { popList.appendChild(rowNode(r, true, n === lead && shown.length - lead > 1, n < lead)); });
+                locks.slice(0, LOCKED_SHOWN).forEach(function (l) { var card = rowNode(l.row, true, false, false, l.yours ? 'yours' : 'private'); lockAnchor = lockAnchor || card; popList.appendChild(card); });
+                if (locks.length > LOCKED_SHOWN) { var more = locks.length - LOCKED_SHOWN, tail = el('li', 'gmore', 'and ' + (locks.length >= ROWS_MAX ? (ROWS_MAX - LOCKED_SHOWN) + '+' : more) + ' more invite-only room' + (more === 1 ? '' : 's')); lockAnchor = lockAnchor || tail; popList.appendChild(tail); }
+                busy(joining, popJoinText.textContent);
+                if (focusCode) { var again = popList.querySelector('[data-code="' + focusCode + '"]'); if (again && again.focus) again.focus(); }
+            }
+            fitSlots(loaded && !off, shown.length);
+            if (focusSlot !== null && slotsOn) { var slot = popList.querySelector('[data-slot="' + Math.min(Number(focusSlot), slotsOn - 1) + '"]'); if (slot && slot.focus) slot.focus(); }       // (the card that had the focus, or the last one when it is gone)
         }
-        // ---- the empty cards ("lobby slots"): they fill what the open rooms leave of the first rows of the grid ----
+        // ---- the empty cards ("lobby slots"): as many as the list can hold with nothing to scroll ----
         function hasLive() { return liveShown() && live.length > 0; }
-        function columns() {                               // the cards in a row of the list as it is drawn (the grid's own tracks); with no layout to ask (the list is covered, or has none), the window's width says it as the style does
-            var n = 0, tracks;
-            if (!docked) return 1;
-            try {
-                if (drawn() && popList.getClientRects && popList.getClientRects().length && win.getComputedStyle) {
-                    tracks = win.getComputedStyle(popList).gridTemplateColumns || '';
-                    n = tracks === 'none' ? 0 : tracks.split(/\s+/).filter(Boolean).length;
-                }
-            } catch (e) { n = 0; }
-            if (n > 0 && n <= 40) return n;
-            return columnsFor(win.innerWidth || 0, win.innerHeight || 0);
+        function setSlots(n) {                             // n empty cards stand after the rooms and before the locked cards (the cards are made once and kept: a card that stays is the same node, with its focus)
+            while (slotsOn > n) popList.removeChild(slotPool[--slotsOn]);
+            while (slotsOn < n) { var card = slotPool[slotsOn] || (slotPool[slotsOn] = slotNode(slotsOn)); popList.insertBefore(card, lockAnchor); slotsOn++; }
         }
-        function slotCount(taken) {                        // two rows of the grid (3 cards on a phone), one row while matches are in progress (2 on a phone); the rooms take the first places, and what is left is empty cards
-            var cols = lastCols = columns(), places = cols === 1 ? (hasLive() ? SLOT_PHONE_LIVE : SLOT_PHONE) : cols * (hasLive() ? SLOT_ROWS_LIVE : SLOT_ROWS);
-            return Math.max(0, places - taken);
+        function holds(n) { setSlots(n); return popBody.scrollHeight <= popBody.clientHeight; }          // (the body has nothing to scroll with n empty cards in it: the browser's own word for it)
+        function fitSlots(on, taken) {                     // the docked list: the most empty cards that leave the body nothing to scroll (the rooms, the locked cards and the matches take their room first, so a list that fills the body has none);
+            var lo = slotsOn, hi = SLOT_MAX + 1, step;     // the popover has no height to fill: three cards (two with matches in progress), the rooms among them
+            if (!on) return setSlots(0);
+            if (!docked) return setSlots(Math.max(0, (hasLive() ? SLOT_PHONE_LIVE : SLOT_PHONE) - taken));
+            if (!(popBody.clientHeight > 0)) return;       // (no layout to ask: the list is covered, or has none. It is asked again when the body has a size)
+            if (lo > 0 && holds(lo) && (lo === SLOT_MAX || !holds(lo + 1))) return setSlots(lo);          // (the usual look: nothing changed since the last one)
+            lo = 0;
+            if (!holds(0)) return;                         // (the rooms and the matches scroll by themselves: no empty card)
+            for (step = 1; lo + step < hi; step *= 2) { if (holds(lo + step)) lo += step; else { hi = lo + step; break; } }        // (the answer is between lo, which holds, and hi, which does not: the steps double, then halve)
+            while (hi - lo > 1) { if (holds((lo + hi) >> 1)) lo = (lo + hi) >> 1; else hi = (lo + hi) >> 1; }
+            setSlots(lo);
         }
-        function slotNode(n) {                             // a dashed card with a plus: no name and no count, nobody waits; its button is Quick host (the question first: Public or Invite only)
+        function refit() {                                 // the body or the matches changed their size (the window, the players' column, the chat, a scoreboard): at the next frame, so that a scrollbar that goes with the cards cannot
+            if (!isOpen || fitFrame !== null) return;      // make the observer's own size change again in the middle of its call (the browser's "loop completed with undelivered notifications")
+            if (!win.requestAnimationFrame) return paintList();
+            fitFrame = win.requestAnimationFrame(guard(function () { fitFrame = null; if (isOpen) paintList(); }));
+        }
+        function slotNode(n) {                             // a dashed card with a plus: no name and no count, nobody waits; its button is Quick host (the question first: Public or Invite only), and the plus is the same press for a pointer
             var li = el('li', 'gitem gslot'), text = el('span', 'gtxt'), top = el('span', 'gtop'), line = el('span', 'gline'), dots = el('span', 'gdots'), pic = el('span', 'gmap'), b = button('gjoin', TEXT.slotHost, null), i;
             pic.setAttribute('aria-hidden', 'true'); dots.setAttribute('aria-hidden', 'true');
             for (i = 0; i < 4; i++) { var d = el('i', 'gdot open'); d.className += ' c' + i; dots.appendChild(d); }
@@ -767,6 +769,7 @@
             text.appendChild(top); text.appendChild(line); li.appendChild(pic); li.appendChild(text); li.appendChild(b);
             b.setAttribute('aria-label', TEXT.slotAria); b.setAttribute('data-slot', String(n));
             b.addEventListener('click', guard(function () { hostFrom = b; try { quickHost(); } finally { hostFrom = null; } }));
+            pic.addEventListener('click', guard(function () { b.click(); }));          // (the plus is no second control: it is hidden from a screen reader and has no focus stop, and a press on it is a press on Host here)
             return li;
         }
         function place() {                                 // under the bar, at the Games button (a phone: the whole width); no taller than what is left of the window
@@ -1069,8 +1072,8 @@
         win.addEventListener('resize', guard(function () { if (isOpen) place(); placeToast(); }));
         var repaint = guard(function () { if (isOpen) paintList(); });
         win.addEventListener('resize', repaint);          // (the list is painted again: its rows of cards may hold more or fewer, and the empty cards fill what is left)
-        var gridWatch = win.ResizeObserver ? new win.ResizeObserver(guard(function () { if (isOpen && lastCols && columns() !== lastCols) paintList(); })) : null;          // (the grid took more or fewer columns without the window changing, for example when the players' column came in: the empty cards are counted again)
-        if (gridWatch) gridWatch.observe(popList);
+        var gridWatch = win.ResizeObserver ? new win.ResizeObserver(guard(refit)) : null;          // (the body took more or less room, or the grid more or fewer columns, without the window changing, for example when the players' column came in or was dragged, the chat was folded, or a scoreboard opened: the empty cards are counted again)
+        if (gridWatch) { gridWatch.observe(popBody); gridWatch.observe(liveBox); }
         var toastWatch = win.MutationObserver ? new win.MutationObserver(guard(function () { if (!toast.hidden) placeToast(); pollLive(); })) : null, lastFocus = null;
         if (toastWatch) toastWatch.observe(doc.body, { attributes: true, subtree: true, attributeFilter: ['data-tab', 'data-open', 'data-screen', 'hidden'] });       // (the list is drawn or covered again: the looks at /live follow; a phone's view, the chat's fold or one of the page's strips changes: the toast is placed again)
         doc.addEventListener('focusin', guard(function (e) { if (e && e.target && !toast.contains(e.target)) lastFocus = e.target; }));       // (where the focus was before it went to the toast)
@@ -1104,5 +1107,5 @@
         };
     }
 
-    return { TEXT: TEXT, rowOf: rowOf, parseList: parseList, lockedOf: lockedOf, parseLocked: parseLocked, liveOf: liveOf, parseLive: parseLive, columnsFor: columnsFor, liveDelay: liveDelay, clockText: clockText, groupDigits: groupDigits, plainName: plainName, boardOf: boardOf, LIVE_EVERY: LIVE_EVERY, LIVE_SOON: LIVE_SOON, delayOf: delayOf, countText: countText, bestOrder: bestOrder, seatsOf: seatsOf, mount: mount, EVERY_CLOSED: EVERY_CLOSED, EVERY_OPEN: EVERY_OPEN, REFRESH_MS: REFRESH_MS, ROWS_MAX: ROWS_MAX };
+    return { TEXT: TEXT, rowOf: rowOf, parseList: parseList, lockedOf: lockedOf, parseLocked: parseLocked, liveOf: liveOf, parseLive: parseLive, liveDelay: liveDelay, clockText: clockText, groupDigits: groupDigits, plainName: plainName, boardOf: boardOf, LIVE_EVERY: LIVE_EVERY, LIVE_SOON: LIVE_SOON, delayOf: delayOf, countText: countText, bestOrder: bestOrder, seatsOf: seatsOf, mount: mount, EVERY_CLOSED: EVERY_CLOSED, EVERY_OPEN: EVERY_OPEN, REFRESH_MS: REFRESH_MS, ROWS_MAX: ROWS_MAX };
 });

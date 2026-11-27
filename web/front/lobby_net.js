@@ -1,6 +1,7 @@
-// The front page's side of network protocol 28 (docs/NETWORK_PORT.md "Protocol 16", "Protocol 17", "Protocol 20" and "Protocol 22", docs/MATCH_COUNTDOWN.md; 18 to 21, 23 to 26 and 28 moved no message layout that a lobby page uses: 21 gave the Begin a second byte, which a page leaves to the game page): the codec of the messages that a lobby page sends and hears, the guard of a color move, and the client that keeps
+// The front page's side of network protocol 29 (docs/NETWORK_PORT.md "Protocol 16", "Protocol 17", "Protocol 20" and "Protocol 22", docs/MATCH_COUNTDOWN.md; 18 to 21, 23 to 26 and 28 moved no message layout that a lobby page uses: 21 gave the Begin a second byte, which a page leaves to the game page): the codec of the messages that a lobby page sends and hears, the guard of a color move, and the client that keeps
 // a page in its lobby room (a keyed way back, the answers to the server's pings, what each refusal means). No screen is drawn here: the page reads the client's state and its events.
-//   * ES5 and no module system, as the site's other scripts: a page gets the global AntsLobbyNet, node gets module.exports (tests/scripts/web_lobby_net_check.js runs it).
+//   * ES5 and no module system, as the site's other scripts: a page gets the global AntsLobbyNet, node gets module.exports (tests/scripts/web_lobby_net_check.js runs it). It needs front/name_letters.js loaded before it
+//     (the letters of a name, and names as UTF-8: a name is UTF-8 on the wire since protocol 29, docs/NETWORK_PORT.md "Protocol 29").
 //   * Every layout is the C++ one (src/ants_net/protocol.cpp), little endian, and every decoder refuses what the C++ decoder refuses; tests/data/lobby_messages.txt holds bytes that the C++ encoders wrote,
 //     which both sides read (tests/test_net/test_lockstep_protocols.cpp N2.111, tests/scripts/web_lobby_net_check.js).
 (function (root, factory) {
@@ -10,9 +11,10 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    var PROTOCOL = 28;                                             // kProtocolVersion
+    var NL = (typeof self !== 'undefined' && self.AntsNameLetters) || (typeof globalThis !== 'undefined' && globalThis.AntsNameLetters) || null;       // (front/name_letters.js: a script tag before this one; the node checks set the global first)
+    var PROTOCOL = 29;                                             // kProtocolVersion
     var LAST_GAME_MODE = 1;                                        // sim::kLastGameMode: 0 the original's highest score, 1 "187"; a byte above it is refused, never played as another mode
-    var MAX_NAME = 32, MAX_ROOM_CODE = 32, MAX_MAP_NAME = 64, MAX_CHAT = 100;
+    var MAX_NAME = 32, MAX_ROOM_CODE = 32, MAX_MAP_NAME = 64, MAX_CHAT = 100, MAX_NOTICE_BYTES = 240;     // (net::kMaxNameChars, kMaxRoomCodeChars, kMaxMapNameChars, kMaxChatChars, kMaxNoticeBytes)
     var PLAYERS = 4;                                               // sim::MAX_PLAYERS
     var NO_TEAM = 255, NO_LEADER = 255, ROOM_SENDER = 255;
     var CLIENT_GAME = 0, CLIENT_PAGE = 1;                          // kClientGame (the game page's own Hello on its results screen: the rematch) and kClientPage
@@ -39,6 +41,13 @@
         for (var i = 0; i < n; i++) this.b.push(s.charCodeAt(i) & 255);
         return this;
     };
+    // a name (protocol 29): UTF-8, a length byte of BYTES; the text is what the wire takes (name_letters.js wireOnly), cut to 32 characters and 96 bytes
+    Writer.prototype.strName = function (s) {
+        var bytes = NL.utf8Of(NL.codePoints(NL.wireOnly(s, MAX_NAME)));
+        this.b.push(bytes.length);
+        for (var i = 0; i < bytes.length; i++) this.b.push(bytes[i]);
+        return this;
+    };
     Writer.prototype.bytes = function (a) { for (var i = 0; i < a.length; i++) this.b.push(a[i] & 255); return this; };
     Writer.prototype.done = function () { return new Uint8Array(this.b); };
 
@@ -51,6 +60,15 @@
         if (this.i + n > this.a.length) { this.bad = true; this.i = this.a.length; return ''; }
         var s = '';
         for (var k = 0; k < n; k++) s += String.fromCharCode(this.a[this.i++]);
+        return s;
+    };
+    // a name or a notice: the bytes are UTF-8 (strict), or the message is no message (the reader says so with bad)
+    Reader.prototype.strName = function () {
+        var n = this.u8();
+        if (this.i + n > this.a.length) { this.bad = true; this.i = this.a.length; return ''; }
+        var s = NL.fromUtf8(Array.prototype.slice.call(this.a, this.i, this.i + n));
+        this.i += n;
+        if (s === null) { this.bad = true; return ''; }
         return s;
     };
     Reader.prototype.bytes = function (n) {
@@ -92,21 +110,18 @@
     function validPlatform(p) { return isWhole(p) && p >= 0 && p <= 255 && (p & 0xE0) === 0 && (p & 0x0F) <= OS.Other; }
     // a key that a server can have given: 16 bytes of a Uint8Array (a string, a plain list or a short array is no key), not all zero
     function isKey(key) { return Object.prototype.toString.call(key) === '[object Uint8Array]' && key.length === 16 && !isZeroKey(key); }
-    // what the game's own client makes of a name before it sends it (lobby.cpp, printable()): the characters outside 0x20 - 0x7E are left out and at most `max` are kept
-    function printableOnly(s, max) {
-        var out = '';
-        if (typeof s !== 'string') return out;
-        for (var i = 0; i < s.length && out.length < max; i++) { var c = s.charCodeAt(i); if (c >= 0x20 && c <= 0x7E) out += s.charAt(i); }
-        return out;
-    }
+    // what the game's own client makes of a name before it sends it (lobby.cpp, clip_wire_name): what the wire does not take is left out (a letter that the game's font does not draw, a control character) and at most `max` characters are kept
+    function printableOnly(s, max) { return NL.wireOnly(s, max); }
+    // the hub's pass for a name (net::valid_pass_shape): digits, a dot and 32 lower-case hex digits; anything else is no pass and is not sent
+    function validPass(p) { return typeof p === 'string' && /^[0-9]{1,12}\.[0-9a-f]{32}$/.test(p); }
     // the names that are a computer player's (ai::is_reserved_bot_name; the page's nameCheck says the same, and tests/scripts/web_lobby_rules_check.js compares them): the word bot first and a bracket after it, or a bracket, the word bot
     // and then a sign or a blank; blanks, signs between the letters and case ignored, a 0 reads as o; the letters stand one after the other or each pair parted ("b o t", not "Bo T"), and a parted word is one only when no letter follows its blanks
     function reservedName(name) {
         var s = String(name).toLowerCase().replace(/0/g, 'o');
         return /^[^a-z0-9()\[\]{}<>]*(?:bot|b[^a-z0-9()\[\]{}<>]+o[^a-z0-9()\[\]{}<>]+t)[^a-z0-9()\[\]{}<>]*[(\[{<]/.test(s) || /[(\[{<][^a-z0-9()\[\]{}<>]*(?:bot(?=[^a-z0-9])|b[^a-z0-9()\[\]{}<>]+o[^a-z0-9()\[\]{}<>]+t(?=[^a-z0-9])(?! +[a-z0-9]))/.test(s);
     }
-    // a name that a person may go by: 1 - 32 printable characters, no space at either end (NameMsg)
-    function validPersonName(name) { return printable(name, MAX_NAME) && name.length > 0 && name.charAt(0) !== ' ' && name.charAt(name.length - 1) !== ' '; }
+    // a name that a person may go by: 1 - 32 characters of what the wire takes (printable ASCII and the letters of name_letters.js), no space at either end (NameMsg)
+    function validPersonName(name) { return typeof name === 'string' && NL.isWireName(name, MAX_NAME) && name.length > 0 && name.charAt(0) !== ' ' && name.charAt(name.length - 1) !== ' '; }
     function validTeams(a, b) { return (a === NO_TEAM && b === NO_TEAM) || (isWhole(a) && isWhole(b) && a >= 0 && a < b && b < PLAYERS); }
     // a line of chat that the server's decoder reads (ChatMsg): 1 - 100 printable ASCII characters, and not only blanks (a line of blanks says nothing; the game's own box sends none)
     function validChatLine(text) { return printable(text, MAX_CHAT) && text.replace(/ /g, '') !== ''; }
@@ -116,12 +131,12 @@
     // Hello of a lobby page (client kind 1). h: { name, room, key (16 bytes, none: a new player), platform (0: not told), create: { map ('' keeps the server's) } or none, kind: 'game' for the game page's Hello
     // on its results screen (client kind 0, never a block: it holds the reserved seat of its key in the lobby room of the rematch and leaves it reserved, docs/SERVER.md "Lobby rooms") }.
     // A lobby block is four seats with the leader starting (valid_create_block); its teams are ignored by the server (the plan decides), so they travel as "none".
-    // The server refuses a Hello whose name is not printable ASCII (or is longer than 32) and a block whose map is no map name: here the name is made as the game's client makes it (the characters outside
-    // the table are left out), a map that is no map name is left out (the room is made with the server's own), a platform that is none is "not told" and a key that is none is a new player's.
+    // The server refuses a Hello whose name is not UTF-8 of what the wire takes (or is longer than 32 characters) and a block whose map is no map name: here the name is made as the game's client makes it (the characters outside
+    // the table are left out); h.pass is the hub's pass for the name (protocol 29), left out when it has not the shape of one, a map that is no map name is left out (the room is made with the server's own), a platform that is none is "not told" and a key that is none is a new player's.
     function encodeHello(h) {
-        var w = new Writer().u8(MSG.Hello).u16(PROTOCOL).str8(printableOnly(h.name, MAX_NAME)).u16(0).u8(255).str8(typeof h.room === 'string' ? h.room : '').str8('');
+        var w = new Writer().u8(MSG.Hello).u16(PROTOCOL).strName(h.name).u16(0).u8(255).str8(typeof h.room === 'string' ? h.room : '').str8('');
         var game = h.kind === 'game';
-        w.bytes(isKey(h.key) ? h.key : zeroKey()).u32(0).u8(validPlatform(h.platform) ? h.platform : 0).u8(game ? CLIENT_GAME : CLIENT_PAGE);
+        w.bytes(isKey(h.key) ? h.key : zeroKey()).u32(0).u8(validPlatform(h.platform) ? h.platform : 0).u8(game ? CLIENT_GAME : CLIENT_PAGE).str8(validPass(h.pass) ? h.pass : '');
         if (h.create && !game) w.str8(validMapName(h.create.map) ? h.create.map : '').u8(PLAYERS).u8(NO_TEAM).u8(NO_TEAM).u8(CREATE_LEADER_STARTS | CREATE_LOBBY);
         return w.done();
     }
@@ -135,7 +150,8 @@
         for (var s = 0; s < PLAYERS; s++) {
             put(room.slots[s].state);
             var name = room.slots[s].state === SLOT.Empty ? '' : room.slots[s].name;          // (protocol 20: the name of a planned bot on an empty color is not who sits there)
-            for (var i = 0; i < name.length; i++) put(name.charCodeAt(i) & 255);
+            var bytes = NL.utf8Of(NL.codePoints(name) || []);                                        // (protocol 29: the bytes of the name, as the server hashes them)
+            for (var i = 0; i < bytes.length; i++) put(bytes[i]);
             put(0);
         }
         return h !== 0 ? h : 1;
@@ -152,7 +168,8 @@
         for (var i = 0; i < PLAYERS; i++) w.u8(kinds[i]);
         return w.u8(teamA).u8(teamB).u8(gameMode).u8(fog ? 1 : 0).done();
     }
-    function encodeName(name) { return new Writer().u8(MSG.Name).str8(name).done(); }
+    // a person's new name (protocol 29: with the hub's pass for it, or none)
+    function encodeName(name, pass) { return new Writer().u8(MSG.Name).strName(name).str8(validPass(pass) ? pass : '').done(); }
     function encodeRemove(seat, guard) { return new Writer().u8(MSG.Remove).u8(seat).u32(guard).done(); }
     function encodeVisibility(isPublic) { return new Writer().u8(MSG.Visibility).u8(isPublic ? 1 : 0).done(); }       // the leader's choice: the room is public (1) or private (0)
     function encodeReady(ready) { return new Writer().u8(MSG.Ready).u8(ready ? 1 : 0).done(); }       // (protocol 27) a person's choice: ready to start (1) or not (0)
@@ -193,8 +210,8 @@
     function decodeRoom(r) {
         var slots = [];
         for (var s = 0; s < PLAYERS; s++) {
-            var slot = { state: r.u8(), name: r.str8(), rtt: r.u16(), platform: r.u8() };
-            if (slot.state > SLOT.Bot || !printable(slot.name, MAX_NAME)) return null;
+            var slot = { state: r.u8(), name: r.strName(), rtt: r.u16(), platform: r.u8() };
+            if (slot.state > SLOT.Bot || !NL.isWireName(slot.name, MAX_NAME)) return null;
             if (!validPlatform(slot.platform) || (slot.platform !== 0 && slot.state !== SLOT.Host && slot.state !== SLOT.Client)) return null;
             slots.push(slot);
         }
@@ -232,8 +249,9 @@
         return r.done() ? m : null;
     }
     function decodeChat(r) {
-        var m = { type: 'chat', sender: r.u8(), team: r.u8(), text: r.str8() };
-        if (!r.done() || m.team > 1 || !printable(m.text, MAX_CHAT)) return null;
+        var sender = r.u8(), team = r.u8();
+        var m = { type: 'chat', sender: sender, team: team, text: sender === ROOM_SENDER ? r.strName() : r.str8() };         // (protocol 29: the room's own notices name people, so they may hold the letters of a name)
+        if (!r.done() || m.team > 1 || (sender === ROOM_SENDER ? !NL.isWireName(m.text, MAX_CHAT, MAX_NOTICE_BYTES) : !printable(m.text, MAX_CHAT))) return null;
         m.team = m.team === 1;
         return m;
     }
@@ -329,7 +347,7 @@
         try { v = JSON.parse(text); } catch (e) { return null; }
         if (!v || typeof v !== 'object' || Array.isArray(v) || Object.keys(v).sort().join(',') !== 'c,k,n,o,s,t') return null;
         if (v.s !== server || typeof v.c !== 'string' || v.c === '' || !validRoomCode(v.c) || typeof v.k !== 'string' || !/^[0-9a-f]{32}$/.test(v.k) || /^0+$/.test(v.k)) return null;
-        if (!printable(v.n, MAX_NAME) || (v.o !== 0 && v.o !== 1) || !isWhole(v.t) || !isWhole(nowMs)) return null;
+        if (!NL.isWireName(v.n, MAX_NAME) || (v.o !== 0 && v.o !== 1) || !isWhole(v.t) || !isWhole(nowMs)) return null;
         if (nowMs - v.t > SEAT_MEMORY_MS || v.t - nowMs > SEAT_MEMORY_MS) return null;
         return { code: v.c, key: bytesOfHex(v.k), name: v.n, own: v.o === 1 };
     }
@@ -374,6 +392,7 @@
         this.code = opts.code;
         this.map = validMapName(opts.map) ? opts.map : '';
         this.name = printableOnly(opts.name, MAX_NAME);
+        this.pass = validPass(opts.pass) ? opts.pass : '';                 // the hub's pass for the name (protocol 29): a server that has the hub's key takes the name as it is only with it; setPass() gives a fresh one (a pass lasts two minutes)
         this.platform = validPlatform(opts.platform) ? opts.platform : 0;
         this.keyBytes = isKey(opts.key) ? new Uint8Array(opts.key) : null;      // a copy: the caller's array is the caller's; read it with .key (a copy again)
         this.joinOnly = opts.join === true || opts.joinFirst === true;                          // a Hello with no lobby block: the room of the code is joined and never made (a code that somebody typed: no such room is NoSuchRoom)
@@ -463,7 +482,7 @@
             self.heard = self.now();
             self.arm(self.silenceMs);
             try {
-                ws.send(encodeHello({ name: self.name, room: self.code, key: self.keyBytes, platform: self.platform, kind: self.kind, create: self.joinOnly ? null : { map: self.map } }));
+                ws.send(encodeHello({ name: self.name, pass: self.pass, room: self.code, key: self.keyBytes, platform: self.platform, kind: self.kind, create: self.joinOnly ? null : { map: self.map } }));
                 self.helloSent = true;
             } catch (e) {
                 self.giveUpSocket();                                // (the link went between its opening and our first word: the way back)
@@ -640,9 +659,13 @@
         if (!this.canAct() || r.starting || typeof ready !== 'boolean' || r.you === 255 || !mustReady(r, r.you)) return false;
         return this.send('ready', encodeReady(ready));
     };
-    LobbyClient.prototype.rename = function (name) {
+    // The hub's pass for the name that this client goes by (a new one: the old one ends two minutes after the hub made it); it goes into the next Hello (a seat that was lost) and the next rename. A text that is no pass is none.
+    LobbyClient.prototype.setPass = function (pass) { this.pass = validPass(pass) ? pass : ''; };
+    LobbyClient.prototype.rename = function (name, pass) {
         if (!this.canAct() || this.room.starting || !validPersonName(name) || reservedName(name)) return false;        // (protocol 20: the server counts a bot-like name as a violation; a page never sends one)
-        return this.send('rename', encodeName(name));
+        var shown = typeof pass === 'string' ? pass : this.pass;
+        if (validPass(shown)) this.pass = shown;
+        return this.send('rename', encodeName(name, shown));
     };
     LobbyClient.prototype.remove = function (seat, guard) {
         var r = this.room;
@@ -689,7 +712,7 @@
     return {
         PROTOCOL: PROTOCOL, LAST_GAME_MODE: LAST_GAME_MODE, MSG: MSG, REJECT: REJECT, SLOT: SLOT, PLAN: PLAN, FILL: FILL, OS: OS, PLATFORM_BROWSER: PLATFORM_BROWSER, PLAYERS: PLAYERS,
         NO_TEAM: NO_TEAM, NO_LEADER: NO_LEADER, ROOM_SENDER: ROOM_SENDER, MAX_NAME: MAX_NAME, MAX_CHAT: MAX_CHAT,
-        validMapName: validMapName, validRoomCode: validRoomCode, publicRoomCode: publicRoomCode, validPersonName: validPersonName, validTeams: validTeams, validPlatform: validPlatform, validChatLine: validChatLine,
+        validMapName: validMapName, validRoomCode: validRoomCode, publicRoomCode: publicRoomCode, validPersonName: validPersonName, validPass: validPass, validTeams: validTeams, validPlatform: validPlatform, validChatLine: validChatLine,
         encodeHello: encodeHello, encodeLeave: encodeLeave, encodePong: encodePong, encodePing: function (nonce, sentMs) { return encodePing(MSG.Ping, nonce, sentMs); },
         encodeSeatMove: encodeSeatMove, encodePlan: encodePlan, encodeName: encodeName, encodeRemove: encodeRemove, encodeVisibility: encodeVisibility, encodeReady: encodeReady, mustReady: mustReady, waitingFor: waitingFor, encodeStartRequest: encodeStartRequest, encodeChat: encodeChat,
         fillOfPlan: fillOfPlan, seatingHash: seatingHash, decode: decode, diffRooms: diffRooms, rejoinEntry: rejoinEntry, SEAT_MEMORY: SEAT_MEMORY, SEAT_MEMORY_MS: SEAT_MEMORY_MS, seatMemory: seatMemory, seatMemoryRead: seatMemoryRead, LobbyClient: LobbyClient,

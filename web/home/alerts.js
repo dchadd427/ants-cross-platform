@@ -104,7 +104,6 @@
     }
     function countOf(rows) { var n = 0; rows.forEach(function (r) { if (r.u) n++; }); return n; }
     function countText(n) { return n > 9 ? '9+' : String(n); }
-    function initial(name, Chat) { var first = Chat.clip(name, 1); return first.length > 1 && first.charAt(first.length - 1) === '\u2026' ? first.slice(0, -1) : first; }          // (the first code point of a name, without the dots that a cut adds)
     function countBig(n) { return n > 99 ? '99+' : String(n); }          // (the count of a tab and of a conversation: the bell's is 9+)
     // The list that a visitor keeps in this browser: the rows of the last 7 days, the newest 30, newest first
     function trim(rows, now) { return rows.filter(function (r) { return now - r.at < DAYS * 86400; }).sort(function (a, b) { return b.id - a.id; }).slice(0, KEEP); }
@@ -222,7 +221,7 @@
             card.appendChild(el('p', 'al-keep', signedIn() ? TEXT.keptAccount : TEXT.keptBrowser));
         }
         function convItem(c) {                              // a conversation: the person's circle, the name (and the gold star of a person that is followed), the start of the newest message, the time and the count of what is not read
-            var C = Chat(), b = el('button', 'al-item al-conv' + (c.u ? ' unread' : '')), ic = el('span', 'al-ic', initial(c.name, C)), tx = el('span', 'al-tx'), t = el('span', 'al-t'), sub = (c.me ? TEXT.you : '') + c.text, meta = el('span', 'al-meta'), star;
+            var C = Chat(), b = el('button', 'al-item al-conv' + (c.u ? ' unread' : '')), ic = el('span', 'al-ic', C.initial(c.name)), tx = el('span', 'al-tx'), t = el('span', 'al-t'), sub = (c.me ? TEXT.you : '') + c.text, meta = el('span', 'al-meta'), star;
             b.type = 'button'; b.setAttribute('data-h', c.h); b.setAttribute('aria-label', c.name + (c.u ? ', ' + c.u + TEXT.unread : '') + ', ' + sub);
             t.appendChild(el('bdi', '', c.name));
             if (c.f) { star = el('span', 'al-star'); star.setAttribute('role', 'img'); star.setAttribute('aria-label', TEXT.followed); t.appendChild(star); }

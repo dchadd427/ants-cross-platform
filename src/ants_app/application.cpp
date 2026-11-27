@@ -367,6 +367,7 @@ bool Application::init(const ApplicationConfig& config) {
             }
         }
         if (!config_.net_extra_ca_pem.empty()) net_->set_extra_trusted_ca_pem(config_.net_extra_ca_pem);
+        net_->set_name_pass(config_.name_pass);                                          // (protocol 29: the hub's pass for the name, told in every Hello of this game)
         const bool ok = host_role                   ? net_->host(config_.net_port, player_name, config_.net_loopback_only)
                         : !config_.net_url.empty() ? net_->join_url(config_.net_url, player_name, join_seat, config_.net_room, config_.net_token, join_key)
                                                    : net_->join(config_.net_address, config_.net_port, player_name, join_seat, config_.net_room, config_.net_token, join_key);

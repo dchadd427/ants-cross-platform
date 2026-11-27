@@ -13,6 +13,7 @@
 const fs = require('fs');
 // the pages load web/shapes.js (the one table of the shapes) before their own code: it is the global AntsShapes of the code that is run here
 globalThis.AntsShapes = require(require('path').resolve(__dirname, '..', '..', 'web', 'shapes.js'));
+globalThis.AntsNameLetters = require(require('path').resolve(__dirname, '..', '..', 'web', 'front', 'name_letters.js'));       // (the page's name block reads the letters of a name: front/name_letters.js, a script tag of the page)
 
 // The lines between the line of `begin` and the line of `end`
 function between(text, begin, end, path) {

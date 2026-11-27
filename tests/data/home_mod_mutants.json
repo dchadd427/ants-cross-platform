@@ -1725,6 +1725,13 @@
    "old": "function on() { var dir = directory(); return !!viewer() || login() ||",
    "new": "function on() { var dir = directory(); return !!viewer() ||",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "the_circle_of_a_card_takes_the_bracket_of_a_tag",
+   "file": "web/home/mod.js",
+   "old": "win.AntsHomeChat.initial(line.who).toUpperCase()",
+   "new": "line.who.charAt(0).toUpperCase()",
+   "test": "node tests/scripts/web_home_mod_check.js web/lobby.html"
   }
  ]
 }

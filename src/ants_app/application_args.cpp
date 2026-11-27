@@ -106,6 +106,8 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             mode_given = direct_match = true;
         } else if (std::strcmp(argv[i], "--name") == 0 && i + 1 < argc) {
             cfg.player_name = argv[++i];                                       // this player's name: the room, the HUD, chat, the results
+        } else if (std::strcmp(argv[i], "--name-pass") == 0 && i + 1 < argc) {
+            cfg.name_pass = argv[++i];                                         // the hub's pass for --name (a page puts it there); a text that is no pass is ignored by the Hello
         } else if (std::strcmp(argv[i], "--team-name") == 0 && i + 2 < argc) {   // --team-name <0-3> <name>, for a local game
             const int team = std::atoi(argv[i + 1]);
             if (team >= 0 && team < 4) cfg.team_names[static_cast<size_t>(team)] = argv[i + 2];

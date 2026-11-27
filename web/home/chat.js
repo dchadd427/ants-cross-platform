@@ -34,6 +34,7 @@
     var BACKOFF = { min: 1000, max: 60000, low: 0.5, high: 1.5 };      // the wait is half to one and a half times the step (1 to 60 s): many pages that lost one hub do not come back together
     var PACE = { burst: 8, every: 600, same: 31000 };                   // this page's own limit, below the hub's (10 at once, one every 0.5 s, no same text twice in 30 s)
     var TEXT = {
+        nameFirst: 'You show as ', nameFirstEnd: ', your Discord name.', nameChoose: 'Choose a nickname', nameChange: 'Nickname and tag', nameNick: 'Nickname ', nameTag: ' \u00b7 Tag ', nameNoTag: ' \u00b7 No tag',
         title: 'Global chat', welcome: 'Welcome to the front page. Everyone here can read what you write.', online: ' here now', connecting: 'connecting…', reconnecting: 'reconnecting…',
         offline: 'Chat is offline', readonly: 'Chat is read-only for now', guest: 'You can read as a guest. Playing and watching stay anonymous.', field: 'Say something to everyone', hint: 'Enter sends the message.', send: 'Send',
         fold: 'Fold chat', open: 'Open chat', log: 'Chat messages', unread: ' unread', generic: 'That did not go through', more: ' more messages', one: 'One more message', many: '500+',
@@ -44,7 +45,7 @@
         cmdBad: 'That command is not right. Type /help to see the commands.', cmdRate: 'You are going too fast, try again in a moment', bansHead: 'People who are banned', bansNone: 'Nobody is banned.', noName: '(no name)',
         kicked: 'A moderator removed you from the chat. You can log in again.', banned: 'You are banned from the chat. You can still read it.', banField: 'You are banned from the chat'
     };
-    var DONE = { mute: 'Done: the person is muted.', unmute: 'Done: the person can write again.', del: 'Done: the line is gone.', kick: 'Done: the person was removed.', ban: 'Done: the person is banned.', unban: 'Done: the ban is lifted.', noimages: 'Done: the person cannot post images.', images: 'Done: the person can post images again.' };
+    var DONE = { mute: 'Done: the person is muted.', unmute: 'Done: the person can write again.', del: 'Done: the line is gone.', kick: 'Done: the person was removed.', ban: 'Done: the person is banned.', unban: 'Done: the ban is lifted.', noimages: 'Done: the person cannot post images.', images: 'Done: the person can post images again.', rename: 'Done: the nickname and the tag are reset.' };
     var SHEET = ['invite', 'follow', 'unfollow', 'msg', 'ignore', 'unignore'];       // the commands that the person's sheet and the Messages part send: the answer is theirs
     var MAXBANS = 50;                                                    // (the hub sends the newest 50)
     var ABOUT = ['power', 'role', 'who'];                                // the codes that are only for a command (a line is never refused with them)
@@ -99,6 +100,9 @@
     function count(n) { return typeof n === 'number' && n >= 0 && n <= LIMIT.count && n === Math.floor(n) ? n : null; }
     function nameOf(s) { return typeof s === 'string' ? clip(plain(s.slice(0, LIMIT.name * 4), true), LIMIT.name) : ''; }       // (a name of the hub, or its key of an account)
     // The pictures (docs/HOME_SCREEN.md, "Pictures"): the hub names a picture by 32 lower-case hex characters; that name is checked here and is the only thing an address is made from (with two constants)
+    function secondsOf(n) { return typeof n === 'number' && n > 0 && n < 4e9 && n === Math.floor(n) ? n : 0; }       // (a time in seconds since 1970 in a frame of the hub, or 0)
+    var TAGRE = /^[^\s\]\[<>]{2,5}$/;
+    function tagOf(s) { return typeof s === 'string' && TAGRE.test(s) ? s : ''; }       // (a tag of the hub, or ''; 2 to 5 characters with no blank and no bracket)
     var PICNAME = /^[0-9a-f]{32}$/, PICDIR = '/hub/pic/', PICEXT = '.png';
     function picOf(v) { return typeof v === 'string' && PICNAME.test(v) ? v : ''; }       // the name of a picture in a frame of the hub (`pic` of `you` and of a players row), or '' (the one place that reads it)
     function picsOf(v) { return v === 'on' || v === 'off' || v === 'blocked' ? v : ''; }       // the switch's state in `you.pics`, or '' (no switch: a guest, a hub without the Discord login)
@@ -133,7 +137,7 @@
     function youOf(y) {                                                  // the visitor, as the hub's `you` says (a welcome, or the frame that changes it), or null when it names nobody: { name, mod, role, k, pick, other, pic (a checked name or ''), pics ('on', 'off', 'blocked' or '') }
         if (!y || typeof y !== 'object') return null;
         var name = nameOf(y.name), role = y.role === 'admin' || y.role === 'mod' || y.role === 'none' ? y.role : y.mod === true ? 'mod' : 'none';       // (`role` where the hub says it; an older hub says `mod` only)
-        return name ? { name: name, mod: role !== 'none', role: role, k: nameOf(y.k), pick: y.pick, other: y.pick === 'display' || y.pick === 'username' ? nameOf(y.other) : '', pic: picsOf(y.pics) === 'on' ? picOf(y.pic) : '', pics: picsOf(y.pics), img: y.img === 'on' || y.img === 'role' || y.img === 'off' || y.img === 'wait' ? y.img : '' } : null;       // (a picture only where the switch says `on`, whatever else a frame holds)
+        return name ? { name: name, nick: nameOf(y.nick), tag: tagOf(y.tag), nickat: secondsOf(y.nickat), nickfree: secondsOf(y.nickfree), tagfree: secondsOf(y.tagfree), mod: role !== 'none', role: role, k: nameOf(y.k), pick: y.pick, other: y.pick === 'display' || y.pick === 'username' ? nameOf(y.other) : '', pic: picsOf(y.pics) === 'on' ? picOf(y.pic) : '', pics: picsOf(y.pics), img: y.img === 'on' || y.img === 'role' || y.img === 'off' || y.img === 'wait' ? y.img : '' } : null;       // (a picture only where the switch says `on`, whatever else a frame holds)
     }
     function imgOf(v) { return v && typeof v === 'object' && typeof v.n === 'string' && PICNAME.test(v.n) ? v : null; }       // (the image of a line: pics.js checks the rest before it makes an address)
     function lineOf(m) {                                                 // one line of the hub, cleaned: { id, who, text, mod, role, sys (the hub's own line: only its flag says so), k (the author's key), u (the author's username: a moderator's copy only) }, or null when it is no line
@@ -141,7 +145,7 @@
         var text = clip(plain(m.text.slice(0, LIMIT.line * 4)), LIMIT.line), sys = m.sys === true;
         var img = sys ? null : imgOf(m.img);
         if (!shows(text) && !img) return null;                           // (an image may have no words)
-        var out = { id: m.id, who: nameOf(m.who) || '?', text: text, mod: !sys && m.mod === true, role: sys ? 'none' : roleOf(m.role, m.mod), sys: sys, k: nameOf(m.k), u: nameOf(m.u) };
+        var out = { id: m.id, who: nameOf(m.who) || '?', tag: sys ? '' : tagOf(m.tag), text: text, mod: !sys && m.mod === true, role: sys ? 'none' : roleOf(m.role, m.mod), sys: sys, k: nameOf(m.k), u: nameOf(m.u) };
         out.img = img;
         out.marks = sys ? [] : marksOf(m.m, text);
         if (dayOf(m.at) !== '') out.at = m.at;                           // (the hub's own time of the line, seconds since 1970; a line without one shows no time: the page never makes one up)
@@ -228,8 +232,9 @@
         var low = Math.max(BACKOFF.min, base * BACKOFF.low), high = Math.min(BACKOFF.max, base * BACKOFF.high);
         return Math.round(low + (high - low) * (random >= 0 && random <= 1 ? random : 0.5));
     }
-    function initial(name) {                                             // the first code point of a name, for the circle in the bar
-        var first = clip(name, 1);
+    var SHOWN = /^\[[^\]\s]{2,5}\] (.+)$/;                                // "[TAG] Nickname", a name as the game and a room write it (front/name_letters.js split reads it too)
+    function initial(name) {                                             // the first code point of the nickname, for a circle (a name with its tag gives the nickname's letter, never the bracket)
+        var shown = SHOWN.exec(name), first = clip(shown ? shown[1] : name, 1);
         return first.length > 1 && first.charAt(first.length - 1) === '…' ? first.slice(0, -1) : first;
     }
     function addressOf(loc) { return (loc.protocol === 'https:' ? 'wss://' : 'ws://') + loc.host + PATH; }
@@ -307,8 +312,9 @@
         put(swLabel, [swBox, el('span', 'gc-swt', TEXT.picShow)]); put(swRow, [swLabel, swNote, swAgain]);
         outBtn.type = 'button'; forgetBtn.type = 'button'; pickBtn.type = 'button';
         put(acct, [el('i', 'gc-dc'), el('span', 'gc-as', TEXT.chatting), acctName]);
+        var nameLine = el('p', 'gc-nl'), nameBtn = el('button', 'btn gc-nb'); nameLine.hidden = nameBtn.hidden = true; nameBtn.type = 'button';       // (the name that the others see, and the button that opens the sheet "Your name": home/names.js)
         var yr = el('p', 'gc-yr'); yr.hidden = true;       // (the role, in words, in the dropdown of the account)
-        put(slot, [acct, yr, pickNote, pickBtn, swRow, outBtn, el('p', 'gc-mnote', TEXT.forgetNote), forgetBtn]);
+        put(slot, [acct, yr, nameLine, nameBtn, pickNote, pickBtn, swRow, outBtn, el('p', 'gc-mnote', TEXT.forgetNote), forgetBtn]);
         var adminLink = el('a', 'btn gc-adminpage', 'Admin page'); adminLink.setAttribute('href', '/admin'); adminLink.hidden = true; slot.insertBefore(adminLink, outBtn);        // (a plain link, for an administrator or the owner only: the page decides again who may come in)
         var chipMark = null, chipAv = null, chipName = null;                   // the bar's chip (home.js makes the button and hides it): Log in, or who the visitor is
         if (chip) { chipMark = el('i', 'gc-dc'); chipAv = el('span', 'gc-av'); chipName = el('span', 'gc-cn'); chip.textContent = ''; put(chip, [chipMark, chipAv, chipName]); }
@@ -332,7 +338,8 @@
             if (e.sys) { r = put(el('div', 'gc-line gc-event'), [stamp(e), el('bdi', 'gc-text', e.text)]); r.setAttribute('data-n', String(e.id)); return r; }       // (a line of the hub's own, drawn quietly; it names the person in its words, and has no author)
             r = el('div', 'gc-line' + (e.mod ? ' gc-mod' : '') + (admin ? ' gc-admin' : '') + (e.own ? ' gc-me' : '') + (!e.own && named(e) ? ' gc-named' : ''));
             r.setAttribute('data-n', String(e.id)); put(r, [stamp(e)]);       // (the number stays in the line as data, for the menu of a moderator; it is never shown)
-            var name = el('bdi', 'gc-who', e.who);
+            var name = el('bdi', 'gc-who', e.tag ? '' : e.who);
+            if (e.tag) { name.appendChild(el('span', 'nm-tag', '[' + e.tag + ']')); name.appendChild(doc.createTextNode(' ' + e.who)); }       // (a tag: dimmer than the name, brackets included; docs/HUB_NICKNAMES.md)
             if (e.mod) { r.appendChild(el('span', 'gc-sr', wordOfRole(e.role) + ' ')); name.setAttribute('title', wordOfRole(e.role)); }       // (the name is red or yellow: the word is in the accessible name too, so that color is never the only sign)
             put(r, [name]);
             if (tools() && e.u) put(r, [el('bdi', 'gc-u', ' (' + e.u + ')')]);       // (a moderator is shown the username where it differs from the name; nobody else ever is)
@@ -444,6 +451,15 @@
             yr.hidden = !(you && you.role !== 'none'); yr.textContent = yr.hidden ? '' : TEXT.youAre[you.role];       // (the role in words, as well as in the color of the name)
             if (slot.hidden && chip && slot.contains && slot.contains(doc.activeElement)) { if (live && login) chip.focus(); else refocus = true; }       // (the dropdown goes under the focus: it goes to the chip, not to nowhere; a picked name closes the socket and hides the chip, so the focus waits for the dropdown to come back)
             outBtn.disabled = forgetBtn.disabled = busy;
+            nameLine.hidden = nameBtn.hidden = !you;
+            if (you) {                                                          // (the name that the others see: the nickname and the tag, or the name of the login)
+                nameLine.textContent = '';
+                if (you.nick) {
+                    nameLine.appendChild(doc.createTextNode(TEXT.nameNick)); nameLine.appendChild(el('b', '', you.nick));
+                    nameLine.appendChild(doc.createTextNode(you.tag ? TEXT.nameTag : TEXT.nameNoTag)); if (you.tag) nameLine.appendChild(el('b', '', you.tag));
+                } else { nameLine.appendChild(doc.createTextNode(TEXT.nameFirst)); nameLine.appendChild(el('b', '', you.name)); nameLine.appendChild(doc.createTextNode(TEXT.nameFirstEnd)); }
+                nameBtn.textContent = you.nick ? TEXT.nameChange : TEXT.nameChoose;
+            }
             pickNote.hidden = pickBtn.hidden = !(you && you.other);
             if (you && you.other) { var a = you.pick === 'display' ? 0 : 1; pickNote.textContent = TEXT.shows + TEXT.names[a] + '.'; pickBtn.textContent = TEXT.use + TEXT.names[1 - a] + ': ' + you.other; }
             swRow.hidden = !(you && you.pics);
@@ -624,7 +640,8 @@
             var next = you ? youOf(m.you) : null;
             if (!next) return;
             var was = tools();
-            you.role = next.role; you.mod = next.mod; you.pic = next.pic; you.pics = next.pics; you.img = next.img; wantPost();       // (the picture and the switch follow the hub's whole `you` at once, whenever it comes)
+            you.role = next.role; you.mod = next.mod; you.pic = next.pic; you.pics = next.pics; you.img = next.img; wantPost();
+            you.name = next.name; you.nick = next.nick; you.tag = next.tag; you.nickat = next.nickat; you.nickfree = next.nickfree; you.tagfree = next.tagfree; you.pick = next.pick; you.other = next.other;       // (a saved nickname or tag, or a moderator's reset: the hub sends a whole `you`, and the menu's name line and the lines to come follow it: docs/HUB_NICKNAMES.md)       // (the picture and the switch follow the hub's whole `you` at once, whenever it comes)
             if (!picWait || next.pics === 'blocked' || next.pics === (picWant ? 'on' : 'off')) picPending(false);       // (a `you` that says what was asked for answers a press of the switch, and so does one that follows a refusal; another `you` meanwhile does not)
             if (was !== tools()) { stale = true; hold = seen(); }                                   // (the numbers and the usernames come or go with the role: the log is made again)
             render();
@@ -693,6 +710,7 @@
             else if (m.t === 'alerts') { lastAlerts = m; tapped('alerts', m); }
             else if (m.t === 'alert') tapped('alert', m);
             else if (m.t === 'follows') { lastFollows = m; tapped('follows', m); }                   // (the people that this account follows, for the players list and the sheet: to its own sockets only)
+            else if (m.t === 'name') tapped('name', m);                                               // (the answer to a frame of the sheet "Your name": home/names.js)
             else if (m.t === 'msgs') { lastMsgs = m; tapped('msgs', m); }
             else if (m.t === 'msg' || m.t === 'thread' || m.t === 'dmx' || m.t === 'dmreported') tapped(m.t, m);       // (private messages: the Messages part, web/home/messages.js, draws them)
             else if (m.t === 'err' && picWait && (m.code === 'pics' || m.code === 'login')) failPic(m.code === 'login');
@@ -872,6 +890,7 @@
             else post();
         }
         form.addEventListener('submit', guard(function (e) { if (e && e.preventDefault) e.preventDefault(); post(); }));
+        nameBtn.addEventListener('click', guard(function () { setMenu(false); tapped('names'); }));       // (the menu closes and the sheet "Your name" opens: home/names.js hears the tap)
         field.addEventListener('keydown', guard(function (e) { if (cmdsApi && cmdsApi.key(e)) return; if (e && e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) { if (e.preventDefault) e.preventDefault(); sendNow(); } }));
         field.addEventListener('beforeinput', guard(function (e) { if (e && (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph')) { if (e.preventDefault) e.preventDefault(); if (!(cmdsApi && cmdsApi.key({ key: 'Enter' }))) sendNow(); } }));
         field.addEventListener('input', guard(function () {
@@ -897,7 +916,7 @@
         go();
         return {
             root: box, slot: slot, field: field, log: log, grow: grow, say: sendLine, state: function () { return state; },
-            you: function () { return you ? { name: you.name, role: you.role } : null; }, line: lineById, by: byAuthor, when: clockOf, arrived: function (fn) { arrivalFns.push(fn); }, command: guard(command), mutes: guard(function (done) { command('/mutes', done, true); }), note: guard(function (text) { answer([String(text)]); }), rows: function (fn) { rowFns.push(fn); },
+            you: function () { return you ? { name: you.name, role: you.role, nick: you.nick, tag: you.tag, nickat: you.nickat, nickfree: you.nickfree, tagfree: you.tagfree } : null; }, line: lineById, by: byAuthor, when: clockOf, arrived: function (fn) { arrivalFns.push(fn); }, command: guard(command), mutes: guard(function (done) { command('/mutes', done, true); }), note: guard(function (text) { answer([String(text)]); }), rows: function (fn) { rowFns.push(fn); },
             tap: function (fn) { taps.push(fn); if (hello) { tell1(fn, 'live', hello); if (lastAlerts) tell1(fn, 'alerts', lastAlerts); if (lastFollows) tell1(fn, 'follows', lastFollows); if (lastMsgs) tell1(fn, 'msgs', lastMsgs); } else if (state === 'offline') tell1(fn, 'lost'); },
             send: out,
             block: guard(function (draw, cls) { var e = answer([], draw, cls); return { redraw: function () { redraw(e); } }; }), call: guard(function (text, done) { command(text, done, false, true); }), onScreen: function () { return seen() && !stale; },
@@ -907,5 +926,5 @@
         };
     }
 
-    return { PATH: PATH, LIMIT: LIMIT, marksOf: marksOf, agoOf: agoOf, MS: MS, PACE: PACE, TEXT: TEXT, ERR: ERR, plain: plain, points: points, clip: clip, parse: parse, count: count, lineOf: lineOf, partsOf: partsOf, mutesOf: mutesOf, youOf: youOf, picOf: picOf, picture: picture, roleOf: roleOf, wordOfRole: wordOfRole, bansOf: bansOf, wordOfCommand: wordOfCommand, wordOf: wordOf, delayOf: delayOf, addressOf: addressOf, mount: mount };
+    return { tagOf: tagOf, PATH: PATH, LIMIT: LIMIT, marksOf: marksOf, agoOf: agoOf, MS: MS, PACE: PACE, TEXT: TEXT, ERR: ERR, plain: plain, points: points, clip: clip, parse: parse, count: count, lineOf: lineOf, partsOf: partsOf, mutesOf: mutesOf, youOf: youOf, picOf: picOf, picture: picture, roleOf: roleOf, wordOfRole: wordOfRole, bansOf: bansOf, wordOfCommand: wordOfCommand, wordOf: wordOf, delayOf: delayOf, addressOf: addressOf, initial: initial, mount: mount };
 });

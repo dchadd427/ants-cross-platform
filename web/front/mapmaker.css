@@ -160,6 +160,11 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .tog[aria-checked="true"] .tk { background: #1d6b4a; }
 .tog[aria-checked="true"] .tk::after { left: 12px; background: var(--gold); }
 #auto-edges-mob[hidden] { display: none; }
+/* the switch "Fill a box" (the part that does the work is mapmaker_fill.js, loaded when it is first on): a line of its own under the palette; on a phone the line also holds the pattern's button */
+.fbrow { display: flex; flex-direction: column; gap: 4px; padding-top: 4px; border-top: 1px solid var(--rule); }
+.fbrow[hidden] { display: none; }
+#fill-box-btn { width: 100%; justify-content: flex-start; height: 30px; padding: 0 8px 0 7px; font-size: 13.5px; white-space: nowrap; }
+@media (pointer: coarse) { #fill-box-btn { height: 44px; } }
 .cvbar .sp { flex: 1; }
 .zoom { display: inline-flex; align-items: center; gap: 6px; }
 .zoom button { display: inline-flex; width: 34px; height: 34px; align-items: center; justify-content: center; font-weight: 500; font-size: 20px; line-height: 1; cursor: pointer; background: var(--sheen) var(--teal); border: 2px solid var(--edge); border-radius: 6px; box-shadow: var(--btn-shadow-sm); }
@@ -332,6 +337,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
     .palette { display: none; }
     .tilebtn:not([hidden]) { display: flex; min-width: 150px; }
     #auto-edges-mob:not([hidden]) { grid-column: 1 / -1; justify-content: flex-start; padding: 0 12px; border-radius: 22px; }
+    .fbrow { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 8px; padding: 0 4px; border-top: 0; } #fill-box-btn { width: auto; flex: none; height: 44px; font-size: 14px; padding: 0 10px 0 8px; }
     .toolnote { font-size: 12px; padding: 0 4px; } .toolnote .dsk { display: none; } .toolnote .mob { display: inline; }
     .cvbar { padding: 6px 8px; } .cvbar .sp { display: none; } #where { flex: 1 1 0; } .editbar { width: 100%; flex-wrap: wrap; justify-content: space-between; gap: 4px 2px; } .undoredo, .drawopts { gap: 2px; } .brushes { margin-left: 0; gap: 2px; }
     .eb { min-width: 44px; height: 44px; padding: 0 2px; font-size: 13px; } .brange { min-width: 44px; height: 44px; }
@@ -370,6 +376,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
     .palette { display: none; }
     .tilebtn:not([hidden]) { display: flex; padding: 4px 6px; } #tile-name { display: none; } .tilebtn::after { margin-left: 4px; }
     #auto-edges-mob { display: none; }
+    .fbrow { grid-column: 1 / -1; } #fill-box-btn { height: 44px; }
     .toolnote { display: none; }
     .tool { justify-content: center; min-height: 32px; font-size: 12px; padding: 2px; text-align: center; } .tool:not([disabled]) { min-height: 44px; } .tool i { display: none; }
     .eb { min-width: 44px; height: 44px; padding: 0 8px; } #edges-btn { padding: 0 3px; } .brange { min-width: 44px; height: 44px; }

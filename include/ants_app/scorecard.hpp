@@ -72,6 +72,7 @@ public:
         uint8_t first{0};                          // the team that made the row (the lower one of an alliance)
         uint8_t second{sim::PLAYER_NEUTRAL};       // its ally, PLAYER_NEUTRAL for a single team
         std::string name;                          // "A" or "A & B", at most 35 characters
+        std::string name_first, name_second;       // the names of the two teams of an alliance as they are (name_second is empty for a single team): the new page shows an alliance on two lines, "A &" over "B"
         std::array<std::string, 4> numbers;        // score, friendly lost, enemy killed, new hatched (187: kills, ants lost, ants left, and nothing)
         int32_t score_value{0};                    // the score (187: the kills) as a number: the new page's bars
         bool has_second() const noexcept { return second != sim::PLAYER_NEUTRAL; }

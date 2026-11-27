@@ -81,7 +81,7 @@ function rig(o) {
     const env = { elements: {}, innerHTMLWrites: [] };
     const clock = makeClock();
     const Chat = loadChat(clock);
-    const doc = { hidden: false, listeners: {}, createElement: (t) => new El(env, t), addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); } };
+    const doc = { hidden: false, listeners: {}, createElement: (t) => new El(env, t), createTextNode: (t) => ({ isText: true, textContent: String(t), parent: null }), addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); } };
     env.doc = doc;                                        // (the fake DOM's focus() looks for it)
     const win = { innerWidth: o.width || 1280, innerHeight: o.height || 800, location: { protocol: 'https:', host: 'play.test' }, listeners: {}, addEventListener(t, fn) { (win.listeners[t] = win.listeners[t] || []).push(fn); } };
     const sockets = [];
@@ -144,7 +144,7 @@ function rig(o) {
         P.parse('{"t":"x"}') !== null && P.parse(5) === null && P.parse(new ArrayBuffer(4)) === null && P.parse('x'.repeat(P.LIMIT.frame + 1)) === null && P.parse('{') === null && P.parse('[1]') === null && P.parse('3') === null
         && P.parse('null') === null && P.parse('{}') === null && P.parse('{"t":5}') === null && P.parse('{"t":"a","__proto__":{"x":1}}') !== null && P.parse('{"t":"ok"}'.padEnd(P.LIMIT.frame, ' ')) !== null);
     same('count: whole numbers from 0 only', [P.count(0), P.count(7), P.count(-1), P.count(1.5), P.count('3'), P.count(null), P.count(NaN), P.count(Infinity), P.count(1e12)], [0, 7, null, null, null, null, null, null, null]);
-    same('lineOf: a good line is cleaned, the mod flag is a boolean true only', [P.lineOf({ id: 4, who: 'a', text: ' hi  there ', mod: true }), P.lineOf({ id: 4, who: 'a', text: 'x', mod: 'yes' }).mod, P.lineOf({ id: 0, who: 'a', text: 'x' }).id], [{ id: 4, who: 'a', text: 'hi there', mod: true, role: 'mod', sys: false, k: '', u: '', img: null, marks: [] }, false, 0]);
+    same('lineOf: a good line is cleaned, the mod flag is a boolean true only', [P.lineOf({ id: 4, who: 'a', text: ' hi  there ', mod: true }), P.lineOf({ id: 4, who: 'a', text: 'x', mod: 'yes' }).mod, P.lineOf({ id: 0, who: 'a', text: 'x' }).id], [{ id: 4, who: 'a', tag: '', text: 'hi there', mod: true, role: 'mod', sys: false, k: '', u: '', img: null, marks: [] }, false, 0]);
     same('lineOf: not a line when the id is not a whole number, the name or text is not a string, or nothing is left of the text',
         [{ who: 'a', text: 'x' }, { id: '4', who: 'a', text: 'x' }, { id: -1, who: 'a', text: 'x' }, { id: 1.5, who: 'a', text: 'x' }, { id: 4, who: 5, text: 'x' }, { id: 4, who: 'a', text: 5 }, { id: 4, who: 'a', text: ' \u202e \u200b ' }, null, 'x', []].map((m) => P.lineOf(m)),
         [null, null, null, null, null, null, null, null, null, null]);
@@ -1269,6 +1269,13 @@ function bring(env) {                                     // the two files arriv
     const r = rig({ chip: true });
     r.live(W({ login: true, you: { name: '\ud83d\ude00smile', mod: false } }));
     check('the circle holds the first CODE POINT of the name (a pair of surrogates is not cut in two)', one(r.chip, 'gc-av').textContent === '\ud83d\ude00');
+    same('the circle of every list holds the first code point of the NICKNAME: a name that comes with its tag ("[TAG] Nickname") gives the nickname\'s letter and never the bracket; no cut dots, no tag taken off a name that has none',
+        ['[ANT] Zoe', '[\u0420\u0423\u0421] \u0401\u0436\u0438\u043a', 'Zoe (Guest)', '[x] Zoe', '[Zoe', '[ANT]', 'ab', '\ud83d\ude00x'].map((n) => Pure.initial(n)), ['Z', '\u0401', 'Z', '[', '[', '[', 'a', '\ud83d\ude00']);
+    const tagged = rig({ chip: true });
+    tagged.live(W({ login: true, you: { name: 'Zoe', tag: 'ANT', mod: false } }));
+    const combined = rig({ chip: true });
+    combined.live(W({ login: true, you: { name: '[ANT] Zoe', mod: false } }));
+    check('the chip of a person with a tag shows the letter of the nickname, whichever way the name comes (a tag of its own, or in the name)', one(tagged.chip, 'gc-av').textContent === 'Z' && one(combined.chip, 'gc-av').textContent === 'Z');
     const q = rig({ chip: true });
     q.live(W({ login: true, you: { name: '\u3164\u2800\ufe0f', mod: false } }));
     check('a name of nothing that shows is nobody: the visitor is a reader, the account line is not shown', q.dock.slot.hidden === true && q.field().disabled === true);
@@ -1341,7 +1348,7 @@ const menuOf = (r) => { const live = r.live; r.live = (...args) => { const sock 
     const P = Pure;
     same('lineOf: the key and the username of the author, cleaned like a name', [P.lineOf({ id: 4, who: 'Maple Leaf', text: 'x', mod: false, k: MINE, u: 'maple.leaf' }), P.lineOf({ id: 4, who: 'a', text: 'x', k: 5, u: 5 }), P.lineOf({ id: 4, who: 'a', text: 'x', k: null, u: [] }),
         P.lineOf({ id: 4, who: 'a', text: 'x', u: '<b>x</b> \u202eevil\u202c \u200b' }).u, P.lineOf({ id: 4, who: 'a', text: 'x', u: 'u'.repeat(60) }).u, P.lineOf({ id: 4, who: 'a', text: 'x', u: '\u3164\u2800' }).u],
-        [{ id: 4, who: 'Maple Leaf', text: 'x', mod: false, role: 'none', sys: false, k: MINE, u: 'maple.leaf', img: null, marks: [] }, { id: 4, who: 'a', text: 'x', mod: false, role: 'none', sys: false, k: '', u: '', img: null, marks: [] }, { id: 4, who: 'a', text: 'x', mod: false, role: 'none', sys: false, k: '', u: '', img: null, marks: [] }, '<b>x</b> evil', 'u'.repeat(32) + '\u2026', '']);
+        [{ id: 4, who: 'Maple Leaf', tag: '', text: 'x', mod: false, role: 'none', sys: false, k: MINE, u: 'maple.leaf', img: null, marks: [] }, { id: 4, who: 'a', tag: '', text: 'x', mod: false, role: 'none', sys: false, k: '', u: '', img: null, marks: [] }, { id: 4, who: 'a', tag: '', text: 'x', mod: false, role: 'none', sys: false, k: '', u: '', img: null, marks: [] }, '<b>x</b> evil', 'u'.repeat(32) + '\u2026', '']);
     same('the words of the switch', [P.TEXT.shows, P.TEXT.names, P.TEXT.use], ['Chat shows your ', ['display name', 'username'], 'Show my ']);
     check('the names of other scripts are fine as they are: cleaned for display they come out whole, and are not cut at 32 code points', NAMED.every((n) => P.plain(n, true) === n && P.clip(n, 32) === n && P.lineOf({ id: 1, who: n, text: 'x', u: n }).who === n && P.lineOf({ id: 1, who: n, text: 'x', u: n }).u === n));
 }
@@ -1639,6 +1646,41 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
     check('the answers are lines like the others: at most 100 lines are kept, the oldest go first', cap.rows().length === 100 && cap.errors.length === 0);
     const unread = rig({}); unread.live(W({ login: true, you: MODE })); unread.dock.open(false); unread.dock.note('Done: a private answer');
     check('an answer to the visitor is not "unread" (it is what they asked for)', unread.pill() === '');
+}
+{   // the tag of a name (docs/HUB_NICKNAMES.md): a line carries the tag that its author had, and the dock draws it dimmer than the name
+    const P = Pure;
+    same('tagOf: two to five characters with no blank, no bracket and no angle; anything else is none', [P.tagOf('ANT'), P.tagOf('A\u00c4N'), P.tagOf('AB'), P.tagOf('ABCDE'), P.tagOf('A'), P.tagOf('ABCDEF'), P.tagOf('A B'), P.tagOf('[AB]'), P.tagOf('<b>'), P.tagOf(5), P.tagOf(null), P.tagOf(undefined), P.tagOf('')],
+        ['ANT', 'A\u00c4N', 'AB', 'ABCDE', '', '', '', '', '', '', '', '', '']);
+    same('lineOf: the tag of a line is the author\'s tag when it is one, and none for a line of the hub\'s own', [P.lineOf({ id: 4, who: 'Zoe', tag: 'ANT', text: 'x' }).tag, P.lineOf({ id: 4, who: 'Zoe', tag: '<b>', text: 'x' }).tag, P.lineOf({ id: 4, who: 'Zoe', text: 'x' }).tag, P.lineOf({ id: 4, who: 'system', tag: 'ANT', text: 'x', sys: true }).tag], ['ANT', '', '', '']);
+    const r = rig({});
+    r.live(W({ login: true, you: ME, history: [Object.assign(L(1, 'Zoe', 'hello', false), { tag: 'ANT' }), L(2, 'Wren (Guest)', 'hi', false), Object.assign(L(3, 'Eve', 'x', false), { tag: '<b>' })].map((m) => { delete m.t; return m; }) }));
+    const t = r.rows();
+    check('a line with a tag draws it before the name in its own node (class nm-tag, brackets in it), and the name after it; a line without one draws the name only', t.length === 3
+        && one(t[0], 'gc-who').textContent === '[ANT] Zoe' && one(one(t[0], 'gc-who'), 'nm-tag') !== null && one(one(t[0], 'gc-who'), 'nm-tag').textContent === '[ANT]'
+        && one(t[1], 'gc-who').textContent === 'Wren (Guest)' && one(one(t[1], 'gc-who'), 'nm-tag') === null
+        && one(t[2], 'gc-who').textContent === 'Eve' && one(one(t[2], 'gc-who'), 'nm-tag') === null, t.map((x) => one(x, 'gc-who').textContent).join(' | '));
+    check('the tag is text: nothing is written as markup', r.env.innerHTMLWrites.length === 0);
+}
+{   // the name line of the account's menu (docs/HUB_NICKNAMES.md): how the others see the person, and the button that opens the sheet "Your name" (the sheet is home/names.js; the dock only taps)
+    const r = rig({});
+    const heard = [];
+    r.dock.tap((kind) => { if (kind === 'names') heard.push(kind); });
+    r.live(W({ login: true, you: ME }));
+    const line = one(r.dock.slot, 'gc-nl'), button = one(r.dock.slot, 'gc-nb');
+    same('the menu of a person with no nickname says that the login name is shown, and offers to choose one', [line.hidden, line.textContent, button.hidden, button.textContent], [false, 'You show as maple.leaf, your Discord name.', false, 'Choose a nickname']);
+    const sentBefore = r.sockets.reduce((n, x) => n + x.sent.length, 0);
+    button.fire('click', {});
+    same('the button tells the dock\'s listeners that the sheet is wanted, and sends nothing to the hub', [heard, r.sockets.reduce((n, x) => n + x.sent.length, 0) - sentBefore], [['names'], 0]);
+    r.s().recv({ t: 'you', you: Object.assign({}, ME, { nick: 'Zoe', tag: 'ANT', nickat: 1700000000, nickfree: 1702592000, tagfree: 0 }) });
+    same('the dock tells the sheet who the visitor is (the name, the role, the nickname and the tag and when each was set and may change): after a `you` of the hub with a nickname and a tag, and after the next one: the hub\'s words (the tag may change again at the time that it says)',
+        [r.dock.you(), (r.s().recv({ t: 'you', you: Object.assign({}, ME, { nick: 'Zoe', tag: 'ANT', nickat: 1700000000, nickfree: 1702592000, tagfree: 1700086400 }) }), r.dock.you())],
+        [{ name: 'maple.leaf', role: 'none', nick: 'Zoe', tag: 'ANT', nickat: 1700000000, nickfree: 1702592000, tagfree: 0 }, { name: 'maple.leaf', role: 'none', nick: 'Zoe', tag: 'ANT', nickat: 1700000000, nickfree: 1702592000, tagfree: 1700086400 }]);
+    same('a person with a nickname and a tag sees both in the menu, and the button changes its words', [line.textContent, button.textContent], ['Nickname Zoe \u00b7 Tag ANT', 'Nickname and tag']);
+    r.s().recv({ t: 'you', you: Object.assign({}, ME, { nick: 'Zoe' }) });
+    same('... a nickname with no tag says so', line.textContent, 'Nickname Zoe \u00b7 No tag');
+    r.s().recv({ t: 'you', you: Object.assign({}, ME, { nick: 'Zoe', tag: '<b>x</b>', nickat: 'soon', nickfree: -5 }) });
+    same('... a tag that is no tag and times that are no times are none', [line.textContent, r.dock.slot.findAll((e) => e.tagName === 'b').map((e) => e.textContent)], ['Nickname Zoe \u00b7 No tag', ['Zoe']]);
+    check('the name line makes only text and b nodes', r.env.innerHTMLWrites.length === 0);
 }
 {   // the hub's own line
     const r = rig({});

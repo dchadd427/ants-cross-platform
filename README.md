@@ -6,7 +6,7 @@ A faithful, deterministic C++17 engine remake and port of the 1998 real-time str
 
 The engine loads the original game's data files (`ants.chd` and `Maps/*.LVL`) directly, without pre-conversion. The game's mechanics are re-derived from the disassembly of the original program, system by system ([the original program](docs/ORIGINAL_PROGRAM.md)); the network play, the computer players, the 16:9 picture, the zoom, the touch controls and the browser build are this project's own. It runs a deterministic 20 Hz simulation, with 32-channel spatial audio, MP3 music (the original's four pieces), TrueType text and an SDL2 2D renderer (hardware-accelerated, with a software fallback).
 
-**Current version: v0.21.6** (shown on screen next to the FPS meter; in the room and the match of a network game the same corner also shows **ping** and **delay**, see [Network play](docs/MULTIPLAYER.md)). The releases since v0.16.2 are in the short **[What’s new](CHANGELOG.md)** (also published at **[beta.playants.org/changelog](https://beta.playants.org/changelog)**); the releases before v0.16.2 are only in git history. How work flows from a commit to a release: [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
+**Current version: v0.22.0** (shown on screen next to the FPS meter; in the room and the match of a network game the same corner also shows **ping** and **delay**, see [Network play](docs/MULTIPLAYER.md)). The releases since v0.16.5 are in the short **[What’s new](CHANGELOG.md)** (also published at **[beta.playants.org/changelog](https://beta.playants.org/changelog)**); the releases before v0.16.5 are only in git history. How work flows from a commit to a release: [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
 
 ## Play
 
@@ -54,6 +54,7 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [The chat hub](docs/HUB.md): `ants-hub`, the global chat service next to the game server: its protocol and limits, the text rules, names and presence, the settings, the stack and nginx wiring
 - [Roles, the moderators' log and the admin page's door](docs/HUB_ROLES.md): who is a moderator or an administrator (the Discord roles), what is written down about their actions, who may use the admin page
 - [The hub's data and the login](docs/HUB_LOGIN.md): what the hub keeps in its database, and the login with Discord
+- [Nicknames, tags and guest names](docs/HUB_NICKNAMES.md): the one sheet "Your name", the rules and limits, what the hub keeps, the pass that the game server asks for, and where a name shows
 - [Alerts, invitations, mentions and follows](docs/HUB_PEOPLE.md): the account's list behind the bell, `/invite`, `@name` and `/follow`: the frames, the limits and who is never told
 - [Private messages](docs/HUB_MESSAGES.md): who may write to whom, what is kept (7 days), Block, reports and what the staff can see
 - [The chat commands](docs/HUB_COMMANDS.md): the slash commands of the chat, who may use which, the helper, `/bots` and the hub's door to the game server

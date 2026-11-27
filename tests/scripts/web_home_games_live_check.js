@@ -22,7 +22,7 @@ async function livePage(o) {
     const site = R.fakeSite();
     site.live.reject = false; site.live.body = answer(o.rows === undefined ? SAMPLE : o.rows);
     if (o.lobbies) site.body = listOf(o.lobbies);
-    return page({ site, stored: o.stored, search: o.search, options: Object.assign({ popover: false }, o.options || {}) });
+    return page({ site, stored: o.stored, search: o.search, layout: o.layout, options: Object.assign({ popover: false }, o.options || {}) });
 }
 const openRows = (env) => R.rowsOf(env).filter((li) => R.classes(li).indexOf('glive') === -1);
 const looksAtLive = (env) => env.site.live.calls.length;
@@ -78,11 +78,11 @@ const M = 'TREASURE.LVL';
     const rows = liveRows(env);
     same('two rows in progress, in the door\'s order, with the map', rows.map((li) => first(li, 'gname').textContent), ['Treasure', 'Islands']);
     check('each has a red Live mark, the players\' names, how long it has run and a Watch button', rows.every((li) => first(li, 'glive-mark').textContent === 'Live' && watchOf(li).textContent === 'Watch'));
-    same('... who plays and for how long', rows.map((li) => [first(li, 'gwho').textContent, first(li, 'glen').textContent]), [['Ann, Bot (Medium)', '2:05 so far'], ['Cy, Black', '0:07 so far']]);
+    same('... who plays and for how long', rows.map((li) => [first(li, 'gwho').textContent, first(li, 'glen').textContent]), [['Ann, Bot (bot)', '2:05 so far'], ['Cy, Black', '0:07 so far']]);
     same('... a dot of each player\'s color: a person is a filled dot, a computer player (the door writes "Bot (Medium)") a ring, as in the open rooms', rows.map((li) => find(li, 'gdot').map((d) => d.className.replace('gdot ', ''))), [['player c0', 'bot c1'], ['player c2', 'player c3']]);
     const w = watchOf(rows[0]);
     same('Watch is a link to the player on that match, in this very tab (the page holds no room: nothing is lost, and Back and Home come back to the one front page)', [w.tagName, w.getAttribute('href'), w.getAttribute('target'), w.getAttribute('rel')], ['a', '/play?live=TREASURE-20261109-120000Z', null, null]);
-    check('... and its name for a screen reader says the match', /^Watch the match on Treasure, Ann, Bot \(Medium\), 2:05 so far$/.test(w.getAttribute('aria-label')));
+    check('... and its name for a screen reader says the match', /^Watch the match on Treasure, Ann, Bot \(bot\), 2:05 so far$/.test(w.getAttribute('aria-label')));
     check('a row in progress has no Join (nobody can take a seat of a running match): its one button is the strip of the scores', rows.every((li) => !first(li, 'gjoin') && li.findAll((e) => e.tagName === 'button').every((b) => classes(b).indexOf('gsum') !== -1)));
     check('the heading of the list says how many are open and how many are in progress', headOf(env) === '1 open, 2 in progress', headOf(env));
     check('the count beside Games is the open games and the matches in progress together (1 open and 2 in progress: 3), and says both to a screen reader', R.pillOf(env).textContent === '3' && R.pillOf(env).hidden === false && env.home('games').getAttribute('aria-label') === 'Games, 1 open, 2 in progress');
@@ -110,11 +110,11 @@ const M = 'TREASURE.LVL';
     const env = await livePage({ rows: [], lobbies: [row('k7m2xq', 'Pebble')] });
     check('nothing in progress: no box at all (an empty box would grow the panel), and the heading is the plain one, "1 waiting · updates live"', boxOf(env).hidden === true && headOf(env) === '1 waiting \u00b7 updates live', headOf(env));
     const both = await livePage({ rows: [] });
-    check('nothing open and nothing in progress: the empty cards of the open games (two rows), one line "none waiting", and no box of matches', headOf(both) === 'none waiting' && slotsOf(both).length === 6 && boxOf(both).hidden === true);
-    const only = await livePage({ lobbies: [] });
-    check('nothing open, two in progress: no "No open games right now." card at all; one row of empty cards, then the box of matches; the head says "0 open, 2 in progress"', slotsOf(only).length === 3 && liveRows(only).length === 2 && headOf(only) === '0 open, 2 in progress' && textOf(popOf(only)).indexOf('No open games right now.') === -1, headOf(only));
-    const openOnes = await livePage({ lobbies: [row('k7m2xq', 'Pebble')] });
-    check('with an open game the open rows come first, then the empty cards that fill one row, and the box of matches follows', rowsOf(openOnes).length === 3 && slotsOf(openOnes).length === 2 && first(popOf(openOnes), 'gpbody').children.indexOf(first(popOf(openOnes), 'glist')) < first(popOf(openOnes), 'gpbody').children.indexOf(boxOf(openOnes)));
+    check('nothing open and nothing in progress: the empty cards of the open games (three rows of three fill the body), one line "none waiting", and no box of matches', headOf(both) === 'none waiting' && slotsOf(both).length === 9 && boxOf(both).hidden === true);
+    const only = await livePage({ lobbies: [], layout: { body: 500 } });
+    check('nothing open, two in progress: no "No open games right now." card at all; the empty cards fill what the box of matches leaves of the body (two rows of three), then the box of matches; the head says "0 open, 2 in progress"', slotsOf(only).length === 6 && liveRows(only).length === 2 && headOf(only) === '0 open, 2 in progress' && textOf(popOf(only)).indexOf('No open games right now.') === -1, headOf(only));
+    const openOnes = await livePage({ lobbies: [row('k7m2xq', 'Pebble')], layout: { body: 500 } });
+    check('with an open game the open rows come first, then the empty cards that fill what is left (it is one of the six places), and the box of matches follows', rowsOf(openOnes).length === 3 && slotsOf(openOnes).length === 5 && first(popOf(openOnes), 'gpbody').children.indexOf(first(popOf(openOnes), 'glist')) < first(popOf(openOnes), 'gpbody').children.indexOf(boxOf(openOnes)));
 }
 
 {   // the tag of a match of mode 187: after the red Live mark, text only, none for any other mode
@@ -127,14 +127,14 @@ const M = 'TREASURE.LVL';
     same('the tag stands in one pair with the Live mark, after it, in the top line of the row; every row has the pair', rows.map((li) => first(li, 'gmarks').children.map((c) => c.className)), [['glive-mark', 'gmode'], ['glive-mark'], ['glive-mark'], ['glive-mark']]);
     check('the pair is in the top line, after the map\'s name', rows.every((li) => { const top = first(li, 'gtop').children; return top.length === 2 && top[0].className === 'gname' && top[1].className === 'gmarks'; }));
     same('Watch says the mode for a screen reader: "the 187 match" for a 187 match, "the match" for the others', rows.map((li) => watchOf(li).getAttribute('aria-label')),
-        ['Watch the 187 match on Treasure, Ann, Bot (Medium), 2:05 so far', 'Watch the match on Islands, Ann, Bot (Medium), 0:07 so far', 'Watch the match on Medium, Ann, Bot (Medium), 1:01 so far', 'Watch the match on Tiny, Ann, Bot (Medium), 1:02 so far']);
+        ['Watch the 187 match on Treasure, Ann, Bot (bot), 2:05 so far', 'Watch the match on Islands, Ann, Bot (bot), 0:07 so far', 'Watch the match on Medium, Ann, Bot (bot), 1:01 so far', 'Watch the match on Tiny, Ann, Bot (bot), 1:02 so far']);
     check('the tag is text that the page wrote itself: nothing was written as markup, and the word of the door never reached the row', env.innerHTMLWrites.length === 0 && !rows.some((li) => li.all().some((e) => /<b>/.test(e.textContent || ''))));
     env.site.live.body = answer([Object.assign({}, KILLS, { seconds: 135 }), SCORE, OLD, ODD]);
     await wait(env, 12500);
-    check('a look later the clock is written again and the 187 row keeps its tag and its name for a screen reader (the rows stay)', liveRows(env)[0] === rows[0] && find(rows[0], 'gmode').length === 1 && first(rows[0], 'glen').textContent === '2:15 so far' && watchOf(rows[0]).getAttribute('aria-label') === 'Watch the 187 match on Treasure, Ann, Bot (Medium), 2:15 so far');
+    check('a look later the clock is written again and the 187 row keeps its tag and its name for a screen reader (the rows stay)', liveRows(env)[0] === rows[0] && find(rows[0], 'gmode').length === 1 && first(rows[0], 'glen').textContent === '2:15 so far' && watchOf(rows[0]).getAttribute('aria-label') === 'Watch the 187 match on Treasure, Ann, Bot (bot), 2:15 so far');
     env.site.live.body = answer([Object.assign({}, KILLS, { mode: 'highest-score', seconds: 140 }), SCORE, OLD, ODD]);
     await wait(env, 12500);
-    check('a match that is given another mode by a later answer (it never is: the id is one match) is drawn again as the answer says', find(liveRows(env)[0], 'gmode').length === 0 && watchOf(liveRows(env)[0]).getAttribute('aria-label') === 'Watch the match on Treasure, Ann, Bot (Medium), 2:20 so far');
+    check('a match that is given another mode by a later answer (it never is: the id is one match) is drawn again as the answer says', find(liveRows(env)[0], 'gmode').length === 0 && watchOf(liveRows(env)[0]).getAttribute('aria-label') === 'Watch the match on Treasure, Ann, Bot (bot), 2:20 so far');
 }
 
 // ---- 2a. the count beside Games (and on the phone's tab, which copies it) ----
@@ -437,6 +437,7 @@ for (const [what, tweak] of [['404', (s) => { s.live.reject = false; s.live.stat
     same('a person is a filled dot of the color, a bot a ring of the color, an unknown color a neutral dot (never the Black one)', find(liveRows(env)[0], 'gdot').map((d) => d.className.replace('gdot ', '')), ['player c0', 'bot c1', 'player cn', 'bot c3']);
     const modern = await livePage({ rows: [LIVE('TREASURE-20261109-120000Z', { players: ['Green (Ann)', 'Red (Pip (bot, Hard))', 'Blue (Kit (bot, idle))', 'Black (Abbott)'] }), LIVE('ISLANDS-20261109-115900Z', { map: 'ISLANDS.LVL', players: ['Green (Robot)', 'Red (Pip (bot))', 'Blue (O\'Neil (x))', 'Black (Bot (Medium))'] })] });
     same('a server names its computer players "Pip (bot, Hard)" or "Kit (bot, idle)" (a ring), and a person whose name only has bot in it (Abbott, Robot) or a bracket (O\'Neil (x)) stays a filled dot', liveRows(modern).map((li) => find(li, 'gdot').map((d) => d.className.replace('gdot ', ''))), [['player c0', 'bot c1', 'bot c2', 'player c3'], ['player c0', 'bot c1', 'player c2', 'bot c3']]);
+    check('a card never says the level or the state of a computer player, only that it is one: "Pip (bot)" and "Kit (bot)" in the names line, its tooltip and what Watch says', liveRows(modern).every((li) => [first(li, 'gwho').textContent, first(li, 'gwho').getAttribute('title'), watchOf(li).getAttribute('aria-label')].every((t) => !/\(bot,|Hard|Medium|Easy|idle/.test(t))) && /Pip \(bot\)/.test(first(liveRows(modern)[0], 'gwho').textContent) && /Kit \(bot\)/.test(first(liveRows(modern)[0], 'gwho').textContent));
 }
 
 // ---- 4. no switch, nothing kept ----
@@ -507,8 +508,9 @@ for (const [what, tweak] of [['404', (s) => { s.live.reject = false; s.live.stat
         ['button', 'false', 'Scores of the match on Treasure: Sage 2,040 leading, Rowan 1,310, Kit (bot) 900, moss 455. ' + TEXT.showBoard, 'Scores of the match on Tiny: maple.leaf 300, Pip (bot) 300. ' + TEXT.showBoard]);
     same('... for a 187 match, a team, a covered box and no score yet', [toggleOf(L('kills')).getAttribute('aria-label'), toggleOf(L('team')).getAttribute('aria-label'), toggleOf(L('fresh')).getAttribute('aria-label')],
         ['Scores of the 187 match on Small: tess 14 leading, Fern 9, Bo (bot) left. ' + TEXT.showBoard, 'Scores of the match on Islands: Pebble + Wren 2,310, juniper + Pip (bot) 2,680 leading. ' + TEXT.showBoard, 'Scores of the match on Medium: no score yet. ' + TEXT.showBoard]);
-    check('Watch still names the match as it did, and has no score in its name', watchOf(L('four')).getAttribute('aria-label') === 'Watch the match on Treasure, Sage, Rowan, Kit (bot, Medium), moss, 12:05 so far');
-    check('the card starts closed: no board, the names of the players in their line, the strip', classes(L('four')).indexOf('gopen') === -1 && first(L('four'), 'gboard').hidden === true && first(L('four'), 'gwho').textContent === 'Sage, Rowan, Kit (bot, Medium), moss');
+    check('Watch still names the match as it did, and has no score in its name', watchOf(L('four')).getAttribute('aria-label') === 'Watch the match on Treasure, Sage, Rowan, Kit (bot), moss, 12:05 so far');
+    check('the card starts closed: no board, the names of the players in their line, the strip', classes(L('four')).indexOf('gopen') === -1 && first(L('four'), 'gboard').hidden === true && first(L('four'), 'gwho').textContent === 'Sage, Rowan, Kit (bot), moss');
+    check('... the level of the computer player is nowhere on the card: not in the names line, its tooltip, what Watch says, the strip\'s words, and the board', [first(L('four'), 'gwho').textContent, first(L('four'), 'gwho').getAttribute('title'), watchOf(L('four')).getAttribute('aria-label'), first(L('four'), 'gsum').getAttribute('aria-label'), first(L('four'), 'gboard').textContent].every((t) => /Kit \(bot\)/.test(t) && !/Medium|\(bot,/.test(t)));
 
     // the scoreboard that the strip opens
     const card = L('four'), button = toggleOf(card);
