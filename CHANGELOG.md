@@ -26,6 +26,11 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- **Show ping.** A new setting in the Video tab of the settings menu, off by default: switched on, the corner of a network game shows "ping NN ms" above the frame rate, and a click on it opens the list of connections as before. Off, the corner is the frame rate and the version only. The corner no longer shows "delay". On the desktop it is `show_ping=on` in the settings file or `--show-ping on` for one run.
+
 ## v0.22.0 - 2026-11-26 - Nicknames, tags and guest names, a welcome for guests, a better Play of the game and Fill a box
 
 **For players:**
@@ -33,7 +38,6 @@ Work that is not released yet is written in the same template under a heading th
 - **Fill a box in the Map Maker.** A switch under the Objects, Food and Ants tools: drag a box and it fills with every cell, every other cell, every Nth row or column or a random pattern, as one Undo step. Water, rock and things in the way are skipped and counted; one fill puts at most 250 ants. An AI that you connect has it too (`fill_area`).
 - **Nicknames, tags and guest names.** Log in and choose a nickname (3 to 16 letters and digits, yours alone) and, if you like, a tag ("[ANTS] Zoe") on one sheet, Your name, from the name in the chat menu. The chat, the Players list, the rooms, the results and the match history show it; finished matches keep the names they were played with. A guest can type a name too: it shows as "Wren (Guest)" and stays in this browser. Latin (with Vietnamese) and Cyrillic letters work. **A welcome for guests.** The first time you open Ants & Uncles without logging in, a card offers Sign in with Discord to chat, Set a display name if you do not want to chat, or Not now. It does not come back once you answer it, set a name or log in. **Long names fit.** The results show an alliance on two lines when its names are long, and a long name ends in dots in a room and on the countdown card.
 - **The Games list fills itself with Open lobby cards.** As many as the window has room for with nothing to scroll (more on a tall window, none when real games fill the list), and the dashed plus on a card hosts a game, the same as Host here.
-- **Show ping.** A new setting in the Video tab of the settings menu, off by default: switched on, the corner of a network game shows "ping NN ms" above the frame rate, and a click on it opens the list of connections as before. Off, the corner is the frame rate and the version only. The corner no longer shows "delay". On the desktop it is `show_ping=on` in the settings file or `--show-ping on` for one run.
 
 **Rules / network:** network protocol 29 (a name is UTF-8, and a name that is not a guest's carries the hub's signature, [`docs/HUB_NICKNAMES.md`](docs/HUB_NICKNAMES.md)): an older page or game cannot join a room of this version, so reload the page. The rules and the recordings are unchanged.
 

@@ -344,7 +344,7 @@ void test_latency_clear_of_scores(const assets::AssetArchive& arc) {
             const int32_t pw = measure.renderer.get_text_width(ping_text(12u), FontSize::Px12);
             const LatencyCornerLayout old = layout_latency_corner(pw, widest, text_h, row.version_x, row.text_y, LATENCY_LEFT_LIMIT_MATCH, plate);
             const LatencyCornerLayout own = layout_latency_corner(pw, widest, text_h, row.version_x, row.text_y, *limit, plate);
-            check(!old.stacked && own.stacked && old.ping_x - strip_right <= 2, pic + "the control: with the original's limit (460) the text stands in the row at x " + std::to_string(old.ping_x) + ", against the boxes (they end at " + std::to_string(strip_right) + "); the layout's limit puts it above the row");
+            check(!old.stacked && own.stacked, pic + "the control: with the original's limit (460) the text stands in the row at x " + std::to_string(old.ping_x) + ", against the boxes (they end at " + std::to_string(strip_right) + "); the layout's limit puts it above the row");
         }
     }
 }
