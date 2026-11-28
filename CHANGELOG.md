@@ -26,11 +26,9 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.22.3 - 2026-11-27 - Tags any time, nicknames once a day, web logs kept 14 days
+## Next
 
 **For players:**
-- **Names: tags change any time, nicknames once a day.** A tag can now be changed as often as you like (it waited a day before, and a change of capitals counted). A nickname changes once every 24 hours after the first (it was once in 30 days), and the old one stays yours for 7 days (it was 30), so that nobody takes it to pass for you. Someone who changed their nickname within the last 30 days may change it again 24 hours after that change.
-- The 3D ant test page /test_3d is gone.
 - In a match the chat, the score labels and the countdown card show your name without the clan tag, so a long name fits (the tag stays on the results and on the pages).
 - **A settings menu in the game itself.** In the desktop game, Esc (when there is nothing to cancel), Ctrl+O and the Options button open a menu drawn in the game's own clay and steel, with the same sections and rows as the browser's: Sound, Video, Controls, Game and the new Quick Chat. The original's options window is gone, and every setting it had is a row of the menu with the same name and numbers.
 - **Quick Chat.** The four texts that F9 to F12 say are edited in the menu's new Quick Chat tab (in the browser too, where a phone's own keyboard opens for them).
@@ -40,6 +38,14 @@ Work that is not released yet is written in the same template under a heading th
 **Fixes:**
 - A recording or a live match that you watch has no chat to write in any more (the input box is covered and the Send to buttons are gone; the players' lines stay readable): what a watcher typed showed in its own log under the name of the first player, and went nowhere else.
 - The ants' heads in the ranked rows of the results screen are no longer cut off at the top of their feelers on large screens.
+
+## v0.22.3 - 2026-11-27 - Tags any time, nicknames once a day, web logs kept 14 days
+
+**For players:**
+- **Names: tags change any time, nicknames once a day.** A tag can now be changed as often as you like (it waited a day before, and a change of capitals counted). A nickname changes once every 24 hours after the first (it was once in 30 days), and the old one stays yours for 7 days (it was 30), so that nobody takes it to pass for you. Someone who changed their nickname within the last 30 days may change it again 24 hours after that change.
+- The 3D ant test page /test_3d is gone.
+
+**Fixes:**
 - In Home's "Your name" sheet, a box that you are typing in is never locked, so erasing the text of a box no longer closes the phone's keyboard: when the nickname changed lately, the line still says when it can change again and Save stays off, but you can keep typing or type your old nickname back.
 
 **For operators:**
@@ -554,20 +560,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/a364d921...f2d101bf)
 
-## v0.16.8 - 2026-11-14 - Game page top bar, Playing in the Players list, one chat box, Discord pictures without a new login
+## Older versions (v0.16.8 and before)
 
-**For players:**
-- **The game page has the site's top bar.** A game against the computer, a joined match, a recording and a live view show the same bar as every other page: Home, the links, the Settings gear, Fullscreen and Menu. The footer is gone; the version is the last line of the Menu. During a match, Home asks first and the other links open in a new tab, and while the Menu is open the keys stay with the bar and go back to the game afterwards. Reload page, which asks first during a game, is in the Menu.
-- **The Players list shows who is Playing.** A public match shows its map and players, a private room or game shows a lock and no details, and a game against the computer reads "<map> . vs computer". The Games list no longer shows an empty "In progress" box while no match is running.
-- **One chat box everywhere.** The box with the field on top and the emoji, microphone and Send buttons under it is now used in every window; the field grows to two lines on a wide window and the chat area is a little taller.
-- **Discord pictures arrive without logging in again.** A picture is picked up while you are logged in: within a few minutes for members of the project's Discord server, otherwise about a day. The Legal page says so.
-- **Live mark.** The red "N live" mark reads "N live: see them on the front page", shows its dot in forced-colors mode and updates when you come back to the tab. The old Live now addresses lead to the front page in any letter case.
-- **Chat staff commands.** Staff can name a person by the number of the chat line or by their row in the Players list, list the mutes with /mutes, and a ban can also delete that person's lines of the last hour.
-
-**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.7 page or game still joins. Under the hood: the chat server changed, so it restarts and chat reconnects by itself within seconds.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f6d76998...1b43c0b5)
-
-## Older versions (v0.16.7 and before)
-
-Every release before v0.16.8, and the long notes of v0.16.7, v0.16.6, v0.16.5, v0.16.4, v0.16.3, v0.16.2, v0.16.1, v0.16.0, v0.15.1, v0.15.0, v0.14.1, v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.16.9, and the long notes of v0.16.8, v0.16.7, v0.16.6, v0.16.5, v0.16.4, v0.16.3, v0.16.2, v0.16.1, v0.16.0, v0.15.1, v0.15.0, v0.14.1, v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

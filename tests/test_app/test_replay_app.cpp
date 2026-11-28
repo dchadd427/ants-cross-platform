@@ -2281,6 +2281,7 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(asked, 1);
         ASSERT_FALSE(app.game_menu_do(game_menu::kActQuickHelp));                       // (the original's windows are a seat's: none in a recording)
         ASSERT_FALSE(app.hud().is_quick_help_open());
+        ASSERT_TRUE(app.game_menu_do(game_menu::kActFullscreen) && app.game_menu_do(game_menu::kActFullscreen));       // (the window's Fullscreen is not a seat's: a recording has it, in and out)
         app.game_menu_set_open(true);
         ASSERT_TRUE(app.game_menu_is_open());
         ASSERT_TRUE(app.game_menu_set(game_menu::kMaster, 55));                         // (the sound rows are the same in a recording)

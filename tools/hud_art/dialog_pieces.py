@@ -80,7 +80,7 @@ def fullscreen_drawing(state, origin):
 
 
 def switch_drawing(word, state, origin):
-    """(w, h, svg) of the On or Off switch of the options window. `chosen`: the one that is on (gold, sunk, its word lit); `chosen_hover`: that one with the ring of the pointer on it"""
+    """(w, h, svg) of the On or Off switch of the settings menu. `chosen`: the one that is on (gold, sunk, its word lit); `chosen_hover`: that one with the ring of the pointer on it"""
     fw, fh = SWITCH_FACE
     u = K.new_uid()
     x, y = origin

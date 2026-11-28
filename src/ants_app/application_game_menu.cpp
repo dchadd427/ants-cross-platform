@@ -352,16 +352,17 @@ bool Application::game_menu_do(int action) {
         confirm_quit();
         return true;
     }
-    if (game_menu_needs_answer() || replay_mode_) return false;
-    if (action == gm::kActQuickHelp) hud_.open_quick_help();
-    else if (action == gm::kActFullscreen) {
+    if (action == gm::kActFullscreen) {                              // (the window's, not a seat's: a recording has it too)
 #if defined(__EMSCRIPTEN__)
         return false;                                                // (the page's own: its Fullscreen button and the browser's permission)
 #else
         toggle_fullscreen();
+        return true;
 #endif
     }
-    else return false;
+    if (game_menu_needs_answer() || replay_mode_) return false;
+    if (action != gm::kActQuickHelp) return false;
+    hud_.open_quick_help();
     return true;
 }
 
