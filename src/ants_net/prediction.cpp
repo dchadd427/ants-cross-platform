@@ -545,15 +545,15 @@ void Prediction::on_turn(const TurnMsg& turn) {
         stale_foreign_ = stale_foreign_ || (foreign && !own_timing);
         stale_own_timing_ = stale_own_timing_ || own_timing;
     }
-    // The orders that this turn should have carried and did not are sealed later. The first time that happens to an order it is expected in the NEXT turn (an order is most often one tick
-    // off, by the phase of the host's seals: the lead is the shortest lag of the last orders); an order that the next turn does not carry either stands at the display tick, as if it had
+    // The orders that this turn should have carried and did not are sealed later. The first time that happens to an order it is expected in the NEXT turn (an order that was late is most
+    // often one tick late: the host seals it in the first turn that was open, which is the next one when the lag has grown by a tick); an order that the next turn does not carry either stands at the display tick, as if it had
     // just been given (a correction that left it where it was would be repeated by every turn that comes: one rebuild a turn until it is sealed)
     for (Pending& p : pending_) {
         if (p.tick > n) continue;
         p.tick = p.misses == 0 ? n + 1u : display_;                  // (a rebuild puts it no later than the display tick and never behind a turn in hand)
         ++p.misses;
     }
-    // A hint is a guess: the first turn that comes without it moves it to the next tick (the sealed tick of an order is most often one off), the second one drops it: the sealed stream wins
+    // A hint is a guess: the first turn that comes without it moves it to the next tick (a late order is most often one tick late), the second one drops it: the sealed stream wins
     for (size_t i = 0; i < hints_.size();) {
         if (hints_[i].tick > n) {
             ++i;

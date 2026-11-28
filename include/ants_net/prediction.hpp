@@ -24,7 +24,7 @@
 // concerns are moved by less when the turn arrives. The hint is a guess and the sealed turn is the truth: the confirmed engine, the turns, the hashes and the record never see a hint, and a hint that
 // the sealed turn does not confirm is dropped. The matching rule (the one place it is written): a sealed command of another seat takes the OLDEST hint of that seat that is equal to it; the hints of the
 // same seat before it were not sealed (the server refused them): dropped. A hint is applied at its tick (never behind a turn in hand); when that tick's turn comes without it, it moves ONCE to the next
-// tick (the sealed tick of an order is most often one off, as for one's own orders), and when that turn comes without it either, it is dropped; one that no turn has carried for pending_timeout_ticks is
+// tick (a late order is most often one tick late, as for one's own orders), and when that turn comes without it either, it is dropped; one that no turn has carried for pending_timeout_ticks is
 // dropped. A hint that comes after its sealed turn (the direct path is slower than the server's) is ignored. Only the kinds that predicts() names are hinted, and only by a seat that is not this one.
 //
 // THE TICK OF AN ORDER (protocol 30). An order is sent with the tick that this screen applies it at (plan_order(): the display tick, never behind a turn in hand), and the host seals it into exactly that turn when the turn is still
