@@ -14,7 +14,7 @@
     SHADOW_VS, SHADOW_FS,
     TILE_GROUND_VS, TILE_GROUND_FS, buildTileGroundMesh,
     BORDER_GRASS_VS, BORDER_GRASS_FS, drawBorderGrassMesh,
-    createAtmoDrawer,
+    createAtmoDrawer, createMaskBuilder,
     evalJelloWobble,
   } = window.__antFx;
 
@@ -684,6 +684,7 @@
       this.tileGroundProg = createProgram(gl, TILE_GROUND_VS, TILE_GROUND_FS);
       this.borderGrassProg = createProgram(gl, BORDER_GRASS_VS, BORDER_GRASS_FS);
       this.atmoDrawer = createAtmoDrawer(gl, createProgram);
+      this.maskBuilder = createMaskBuilder(gl, createProgram);
       this.uBorderGrass = getUniforms(gl, this.borderGrassProg, [
         "u_viewProj", "u_time", "u_keyDir", "u_fillDir", "u_keyColor", "u_fillColor", "u_skyColor", "u_groundColor", "u_lightMix",
       ]);
@@ -691,7 +692,7 @@
       this.sparkParticles = buildSparkParticles(gl);
       this.tileGroundMesh = null;
       this.shadowFbo = null; this.shadowTex = null; this.shadowSize = 2048;
-      this.atlasTex = null; this.mapTex = null;
+      this.atlasTex = null; this.mapTex = null; this.maskTex = null; this.maskAtlasTex = null; this._lastMaskAtlasImg = null;
       this.emptyVao = gl.createVertexArray();
       this.fallbacks = createFallbackTextures(gl);
       this.plinth = null; this.plinthKey = "";
@@ -770,12 +771,39 @@
       this.shadowTex = tex;
     }
 
-    uploadTileAtlas(img) {
-      this.atlasTex = this._uploadLinearTex(img, this.atlasTex);
-    }
+    uploadTileAtlas(img) { this.atlasTex = this._uploadLinearTex(img, this.atlasTex); }
 
     uploadMaskAtlas(img) {
-      this.maskTex = this._uploadLinearTex(img, this.maskTex);
+      const isTileAtlas = Boolean(img && img.width === 1024 && img.height === 960);
+      if (isTileAtlas) {
+        const prev = this.maskAtlasTex && this.maskAtlasTex !== this.maskTex ? this.maskAtlasTex : null;
+        this.maskAtlasTex = this._uploadLinearTex(img, prev);
+        this._lastMaskAtlasImg = img;
+        if (!this.maskTex) this.maskTex = this.maskAtlasTex;
+        return;
+      }
+      const prev = this.maskTex && this.maskTex !== this.maskAtlasTex ? this.maskTex : null;
+      this.maskTex = this._uploadLinearTex(img, prev);
+    }
+
+    buildMaskFromAtlas(cols, rows, tiles, atlasMaskImg, opts = {}) {
+      if (tiles) this.uploadMapGrid(cols, rows, tiles, true);
+      let atlasTex = this.maskAtlasTex;
+      if (atlasMaskImg) {
+        if (typeof WebGLTexture !== "undefined" && atlasMaskImg instanceof WebGLTexture) {
+          atlasTex = atlasMaskImg;
+        } else if (atlasMaskImg !== this._lastMaskAtlasImg || !this.maskAtlasTex) {
+          const prev = this.maskAtlasTex && this.maskAtlasTex !== this.maskTex ? this.maskAtlasTex : null;
+          this.maskAtlasTex = this._uploadLinearTex(atlasMaskImg, prev);
+          this._lastMaskAtlasImg = atlasMaskImg;
+          atlasTex = this.maskAtlasTex;
+        }
+      }
+      if (!atlasTex || !this.mapTex) return null;
+      const tex = this.maskBuilder.build(cols, rows, this.mapTex, atlasTex, this.emptyVao, opts);
+      if (this.maskTex && this.maskTex !== this.maskAtlasTex) this.gl.deleteTexture(this.maskTex);
+      this.maskTex = tex;
+      return tex;
     }
 
     _uploadLinearTex(img, prev) {
@@ -786,31 +814,28 @@
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
       gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, img);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       gl.bindTexture(gl.TEXTURE_2D, null);
       return tex;
     }
 
-    uploadMapGrid(cols, rows, tileArray) {
+    uploadMapGrid(cols, rows, tileArray, skipAutoMask = false) {
       const gl = this.gl;
       if (this.mapTex) gl.deleteTexture(this.mapTex);
       const tex = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, tex);
-      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, cols, rows, 0, gl.RED, gl.UNSIGNED_BYTE, new Uint8Array(tileArray));
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       gl.bindTexture(gl.TEXTURE_2D, null);
       this.mapTex = tex;
       if (!this.tileGroundMesh || this.tileGroundMesh.cols !== cols || this.tileGroundMesh.rows !== rows) {
         if (this.tileGroundMesh) this.tileGroundMesh.dispose();
         this.tileGroundMesh = buildTileGroundMesh(gl, cols, rows, 64.0);
       }
+      if (!skipAutoMask && this.maskAtlasTex) this.buildMaskFromAtlas(cols, rows);
     }
 
     ensurePlinth(halfSpanX, radius) {
@@ -1143,63 +1168,42 @@
       }
       if (furCalls.length) {
         gl.useProgram(this.furProg);
-        gl.enable(gl.DEPTH_TEST);
-        gl.depthMask(false);
-        gl.enable(gl.BLEND);
-        gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-        gl.disable(gl.CULL_FACE);
+        gl.enable(gl.DEPTH_TEST); gl.depthMask(false); gl.disable(gl.CULL_FACE);
+        gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
         gl.uniformMatrix4fv(this.uFur.u_viewProj, false, camera.viewProj);
-        gl.uniform3fv(this.uFur.u_cameraPos, camera.eye);
-        gl.uniform3fv(this.uFur.u_viewDir, camera.viewDir);
+        gl.uniform3fv(this.uFur.u_cameraPos, camera.eye); gl.uniform3fv(this.uFur.u_viewDir, camera.viewDir);
         gl.uniform1i(this.uFur.u_isOrtho, camera.isOrtho ? 1 : 0);
-        gl.uniform3fv(this.uFur.u_keyDir, keyDir);
-        gl.uniform3fv(this.uFur.u_fillDir, fillDir);
-        gl.uniform3fv(this.uFur.u_rimDir, rimDir);
-        gl.uniform3fv(this.uFur.u_keyColor, lp.keyColor);
-        gl.uniform3fv(this.uFur.u_fillColor, lp.fillColor);
-        gl.uniform3fv(this.uFur.u_rimColor, lp.rimColor);
-        gl.uniform3fv(this.uFur.u_envRimTint, lp.envRimTint);
-        gl.uniform4fv(this.uFur.u_lightMix, lp.lightMix);
-        gl.uniform3fv(this.uFur.u_skyColor, pal.sky);
-        gl.uniform3fv(this.uFur.u_groundColor, pal.ground);
+        gl.uniform3fv(this.uFur.u_keyDir, keyDir); gl.uniform3fv(this.uFur.u_fillDir, fillDir); gl.uniform3fv(this.uFur.u_rimDir, rimDir);
+        gl.uniform3fv(this.uFur.u_keyColor, lp.keyColor); gl.uniform3fv(this.uFur.u_fillColor, lp.fillColor); gl.uniform3fv(this.uFur.u_rimColor, lp.rimColor);
+        gl.uniform3fv(this.uFur.u_envRimTint, lp.envRimTint); gl.uniform4fv(this.uFur.u_lightMix, lp.lightMix);
+        gl.uniform3fv(this.uFur.u_skyColor, pal.sky); gl.uniform3fv(this.uFur.u_groundColor, pal.ground);
         gl.uniform1f(this.uFur.u_rimBoost, opts.transparent && !lp.pal ? (opts.dark ? 0.95 : 0.65) : pal.rimBoost);
         gl.uniform1i(this.uFur.u_silhouette, isSil ? 1 : 0);
         gl.uniform3fv(this.uFur.u_silhouetteColor, opts.dark ? [0.910, 0.933, 0.973] : [0.067, 0.086, 0.122]);
 
         for (const fc of furCalls) {
           const { prim, mat, modelMat, profile } = fc;
-          gl.uniformMatrix4fv(this.uFur.u_model, false, modelMat);
-          gl.uniformMatrix3fv(this.uFur.u_normalMat, false, mat3NormalFromMat4(modelMat));
+          gl.uniformMatrix4fv(this.uFur.u_model, false, modelMat); gl.uniformMatrix3fv(this.uFur.u_normalMat, false, mat3NormalFromMat4(modelMat));
           gl.uniform3f(this.uFur.u_baseColor, mat.baseColor[0], mat.baseColor[1], mat.baseColor[2]);
-          gl.uniform1f(this.uFur.u_furLength, profile.length);
-          gl.uniform1f(this.uFur.u_furDroop, profile.droop);
-          gl.uniform1f(this.uFur.u_furDensity, profile.density);
-          gl.uniform1i(this.uFur.u_isCotton, profile.isCotton);
+          gl.uniform1f(this.uFur.u_furLength, profile.length); gl.uniform1f(this.uFur.u_furDroop, profile.droop);
+          gl.uniform1f(this.uFur.u_furDensity, profile.density); gl.uniform1i(this.uFur.u_isCotton, profile.isCotton);
           gl.bindVertexArray(prim.vao);
           for (let sh = 1; sh <= profile.shells; sh++) {
             gl.uniform1f(this.uFur.u_shellFrac, sh / profile.shells);
-            if (prim.indexed) gl.drawElements(prim.mode, prim.drawCount, prim.indexType, 0);
-            else gl.drawArrays(prim.mode, 0, prim.drawCount);
+            if (prim.indexed) gl.drawElements(prim.mode, prim.drawCount, prim.indexType, 0); else gl.drawArrays(prim.mode, 0, prim.drawCount);
           }
         }
       }
+      const camRightUp = () => {
+        const vd = camera.viewDir, rLen = Math.hypot(vd[2], -vd[0]) || 1, r = [vd[2] / rLen, 0, -vd[0] / rLen];
+        return [r, [vd[1] * r[2] - vd[2] * r[1], vd[2] * r[0] - vd[0] * r[2], vd[0] * r[1] - vd[1] * r[0]]];
+      };
       if (fireEmitters.length) {
-        const vd = camera.viewDir;
-        const rLen = Math.hypot(vd[2], -vd[0]) || 1;
-        const camRight = [vd[2] / rLen, 0, -vd[0] / rLen];
-        const camUp = [
-          vd[1] * camRight[2] - vd[2] * camRight[1],
-          vd[2] * camRight[0] - vd[0] * camRight[2],
-          vd[0] * camRight[1] - vd[1] * camRight[0],
-        ];
+        const [camRight, camUp] = camRightUp();
         gl.useProgram(this.fireProg);
-        gl.disable(gl.CULL_FACE);
-        gl.enable(gl.DEPTH_TEST);
-        gl.depthMask(false);
-        gl.enable(gl.BLEND);
+        gl.disable(gl.CULL_FACE); gl.enable(gl.DEPTH_TEST); gl.depthMask(false); gl.enable(gl.BLEND);
         gl.uniformMatrix4fv(this.uFire.u_viewProj, false, camera.viewProj);
-        gl.uniform3fv(this.uFire.u_camRight, camRight);
-        gl.uniform3fv(this.uFire.u_camUp, camUp);
+        gl.uniform3fv(this.uFire.u_camRight, camRight); gl.uniform3fv(this.uFire.u_camUp, camUp);
         gl.uniform1i(this.uFire.u_transparent, opts.transparent ? 1 : 0);
         gl.uniform1i(this.uFire.u_silhouette, isSil ? 1 : 0);
         gl.uniform3fv(this.uFire.u_silhouetteColor, opts.dark ? [0.910, 0.933, 0.973] : [0.067, 0.086, 0.122]);
@@ -1211,42 +1215,23 @@
           : fireEmitters;
         for (const em of activeFire) {
           gl.uniformMatrix4fv(this.uFire.u_model, false, em.modelMat);
-          gl.uniform3fv(this.uFire.u_emitterMin, em.localMin);
-          gl.uniform3fv(this.uFire.u_emitterMax, em.localMax);
+          gl.uniform3fv(this.uFire.u_emitterMin, em.localMin); gl.uniform3fv(this.uFire.u_emitterMax, em.localMax);
           gl.uniform1f(this.uFire.u_time, em.time);
-
-          // 1. Subtle rising dark wispy smoke behind/above the blaze
           gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
           gl.drawElements(gl.TRIANGLES, this.fireParticles.smokeRange.count, gl.UNSIGNED_SHORT, this.fireParticles.smokeRange.offset);
-
-          // 2. Main turbulent rising volumetric fire plumes (alpha-blended for sharp licking fiery detail, zero blowout!)
           gl.drawElements(gl.TRIANGLES, this.fireParticles.mainRange.count, gl.UNSIGNED_SHORT, this.fireParticles.mainRange.offset);
-
-          // 3. Incandescent inner plasma core bloom (controlled additive)
-          if (!isSil) {
-            gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-          }
+          if (!isSil) gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
           gl.drawElements(gl.TRIANGLES, this.fireParticles.coreRange.count, gl.UNSIGNED_SHORT, this.fireParticles.coreRange.offset);
-
-          // 4. Crisp glowing rising sparks & ember flecks
           gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
           gl.drawElements(gl.TRIANGLES, this.fireParticles.sparkRange.count, gl.UNSIGNED_SHORT, this.fireParticles.sparkRange.offset);
         }
       }
       if (sparkEmitters.length) {
-        const vd = camera.viewDir;
-        const rLen = Math.hypot(vd[2], -vd[0]) || 1;
-        const camRight = [vd[2] / rLen, 0, -vd[0] / rLen];
-        const camUp = [
-          vd[1] * camRight[2] - vd[2] * camRight[1],
-          vd[2] * camRight[0] - vd[0] * camRight[2],
-          vd[0] * camRight[1] - vd[1] * camRight[0],
-        ];
+        const [camRight, camUp] = camRightUp();
         gl.useProgram(this.sparkProg);
         gl.disable(gl.CULL_FACE); gl.enable(gl.DEPTH_TEST); gl.depthMask(false); gl.enable(gl.BLEND);
         gl.uniformMatrix4fv(this.uSpark.u_viewProj, false, camera.viewProj);
-        gl.uniform3fv(this.uSpark.u_camRight, camRight);
-        gl.uniform3fv(this.uSpark.u_camUp, camUp);
+        gl.uniform3fv(this.uSpark.u_camRight, camRight); gl.uniform3fv(this.uSpark.u_camUp, camUp);
         gl.uniform1i(this.uSpark.u_silhouette, isSil ? 1 : 0);
         gl.uniform3fv(this.uSpark.u_silhouetteColor, opts.dark ? [0.910, 0.933, 0.973] : [0.067, 0.086, 0.122]);
         gl.bindVertexArray(this.sparkParticles.vao);
@@ -1258,9 +1243,7 @@
         for (const em of activeSparks) {
           gl.uniformMatrix4fv(this.uSpark.u_model, false, em.modelMat);
           gl.uniform3fv(this.uSpark.u_emitterCenter, em.center);
-          gl.uniform1f(this.uSpark.u_emitterRadius, em.radius);
-          gl.uniform1f(this.uSpark.u_time, em.time);
-
+          gl.uniform1f(this.uSpark.u_emitterRadius, em.radius); gl.uniform1f(this.uSpark.u_time, em.time);
           gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
           gl.drawElements(gl.TRIANGLES, this.sparkParticles.smokeRange.count, gl.UNSIGNED_SHORT, this.sparkParticles.smokeRange.offset);
           gl.drawElements(gl.TRIANGLES, this.sparkParticles.streakRange.count, gl.UNSIGNED_SHORT, this.sparkParticles.streakRange.offset);
