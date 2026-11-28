@@ -441,29 +441,6 @@ def field(uid, x, y, w, h, wl=4, wt=4, wr=6, wb=6, flat=None):
     return b
 
 
-def track(uid, x, y, w, h):
-    """a slider's track (the original's 235 x 18 strip; its outer 2 pixels below and right are a cast shadow): a rod of brushed green steel lying in a groove of the clay. The groove is deep and
-    dark with a lit lip below. The rod: a dark body, a band of light along its upper third whose core is a BROKEN glint, a black underside with a thin reflected line, brushed along its length;
-    a collar at each end."""
-    _tn[0] += 1
-    u = '%s_s%d' % (uid, _tn[0])
-    fw, fh = w - 2, h - 3
-    r = fh / 2.0
-    tube = [(0, '#06140f'), (.12, '#17443a'), (.22, '#377c65'), (.30, '#72bd9f'), (.38, '#2c705c'), (.46, '#1a493c'), (.62, '#0e2a22'), (.82, '#06140f'), (.92, '#2a6b58'), (1, '#0a211a')]
-    d = S.vgrad(u + '_f', y + 1, y + fh - 1, tube)
-    d += S.vgrad(u + '_k', y, y + fh, [(0, '#06140f'), (.14, '#1f5445'), (.25, '#5aa98b'), (.31, '#e4fff3'), (.38, '#3a8068'), (.5, '#1f5445'), (.8, '#07160f'), (.93, '#1f5445'), (1, '#06140f')])
-    b = '<defs>%s</defs>' % d
-    b += contact(uid, x, y, fw, fh, r, .5)
-    b += S.rrect(x, y + 1, fw + 1, fh + 1, r, '#ffb27a', ' fill-opacity=".30"')                                    # the groove's lit lip, below and right
-    b += S.rrect(x, y, fw, fh, r, '#160400')                                                                         # the groove
-    b += S.rrect(x + 1, y + 1, fw - 2, fh - 2, r - 1, 'url(#%s_f)' % u)
-    b += brush(x + 1, y + 1, fw - 2, fh - 2, r - 1)
-    b += glint(x + 8, y + 4, fw - 16)                                                                                # the specular core: one row, broken
-    for cx in (x + 1, x + fw - 8):                                                                                   # the collars
-        b += S.rrect(cx, y, 7, fh, 2.5, '#030b08') + S.rrect(cx + 1, y + 1, 5, fh - 2, 1.5, 'url(#%s_k)' % u)
-    return b
-
-
 def thumb(uid, x, y, w, h, state='up'):
     """a slider's thumb (the original's 49 x 16): a machined grip of brushed green steel riding on the rod. A bevelled block, a lit upper-left edge, a hard band of light across its upper third,
     brushed along x, seven cut ridges in its middle that each catch the light on one flank, a black lower-right edge and a tight contact shadow. hover: its edges light; held: lower, the ridges gold."""
@@ -496,18 +473,3 @@ def arrow(uid, x, y, w, h):
     neck = w * .52
     pts = [(x, y + hh - s), (x + neck, y + hh - s), (x + neck, y), (x + w, y + hh), (x + neck, y + h), (x + neck, y + hh + s), (x, y + hh + s)]
     return S.poly(pts, '#d9521a')
-
-
-def jade_ant(uid, x, y, s=1.0):
-    """the ornament ant of the HUD (its outline: pieces.py) as a piece of the same metal as the letters: dark rim, a green-steel body lit from the upper left, a cast shadow. 30 x 30 at s = 1"""
-    import pieces
-    legs, feelers = pieces.ant_paths()
-    line = '<path d="%s %s"/>' % (legs, feelers)
-    body = '<ellipse cx="15" cy="7.4" rx="3.1" ry="3.3"/><ellipse cx="15" cy="14.6" rx="2.7" ry="3.5"/><ellipse cx="15" cy="23" rx="4.1" ry="5.2"/>'
-    g = '<g transform="translate(%s %s) scale(%s)">' % (x, y, s)
-    g += '<defs><radialGradient id="%s_jb" cx=".33" cy=".26" r=".85"><stop offset="0" stop-color="%s"/><stop offset=".2" stop-color="#4a977a"/><stop offset=".6" stop-color="#286552"/><stop offset="1" stop-color="#11392d"/></radialGradient></defs>' % (uid, SPEC)
-    g += '<g transform="translate(1.2 1.6)" fill="#3d0d00" fill-opacity=".5" stroke="#3d0d00" stroke-opacity=".5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">%s%s</g>' % (line.replace('<path', '<path fill="none"'), body)
-    g += '<g fill="#030d09" stroke="#030d09" stroke-width="3.1" stroke-linecap="round" stroke-linejoin="round">%s%s</g>' % (line.replace('<path', '<path fill="none"'), body)
-    g += '<g fill="none" stroke="#367f68" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">%s</g>' % line
-    g += '<g fill="url(#%s_jb)">%s</g>' % (uid, body)
-    return g + '</g>'

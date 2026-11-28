@@ -720,7 +720,7 @@ uint32_t own_ant_in_view(Application& app, uint32_t except = 0) {
     return 0;
 }
 
-// What the player does at once: the question whether the wheel may zoom the map, a click on an own ant, typed text (it goes to the chat box), a key of the match (Ctrl+O opens the options).
+// What the player does at once: the question whether the wheel may zoom the map, a click on an own ant, typed text (it goes to the chat box), a key of the match (Ctrl+O opens the settings menu).
 // What of it reached the match?
 struct Reach {
     bool wheel{false};
@@ -757,7 +757,7 @@ Reach poke(Application& app, uint32_t ant_id) {
     r.text = !app.hud().get_chat_input().empty();
     for (int i = 0; i < 8 && !app.hud().get_chat_input().empty(); ++i) app.hud().handle_key_down(SDLK_BACKSPACE, app.sim(), app.renderer().camera(), 0, false);      // (the HUD's own: the loop's key may be swallowed)
     app.handle_key_down(key_event(SDLK_o, false, KMOD_LCTRL));
-    r.options = app.hud().is_modal_open();
+    r.options = app.game_menu_is_open();                                                         // (the desktop's drawn menu: the panel takes the keys while it is up)
     return r;
 }
 
@@ -897,7 +897,7 @@ void run_use_tests() {
         ASSERT_TRUE(ant != 0);
         const Reach reached = poke(second, ant);
         ASSERT_TRUE(reached.wheel && reached.click && reached.text && reached.options);
-        second.handle_key_down(key_event(SDLK_ESCAPE));                                          // (closes the options again)
+        second.handle_key_down(key_event(SDLK_ESCAPE));                                          // (closes the settings menu again)
         ASSERT_FALSE(chat_has(second, "Game started!"));
         w.run(3000);
         ASSERT_TRUE(second.net()->turns_executed() > sealed + 40);                               // and it goes on

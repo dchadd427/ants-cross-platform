@@ -145,12 +145,6 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         if (button == SDL_BUTTON_LEFT) quick_help_return_.on_press(x - page.x, y - page.y);     // the Return button captures (qh_return3 carries no sound); nothing else reacts
         return true;
     }
-    if (options_.is_open()) {
-        // The window takes every press; only the left button acts (the controls' mouse handlers test the left button message): the start of a slider
-        // drag, a captured button, the focus of an edit field. Nothing acts before the release, and a press outside the controls does nothing.
-        if (button == SDL_BUTTON_LEFT) options_.on_press(x - page.x, y - page.y, clock_ms());
-        return true;
-    }
     if (show_match_start_modal_ && !match_countdown_) {
         return true; // Consume all clicks while match start modal is open
     }
@@ -236,14 +230,14 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
     if (pedestal_press(sim, x, y)) return true;
 
     // [All] button (532, 443, 44x24): hidden while chat is off
-    if (options_.state().chat && send_to_button_.contains(x, y)) {
+    if (chat_writable() && send_to_button_.contains(x, y)) {
         send_to_button_.is_pressed = true;
         play_sfx(sim::SoundID::ButtonClick);
         return true;
     }
 
     // [Team] button (579, 443, 46x24): exists while the local player has an ally
-    if (options_.state().chat && is_on_team_ && team_button_.contains(x, y)) {
+    if (chat_writable() && is_on_team_ && team_button_.contains(x, y)) {
         team_button_.is_pressed = true;
         play_sfx(sim::SoundID::ButtonClick);
         return true;
@@ -280,8 +274,8 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
     const bool fire_options = left_release && options_button_.is_pressed && options_button_.contains(x, y);
     const bool fire_quit = left_release && quit_button_.is_pressed && quit_button_.contains(x, y);
     const bool fire_fullscreen = left_release && fullscreen_button_.is_pressed && fullscreen_button_.contains(x, y);
-    const bool fire_all = left_release && options_.state().chat && send_to_button_.is_pressed && send_to_button_.contains(x, y);
-    const bool fire_team = left_release && options_.state().chat && is_on_team_ && team_button_.is_pressed && team_button_.contains(x, y);
+    const bool fire_all = left_release && chat_writable() && send_to_button_.is_pressed && send_to_button_.contains(x, y);
+    const bool fire_team = left_release && chat_writable() && is_on_team_ && team_button_.is_pressed && team_button_.contains(x, y);
     help_button_.is_pressed = false;
     options_button_.is_pressed = false;
     quit_button_.is_pressed = false;
@@ -299,11 +293,6 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
     const LayoutPoint modal = layout_.modal_offset();
     if (show_quick_help_) {
         if (button == SDL_BUTTON_LEFT && quick_help_return_.on_release(x - page.x, y - page.y)) close_quick_help();        // the callback runs at the release, on the button
-        return true;
-    }
-    if (options_.is_open()) {
-        // The callbacks run at the release: Return, the pairs of switches and the sliders' drags (FUN_010115ca, FUN_01011206)
-        if (button == SDL_BUTTON_LEFT) options_.on_release(x - page.x, y - page.y);
         return true;
     }
 
@@ -360,7 +349,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
     if (button == SDL_BUTTON_LEFT) {
         if (!in_strip) {
             if (fire_help) open_quick_help();
-            else if (fire_options) open_options();
+            else if (fire_options) { if (on_menu_request_) on_menu_request_(); }          // (the settings menu: the original's options window is gone)
             else if (fire_quit) open_quit_dialog();
             else if (fire_fullscreen) {
                 ++fullscreen_clicks_;
@@ -404,10 +393,6 @@ bool HUD::handle_mouse_motion(int32_t x, int32_t y, sim::SimulationEngine& sim, 
     const LayoutPoint modal = layout_.modal_offset();
     if (show_quick_help_) {
         quick_help_return_.on_move(x - page.x, y - page.y);
-        return true;
-    }
-    if (options_.is_open()) {
-        options_.on_move(x - page.x, y - page.y);                   // hover pictures; a dragged thumb follows the pointer (only the thumb: the value is applied at the release)
         return true;
     }
 
@@ -461,7 +446,6 @@ bool HUD::handle_mouse_motion(int32_t x, int32_t y, sim::SimulationEngine& sim, 
 
 void HUD::cancel_press() noexcept {
     release_capture();
-    options_.cancel_press();                                // (a slider's drag of the options window ends with no act: nothing is written)
     for (UIButton* b : {&help_button_, &options_button_, &quit_button_, &fullscreen_button_, &send_to_button_, &team_button_, &move_pedestal_button_, &ability_pedestal_button_, &stop_button_, &hatch_button_, &team_up_button_}) {
         b->is_pressed = false;
     }

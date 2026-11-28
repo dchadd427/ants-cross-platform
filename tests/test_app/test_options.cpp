@@ -1,6 +1,6 @@
-// Options model tests (batch 4 part 2): the original's slider, latching button and edit field (Ants.exe FUN_01011397, FUN_01010fcb with its toggle flag, FUN_010119a8),
-// the settings store (FUN_0100c18f / FUN_0102950f: a value in [min, max) or the default) and the options screen built from them (FUN_0101487c). Pure logic, no
-// drawing: the pictures are checked in test_hud_layout. (docs/GAME_REVERSE_ENGINEERING.md 5.51)
+// Options model tests (batch 4 part 2): the original's slider, latching button and edit field (Ants.exe FUN_01011397, FUN_01010fcb with its toggle flag, FUN_010119a8: the setup screens use them),
+// the settings store (FUN_0100c18f / FUN_0102950f: a value in [min, max) or the default) and the original's options that the game keeps (OptionsState; the window that used to hold them is gone, the
+// settings menu has them). Pure logic, no drawing. (docs/GAME_REVERSE_ENGINEERING.md 5.51)
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
@@ -12,7 +12,7 @@
 
 #include "ants_app/audio_mixer.hpp"
 #include "ants_app/config_store.hpp"
-#include "ants_app/options_screen.hpp"
+#include "ants_app/options_state.hpp"
 #include "ants_app/screen_controls.hpp"
 
 using namespace ants::app;
@@ -266,7 +266,7 @@ void test_config_store() {
 
 void test_options_state() {
     g_group = "options state";
-    std::printf("[options] the settings of the options screen: defaults, load rules, write (FUN_0100a2c9, FUN_0101487c)\n");
+    std::printf("[options] the original's options that the game keeps: defaults, load rules, write (FUN_0100a2c9, FUN_0101487c)\n");
     OptionsState st;
     check(st.sound_volume == 100 && st.music_volume == 65 && st.scroll_speed == 50 && st.chat && st.quick_help, "defaults: sound 100, music 65, scroll 50, chat on, quick help on");
     check(st.quick_chat[0] == "Now you are in for it!" && st.quick_chat[1] == "Let me be!" && st.quick_chat[2] == "Attack!" && st.quick_chat[3] == "Do you want to ally?",
@@ -306,6 +306,11 @@ void test_options_state() {
     s4.load(w);
     check(s4.sound_volume == 33 && s4.music_volume == 44 && s4.scroll_speed == 55 && !s4.chat && !s4.quick_help && s4.quick_chat[2] == "Go go" && s4.quick_chat[0] == "Now you are in for it!",
           "what the callbacks write is what the next start reads");
+    // a text that the settings menu hands over is what the original's edit field would have kept: printable ASCII (0x20 - 0x7e), at most 100 characters
+    check(OptionsState::clean_quick_chat("Attack!") == "Attack!" && OptionsState::clean_quick_chat("").empty() && OptionsState::clean_quick_chat(std::string(130, 'a')) == std::string(100, 'a'),
+          "a clean text stays, an empty one is empty, a long one is cut at 100");
+    check(OptionsState::clean_quick_chat("caf\xC3\xA9\tnow\x7f ok~") == "cafnow ok~" && OptionsState::clean_quick_chat(std::string(99, 'a') + "\x01" + "bc") == std::string(99, 'a') + "b",
+          "an accent, a tab and the delete character are left out (the first 100 kept characters count, not the bytes)");
 }
 
 void test_sound_law() {
@@ -317,155 +322,6 @@ void test_sound_law() {
           "1, 50, 65, 99, 100: -2475, -1250, -875, -25, 0");
     // the music: the device volume word is v * 0xffff / 100 (FUN_0100e714)
     check((65 * 0xffff) / 100 == 42597 && (100 * 0xffff) / 100 == 0xffff && (0 * 0xffff) / 100 == 0, "the music word of 65 is 42597, of 100 0xffff");
-}
-
-struct Recorder {
-    std::vector<OptionSetting> changes;
-};
-
-void test_options_screen() {
-    g_group = "options screen";
-    std::printf("[screen] the options screen: controls, events, callbacks at the release, Enter, no click outside (FUN_0101487c, FUN_01014f12)\n");
-    OptionsScreen screen;
-    Recorder rec;
-    screen.set_on_change([&](OptionSetting s) { rec.changes.push_back(s); });
-    check(!screen.is_open(), "closed at first");
-    screen.on_press(400, 440, 0);
-    screen.on_release(400, 440);
-    check(rec.changes.empty(), "a closed screen takes no events");
-
-    screen.open(1000);
-    check(screen.is_open(), "open");
-    check(screen.slider(0).value() == 99 && screen.slider(0).thumb_left() == 372, "the Sound slider stands at the end of its track");
-    check(screen.slider(1).value() == 65 && screen.slider(2).value() == 50, "Music 65, Scroll 50");
-    check(screen.chat_on().latched() && !screen.chat_off().latched() && screen.help_on().latched() && !screen.help_off().latched(), "both switches are on");
-    check(screen.edit(0).focused() && !screen.edit(1).focused() && !screen.edit(2).focused() && !screen.edit(3).focused(), "the F9 field has the focus");
-    check(screen.edit(0).text() == "Now you are in for it!" && screen.edit(3).text() == "Do you want to ally?", "the fields hold the quick chats");
-    check(screen.edit(0).x() == 92 && screen.edit(0).y() == 370 && screen.edit(1).x() == 92 && screen.edit(1).y() == 402 && screen.edit(2).x() == 302 && screen.edit(2).y() == 370 &&
-              screen.edit(3).x() == 302 && screen.edit(3).y() == 402 && screen.edit(0).w() == 141 && screen.edit(0).h() == 15,
-          "fields: (92, 370), (92, 402), (302, 370), (302, 402), 141 x 15");
-
-    // sliders: nothing happens before the release
-    screen.on_press(300, 222, 1100);                             // the Music slider's track (y 216 .. 235)
-    screen.on_move(250, 222);
-    screen.on_move(330, 500);
-    check(rec.changes.empty() && screen.state().music_volume == 65, "press and drag change nothing");
-    check(screen.slider(1).value() == 64 && screen.slider(1).position() == 330, "the thumb follows the pointer (pos 330: value 119 100 / 185 = 64)");
-    screen.on_release(330, 500);
-    check(rec.changes.size() == 1 && rec.changes[0] == OptionSetting::MusicVolume && screen.state().music_volume == 64, "the release applies the value once");
-    rec.changes.clear();
-
-    // every event is preceded by the move (FUN_0102737e -> FUN_0102653f): the release moves the thumb to the pointer even when no motion came between. A plain click
-    // therefore sets the value of the clicked position, and the far end of the track is 99: the Sound Volume 100 of the start cannot be set again
-    screen.on_press(400, 185, 1200);
-    screen.on_release(400, 185);
-    check(rec.changes.size() == 1 && rec.changes[0] == OptionSetting::SoundVolume && screen.state().sound_volume == 99, "a click at the far end of the Sound track: 99");
-    rec.changes.clear();
-    screen.on_press(300, 185, 1250);
-    screen.on_release(300, 185);
-    check(rec.changes.size() == 1 && screen.state().sound_volume == 48 && screen.slider(0).thumb_left() == 277, "a click without a move sets the value of the clicked position: (300 - 211) 100 / 185 = 48");
-    rec.changes.clear();
-    // a press beside the track
-    screen.on_press(300, 210, 1300);
-    screen.on_release(300, 210);
-    check(rec.changes.empty(), "a click between the tracks does nothing");
-
-    // the Scroll Speed slider
-    screen.on_press(304, 260, 1400);
-    screen.on_move(211, 260);
-    screen.on_release(211, 260);
-    check(rec.changes.size() == 1 && rec.changes[0] == OptionSetting::ScrollSpeed && screen.state().scroll_speed == 0, "Scroll Speed: dragged to the left end: 0");
-    rec.changes.clear();
-
-    // switches: nothing at the press, both latches at the release
-    screen.on_press(160, 300, 1500);                              // chat OFF
-    check(rec.changes.empty() && screen.state().chat, "a press on Chat OFF changes nothing yet");
-    screen.on_release(160, 300);
-    check(rec.changes.size() == 1 && rec.changes[0] == OptionSetting::Chat && !screen.state().chat, "the release switches the chat off");
-    check(screen.chat_off().latched() && !screen.chat_on().latched(), "Chat OFF is latched, Chat ON is not");
-    rec.changes.clear();
-    screen.on_press(160, 300, 1600);
-    screen.on_release(160, 300);
-    check(screen.chat_off().latched() && !screen.chat_on().latched() && !screen.state().chat, "clicking the latched OFF again leaves it latched");
-    rec.changes.clear();
-    screen.on_press(110, 300, 1700);                              // chat ON
-    screen.on_move(300, 300);                                     // leaves
-    screen.on_release(300, 300);
-    check(rec.changes.empty() && !screen.state().chat, "a press that leaves the button before the release does nothing");
-    screen.on_press(110, 300, 1800);
-    screen.on_release(110, 300);
-    check(screen.state().chat && screen.chat_on().latched() && !screen.chat_off().latched(), "Chat ON switches it on again");
-    rec.changes.clear();
-    screen.on_press(420, 300, 1900);                              // quick help OFF
-    screen.on_release(420, 300);
-    check(rec.changes.size() == 1 && rec.changes[0] == OptionSetting::QuickHelp && !screen.state().quick_help && screen.help_off().latched() && !screen.help_on().latched(),
-          "Quick Help OFF");
-    rec.changes.clear();
-    screen.on_press(370, 300, 2000);                              // quick help ON
-    screen.on_release(370, 300);
-    check(screen.state().quick_help && screen.help_on().latched() && !screen.help_off().latched(), "Quick Help ON");
-    rec.changes.clear();
-
-    // edit fields: the presses on the sliders and switches took the focus from F9 (a press anywhere but on a field does); a press on the field gives it back
-    check(!screen.edit(0).focused(), "the presses on the other controls took the focus from F9");
-    screen.on_text("!!");
-    check(rec.changes.empty(), "so nothing is typed");
-    screen.on_press(150, 377, 2100);
-    screen.on_release(150, 377);
-    check(screen.edit(0).focused() && screen.is_open(), "a press on F9 gives it the focus");
-    screen.on_text("!!");
-    check(rec.changes.size() == 2 && rec.changes[0] == OptionSetting::QuickChat1 && screen.state().quick_chat[0] == "Now you are in for it!!!", "every typed character changes the quick chat at once");
-    rec.changes.clear();
-    screen.on_key(ScreenEdit::KEY_BACKSPACE);
-    check(rec.changes.size() == 1 && screen.state().quick_chat[0] == "Now you are in for it!!", "Backspace");
-    rec.changes.clear();
-    screen.on_key(ScreenEdit::KEY_ESCAPE);
-    check(screen.is_open() && rec.changes.empty(), "Esc does nothing");
-    // a click on the F10 field moves the focus there (the press only)
-    screen.on_press(200, 410, 3000);
-    check(!screen.edit(0).focused() && screen.edit(1).focused(), "a press on F10 focuses it and takes the focus from F9");
-    screen.on_release(200, 410);
-    screen.on_text("ab");
-    check(screen.state().quick_chat[1] == "Let me be!ab" && screen.state().quick_chat[0] == "Now you are in for it!!", "the text goes to the focused field only");
-    rec.changes.clear();
-    // a click anywhere else takes the focus away
-    screen.on_press(300, 330, 3100);
-    screen.on_release(300, 330);
-    check(!screen.edit(1).focused(), "a click on the window takes the focus from every field");
-    screen.on_text("zz");
-    check(rec.changes.empty() && screen.state().quick_chat[1] == "Let me be!ab", "nothing is typed then");
-    // clicks outside the window's controls never close it
-    screen.on_press(5, 5, 3200);
-    screen.on_release(5, 5);
-    screen.on_press(630, 470, 3300);
-    screen.on_release(630, 470);
-    check(screen.is_open(), "a click outside the card does not close the screen");
-
-    // Return: the release closes it, and only on the button
-    screen.on_press(400, 440, 3400);
-    check(screen.return_button().pressed() && screen.is_open(), "a press on Return only captures it");
-    screen.on_move(10, 10);
-    screen.on_release(10, 10);
-    check(screen.is_open(), "a press that leaves the button before the release does not close it");
-    screen.on_press(400, 440, 3500);
-    screen.on_release(400, 440);
-    check(!screen.is_open(), "the release on Return closes the screen");
-
-    // Enter closes it whatever has the focus, typing included
-    screen.open(4000);
-    screen.on_text("x");
-    check(screen.state().quick_chat[0] == "Now you are in for it!!x", "reopened: the F9 field has the focus again and takes text");
-    screen.on_key(ScreenEdit::KEY_ENTER);
-    check(!screen.is_open() && screen.state().quick_chat[0] == "Now you are in for it!!x", "Enter closes it; the text stays");
-    screen.open(5000);
-    screen.on_press(300, 330, 5100);
-    screen.on_key(ScreenEdit::KEY_ENTER);
-    check(!screen.is_open(), "Enter closes it with no field focused");
-    // the screen is built from the state each time
-    screen.state().sound_volume = 30;
-    screen.state().chat = false;
-    screen.open(6000);
-    check(screen.slider(0).value() == 30 && screen.chat_off().latched() && !screen.chat_on().latched(), "reopened from the changed settings");
 }
 
 }  // namespace
@@ -480,7 +336,6 @@ int main(int argc, char* argv[]) {
     test_config_store();
     test_options_state();
     test_sound_law();
-    test_options_screen();
     std::printf("\noptions: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

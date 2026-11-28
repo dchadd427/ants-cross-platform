@@ -287,7 +287,7 @@ endif()
 add_test(NAME test_pointer_model COMMAND test_pointer_model)
 set_tests_properties(test_pointer_model PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
-# Options model: the slider, the latching button and the edit field of the original, the settings store and the options screen built from them (pure logic)
+# Options model: the slider, the latching button and the edit field of the original, the settings store and the options that the game keeps (pure logic)
 add_executable(test_options
     test_options.cpp
 )
@@ -1341,6 +1341,7 @@ set_tests_properties(test_web_chat PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_
 # The settings menu that Esc opens: the one table of rows, what Leave game does, the new settings, Esc's rule, the input that the game does not take while the panel is up, and the acts of the panel
 add_executable(test_game_menu
     test_game_menu.cpp
+    test_game_menu_panel.cpp
 )
 
 target_include_directories(test_game_menu PRIVATE

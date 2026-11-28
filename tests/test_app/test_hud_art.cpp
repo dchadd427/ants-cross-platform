@@ -401,7 +401,7 @@ void test_derive() {
     }
     check(seen > 100000 && wrong == 0, "the derived rows are the premultiplied averages of the 3x rows (every 6th row, every 2nd column, to one level)");
     // where the sprites are: the windows' pictures are in the band, so are the panel's clay and frame pieces; the HUD's own are not
-    for (const char* name : {"panel_c", "panel_tl", "panel_t", "dlg_btn_yes_up", "op_on_up", "op_part_00", "qh_part_02", "cd_title", "cd_count_well", "cd_row_well", "dlg_btn_fullscreen_up", "qh_pedestal_move"}) {
+    for (const char* name : {"panel_c", "panel_tl", "panel_t", "dlg_btn_yes_up", "op_on_up", "qh_part_02", "cd_title", "cd_count_well", "cd_row_well", "dlg_btn_fullscreen_up", "qh_pedestal_move"}) {
         const hud_art::Sprite* s = art.sprite_at(art.find_sprite(name));
         bool shows = false;
         if (s != nullptr && s->sheet_y + s->h <= rows) {

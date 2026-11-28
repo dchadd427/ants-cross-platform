@@ -175,6 +175,7 @@ void Application::handle_events() {
             continue;
         }
 
+        if (feed_game_menu_panel(event)) continue;           // (the desktop's drawn settings panel is up: it takes the keys, text, pointer and wheel)
         if (game_menu_takes(event)) continue;                // (the settings panel is up: its keys, text, clicks and wheel are the panel's)
 
         // Gameplay Event Dispatch
@@ -226,6 +227,7 @@ bool Application::button_outside_window(const SDL_MouseButtonEvent& button) cons
 void Application::handle_window_event(const SDL_WindowEvent& we) {
     if (we.event == SDL_WINDOWEVENT_FOCUS_LOST) {
         cancel_touch();                                                        // (a finger whose lift will never be heard of must not hold a press, nor block the next ones)
+        if (menu_panel_) menu_panel_->cancel_press();                          // (nor a drag of the settings menu's slider that will never see its release)
         set_app_active(false);
         if (!config_.headless) SDL_ShowCursor(SDL_ENABLE);                     // not ours to hide while another window has the input
     }

@@ -1172,7 +1172,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(v.ok);
         ASSERT_TRUE(v.app.replay_mode() && v.app.replay_failure() == ReplayFailure::None);
         ASSERT_TRUE(v.state() == ReplayState::Playing && v.turn() == 0);
-        ASSERT_TRUE(v.app.state() == AppState::Playing && v.app.hud().chat_takes_text() && !v.app.web_chat_available() && !v.app.web_chat_do(1, 'a'));      // (a phone's keyboard: a recording has no chat line to type in)
+        ASSERT_TRUE(v.app.state() == AppState::Playing && !v.app.hud().chat_takes_text() && !v.app.web_chat_available() && !v.app.web_chat_do(1, 'a'));      // (a recording has no chat line to type in: the HUD takes no text, and a phone's keyboard is not offered)
         ASSERT_EQ(v.app.replay_value(ReplayValue::Total), 700);
         ASSERT_EQ(v.app.replay_value(ReplayValue::Speed), 100);
         ASSERT_FALSE(v.app.sim().is_fog_of_war_enabled());                              // (the file has the fog on: a viewer sees everything, and the fog is no part of any hash)
@@ -2238,6 +2238,30 @@ int main(int argc, char* argv[]) {
         v.app.shutdown();
     } TEST_END();
 
+    TEST_CASE("RA8.15 Nobody writes in the chat of a recording or a live match that is watched: no text, no Enter, no quick chat key and no Send to button; the players' lines stay in the log, to read") {
+        ASSERT_FALSE(bot_match().bytes.empty());
+        Viewer v(bot_match().bytes);
+        ASSERT_TRUE(v.ok);
+        v.frames(20);
+        HUD& hud = v.app.hud();
+        ASSERT_TRUE(hud.view_only() && !hud.chat_writable() && !hud.chat_takes_text());
+        ASSERT_FALSE(v.app.network_active());                                       // (a watched match has no connection: what a watcher types could not reach a player, and there is no seat to say it from)
+        int sent = 0;
+        hud.set_on_chat_send([&](const std::string&, bool) { ++sent; });
+        const size_t before = hud.get_chat_log().size();
+        hud.handle_text_input("canichat?");
+        press(v.app, SDLK_RETURN);
+        press(v.app, SDLK_F9);
+        press(v.app, SDLK_F12);
+        v.frames(5);
+        ASSERT_EQ(hud.get_chat_log().size(), before);
+        ASSERT_TRUE(hud.get_chat_input().empty());
+        ASSERT_EQ(sent, 0);
+        hud.receive_chat_message(1, "Bea", "gg", false, v.app.sim().get_world_state());
+        ASSERT_TRUE(hud.get_chat_log().size() > before);                            // (what the players say is still there to read)
+        v.app.shutdown();
+    } TEST_END();
+
     TEST_CASE("RA10.1 The settings menu in a recording: it is a screen that is watched (no Game section), Esc with nothing to cancel asks for it, Leave game asks nothing and goes back to the list, and the panel takes the input") {
         ASSERT_FALSE(bot_match().bytes.empty());
         Viewer v(bot_match().bytes);
@@ -2257,6 +2281,7 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(asked, 1);
         ASSERT_FALSE(app.game_menu_do(game_menu::kActQuickHelp));                       // (the original's windows are a seat's: none in a recording)
         ASSERT_FALSE(app.hud().is_quick_help_open());
+        ASSERT_TRUE(app.game_menu_do(game_menu::kActFullscreen) && app.game_menu_do(game_menu::kActFullscreen));       // (the window's Fullscreen is not a seat's: a recording has it, in and out)
         app.game_menu_set_open(true);
         ASSERT_TRUE(app.game_menu_is_open());
         ASSERT_TRUE(app.game_menu_set(game_menu::kMaster, 55));                         // (the sound rows are the same in a recording)

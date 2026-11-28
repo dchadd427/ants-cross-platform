@@ -370,18 +370,16 @@ struct AllianceTable {
 }  // namespace
 
 void test_dialogs_and_pages(const assets::AssetArchive& arc) {
-    group("windows", "the dialogs, the options window and the quick help sit over the middle of the map view with the HUD visible around them, the pointer is taken back to their numbers");
+    group("windows", "the dialogs and the quick help sit over the middle of the map view with the HUD visible around them, the pointer is taken back to their numbers");
     const ScreenLayout wide = ScreenLayout::with_size(960, 540);
     const ScreenLayout classic = ScreenLayout::classic();
     // (the page offset, (160, 30) at 960 x 540, is gone: no page of the original is centred over a margin any more, every screen outside a match is composed for the whole canvas: test_wide_pages)
-    check(wide.options_offset() == LayoutPoint{160, 30} && wide.quick_help_offset() == LayoutPoint{77, 31} && classic.options_offset() == LayoutPoint{0, 0} && classic.quick_help_offset() == LayoutPoint{0, 0},
-          "the options window's offset is (160, 30) and the quick help's (77, 31) at 960 x 540: the 442 x 440 card (16, 21) and the 640 x 480 page go to the middle (397, 271) of the view; (0, 0) in the original's picture");
+    check(wide.quick_help_offset() == LayoutPoint{77, 31} && classic.quick_help_offset() == LayoutPoint{0, 0},
+          "the quick help's offset is (77, 31) at 960 x 540: the 640 x 480 page goes to the middle (397, 271) of the view; (0, 0) in the original's picture");
     for (const ScreenLayout& l : {wide, ScreenLayout::with_size(1280, 720), ScreenLayout::with_size(1920, 1080)}) {
-        const LayoutPoint o = l.options_offset();
         const LayoutPoint q = l.quick_help_offset();
         const LayoutRect v = l.view();
         const std::string at = std::to_string(l.width) + " x " + std::to_string(l.height) + ": ";
-        check(16 + o.x + 221 == v.x + v.w / 2 && 21 + o.y + 220 == v.y + v.h / 2, at + "the options card's centre is the view's centre");
         check(q.x + 320 == v.x + v.w / 2 && q.y + 240 == v.y + v.h / 2, at + "the quick help page's centre is the view's centre");
         check(q.x >= v.x && q.y >= v.y && q.x + 640 <= v.right() && q.y + 480 <= v.bottom(), at + "the quick help page lies inside the map view: the HUD around it stays visible");
     }
@@ -504,59 +502,11 @@ void test_dialogs_and_pages(const assets::AssetArchive& arc) {
         check(t.sim.get_world_state().player_alliances[1] == 0 && t.sim.get_world_state().player_alliances[0] == 1, at + "a click at Accept's place on screen forms the team of Bob and Alice");
     }
 
-    // --- the options window and the quick help of the original during a match: its own pictures, drawn over the map view with the HUD around them
+    // --- the quick help of the original during a match: its own pictures, drawn over the map view with the HUD around them
     for (const ScreenLayout& layout : {classic, wide}) {
         const bool is_classic = layout.is_classic();
-        const LayoutPoint o = layout.options_offset();
         const LayoutPoint q = layout.quick_help_offset();
         const std::string at = std::string(is_classic ? "classic" : "960 x 540") + ": ";
-        {   // the options: Return to Game is (351, 425) 98 x 26 of the window's own numbers
-            HudRig rig(arc, layout);
-            rig.hud.open_options();
-            const Spy spy = rig.frame();
-            // the HUD is drawn first, and still: the 14 pieces of the frame, then the window under its origin
-            size_t i_origin = spy.events.size(), i_reset = spy.events.size(), i_clip = spy.events.size(), i_unclip = spy.events.size();
-            bool clay = false;
-            for (size_t i = 0; i < spy.events.size(); ++i) {
-                const Spy::Ev& e = spy.events[i];
-                if (e.kind == Spy::Kind::Origin && e.x == o.x && e.y == o.y && i_origin == spy.events.size()) i_origin = i;
-                if (e.kind == Spy::Kind::Origin && e.x == 0 && e.y == 0 && i > i_origin && i_reset == spy.events.size()) i_reset = i;
-                if (e.kind == Spy::Kind::Clip && i > i_origin && i_clip == spy.events.size()) i_clip = i;
-                if (e.kind == Spy::Kind::ClearClip && i > i_clip && i_unclip == spy.events.size()) i_unclip = i;
-                clay = clay || (e.kind == Spy::Kind::Fill && e.color.r == 219 && e.color.g == 75 && e.color.b == 19);
-            }
-            check(!clay, at + "no clay margin: the options window does not cover the match");
-            size_t pieces_before = 0;
-            for (size_t i = 0; i < i_origin && i < spy.events.size(); ++i) pieces_before += (spy.events[i].kind == Spy::Kind::Sprite || spy.events[i].kind == Spy::Kind::Region) ? size_t{1} : size_t{0};
-            check(pieces_before >= 14 && spy.has_sprite_at("x480y126.bmp", 480 + layout.dx(), 126), at + "the HUD is drawn before the window: the 14 pieces of the frame (the status card at its place) come first");
-            if (is_classic) {
-                check(i_clip == spy.events.size(), at + "the original's own picture needs no clip");
-            } else {
-                const LayoutRect v = layout.view();
-                bool clip_ok = false;
-                for (const Spy::Ev& e : spy.events) {
-                    if (e.kind == Spy::Kind::Clip && e.ox == o.x && e.oy == o.y) clip_ok = e.x == v.x - o.x && e.y == v.y - o.y && e.w == v.w && e.h == v.h;
-                }
-                check(i_origin < i_clip && i_clip < i_unclip && i_unclip <= i_reset && i_reset < spy.events.size() && clip_ok, at + "the window: its origin (160, 30), the clip of the map view (it stops at the view), the window, the clip off, the origin off");
-            }
-            // the hover picture of Return: the pointer on it at its place on screen
-            rig.hud.handle_mouse_motion(351 + o.x + 10, 425 + o.y + 10, rig.sim, rig.cam);
-            check(rig.frame().has_sprite_at("breturn2.bmp", 351, 425), at + "the options' Return button shows its hover picture when the pointer is on it at its place on screen");
-            if (!is_classic) {
-                rig.hud.handle_mouse_motion(351 + 10, 425 + 10, rig.sim, rig.cam);
-                check(!rig.frame().has_sprite_at("breturn2.bmp", 351, 425), at + "... and not when it is at Return's own numbers");
-            }
-            // the pointer: Return at its place on screen closes the options; at the window's own numbers (without the move) it does not
-            check(rig.hud.is_options_open(), at + "the options are open");
-            if (!is_classic) {
-                rig.click(351 + 10, 425 + 10);
-                check(rig.hud.is_options_open(), at + "a click at Return's own numbers (351, 425) does nothing");
-                rig.click(351 + o.x - 20, 425 + o.y + 10);
-                check(rig.hud.is_options_open(), at + "a click left of Return does nothing");
-            }
-            rig.click(351 + o.x + 10, 425 + o.y + 10);
-            check(!rig.hud.is_options_open(), at + "a click on Return at its place on screen (" + std::to_string(351 + o.x + 10) + ", " + std::to_string(425 + o.y + 10) + ") closes the options");
-        }
         {   // the quick help: Return is (529, 437) 98 x 26
             HudRig rig(arc, layout);
             rig.hud.open_quick_help();
@@ -571,8 +521,6 @@ void test_dialogs_and_pages(const assets::AssetArchive& arc) {
             if (!is_classic) {
                 rig.hud.handle_mouse_motion(529 + 10, 437 + 10, rig.sim, rig.cam);
                 check(!rig.frame().has_sprite_at("breturn2.bmp", 529, 437), at + "... and not when it is at Return's own numbers");
-                rig.hud.handle_mouse_motion(529 + o.x + 90, 437 + o.y + 10, rig.sim, rig.cam);                // (the right end of the button at the options window's place: outside the quick help's own)
-                check(!rig.frame().has_sprite_at("breturn2.bmp", 529, 437), at + "... nor at the place of the options window's offset (the quick help has its own)");
                 rig.click(529 + 10, 437 + 10);
                 check(rig.hud.is_quick_help_open(), at + "a click at the Return button's own numbers does nothing");
                 bool one_origin = false;
@@ -585,15 +533,14 @@ void test_dialogs_and_pages(const assets::AssetArchive& arc) {
     }
 }
 
-/// The options window and the quick help take the pointer from the 50 ms poll of HUD::update as well as from the events (the INPUT task of the original): a control that is pressed and
-/// released while frames and ticks run in between must still be clicked (the poll once fed the window the raw position of the pointer, the original's own numbers moved by the window's
-/// offset: Return, the ON / OFF switches of the options and the quick help's Return could not be clicked in the 16:9 match, as the poll took the pointer off the control and cancelled the press)
+/// The quick help takes the pointer from the 50 ms poll of HUD::update as well as from the events (the INPUT task of the original): a control that is pressed and released while frames and
+/// ticks run in between must still be clicked (the poll once fed a window the raw position of the pointer, the original's own numbers moved by the window's offset: Return could not be
+/// clicked in the 16:9 match, as the poll took the pointer off the control and cancelled the press)
 void test_window_controls_through_update(const assets::AssetArchive& arc) {
-    group("window-controls", "every control of the options window and of the quick help can be clicked through the HUD's 50 ms poll (press, update, release), at its place on screen only");
+    group("window-controls", "the quick help's Return can be clicked through the HUD's 50 ms poll (press, update, release), at its place on screen only; the Options button asks for the settings menu");
     const ScreenLayout classic = ScreenLayout::classic();
     const ScreenLayout wide = ScreenLayout::with_size(960, 540);
     for (const ScreenLayout& layout : {classic, wide}) {
-        const LayoutPoint o = layout.options_offset();
         const LayoutPoint q = layout.quick_help_offset();
         const bool is_classic = layout.is_classic();
         const std::string at = std::string(is_classic ? "classic" : "960 x 540") + ": ";
@@ -604,60 +551,8 @@ void test_window_controls_through_update(const assets::AssetArchive& arc) {
             for (int i = 0; i < polls; ++i) rig.hud.update(rig.sim.get_world_state(), 1);
             rig.hud.handle_mouse_up(x, y, SDL_BUTTON_LEFT, rig.sim, rig.cam);
         };
-        // --- the options window
-        {
-            HudRig rig(arc, layout);
-            rig.hud.open_options();
-            auto at_screen = [&](int32_t x, int32_t y) { return std::make_pair(x + o.x, y + o.y); };
-            // Return to Game
-            {
-                const auto p = at_screen(351 + 40, 425 + 12);
-                press_update_release(rig, p.first, p.second, 3);
-                check(!rig.hud.is_options_open(), at + "Return to Game: press, three polls, release: the window closes");
-            }
-            rig.hud.open_options();
-            // Chat Off, Chat On, Quick Help Off, Quick Help On
-            struct Toggle { const char* name; int32_t x; bool OptionsState::*field; bool value; };
-            const Toggle toggles[] = {{"Chat Off", OptionsScreen::CHAT_OFF_X, &OptionsState::chat, false}, {"Chat On", OptionsScreen::CHAT_ON_X, &OptionsState::chat, true},
-                                      {"Quick Help Off", OptionsScreen::HELP_OFF_X, &OptionsState::quick_help, false}, {"Quick Help On", OptionsScreen::HELP_ON_X, &OptionsState::quick_help, true}};
-            for (const Toggle& t : toggles) {
-                const auto p = at_screen(t.x + 20, OptionsScreen::TOGGLE_Y + 10);
-                press_update_release(rig, p.first, p.second, 2);
-                check(rig.hud.options().*(t.field) == t.value && rig.hud.is_options_open(), at + std::string(t.name) + ": press, two polls, release: the switch changes");
-            }
-            // the switches at the window's own numbers (without the offset) do nothing in a 16:9 picture
-            if (!is_classic) {
-                rig.hud.options().chat = true;
-                press_update_release(rig, OptionsScreen::CHAT_OFF_X + 20, OptionsScreen::TOGGLE_Y + 10, 2);
-                check(rig.hud.options().chat, at + "Chat Off at the window's own numbers (not moved) does nothing");
-            }
-            // the sliders: press on the thumb, drag, poll, release: the value follows
-            const int32_t* values[3] = {&rig.hud.options().sound_volume, &rig.hud.options().music_volume, &rig.hud.options().scroll_speed};
-            for (int i = 0; i < 3; ++i) {
-                const int32_t before = *values[i];
-                const int32_t thumb_x = OptionsScreen::SLIDER_X + ScreenSlider::TRACK_LEFT_OFFSET + (ScreenSlider::TRACK_SPAN * before) / 99;
-                const int32_t y = OptionsScreen::SLIDER_Y[i] + 8;
-                const int32_t target_x = thumb_x + (before > 50 ? -60 : 60);
-                const auto from = at_screen(thumb_x, y);
-                const auto to = at_screen(target_x, y);
-                rig.hud.handle_mouse_motion(from.first, from.second, rig.sim, rig.cam);
-                rig.hud.handle_mouse_down(from.first, from.second, SDL_BUTTON_LEFT, rig.sim, rig.cam);
-                rig.hud.handle_mouse_motion(to.first, to.second, rig.sim, rig.cam);
-                rig.hud.update(rig.sim.get_world_state(), 1);              // the poll re-feeds the same position: the drag goes on
-                rig.hud.handle_mouse_up(to.first, to.second, SDL_BUTTON_LEFT, rig.sim, rig.cam);
-                check(before > 50 ? *values[i] < before - 20 : *values[i] > before + 20, at + "slider " + std::to_string(i) + ": press on the thumb, drag, poll, release: the value moved from " + std::to_string(before) + " to " + std::to_string(*values[i]));
-            }
-            // an edit field takes the focus and the typed text
-            {
-                const auto p = at_screen(OptionsScreen::EDIT_X[2] + 20, OptionsScreen::EDIT_Y[2] + 5);
-                press_update_release(rig, p.first, p.second, 1);
-                rig.hud.handle_text_input("Q");
-                check(!rig.hud.options().quick_chat[2].empty() && rig.hud.options().quick_chat[2].back() == 'Q', at + "the F11 field: a click at its place gives it the focus and it takes the typed letter");
-            }
-            check(rig.hud.is_options_open(), at + "(the window is still open: nothing but Return closes it)");
-        }
-        // --- the windows opened the way a player opens them: by CLICKING the HUD's own Options and Help buttons (press, release, an update between every event), then Return (the web build's
-        //     report: after the click on Options a click on Return did nothing, even a second one, in 16:9; Ctrl+O first did not show it)
+        // --- the quick help opened the way a player opens it: by CLICKING the HUD's own Help button (press, release, an update between every event), then Return (the web build's report: after
+        //     the click on a button a click on Return did nothing, even a second one, in 16:9); and the Options button, which asks for the settings menu in the same way
         {
             HudRig rig(arc, layout);
             auto step = [&](int32_t x, int32_t y, bool down_event, bool up_event) {
@@ -674,15 +569,11 @@ void test_window_controls_through_update(const assets::AssetArchive& arc) {
                     rig.hud.update(rig.sim.get_world_state(), 1);
                 }
             };
+            int asked = 0;
+            rig.hud.set_on_menu_request([&] { ++asked; });
             const UIButton opt = rig.hud.options_button();
             step(opt.x + opt.w / 2, opt.y + opt.h / 2, true, true);
-            check(rig.hud.is_options_open() && !rig.hud.options_button().is_pressed, at + "a click on the HUD's Options button opens the options window (updates between every event)");
-            // a few frames of the pointer resting on the window's Return, then the click
-            const int32_t rx = 351 + o.x + 40, ry = 425 + o.y + 12;
-            step(rx, ry, false, false);
-            check(rig.hud.is_options_open(), at + "(the window is still open while the pointer rests on Return)");
-            step(rx, ry, true, true);
-            check(!rig.hud.is_options_open(), at + "the first click on Return closes the window that the Options button opened");
+            check(asked == 1 && !rig.hud.options_button().is_pressed && !rig.hud.is_modal_open(), at + "a click on the HUD's Options button asks for the settings menu once (updates between every event) and opens no window of the HUD's");
             const UIButton help = rig.hud.help_button();
             step(help.x + help.w / 2, help.y + help.h / 2, true, true);
             check(rig.hud.is_quick_help_open() && !rig.hud.help_button().is_pressed, at + "a click on the HUD's Help button opens the quick help");
@@ -690,12 +581,11 @@ void test_window_controls_through_update(const assets::AssetArchive& arc) {
             step(qx, qy, false, false);
             step(qx, qy, true, true);
             check(!rig.hud.is_quick_help_open(), at + "the first click on its Return closes it");
-            // and again: the same buttons open them a second time and Return closes them a second time
-            step(opt.x + opt.w / 2, opt.y + opt.h / 2, true, true);
-            step(rx, ry, true, true);
-            check(!rig.hud.is_options_open(), at + "the Options button and Return a second time: closed");
-            // the click that closes a window does not act on the HUD under it: the pointer is over the map there, the selection and the pedestals stay as they were
-            check(!rig.hud.is_quick_help_open() && !rig.hud.is_options_open(), at + "no window is left open");
+            // and again: the same button opens it a second time and Return closes it a second time
+            step(help.x + help.w / 2, help.y + help.h / 2, true, true);
+            check(rig.hud.is_quick_help_open(), at + "the Help button opens the quick help a second time");
+            step(qx, qy, true, true);
+            check(!rig.hud.is_quick_help_open() && asked == 1, at + "Return closes it a second time, and no window is left open");
         }
         // --- the quick help
         {
@@ -705,10 +595,8 @@ void test_window_controls_through_update(const assets::AssetArchive& arc) {
             check(!rig.hud.is_quick_help_open(), at + "the quick help's Return: press, three polls, release: it closes");
             if (!is_classic) {
                 rig.hud.open_quick_help();
-                press_update_release(rig, 529 + o.x + 40, 437 + o.y + 12, 3);           // where the OPTIONS window's offset would put it
-                check(rig.hud.is_quick_help_open(), at + "the quick help's Return at the options window's offset does nothing (the quick help has its own place)");
                 press_update_release(rig, 529 + 40, 437 + 12, 3);
-                check(rig.hud.is_quick_help_open(), at + "... nor at its own numbers");
+                check(rig.hud.is_quick_help_open(), at + "the quick help's Return at its own numbers (not moved to its place on screen) does nothing");
             }
         }
     }

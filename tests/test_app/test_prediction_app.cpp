@@ -411,6 +411,7 @@ int main(int argc, char* argv[]) {
         int32_t click_y = psy;
         if (std::abs(dx) >= std::abs(dy)) click_x = psx + (dx > 0 ? 19 : -20);
         else click_y = psy + (dy > 0 ? 15 : -32);
+        app.set_on_game_menu([]() {});                                       // (an Esc with nothing selected asks for the settings menu: this test only wants the deselect)
         const auto deselect = [&]() { app.hud().handle_key_down(SDLK_ESCAPE, app.sim(), app.renderer().camera()); };
         const auto point_at = [&](int32_t x, int32_t y) {
             SDL_MouseMotionEvent motion{};
@@ -688,6 +689,7 @@ int main(int argc, char* argv[]) {
             }
             return true;
         };
+        app.set_on_game_menu([]() {});                                       // (an Esc with nothing selected asks for the settings menu: this test only wants the deselect)
         const auto deselect = [&]() { app.hud().handle_key_down(SDLK_ESCAPE, app.sim(), app.renderer().camera()); };
         bool tried = false;
         const std::pair<int32_t, int32_t> slides[] = {{48, 0}, {-48, 0}, {0, 56}, {0, -56}, {48, 56}, {-48, -56}, {48, -56}, {-48, 56}};
@@ -926,6 +928,7 @@ int main(int argc, char* argv[]) {
         app.render_frame();
         ASSERT_TRUE(app.hud().current_cursor() == CursorType::Attack);
         app.set_others_confirmed(true);
+        app.set_on_game_menu([]() {});                                       // (an Esc with nothing selected asks for the settings menu: this test only wants the deselect)
         app.hud().handle_key_down(SDLK_ESCAPE, app.sim(), app.renderer().camera());        // (deselected, and the pointer back where it rested: the same interface as in the frames before)
         app.handle_mouse_motion(motion);
         app.render_frame();
@@ -973,6 +976,7 @@ int main(int argc, char* argv[]) {
         motion.x = view.x + 30;
         motion.y = view.y + view.h - 30;
         app.handle_mouse_motion(motion);
+        app.set_on_game_menu([]() {});                                       // (an Esc with nothing selected asks for the settings menu: this test only wants the deselect)
         app.hud().handle_key_down(SDLK_ESCAPE, app.sim(), app.renderer().camera());        // (nothing selected: the interface is the same in every frame)
         app.set_others_confirmed(false);
         app.render_frame();

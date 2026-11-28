@@ -25,7 +25,8 @@ int main(int argc, char* argv[]) {
     test_latency_corner(arc);
     test_net_overlay();
     test_connections_overlay(arc);
-    test_more_button_zones(arc);
+    test_more_button_zones();
+    test_corner_without_the_frame_rate();
     test_pedestal_chains(arc);
     test_pedestal_timeline(arc);
     test_minimap(arc);

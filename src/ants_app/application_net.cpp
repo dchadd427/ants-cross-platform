@@ -685,16 +685,28 @@ std::optional<uint32_t> Application::order_delay_ms() const {
 
 // The network's part of the corner (ants_app/latency_corner.hpp): "ping NN ms" while a room or a match of a network game is on screen and the setting Show ping is on. Off, a game of one
 // machine, the loading and quick help screens, a connection that is being made, one that failed or is over draw nothing here (and the ping text that opens the list of connections is not there).
-void Application::render_latency_corner(int32_t version_x, int32_t text_y, const CornerPlate& plate) {
-    if (!network_active() || !menu_settings_.show_ping) return;
+std::optional<int32_t> Application::latency_limit_now() const {
+    if (!network_active() || !menu_settings_.show_ping) return std::nullopt;
     const CornerScreen screen = state_ == AppState::MapSelect ? CornerScreen::Setup
                                 : state_ == AppState::Playing ? (scorecard_.is_open() ? CornerScreen::Results : CornerScreen::Match)
                                                               : CornerScreen::Other;
-    const std::optional<int32_t> left_limit = latency_left_limit(true, net_->phase(), screen, layout_);
+    return latency_left_limit(true, net_->phase(), screen, layout_);
+}
+
+void Application::render_latency_corner(int32_t version_x, int32_t text_y, const CornerPlate& plate, const std::optional<int32_t>& left_limit, bool in_the_fps_place) {
     if (!left_limit) return;
+    const CornerScreen screen = state_ == AppState::MapSelect ? CornerScreen::Setup
+                                : state_ == AppState::Playing ? (scorecard_.is_open() ? CornerScreen::Results : CornerScreen::Match)
+                                                              : CornerScreen::Other;
     const std::optional<uint32_t> ping_ms = net_->ping_ms();
-    last_latency_layout_ = latency_corner_layout(*renderer_, ping_ms, version_x, text_y, *left_limit, plate);
-    draw_latency_corner(*renderer_, ping_ms, version_x, text_y, *left_limit, plate);
+    if (in_the_fps_place) {                                                // (the frame rate is off: the readout stands where its number stood, right aligned at the corner's edge)
+        const int32_t w = renderer_->get_text_width(ping_text(ping_ms), FontSize::Px12);
+        last_latency_layout_ = LatencyCornerLayout{false, plate.right_edge - w, text_y};
+        renderer_->draw_text(ping_text(ping_ms), last_latency_layout_->ping_x, text_y, ants::assets::ColorRGBA{255, 255, 255, 255}, FontSize::Px12);
+    } else {
+        last_latency_layout_ = latency_corner_layout(*renderer_, ping_ms, version_x, text_y, *left_limit, plate);
+        draw_latency_corner(*renderer_, ping_ms, version_x, text_y, *left_limit, plate);
+    }
     if (screen == CornerScreen::Match) {                                   // the ping text opens the list of connections (a few pixels of margin: a finger's tap)
         const int32_t w = renderer_->get_text_width(ping_text(ping_ms), FontSize::Px12);
         connections_hit_ = LayoutRect{last_latency_layout_->ping_x - 4, last_latency_layout_->ping_y - 4, w + 8, font_cell_height(FontSize::Px12) + 8};

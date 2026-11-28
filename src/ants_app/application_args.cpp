@@ -52,7 +52,7 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
     // screenshot) says so here and skips the menu; the options that only set something up (--name, --settings, --seed, --team-name, --title, the window options ...) do not
     bool mode_given = false;
     bool menu_forced = false;
-    bool direct_match = false;                                                 // --map, --open-options, --scorecard: a match starts at once (the menu cannot come first)
+    bool direct_match = false;                                                 // --map, --open-menu, --scorecard: a match starts at once (the menu cannot come first)
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--headless") == 0) {
             cfg.headless = true;
@@ -86,8 +86,8 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             if (whole_number(argv[++i], -1, INT_MAX, team)) cfg.select_base_team = static_cast<int>(team);
             else refuse_number(cfg, "--select-base", argv[i], "the number of a team");
             mode_given = true;
-        } else if (std::strcmp(argv[i], "--open-options") == 0) {
-            cfg.open_options = true;
+        } else if (std::strcmp(argv[i], "--open-menu") == 0) {
+            cfg.open_menu = true;
             cfg.start_in_map_select = false;
             mode_given = direct_match = true;
         } else if (std::strcmp(argv[i], "--show-grid") == 0) {
@@ -291,6 +291,14 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
                 ++i;
                 cfg.show_ping_given = true;
             }
+        } else if (std::strcmp(argv[i], "--show-fps") == 0) {                    // --show-fps on | off: the frame rate and its graph in the corner of the screen
+            if (i + 1 >= argc || !parse_switch(argv[i + 1], cfg.show_fps)) {
+                if (cfg.startup_error.empty()) cfg.startup_error = "--show-fps needs on or off";
+                if (i + 1 < argc) ++i;
+            } else {
+                ++i;
+                cfg.show_fps_given = true;
+            }
         } else if (std::strcmp(argv[i], "--zoom") == 0) {                        // --zoom 0.05 .. 2: the zoom of the map view that a match starts with, the nearest level that its map offers (view_zoom.hpp)
             std::string why;
             if (i + 1 >= argc) {
@@ -389,7 +397,7 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
     if (menu_forced) {
         // The menu comes first and chooses the match: an option that starts a match or a room at once cannot be combined with it, nor can --alone, which decides who plays (the menu's Single player does)
         if ((direct_match || cfg.net_role != ApplicationConfig::NetRole::None) && cfg.startup_error.empty()) {
-            cfg.startup_error = "--start-menu cannot be combined with --map, --open-options, --scorecard, --host, --join or --join-url: they start a match or a room at once";
+            cfg.startup_error = "--start-menu cannot be combined with --map, --open-menu, --scorecard, --host, --join or --join-url: they start a match or a room at once";
         } else if (cfg.alone && cfg.startup_error.empty()) {
             cfg.startup_error = "--start-menu cannot be combined with --alone: the menu's Single player chooses who plays.";
         }

@@ -525,14 +525,14 @@ void test_dialogs_and_catch_up() {
         check(lit_share(p) > 0.4, nm(to) + ": a frame with the dialog is drawn (" + std::to_string(lit_share(p)) + ")");
     }
     app.hud().dismiss_match_start_modal();
-    app.hud().open_options();
-    check(app.hud().is_options_open(), "the options window is open");
+    app.hud().open_quick_help();
+    check(app.hud().is_quick_help_open(), "the quick help is open");
     for (const Aspect to : kShapes) {
-        check(app.set_aspect(to), nm(to) + ": set_aspect says yes (options)");
-        check(app.hud().is_options_open(), nm(to) + ": the options window is still open");
-        check(lit_share(frame_of(app)) > 0.4, nm(to) + ": a frame with the options window is drawn");
+        check(app.set_aspect(to), nm(to) + ": set_aspect says yes (quick help)");
+        check(app.hud().is_quick_help_open(), nm(to) + ": the quick help is still open");
+        check(lit_share(frame_of(app)) > 0.4, nm(to) + ": a frame with the quick help is drawn");
     }
-    app.hud().close_options();
+    app.hud().close_quick_help();
     app.hud().open_quit_dialog();
     for (const Aspect to : kShapes) {
         check(app.set_aspect(to), nm(to) + ": set_aspect says yes (quit dialog)");

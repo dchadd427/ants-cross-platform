@@ -4,12 +4,12 @@ script can say without a browser is checked here:
 
   - the page: has no tag and no markup of the menu (the script fetches itself and makes its buttons and panel), loads it once the game runs (the frame of a match page too: its ready callback is run by
     tests/scripts/web_menu_handover_check.js), retries once and then says so in the toast, calls it with the pieces of the page that it needs, and has no key handler of its own for Esc (the game asks, through window.antsGameMenuAsk, when Esc has nothing to cancel);
-  - the script: puts every text in with textContent (no markup is ever written), reads and writes the game only through the five exports of src/ants_app/application_game_menu.cpp, uses the numbers of
+  - the script: puts every text in with textContent (no markup is ever written), reads and writes the game only through the seven exports of src/ants_app/application_game_menu.cpp, uses the numbers of
     game_menu.hpp for rows, facts and acts, handles by name only rows that the C++ table has, listens to nothing outside the panel's life, and leaves the lifts of keys to the game;
   - the style: no button of the menu lies over the picture in fullscreen, on any device (the header, under-the-picture and replay-bar buttons are all that is left), and the list of a section scrolls
     (the pane is the one box of the panel that is held to its row and scrolls), also in fullscreen, where the stage cancels the wheel over its bars (the stage's listener is run on fakes);
   - the table: the two JSON files that the page's check draws from (tests/data/game_menu_*.json, kept equal to the game's own text by test_game_menu) name exactly the rows of the C++ table;
-  - the exports: the five of them are in the game, the page's EM_JS call and the HUD's Esc hook are there;
+  - the exports: the seven of them are in the game, the page's EM_JS call and the HUD's Esc hook are there;
   - the image: carries the script and the style (Dockerfile, build_web.sh, the CI's list of files);
   - the script RUNS on a strict fake of the DOM (node, when it is installed: tests/scripts/web_game_menu_check.js);
   - the browser check (tests/scripts/web_game_menu_check.py, opt-in: tests/scripts/test_web_game_menu.sh): its command line and its skip without a page.
@@ -43,7 +43,7 @@ def read(path):
 
 def table_keys():
     """The names of the rows of the C++ table, in its order"""
-    return re.findall(r'\{k[A-Za-z]+, "([a-z_]+)", Section::', read(TABLE))
+    return re.findall(r'\{k[A-Za-z0-9]+(?: \+ \d)?, "([a-z_]+)", Section::', read(TABLE))
 
 
 class ThePage(unittest.TestCase):
@@ -99,9 +99,9 @@ class TheScript(unittest.TestCase):
         self.assertNotRegex(self.script, r"https?://", "it loads nothing from anywhere but the page's own folder")
         self.assertTrue(all(ord(c) < 128 for c in self.script), "plain ASCII: a character beyond it is written as an escape")
 
-    def test_it_reads_and_writes_the_game_only_through_the_five_exports(self):
+    def test_it_reads_and_writes_the_game_only_through_the_seven_exports(self):
         used = set(re.findall(r"_ants_menu_(\w+)", self.script))
-        self.assertEqual(used, {"describe", "get", "set", "do", "open"})
+        self.assertEqual(used, {"describe", "get", "set", "do", "open", "text", "text_set"})
         glue = read(GLUE)
         for name in used:
             self.assertRegex(glue, r'EMSCRIPTEN_KEEPALIVE [^\n]*ants_menu_%s\(' % name)
@@ -115,9 +115,10 @@ class TheScript(unittest.TestCase):
         self.assertIn("function answered() { return get(101) === 0; }", self.script)
         self.assertEqual(len(re.findall(r"get\(102\)", self.script)), 2, "what Leave game would do: the question and its follow-up")
         acts = dict((k, int(v)) for k, v in re.findall(r"kAct(\w+) = (\d+)", header))
-        self.assertEqual(acts, {"Leave": 1, "QuickHelp": 2, "OptionsWindow": 3})
+        self.assertEqual(acts, {"Leave": 1, "QuickHelp": 2, "Fullscreen": 3})
         self.assertIn("call('_ants_menu_do', 1)", self.script)
-        self.assertIn("row.key === 'quickhelp' ? 2 : 3", self.script)
+        self.assertIn("call('_ants_menu_do', 2)", self.script)
+        self.assertNotIn("call('_ants_menu_do', 3)", self.script, "the window's Fullscreen is the page's own (its button and the browser's permission), never an act of the game")
         self.assertNotIn("kind === 3", self.script, "what asks nothing is the table's word (asks), not a number of the page's")
         self.assertIn("!found.asks", self.script)
         self.assertRegex(header, r"Held = 3,")
@@ -125,7 +126,7 @@ class TheScript(unittest.TestCase):
 
     def test_the_rows_that_it_handles_by_name_are_rows_of_the_table(self):
         keys = set(table_keys())
-        self.assertEqual(len(keys), 18)
+        self.assertEqual(len(keys), 23)
         own = {"touchkeys"}        # (the one row that the page adds to the game's table: the hotkey buttons' Touch buttons, web/touch_keys.js; it needs no game and is not in the table)
         for name in re.findall(r"^\s{12}(\w+): \{$", self.script, re.M):
             if name not in own:
@@ -419,7 +420,7 @@ class TheTable(unittest.TestCase):
 
     def test_the_new_rows_are_tagged_and_only_they(self):
         match = json.loads(read(os.path.join(DATA, "game_menu_match.json")))
-        self.assertEqual([r["key"] for r in match["rows"] if r["new"]], ["master", "mute", "ant_health", "ant_health_style", "health_changes", "show_ping", "hud_art"])
+        self.assertEqual([r["key"] for r in match["rows"] if r["new"]], ["master", "mute", "ant_health", "ant_health_style", "health_changes", "show_fps", "show_ping", "hud_art"])
         self.assertEqual([r["key"] for r in match["rows"] if r["page"]], ["fullscreen", "picture", "lockmouse"])
         self.assertEqual([r["key"] for r in match["rows"] if r["live"]], ["master"])
 

@@ -74,14 +74,6 @@ Pieces check(const hud_art::Art& art, const assets::AssetArchive& assets) {
                                           {"dad_bacc1", "dad_bacc1", kD, kD}, {"dad_bacc2", "dad_bacc1", kD, kD}, {"dad_bacc3", "dad_bacc1", kD, kD},
                                           {"dad_bdec1", "dad_bdec1", kD, kD}, {"dad_bdec2", "dad_bdec1", kD, kD}, {"dad_bdec3", "dad_bdec1", kD, kD},
                                           {"dw_bwith1", "dw_bwith1", kD, kD}, {"dw_bwith2", "dw_bwith1", kD, kD}, {"dw_bwith3", "dw_bwith1", kD, kD}});
-    p.options = art.find_animation("op_window") != nullptr &&
-                all_replace(art, assets, {{"breturn1", "breturn1", 0, 0}, {"breturn2", "breturn1", 0, 0}, {"breturn3", "breturn1", 0, 0},
-                                          {"op_conu", "op_conu", 0, 0}, {"op_conr", "op_conu", 0, 0}, {"op_cond", "op_conu", 0, 0}, {"op_condr", "op_conu", 0, 0},
-                                          {"op_coffu", "op_coffu", 0, 0}, {"op_coffr", "op_coffu", 0, 0}, {"op_coffd", "op_coffu", 0, 0}, {"op_coffdr", "op_coffu", 0, 0},
-                                          {"op_honu", "op_honu", 0, 0}, {"op_honr", "op_honu", 0, 0}, {"op_hond", "op_honu", 0, 0}, {"optondr", "op_honu", 0, 0},
-                                          {"op_hoffu", "op_hoffu", 0, 0}, {"op_hoffr", "op_hoffu", 0, 0}, {"op_hoffd", "op_hoffu", 0, 0}, {"op_hoffdr", "op_hoffu", 0, 0}}) &&
-                art.find_animation("op_conh") != nullptr && art.find_animation("op_coffh") != nullptr && art.find_animation("op_honh") != nullptr && art.find_animation("op_hoffh") != nullptr &&
-                has_sprites(art, {"op_thumb_up", "op_thumb_hover", "op_thumb_held"});
     p.quick_help = art.find_animation("qh_window") != nullptr && all_replace(art, assets, {{"qh_return1", "qh_return1", 0, 0}, {"qh_return2", "qh_return1", 0, 0}, {"qh_return3", "qh_return1", 0, 0}}) &&
                    assets.find_sprite_id("qh1.bmp") >= 0 && assets.find_sprite_id("qh2.bmp") >= 0;
     p.countdown = art.find_animation("cd_card") != nullptr && art.find_animation("cd_row") != nullptr &&
@@ -114,15 +106,19 @@ bool has_results_page(const hud_art::Art& art) {
            size_is("sc_well_b", scorecard_layout::kWellRun, c) && size_is("sc_well_l", c, scorecard_layout::kWellRunY) && size_is("sc_well_r", c, scorecard_layout::kWellRunY);
 }
 
-bool has_fullscreen_button(const hud_art::Art& art) noexcept {
-    return has_sprites(art, {"button_fullscreen_up", "button_fullscreen_hover", "button_fullscreen_down", "button_fullscreen_leave_up", "button_fullscreen_leave_hover", "button_fullscreen_leave_down"});
+bool has_menu_panel(const hud_art::Art& art) {
+    if (!art.loaded() || !hud_art::has_panel(art)) return false;
+    if (!has_sprites(art, {"sc_well_tl", "sc_well_t", "sc_well_tr", "sc_well_l", "sc_well_r", "sc_well_bl", "sc_well_b", "sc_well_br", "op_on_up", "op_on_hover", "op_on_down", "op_on_chosen", "op_on_chosen_hover",
+                           "op_off_up", "op_off_hover", "op_off_down", "op_off_chosen", "op_off_chosen_hover", "op_thumb_up", "op_thumb_hover", "op_thumb_held"})) return false;
+    for (const char* state : {"up", "hover", "down"}) {
+        const std::string st = state;
+        if (!has_sprites(art, {("sc_sm_l_" + st).c_str(), ("sc_sm_m_" + st).c_str(), ("sc_sm_r_" + st).c_str()})) return false;
+    }
+    return true;
 }
 
-std::array<LayoutRect, 4> veil_bands(const LayoutRect& picture, const LayoutRect& card) noexcept {
-    return {LayoutRect{picture.x, picture.y, picture.w, card.y - picture.y},
-            LayoutRect{picture.x, card.y + card.h, picture.w, picture.y + picture.h - (card.y + card.h)},
-            LayoutRect{picture.x, card.y, card.x - picture.x, card.h},
-            LayoutRect{card.x + card.w, card.y, picture.x + picture.w - (card.x + card.w), card.h}};
+bool has_fullscreen_button(const hud_art::Art& art) noexcept {
+    return has_sprites(art, {"button_fullscreen_up", "button_fullscreen_hover", "button_fullscreen_down", "button_fullscreen_leave_up", "button_fullscreen_leave_hover", "button_fullscreen_leave_down"});
 }
 
 std::vector<std::string> draw_sentence(IRenderer& renderer, const std::string& text, const SentenceStyle& style, int32_t centre_x, int32_t top) {

@@ -40,6 +40,7 @@
 #include "ants_app/config_store.hpp"
 #include "ants_app/fps_overlay.hpp"
 #include "ants_app/game_menu.hpp"
+#include "ants_app/game_menu_panel.hpp"
 #include "ants_app/health_changes.hpp"
 #include "ants_app/live_match_stats.hpp"
 #include "ants_app/connections_overlay.hpp"
@@ -80,8 +81,8 @@ struct ApplicationConfig {
     /// Application::set_aspect). 4:3 is the original's fixed 640 x 480 canvas; every other row is 960 x 540 or more (3:2 960 x 640, 16:10 960 x 600, 20:9 1200 x 540, 21:9 1260 x 540, 32:9 1920 x 540: the 16:9 match screen with a taller or a wider map view; each page is the
     /// 960 x 540 one, centred in the canvas); 16:9 is a fixed 960 x 540 canvas, in which the match screen is the wide frame (a 762 x 500 map view, the right panel pinned to the right edge: shell_layout.hpp) and every screen outside a match is
     /// composed for the whole canvas from the original's own art: the setup screen and the room (setup_layout.hpp, with a map preview), the loading screen and the quick help at the start
-    /// (page_layout.hpp), the results (results_layout.hpp) and the desktop start menu (start_menu.hpp), all on the wide pages' clay and frame (wide_page.hpp); the options window and the quick help of
-    /// a match sit over the map view with the frame around them. SDL scales the canvas into the window by
+    /// (page_layout.hpp), the results (results_layout.hpp) and the desktop start menu (start_menu.hpp), all on the wide pages' clay and frame (wide_page.hpp); the quick help of
+    /// a match sits over the map view with the frame around it. SDL scales the canvas into the window by
     /// the largest scale that fits (whole when the window is a multiple of the canvas, else fractional), centred, with bars; a window of an aspect opens at the largest scale in steps of 0.5
     /// of the canvas that fits the display's usable area, at least 1x (--window-size and --grid still win; a game that starts in fullscreen has this size for the way back, Alt+Enter),
     /// and fullscreen is the same canvas filling as much of the monitor as fits. A desktop game that is
@@ -117,6 +118,9 @@ struct ApplicationConfig {
     /// `show_ping_given` is true when the command line said it (the settings key then does not count, and it is not written).
     bool show_ping{false};
     bool show_ping_given{false};
+    /// --show-fps on | off (the settings key `show_fps` when the command line does not say): whether the corner shows the frame rate and its graph (the version stays). Off by default.
+    bool show_fps{false};
+    bool show_fps_given{false};
     bool headless{false};
     std::string chd_path{"Original-Ants/ants.chd"};
     std::string maps_dir{"Original-Ants/Maps"};     // the folder whose `*.lvl` files are the map list (the original searches its Maps folder)
@@ -142,7 +146,7 @@ struct ApplicationConfig {
     int screenshot_frames{5};
     int select_ant_id{-1};
     int select_base_team{-1};
-    bool open_options{false};
+    bool open_menu{false};
     bool show_tile_grid{false};
     bool show_scorecard{false};
     uint8_t local_player_id{0};
@@ -230,7 +234,7 @@ struct ApplicationConfig {
     std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)> bot_factory;
     /// The desktop start menu (README "Start menu"): after the loading screen and before the quick help, Single player (with computer players per seat), Join with a code, Host an online
     /// match, Quit. parse_arguments turns it on for a native game that is started without a mode on the command line (no --map, --map-select, --host, --join, --join-url, --room, --token,
-    /// --seat, --bot, --headless, --screenshot, --player / -pnum, --select-ant, --select-base, --open-options, --scorecard) and with --start-menu, which forces it (also headless, for the tests
+    /// --seat, --bot, --headless, --screenshot, --player / -pnum, --select-ant, --select-base, --open-menu, --scorecard) and with --start-menu, which forces it (also headless, for the tests
     /// and the screenshots). A config that is made by hand has it off, which is the game without a menu exactly; the web build never shows it (its page has its own controls).
     bool start_menu{false};
     /// --server wss://HOST[/PATH] or HOST[:PORT]: the game server of the menu's Join and Host. Empty: the settings key `server`, else wss://beta.playants.org/ws (start_menu.hpp parse_server).
@@ -434,20 +438,23 @@ public:
     void game_menu_set_open(bool open);
     bool game_menu_is_open() const noexcept { return game_menu_open_; }
     const std::string& game_menu_describe();
+    /// The text of a Quick Chat row (game_menu::kQuickChat1 .. kQuickChat4) and a change of it (printable ASCII, at most 100 characters; it is kept and written to the profile)
+    std::string game_menu_text(int id) const;
+    void game_menu_set_text(int id, const std::string& text);
+    /// The page types a Quick Chat text one character at a time (ants_menu_text_set): `index` 0 starts the text, a character code adds one (printable ASCII only), -1 keeps the text that was made
+    bool game_menu_text_edit(int id, int index, int code);
+    /// The desktop's drawn panel (game_menu_panel.hpp): it opens with Esc, Ctrl+O and the Options button where the browser has the page's own; the same rules say when it may open and when it closes
+    GameMenuPanel& game_menu_panel() noexcept { return *menu_panel_; }
+    void open_game_menu_panel();
     const game_menu::MenuSettings& menu_settings() const noexcept { return menu_settings_; }
     const hud_art::Art& hud_art() const noexcept { return hud_art_; }
     const health::ChangeTracker& health_changes() const noexcept { return health_changes_; }      // the live damage and heal numbers (empty while the setting is Off)
-    /// A PHONE'S KEYBOARD for the match's chat box and the options window's four quick chat fields (application_touch.cpp; the page, web/shell.html "ANTS_CHAT", opens the browser's keyboard when a
-    /// finger taps a box and hands the game what is typed, through these and the exports ants_chat_probe / ants_chat_do): a box takes text now (a match is on the screen, no recording, no
-    /// catch-up screen, and either the options window is open, or chat is on and no dialog is open)
+    /// A PHONE'S KEYBOARD for the match's chat box (application_touch.cpp; the page, web/shell.html "ANTS_CHAT", opens the browser's keyboard when a finger taps the box and hands the game what
+    /// is typed, through these and the exports ants_chat_probe / ants_chat_do): the box takes text now (a match is on the screen, no recording, no catch-up screen, chat is on and no dialog is open)
     bool web_chat_available() const noexcept;
-    /// ... which boxes there are: 0 the chat box, 1 the four fields of the options window (the window is open: it has the screen and the chat box has none)
-    int web_text_mode() const noexcept;
     /// ... the chat box where a finger taps, in the CANVAS's pixels (the picture sits in the canvas: picture().x / y)
     LayoutRect web_chat_box() const noexcept;
-    /// ... the options window's field `index` (0 - 3: F9 - F12), in the same pixels (an empty rectangle for no such field)
-    LayoutRect web_options_field(size_t index) const noexcept;
-    /// ... the line that the keyboard edits: the HUD's chat line, or the text of the options field with the focus (empty when none has it)
+    /// ... the line that the keyboard edits: the HUD's chat line
     std::string web_text_line() const;
     /// Protocol 21, for the page (ants_probe 60 - 64): the seconds that the countdown has left (-1 when no countdown card is up) and the place of the Fullscreen button on it, in the page's canvas pixels
     int32_t countdown_seconds_left() const noexcept;
@@ -457,10 +464,8 @@ public:
     bool fullscreen_now() const noexcept;
     void set_page_fullscreen(bool on) noexcept { page_fullscreen_ = on; }
     int countdown_probe(int what) const noexcept;         // ants_probe 60 - 65: the two above, the button's x, y, width and height, and the lines of the chat log (application_net.cpp)
-    /// ... and the page edits the HUD's chat line, or the options field with the focus (the game's own line stays the one that is shown and sent): what 0 clear, 1 add the printable ASCII character
-    /// `value`, 2 Backspace, 3 Enter (a key press through SDL's queue: the same path as a keyboard's, so [All] / [Team] and the rules of the HUD are the game's; in the options window it closes
-    /// the window), 4 give the options field `value` the focus, 5 write the options field's text to the profile (what 0 - 2 left in it is shown at once and written here). Returns false when no
-    /// box takes anything (web_chat_available), and for 4 and 5 outside the options window
+    /// ... and the page edits the HUD's chat line (the game's own line stays the one that is shown and sent): what 0 clear, 1 add the printable ASCII character `value`, 2 Backspace, 3 Enter (a key press
+    /// through SDL's queue: the same path as a keyboard's, so [All] / [Team] and the rules of the HUD are the game's). Returns false when the box takes nothing (web_chat_available)
     bool web_chat_do(int what, int value);
     /// Is a touch device's finger one of the model's? Not a platform's own touch made from the mouse, and not a trackpad's (a touch screen counts, and so does a device that SDL does not know: a test's)
     static bool counts_as_finger(SDL_TouchID device, SDL_TouchDeviceType kind) noexcept;
@@ -800,6 +805,9 @@ private:
     std::string game_menu_json_;                          // what ants_menu_describe hands to the page (it stays until the next call)
     bool game_menu_open_{false};                          // the page's settings panel is up: the game takes no input
     bool game_menu_closing_{false};                       // ... and is closed: input comes back after this frame's events
+    std::unique_ptr<GameMenuHost> menu_host_;             // what the drawn panel asks of the game
+    std::unique_ptr<GameMenuPanel> menu_panel_;           // the desktop's settings menu (game_menu_panel.hpp)
+    std::array<std::string, 4> menu_text_;                // a Quick Chat text that the page is typing (game_menu_text_edit)
     bool replay_live_{false};                             // --replay-live: it follows a recording that is still being made (until the file is complete or the page says LiveOver)
     std::unique_ptr<replay::Replay> replay_file_;         // its file (null: it could not be read)
     ants::assets::LevelData replay_level_;                // its map, as the file names it
@@ -932,7 +940,11 @@ private:
     bool match_held() const;                              // a seat is missing, the countdown runs or the link is on its way back (confirm_quit and Leave game)
     int game_menu_leave_kind() const;                     // game_menu::LeaveKind of Leave game now
     bool game_menu_takes(const SDL_Event& event) const noexcept;   // the panel is up and the event is one that the game does not take (the keys, text, clicks and wheel)
-    void end_game_menu_frame();                           // the panel was closed: the game takes input again after the events of this frame
+    void end_game_menu_frame();
+    void make_game_menu_panel();                          // the drawn panel and what it asks the game through (application_game_menu.cpp)
+    void update_game_menu_panel();                        // once a frame: it follows the picture, and closes when the match has nothing to offer it any more
+    bool feed_game_menu_panel(const SDL_Event& event);    // an event of the window while the panel is up: the panel's (true when it was one that the panel takes)
+    void render_game_menu_panel();                           // the panel was closed: the game takes input again after the events of this frame
 
     // The desktop start menu (application_menu.cpp)
     void init_start_menu();                               // the menu's settings, server, clipboard and callbacks (when this run has a menu)
@@ -982,7 +994,8 @@ private:
     NetOverlayMetrics net_overlay_metrics(const NetOverlayLine& line) const;    // the renderer's width of every text of the overlay
     bool handle_vote_key(const SDL_KeyboardEvent& key);   // F2 / F3 while a vote is open
     bool handle_vote_mouse(const SDL_MouseButtonEvent& button);   // a click on a button of the vote block
-    void render_latency_corner(int32_t version_x, int32_t text_y, const CornerPlate& plate);       // "ping NN ms" next to the frame rate, in a room and a match of a network game, while Show ping is on
+    void render_latency_corner(int32_t version_x, int32_t text_y, const CornerPlate& plate, const std::optional<int32_t>& limit, bool in_the_fps_place);
+    std::optional<int32_t> latency_limit_now() const;                                               // where the readout may stand on this screen, when it is shown at all       // "ping NN ms" next to the frame rate, in a room and a match of a network game, while Show ping is on
     void render_connections();                            // the list of connections over the map view of a match of a network game, when it is open (connections_overlay.hpp)
     bool handle_connections_mouse(const SDL_MouseButtonEvent& button);   // a press and a release on the corner's ping text open and close the list (nothing of it reaches the map)
     std::optional<LatencyCornerLayout> last_latency_layout_;                                         // where the last frame put the network's readout (none: it drew none)

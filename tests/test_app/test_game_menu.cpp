@@ -1,10 +1,11 @@
-// The settings menu that Esc opens (src/ants_app/game_menu.cpp, application_game_menu.cpp; docs/GAME_MENU.md; the page's side is tests/scripts/test_web_game_menu.py):
+// The settings menu that Esc, Ctrl+O and the Options button open (src/ants_app/game_menu.cpp, application_game_menu.cpp; docs/GAME_MENU.md; the page's side is tests/scripts/test_web_game_menu.py, the
+// desktop's drawn panel is test_game_menu_panel.cpp):
 //   * the one table of rows: ids and names are unique, every text is plain (no markup), the JSON that the page gets is valid for a match and for a recording, in the browser and in the desktop build,
-//     and a recording has no Game section;
+//     and a recording has no Game and no Quick Chat section; the Controls list and the Quick Chat texts are in it;
 //   * Leave game: what it does in every state (a forfeit with one opponent left, a drop out with more, the match held, a recording) and the words that ask;
-//   * the new settings (Master volume, Mute, the ant health marks, Show ping): read with the original's reader, written under their own names, the old hit point numbers read once as Off, and the gain they make;
+//   * the new settings (Master volume, Mute, the ant health marks, Show FPS, Show ping): read with the original's reader, written under their own names, the old hit point numbers read once as Off, and the gain they make;
 //   * Esc: it cancels what is open or selected first, and asks for the menu only when there was nothing, only on a first press, never over a dialog that needs its answer;
-//   * what the panel changes is what the original's options window shows (the same state, stored under the original's names), and a change of Ctrl+L is remembered;
+//   * what the panel changes is the original's options (the same state, stored under the original's names: the four quick chat texts too), and a change of Ctrl+L is remembered;
 //   * while the panel is up the game takes no key, text or click, does not scroll at the edges and sees no finger; closing gives the input back after the events that were queued;
 //   * Leave game goes through the quit dialog's Yes.
 // Usage: test_game_menu. Exit code 0 when every check passes.
@@ -30,6 +31,9 @@ using namespace ants;
 using namespace ants::app;
 using namespace zoomtest;
 namespace gm = ants::app::game_menu;
+
+/// The desktop's drawn panel (test_game_menu_panel.cpp): adds its checks to the count and returns the number that failed
+int test_menu_panel(int& checks);
 
 namespace {
 
@@ -119,7 +123,7 @@ void test_table() {
     std::printf("[table] the one list of rows\n");
     size_t count = 0;
     const gm::Row* rows = gm::rows(count);
-    check(count == 18, "eighteen rows");
+    check(count == 23, "twenty-three rows");
     for (size_t i = 0; i < count; ++i) {
         const gm::Row& row = rows[i];
         check(gm::find_row(row.id) == &row, std::string("row ") + row.key + " is found by its id");
@@ -141,7 +145,7 @@ void test_table() {
               "the picture row has one word for each row of the shape table, in its order, and the web's default shape as its default");
         check(picture != nullptr && std::string(picture->hint) == "The shape of the picture; the match goes on", "the picture row's hint says what the dropdown does (the page lists the shapes, from its own copy of the table)");
     }
-    check(gm::find_row(0) == nullptr && gm::find_row(19) == nullptr && gm::find_row(-1) == nullptr, "no other id is a row");
+    check(gm::find_row(0) == nullptr && gm::find_row(13) == nullptr && gm::find_row(25) == nullptr && gm::find_row(-1) == nullptr, "no other id is a row (13 was the original's options window: it is gone)");
     check(gm::find_row(gm::kMaster)->def == 100 && gm::find_row(gm::kMusic)->def == 65 && gm::find_row(gm::kEffects)->def == 100 && gm::find_row(gm::kScroll)->def == 50, "the defaults are the original's (Master 100: nothing changes)");
     check((gm::find_row(gm::kMaster)->show & gm::kShowNew) && (gm::find_row(gm::kMute)->show & gm::kShowNew) && (gm::find_row(gm::kAntHealth)->show & gm::kShowNew) && (gm::find_row(gm::kHealthStyle)->show & gm::kShowNew) && (gm::find_row(gm::kHealthChanges)->show & gm::kShowNew) && (gm::find_row(gm::kShowPing)->show & gm::kShowNew) && (gm::find_row(gm::kHudArt)->show & gm::kShowNew) && !(gm::find_row(gm::kMusic)->show & gm::kShowNew), "exactly the five new rows carry the new tag");
     {   // Damage & heal numbers: one On / Off row in Video right after "Show health as", on by default, in a match and while watching, in both skins
@@ -158,7 +162,52 @@ void test_table() {
         }
         check(style_at < n_rows && row_at == style_at + 1, "...right after Show health as");
     }
-    {   // Show ping: one On / Off switch in Video right after the damage and heal numbers, Off by default, in a match of a seat and not in a recording, in both skins
+    {   // Show FPS: one On / Off switch in Video right after the damage and heal numbers, Off by default, in a match and in a recording (a recording has a corner), in both skins
+        const gm::Row* row = gm::find_row(gm::kShowFps);
+        check(row != nullptr && std::string(row->key) == "show_fps" && std::string(row->label) == "Show FPS" && row->section == gm::Section::Video && row->kind == gm::Kind::Switch &&
+                  row->def == 0 && row->min == 0 && row->max == 1 && std::string(row->words) == "On|Off" && (row->show & gm::kShowWatch) && (row->show & gm::kShowWeb) && (row->show & gm::kShowDesktop) && (row->show & gm::kShowNew),
+              "the Show FPS row: a switch in Video, Off by default, in both skins, tagged new, and in a recording");
+        size_t n_rows = 0;
+        const gm::Row* all = gm::rows(n_rows);
+        size_t changes_at = n_rows, row_at = n_rows;
+        for (size_t i = 0; i < n_rows; ++i) {
+            if (all[i].id == gm::kHealthChanges) changes_at = i;
+            if (all[i].id == gm::kShowFps) row_at = i;
+        }
+        check(changes_at < n_rows && row_at == changes_at + 1, "...right after Damage & heal numbers");
+    }
+    {   // the Quick Chat section: a line, and four text rows (F9 to F12) with the original's defaults, in a match of a seat only, in both skins
+        const std::vector<gm::SectionInfo> match = gm::sections_for(false), watch = gm::sections_for(true);
+        check(match.size() == 5 && std::string(match[4].id) == "quickchat" && std::string(match[4].label) == "Quick Chat" && watch.size() == 3, "five sections in a match, Quick Chat the last, and three in a recording");
+        for (const bool web : {true, false}) {
+            const std::vector<const gm::Row*> chat_rows = gm::rows_for(gm::Section::QuickChat, false, web);
+            check(chat_rows.size() == 5 && chat_rows[0]->kind == gm::Kind::Info && std::string(chat_rows[0]->key) == "quickchat_note" && gm::rows_for(gm::Section::QuickChat, true, web).empty(), "Quick Chat: a line on top, and nothing in a recording");
+            const char* defaults[4] = {"Now you are in for it!", "Let me be!", "Attack!", "Do you want to ally?"};
+            bool four = chat_rows.size() == 5;
+            for (size_t i = 0; four && i < 4; ++i) {
+                const gm::Row* r = chat_rows[i + 1];
+                four = r->id == gm::kQuickChat1 + static_cast<int>(i) && r->kind == gm::Kind::Text && r->max == gm::kQuickChatMax && std::string(r->words) == defaults[i] && std::string(r->label) == "F" + std::to_string(9 + i);
+            }
+            check(four, "...four text rows, F9 to F12, up to 100 letters, with the original's four messages as their defaults");
+        }
+        check(OptionsState().quick_chat[0] == "Now you are in for it!" && OptionsState().quick_chat[1] == "Let me be!" && OptionsState().quick_chat[2] == "Attack!" && OptionsState().quick_chat[3] == "Do you want to ally?",
+              "(the rows' defaults are the options' defaults)");
+    }
+    {   // the Controls list: the mouse, the touch screen and the keys, in the table; a recording leaves out what it ignores; the key that was the original's options window is this menu now
+        size_t keys = 0, mouse = 0, watch_mouse = 0, touch = 0;
+        const gm::ControlLine* k = gm::control_lines(gm::ControlGroup::Keys, keys);
+        gm::control_lines(gm::ControlGroup::Mouse, mouse);
+        gm::control_lines(gm::ControlGroup::MouseWatch, watch_mouse);
+        gm::control_lines(gm::ControlGroup::Touch, touch);
+        bool menu_key = false, options_word = false;
+        for (size_t i = 0; i < keys; ++i) {
+            menu_key = menu_key || (std::string(k[i].keys) == "Ctrl|O" && std::string(k[i].what) == "This menu");
+            options_word = options_word || std::string(k[i].what).find("options") != std::string::npos;
+        }
+        check(keys == 12 && mouse == 6 && watch_mouse == 4 && touch == 5 && menu_key && !options_word, "the Controls list: twelve keys, six mouse lines, five touch lines, and Ctrl+O opens this menu");
+        check(std::string(gm::controls_note()) == "On a Mac, Cmd works as Ctrl.", "...and the Mac note");
+    }
+    {   // Show ping: one On / Off switch in Video right after Show FPS, Off by default, in a match of a seat and not in a recording, in both skins
         const gm::Row* row = gm::find_row(gm::kShowPing);
         check(row != nullptr && std::string(row->key) == "show_ping" && std::string(row->label) == "Show ping" && row->section == gm::Section::Video && row->kind == gm::Kind::Switch &&
                   row->def == 0 && row->min == 0 && row->max == 1 && std::string(row->words) == "On|Off" && !(row->show & gm::kShowWatch) && (row->show & gm::kShowWeb) && (row->show & gm::kShowDesktop) && (row->show & gm::kShowNew),
@@ -168,10 +217,10 @@ void test_table() {
         const gm::Row* all = gm::rows(n_rows);
         size_t changes_at = n_rows, row_at = n_rows;
         for (size_t i = 0; i < n_rows; ++i) {
-            if (all[i].id == gm::kHealthChanges) changes_at = i;
+            if (all[i].id == gm::kShowFps) changes_at = i;
             if (all[i].id == gm::kShowPing) row_at = i;
         }
-        check(changes_at < n_rows && row_at == changes_at + 1, "...right after Damage & heal numbers");
+        check(changes_at < n_rows && row_at == changes_at + 1, "...right after Show FPS");
     }
     {   // HUD art: one New / Classic choice in Video right after Show ping, New by default, in a match and while watching, in both skins
         const gm::Row* row = gm::find_row(gm::kHudArt);
@@ -196,6 +245,9 @@ void test_table() {
             check(reader.valid(), std::string("the JSON is valid (watching ") + (watching ? "yes" : "no") + ", " + (web ? "web" : "desktop") + ")");
             check(has(json, "\"key\":\"master\"") && has(json, "\"key\":\"mute\"") && has(json, "\"key\":\"ant_health\"") && has(json, "\"key\":\"ant_health_style\"") && has(json, "\"key\":\"health_changes\"") && has(json, "\"key\":\"hud_art\"") && !has(json, "hp_numbers") && has(json, "\"key\":\"scroll\""), "the sound and video rows are there");
             check(has(json, "\"key\":\"show_ping\"") == !watching, "Show ping is in a match of a seat and not in a recording, in both skins");
+            check(has(json, "\"key\":\"show_fps\""), "Show FPS is in a match and in a recording, in both skins");
+            check(has(json, "\"id\":\"quickchat\"") == !watching && has(json, "\"key\":\"quickchat_one\",\"sec\":\"quickchat\",\"kind\":\"text\"") == !watching && !has(json, "options_window"), "the Quick Chat section is in a match and not in a recording, and the original's options window is not a row");
+            check(has(json, "\"controls\":{\"mouse\":[[\"Left click\",\"Select, order\",0]") && has(json, "[\"F9|~to|F12\",\"Quick chat\",1]") && has(json, "\"note\":\"On a Mac, Cmd works as Ctrl.\""), "the Controls list is in the JSON");
             check(has(json, "\"id\":\"controls\"") && has(json, "\"id\":\"sound\"") && has(json, "\"id\":\"video\""), "the Sound, Video and Controls sections are there");
             check(has(json, "\"key\":\"chat\"") == !watching && has(json, "\"id\":\"game\"") == !watching && has(json, "\"key\":\"version\"") == !watching, "the Game section is in a match and not in a recording");
             check(has(json, "\"key\":\"picture\"") == web && has(json, "\"key\":\"lockmouse\"") == web, "the picture's shape and the fullscreen mouse are the browser's rows");
@@ -517,10 +569,9 @@ void test_esc() {
     app.hud().open_quick_help();
     press_key(app, SDLK_ESCAPE);
     check(asked == 3 && !app.hud().is_quick_help_open(), "Esc closes the quick help and asks for nothing");
-    app.hud().open_options();
-    press_key(app, SDLK_ESCAPE);
-    check(asked == 3 && app.hud().is_options_open(), "the original's options window keeps its own Esc (it does nothing) and the menu does not open over it");
-    app.hud().close_options();
+    press_key(app, SDLK_o, KMOD_LCTRL);
+    check(asked == 4, "Ctrl+O asks for the menu too (it opened the original's options window before)");
+    asked = 3;
 
     app.request_game_menu();
     check(asked == 4, "the request itself asks when nothing is open");
@@ -580,10 +631,27 @@ void test_values() {
         check(!app.game_menu_set(gm::kHealthChanges, 2) && !app.game_menu_set(gm::kHealthChanges, -1) && app.game_menu_get(gm::kHealthChanges) == 0, "a word that the row does not have is refused");
         check(app.hud().ant_health().when == health::When::Off && app.game_menu_get(gm::kAntHealth) == 2, "the health marks are their own setting: the numbers do not touch them");
         check(!app.game_menu_set(gm::kFullscreen, 1) && !app.game_menu_set(gm::kVersion, 1) && !app.game_menu_set(77, 1), "what is not the game's is refused");
-        app.hud().open_options();
-        check(app.hud().options_screen().slider(0).value() == ScreenSlider(188, 179, 77).value() && app.hud().options_screen().slider(1).value() == ScreenSlider(188, 216, 30).value() &&
-                  app.hud().options_screen().slider(2).value() == ScreenSlider(188, 253, 12).value(), "the original's window opens on the same sliders (77, 30 and 12 as its thumbs stand for them)");
-        app.hud().close_options();
+        check(app.game_menu_get(gm::kShowFps) == 0 && !app.menu_settings().show_fps, "Show FPS starts Off");
+        check(app.game_menu_set(gm::kShowFps, 1) && app.game_menu_get(gm::kShowFps) == 1 && app.menu_settings().show_fps && has(read_file(file), "show_fps=on\n"), "...goes on, and that is written");
+        check(!app.game_menu_set(gm::kShowFps, 2) && !app.game_menu_set(gm::kShowFps, -1) && app.game_menu_get(gm::kShowFps) == 1, "a word that the row does not have is refused");
+        check(app.game_menu_set(gm::kShowFps, 0) && app.game_menu_get(gm::kShowFps) == 0 && has(read_file(file), "show_fps=off\n"), "...and Off is written");
+        check(app.game_menu_set(gm::kShowFps, 1), "(On again, for the file)");
+        check(app.game_menu_text(gm::kQuickChat1) == "Now you are in for it!" && app.game_menu_text(gm::kQuickChat4) == "Do you want to ally?" && app.game_menu_text(gm::kQuickChat1 - 1).empty() && app.game_menu_text(gm::kQuickChat4 + 1).empty(),
+              "the Quick Chat texts start as the original's four messages; nothing else has a text");
+        app.game_menu_set_text(gm::kQuickChat1 + 1, "Hold the hill!");
+        check(app.game_menu_text(gm::kQuickChat1 + 1) == "Hold the hill!" && app.hud().get_quick_chat_key(1) == "Hold the hill!" && has(read_file(file), "Quick Chat F10=Hold the hill!\n"), "a text is taken, the HUD says it at F10, and it is written under the original's name");
+        app.game_menu_set_text(gm::kQuickChat1 + 2, std::string(120, 'z') + "\x01");
+        check(app.game_menu_text(gm::kQuickChat1 + 2) == std::string(100, 'z'), "a text is held to 100 printable letters");
+        app.game_menu_set_text(7, "no row");
+        check(app.game_menu_text(gm::kQuickChat1) == "Now you are in for it!", "a text of no row is refused");
+        {   // the page types a text one letter at a time: index 0 starts, -1 keeps
+            check(app.game_menu_text_edit(gm::kQuickChat1 + 3, 0, 'H') && app.game_menu_text_edit(gm::kQuickChat1 + 3, 1, 'i') && app.game_menu_text_edit(gm::kQuickChat1 + 3, 2, 0x01) && app.game_menu_text(gm::kQuickChat1 + 3) == "Do you want to ally?",
+                  "a text that the page is typing is not the text until the page keeps it");
+            check(app.game_menu_text_edit(gm::kQuickChat1 + 3, -1, 0) && app.game_menu_text(gm::kQuickChat1 + 3) == "Hi", "...and then it is (a character that is no letter is left out)");
+            check(app.game_menu_text_edit(gm::kQuickChat1 + 3, 0, 0) && app.game_menu_text_edit(gm::kQuickChat1 + 3, -1, 0) && app.game_menu_text(gm::kQuickChat1 + 3).empty(), "a text that the page empties is empty");
+            check(!app.game_menu_text_edit(3, 0, 'a'), "no other row has a text to edit");
+            app.game_menu_set_text(gm::kQuickChat1 + 3, "Do you want to ally?");
+        }
         app.run_frame_with_delta(0.016f);
         press_key(app, SDLK_l, KMOD_LCTRL);
         check(app.hud().ant_health() == health::Setting{health::When::Hurt, health::Style::Number}, "(Ctrl+L turns the marks on again, with the look that was chosen)");
@@ -869,6 +937,68 @@ void test_show_ping_start() {
     }
 }
 
+void test_show_fps_start() {
+    std::printf("[show fps] the settings file and --show-fps\n");
+    const auto start = [](Application& app, bool given, bool on, const std::string& settings) {
+        const QuietStdout quiet;
+        SDL_Init(SDL_INIT_VIDEO);
+        ApplicationConfig cfg = base_config(Aspect::Wide16x9);
+        cfg.screenshot_path = "never_written.png";
+        cfg.screenshot_frames = 1 << 30;
+        cfg.show_fps_given = given;
+        cfg.show_fps = on;
+        cfg.settings_path = settings;
+        return app.init(cfg);
+    };
+    const std::filesystem::path file = std::filesystem::temp_directory_path() / ("ants_show_fps_" + std::to_string(static_cast<long long>(SDL_GetTicks())) + ".ini");
+    {
+        Application app;
+        check(start(app, false, false, std::string()) && !app.menu_settings().show_fps && app.game_menu_get(gm::kShowFps) == 0, "by default the frame rate is not shown");
+    }
+    {
+        Application app;
+        check(start(app, true, true, std::string()) && app.menu_settings().show_fps && app.game_menu_get(gm::kShowFps) == 1, "--show-fps on: shown for this run");
+    }
+    {
+        std::ofstream out(file);
+        out << "show_fps=on\n";
+    }
+    {
+        Application app;
+        check(start(app, false, false, file.string()) && app.menu_settings().show_fps && app.game_menu_get(gm::kShowFps) == 1, "the settings file says on: shown");
+    }
+    {
+        Application app;
+        check(start(app, true, false, file.string()) && !app.menu_settings().show_fps && app.game_menu_get(gm::kShowFps) == 0, "...and --show-fps off says off for this run");
+        check(read_file(file) == "show_fps=on\n", "...and the file is not changed by it");
+    }
+    std::error_code ignored;
+    std::filesystem::remove(file, ignored);
+    {   // the command line
+        std::vector<std::string> args;
+        std::vector<char*> st;
+        const auto parse = [&](std::vector<std::string> a) {
+            args = std::move(a);
+            st.clear();
+            for (std::string& x : args) st.push_back(x.data());
+            st.push_back(nullptr);
+            return Application::parse_arguments(static_cast<int>(args.size()), st.data());
+        };
+        ApplicationConfig c = parse({"ants"});
+        check(!c.show_fps && !c.show_fps_given && c.startup_error.empty(), "the command line says nothing: the settings decide, and the default is off");
+        c = parse({"ants", "--show-fps", "on"});
+        check(c.show_fps && c.show_fps_given && c.startup_error.empty(), "--show-fps on");
+        c = parse({"ants", "--show-fps", "off"});
+        check(!c.show_fps && c.show_fps_given && c.startup_error.empty(), "--show-fps off");
+        c = parse({"ants", "--show-fps", "maybe"});
+        check(c.startup_error == "--show-fps needs on or off" && !c.show_fps_given, "--show-fps with another word is refused with the reason");
+        c = parse({"ants", "--show-fps"});
+        check(c.startup_error == "--show-fps needs on or off", "--show-fps with no word is refused");
+        c = parse({"ants", "--show-fps", "on", "--show-fps", "off"});
+        check(!c.show_fps && c.show_fps_given, "the last one wins");
+    }
+}
+
 void test_input() {
     std::printf("[input] the game takes nothing while the panel is up\n");
     AppRig rig(Aspect::Wide16x9, 1.0f, false, std::string(), true, true);
@@ -995,10 +1125,12 @@ void test_acts() {
         Application& app = rig.app;
         check(app.game_menu_get(gm::kFactLeave) == static_cast<int>(gm::leave_kind(false, false, false, app.sim().other_sides(app.local_player_id()), true)), "Leave game's kind is the model's, from the match as it is");
         check(app.game_menu_do(gm::kActQuickHelp) && app.hud().is_quick_help_open(), "Quick help opens the original's quick help");
-        check(!app.game_menu_do(gm::kActOptionsWindow) && !app.hud().is_options_open(), "...and nothing opens over a dialog that is open");
+        check(!app.game_menu_do(gm::kActQuickHelp) || app.hud().is_quick_help_open(), "...and it opens once");
         app.hud().close_quick_help();
-        check(app.game_menu_do(gm::kActOptionsWindow) && app.hud().is_options_open(), "the options window opens");
-        app.hud().close_options();
+        app.hud().open_quit_dialog();
+        check(!app.game_menu_do(gm::kActQuickHelp) && !app.hud().is_quick_help_open(), "...and nothing opens over a dialog that is open");
+        app.hud().close_quit_dialog();
+        check(app.game_menu_do(gm::kActFullscreen) && app.game_menu_do(gm::kActFullscreen), "...and goes in and out");
         check(!app.game_menu_do(7) && !app.game_menu_do(0), "an act that does not exist does nothing");
         app.game_menu_set_open(true);
         check(app.game_menu_do(gm::kActLeave) && !app.game_menu_is_open(), "Leave game is taken");
@@ -1039,6 +1171,8 @@ int main(int argc, char* argv[]) {
     test_values();
     test_hud_art();
     test_show_ping_start();
+    test_show_fps_start();
+    g_failures += test_menu_panel(g_checks);
     test_input();
     test_acts();
     std::printf("\ngame menu: %d checks, %d failures\n", g_checks, g_failures);

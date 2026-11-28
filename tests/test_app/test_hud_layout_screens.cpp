@@ -3,26 +3,7 @@
 #include "hud_layout_fixtures.hpp"
 
 void test_screens(const assets::AssetArchive& arc) {
-    std::printf("[hud] options, quit, quick help and start screens\n");
-    // Options: op_screen composite only (its own dither), no extra dither grid or card fill
-    {
-        RecordingRenderer rr(arc);
-        sim::WorldState world;
-        HUD hud;
-        hud.init(0);
-        hud.open_options();
-        ViewportCamera camera;
-        hud.render(rr, arc, world, camera);
-        size_t dither200 = 0;
-        for (const auto& s : rr.sprites) if (s.name == "dith200.bmp") ++dither200;
-        const auto* op = arc.find_animation("op_screen");
-        size_t expect = 0;
-        if (op) for (const auto& part : op->subitems[0].frames) if (arc.get_sprite(part.sprite_index).name == "dith200.bmp") ++expect;
-        check(dither200 == expect, "options: only the composite's own dith200 tiles (" + std::to_string(dither200) + " of " + std::to_string(expect) + ")");
-        bool card_fill = false;
-        for (const auto& f : rr.fills) if (f.x == 18 && f.y == 20 && f.w == 442 && f.h == 440) card_fill = true;
-        check(!card_fill, "options: no opaque card fill");
-    }
+    std::printf("[hud] quit, quick help and start screens\n");
     // Quick help: qh_screen composite (qh2 at (267,10), qh1 at (10,9)) + qh_return1, no dim fill
     {
         RecordingRenderer rr(arc);
@@ -669,10 +650,26 @@ void test_button_zones(const assets::AssetArchive& arc) {
     check(FPS_OVERLAY_BOTTOM <= 480 && FPS_OVERLAY_SPARK_Y + font_cell_height(FontSize::Px12) <= 480, "and the plate and the 12 px text end inside the 480 rows");
 }
 
-// The same rule for the other buttons of the class that the release converted: the setup screen's Up, Down and Leave, the results screen's Leave, the options
-// screen's Return; and the host's screen after a cancelled start
-void test_more_button_zones(const assets::AssetArchive& arc) {
-    std::printf("[zones] Up, Down, Leave (setup and results), Return (options): click zones; unlock after a cancelled start\n");
+// The corner with Show FPS off (fps_overlay.hpp, docs/VIEW_AND_HUD.md "The corner"): the version alone stands at the right edge; with the ping on and room for it, the ping takes the frame rate's place and the version stands to its left
+void test_corner_without_the_frame_rate() {
+    std::printf("[corner] Show FPS off: the version at the right edge, the ping in the frame rate's place when it fits\n");
+    const CornerPlate plate = CornerPlate::for_canvas(960, 540);
+    const int32_t ver_w = 40, ping_w = 66, gap = 6;
+    const CornerWithoutFps alone = CornerWithoutFps::of(plate, ver_w, ping_w, gap, std::nullopt);
+    check(alone.version_x == plate.right_edge - ver_w && !alone.ping_in_fps_place, "no ping: the version ends at the plate's right edge");
+    const int32_t beside = plate.right_edge - ping_w - gap - ver_w;
+    const CornerWithoutFps room = CornerWithoutFps::of(plate, ver_w, ping_w, gap, beside);
+    check(room.ping_in_fps_place && room.version_x == beside, "a ping whose left limit leaves exactly the room for both: the ping at the right edge, the version left of it with the gap");
+    const CornerWithoutFps tight = CornerWithoutFps::of(plate, ver_w, ping_w, gap, beside + 1);
+    check(!tight.ping_in_fps_place && tight.version_x == plate.right_edge - ver_w, "one pixel short of room: the version keeps the right edge and the ping its old place left of it");
+    const CornerRow with_fps = CornerRow::of(plate, 50, ver_w, 36, FPS_OVERLAY_SPARK_H, 14);
+    check(with_fps.version_x < alone.version_x && with_fps.fps_x + 50 == plate.right_edge, "with the frame rate on, the row is as it was: the frame rate ends at the right edge and the version is left of the graph");
+}
+
+// The same rule for the other buttons of the class that the release converted: the setup screen's Up, Down and Leave, the results screen's Leave
+// and the host's screen after a cancelled start
+void test_more_button_zones() {
+    std::printf("[zones] Up, Down, Leave (setup and results): click zones; unlock after a cancelled start\n");
     using MS = MapSelectScreen;
     // setup Up: up1 [226, 272) x [299, 321), up3 [224, 271) x [301, 322): the zone is [226, 271) x [301, 321)
     {
@@ -735,22 +732,6 @@ void test_more_button_zones(const assets::AssetArchive& arc) {
         card.handle_mouse_up(530, 20);
         check(left == 3 && !card.is_quit_pressed(), "results Leave: leaving the pressed picture cancels the capture for good");
     }
-    // options Return: breturn1 [351, 449) x [425, 451), breturn3 [353, 450) x [427, 451): the zone is [353, 449) x [427, 451)
-    {
-        ScreenButton ret(ButtonRect{OptionsScreen::RETURN_X, OptionsScreen::RETURN_Y, OptionsScreen::RETURN_W, OptionsScreen::RETURN_H}, OptionsScreen::RETURN_PRESSED);
-        auto fires = [&](int32_t x, int32_t y) {
-            ScreenButton b = ret;
-            b.on_move(x, y);
-            b.on_press(x, y);
-            return b.on_release(x, y);
-        };
-        check(ret.up_rect() == ButtonRect({351, 425, 98, 26}) && ret.pressed_rect() == ButtonRect({353, 427, 97, 24}), "options Return: breturn1 / 2 and breturn3 rectangles");
-        const UIRect r1 = animation_bounds(arc, "breturn1");
-        const UIRect r3 = animation_bounds(arc, "breturn3");
-        check(r1.x == 351 && r1.y == 425 && r1.w == 98 && r1.h == 26 && r3.x == 353 && r3.y == 427 && r3.w == 97 && r3.h == 24, "options Return: the rectangles are the CHD's");
-        check(fires(353, 427) && fires(448, 450) && fires(400, 440), "options Return: fires in [353, 449) x [427, 451)");
-        check(!fires(351, 440) && !fires(400, 425) && !fires(449, 440), "options Return: x = 351, y = 425 and x = 449 fire nothing");
-    }
     // the host's screen after a cancelled start: unlock gives the controls back
     {
         MS screen;
@@ -793,6 +774,52 @@ void test_text_sizes(const assets::AssetArchive& arc) {
         check(header != nullptr && header->size == FontSize::Px12 && chat != nullptr && chat->y == header->y + 12, "hud: chat lines are one 12 px cell apart");
         const auto* mine = find(rr, "Player:");                      // the HUD's default player name
         check(mine != nullptr && mine->size == FontSize::Px14 && mine->x + 7 * 6 == 399 && mine->y == 4, "hud: the own score label is 14 px high, right aligned to x = 399, at the top of its box");
+    }
+    // the score labels show the name, not the clan tag: "[ANTS1] Wolfgang" is "Wolfgang:" (the label holds 15 characters, and the tag used to take seven of them)
+    {
+        RecordingRenderer rr(arc);
+        sim::WorldState world;
+        HUD hud;
+        hud.init(0);
+        hud.set_player_name("[ANTS1] Wolfgang");
+        ViewportCamera camera;
+        hud.render(rr, arc, world, camera);
+        check(find(rr, "Wolfgang:") != nullptr && find(rr, "[ANTS1] Wolfgang:") == nullptr, "hud: the own score label shows the name without the clan tag");
+    }
+    // a name that does not fit its label's box at 14 px is set at 12 px, then at 10 px, and only a name that does not fit at 10 px has its front cut (the label never shows the clan tag; the chat stays 12 px).
+    // The renderer here has the letters' widths of the three sizes: 9, 7 and 6 px a letter
+    {
+        struct SizedWidths : RecordingRenderer {
+            using RecordingRenderer::RecordingRenderer;
+            int32_t get_text_width(const std::string& text, FontSize size = FontSize::Px12) const override {
+                const int32_t per = size == FontSize::Px14 ? 9 : size == FontSize::Px12 ? 7 : 6;
+                return static_cast<int32_t>(text.size()) * per;
+            }
+        };
+        const ScoreSlot slot = ScreenLayout::classic().score_slot(0);
+        const int32_t room = slot.label_right - slot.label_left;
+        const size_t fit14 = static_cast<size_t>(room / 9), fit12 = static_cast<size_t>(room / 7), fit10 = static_cast<size_t>(room / 6);
+        check(fit14 + 1 < fit12 && fit12 + 1 < fit10 && fit10 < 16, "(the three sizes need three different lengths: the box holds " + std::to_string(fit14) + " letters at 14 px, " + std::to_string(fit12) + " at 12, " + std::to_string(fit10) + " at 10)");
+        size_t checked = 0;
+        for (size_t letters = 1; letters <= 15; ++letters) {
+            std::string name;
+            for (size_t i = 0; i < letters; ++i) name += static_cast<char>('a' + (i % 26));
+            SizedWidths rr(arc);
+            sim::WorldState world;
+            HUD hud;
+            hud.init(0);
+            hud.set_player_name(name);
+            ViewportCamera camera;
+            hud.render(rr, arc, world, camera);
+            const size_t label_len = letters + 1;                                          // (the name and its colon)
+            const FontSize want = label_len <= fit14 ? FontSize::Px14 : label_len <= fit12 ? FontSize::Px12 : FontSize::Px10;
+            const size_t shown = label_len <= fit10 ? label_len : fit10;
+            const std::string want_text = (name + ":").substr(label_len - shown);
+            const auto* mine = find(rr, want_text);
+            if (mine != nullptr && mine->size == want && mine->x + static_cast<int32_t>(want_text.size()) * (want == FontSize::Px14 ? 9 : want == FontSize::Px12 ? 7 : 6) == slot.label_right) ++checked;
+            else check(false, "a name of " + std::to_string(letters) + " letters: the label is " + std::to_string(shown) + " letters, right aligned, at the size that fits");
+        }
+        check(checked == 15, "every length from 1 to 15 letters: the first size that fits (14, 12, 10 px), the front cut only past 10 px");
     }
     // the quit dialog: one centred label of 24 px letters in (130, 180) 260 x 160
     {
@@ -1389,6 +1416,9 @@ void test_countdown_card_geometry() {
         const CountdownRowWords f = countdown_row_words(CountdownSeat{true, false, "", net::PeerLink::None, -1, false}, false, "Red");
         check(f.name == "Red" && f.tag == "in" && f.ping.empty(), "row words: no name is the color; a game on this computer shows no number");
         check(countdown_row_words(CountdownSeat{true, false, "X", net::PeerLink::Direct, 123456, true}, false, "Red").ping == "999 ms", "row words: a number is cut at 999 ms");
+        check(countdown_row_words(CountdownSeat{true, false, "[ANTS1] Wolfgang", net::PeerLink::Direct, 24, true}, false, "Red").name == "Wolfgang" &&
+                  countdown_row_words(CountdownSeat{true, false, "[ANTS1] Wolfgang", net::PeerLink::None, 38, true}, true, "Green").name == "Wolfgang (you)",
+              "row words: a clan tag is not shown, and (you) follows the name");
         check(ping_color(79).g == 240 && ping_color(80).r == 246 && ping_color(149).r == 246 && ping_color(150).r == 255 && ping_color(-1).r == 168, "the colors of a number: green under 80, gold under 150, red from there, gray for none");
     }
 }

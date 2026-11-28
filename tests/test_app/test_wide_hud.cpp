@@ -6,7 +6,7 @@
 //     mock-up's row (canvas y = 357) are plain there between their ant decorations; a cut where the art is not plain fails the same tests;
 //   * the picture: the frame composed from the spans is, pixel for pixel, the mock-up's semantics (one line repeated) written out independently, at several sizes, and with the
 //     original's picture the plain 14 pieces; the real renderer draws the spans exactly (draw_sprite_region, set_origin);
-//   * the HUD: it draws the frame first, offsets the panel's animations by the layout, puts the options window and the quick help of a match over the middle of the map view (the frame
+//   * the HUD: it draws the frame first, offsets the panel's animations by the layout, puts the quick help of a match over the middle of the map view (the frame
 //     stays around them) like its dialogs, and takes the pointer back to the numbers of those windows in the events AND in the 50 ms poll of HUD::update (every control is clicked
 //     through it); the score boxes are slots (no 4 in the layout code), spread over the strip by its three cuts (columns 15, 188, 346: dx in thirds); the readout of a network match stays
 //     clear of them (the match's limit is the layout's);
@@ -48,7 +48,6 @@ int main(int argc, char* argv[]) {
     test_every_shape_screens();
     test_small_levels_in_the_application();
     test_margin_and_pages_in_match();
-    test_options_dim(arc);
     test_default_and_options();
     test_pointer_edges_in_match();
 

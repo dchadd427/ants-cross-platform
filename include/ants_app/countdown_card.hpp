@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <string>
 
+#include "ants_app/display_name.hpp"
 #include "ants_app/screen_layout.hpp"
 #include "ants_assets/chd_parser.hpp"
 #include "ants_net/latency.hpp"
@@ -183,7 +184,7 @@ struct CountdownRowWords {
 
 inline CountdownRowWords countdown_row_words(const CountdownSeat& who, bool mine, const char* color_name) {
     CountdownRowWords w;
-    w.name = who.name.empty() ? std::string(color_name) : who.name;
+    w.name = who.name.empty() ? std::string(color_name) : without_clan_tag(who.name);       // (the clan tag is not shown here: a row has room for the name)
     if (who.computer) {
         const size_t open = w.name.find(" (bot");
         const size_t close = w.name.rfind(')');

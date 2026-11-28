@@ -351,6 +351,5 @@ void test_picture_per_screen();
 void test_every_shape_screens();
 void test_small_levels_in_the_application();
 void test_margin_and_pages_in_match();
-void test_options_dim(const assets::AssetArchive& arc);
 void test_default_and_options();
 void test_pointer_edges_in_match();

@@ -17,7 +17,7 @@ whose fullscreen is REAL (headless Chrome enters it): the 16:9 picture is 1440 x
     page the real locked motion, `movementX / movementY` with the position frozen); the game's cursor starts in the middle of the picture, moves by the distance of the mouse's motion
     and stays on the picture (every edge and every corner scrolls the map, the way back from an edge is at once), a slow mouse is not lost (fractions of a pixel add up, at a device ratio
     of 1 and of 2), the game's window system is not told of the lock (the game's pointer is the page's, and the game is not told of a pointer that leaves), a click goes where the game's
-    cursor is (the cursor is moved onto the Options button and a click opens the options), Esc is locked as a key (navigator.keyboard.lock: the call is seen) and unlocked with fullscreen;
+    cursor is (the cursor is moved onto the Help button and a click opens the quick help), Esc is locked as a key (navigator.keyboard.lock: the call is seen) and unlocked with fullscreen;
     the lock let go (exitPointerLock, as the browser does for Esc, a lost focus) leaves the game's cursor where it is (nothing happens until the pointer moves: no jump, no click) and
     the pointer is the normal one; leaving fullscreen lets the lock go; a click on the game takes the lock again where the browser let it go, the cursor staying where the click is;
     a browser that REFUSES the lock still gets the bars' rules; the setting Free (and the control under the game: its markup, its click, the remembered key `ants.pointerlock`) asks
@@ -49,7 +49,7 @@ from web_aspect_check import Browser, NotReachable, Tab                      # n
 from web_hidden_check import find_browser                                    # noqa: E402
 
 PICTURE_W, PICTURE_H = 960, 540                                              # the game's canvas
-OPTIONS_BUTTON = (845 + 26, 7 + 11)                                          # the Options button of the 16:9 picture (the classic (525, 7, 52, 23) moved by the 320 pixels that the picture is wider), its middle
+HELP_BUTTON = (796 + 23, 7 + 11)                                             # the Help button of the 16:9 picture (the classic (476, 7, 46, 23) moved by the 320 pixels that the picture is wider), its middle
 
 
 
@@ -839,21 +839,21 @@ def main():
             time.sleep(0.5)
             b = game.state()
             check(a["py"] > 12 and abs(b["vy"] - a["vy"]) <= 2, "pushed against the top for good and moved back by 60 px: the cursor is off the edge at once (y %d) and the scrolling has stopped (%d -> %d)" % (a["py"], a["vy"], b["vy"]))
-            # a click goes where the game's cursor is: the cursor is moved onto the Options button and the click opens the options
+            # a click goes where the game's cursor is: the cursor is moved onto the Help button and the click opens the quick help
             to_middle_of_map()
-            target = (OPTIONS_BUTTON[0] * scale, OPTIONS_BUTTON[1] * scale)
+            target = (HELP_BUTTON[0] * scale, HELP_BUTTON[1] * scale)
             cursor_to(model, box, target[0], target[1])
             time.sleep(0.3)
             s = game.state()
-            check((s["px"], s["py"]) == model.pointer(scale) and abs(s["px"] - OPTIONS_BUTTON[0]) <= 1 and abs(s["py"] - OPTIONS_BUTTON[1]) <= 1 and s["modal"] == 0,
-                  "the cursor is on the Options button at (%d, %d), nothing is open yet" % (s["px"], s["py"]))
+            check((s["px"], s["py"]) == model.pointer(scale) and abs(s["px"] - HELP_BUTTON[0]) <= 1 and abs(s["py"] - HELP_BUTTON[1]) <= 1 and s["modal"] == 0,
+                  "the cursor is on the Help button at (%d, %d), nothing is open yet" % (s["px"], s["py"]))
             tab.call("Input.dispatchMouseEvent", {"type": "mousePressed", "x": game.pointer[0], "y": game.pointer[1], "button": "left", "clickCount": 1, "buttons": 1})
             time.sleep(0.1)
             tab.call("Input.dispatchMouseEvent", {"type": "mouseReleased", "x": game.pointer[0], "y": game.pointer[1], "button": "left", "clickCount": 1})
             time.sleep(0.6)
             s = game.state()
-            check(s["modal"] == 1, "a click goes where the game's cursor is: the options opened (dialog %s)" % s["modal"])
-            shot("edge_locked_options")
+            check(s["modal"] == 1, "a click goes where the game's cursor is: the quick help opened (dialog %s)" % s["modal"])
+            shot("edge_locked_help")
             # the lock let go (as the browser does for Esc, a lost focus): nothing happens until the pointer moves
             before = game.state()
             events_before = json.loads(tab.ev("JSON.stringify(window.__lockEvents)"))
@@ -912,7 +912,7 @@ def main():
         def relock_checks():
             print("[web edge] the lock taken again by a click: only that click when the page held the lock before, an ordinary click when it never did; the free pointer is quiet after a release")
             quit_at = (899 + 23, 7 + 11)                                           # the Quit button of the 16:9 picture, its middle (the classic (579, 7, 46, 23) moved by 320)
-            options_at = OPTIONS_BUTTON
+            help_at = HELP_BUTTON
             on_screen = lambda c: (c[0] * 1.5, 45 + c[1] * 1.5)
             # 1. the page held the lock, the browser let it go
             game.open(storage=None)
@@ -960,13 +960,13 @@ def main():
             check(g["fullscreen"] and not game.locked(), "(setup) fullscreen, the first request of the lock refused")
             tab.ev("Element.prototype.requestPointerLock = window.__realLock; 1")
             time.sleep(4.0)
-            x, y = on_screen(options_at)
+            x, y = on_screen(help_at)
             game.move(x, y)
             tab.click(x, y)
             game.pointer = [x, y]
             time.sleep(0.8)
             s_ = game.state()
-            check(game.locked() and s_["modal"] == 1, "a click on the game when the page never held the lock gets the lock and is an ordinary click: the options opened (locked %s, dialog %s)" % (game.locked(), s_["modal"]))
+            check(game.locked() and s_["modal"] == 1, "a click on the game when the page never held the lock gets the lock and is an ordinary click: the quick help opened (locked %s, dialog %s)" % (game.locked(), s_["modal"]))
 
         if wanted("relock"):
             relock_checks()

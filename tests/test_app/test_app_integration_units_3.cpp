@@ -94,13 +94,7 @@ void run_suite_12_unit_selection_and_occupied_tile_movement_3() {
             ASSERT_FALSE(played_sounds.empty());
             ASSERT_EQ(played_sounds.back(), SoundID::ButtonClick);
 
-            // Options screen: the Chat ON / OFF toggles and the Return button (breturn3) are silent
-            played_sounds.clear();
-            hud.handle_mouse_down(126, 300, SDL_BUTTON_LEFT, sim, camera, 0);    // chat ON toggle
-            hud.handle_mouse_down(175, 300, SDL_BUTTON_LEFT, sim, camera, 0);    // chat OFF toggle
-            hud.handle_mouse_down(400, 440, SDL_BUTTON_LEFT, sim, camera, 0);    // Return button (351..449, 425..451)
-            ASSERT_TRUE(played_sounds.empty());
-            hud.handle_mouse_up(400, 440, SDL_BUTTON_LEFT, sim, camera, 0);
+            hud.handle_mouse_up(540, 15, SDL_BUTTON_LEFT, sim, camera, 0);       // (the button is let go of; no settings menu is wired here, so nothing opens)
 
             // Quit button (579, 7, 46, 23) -> opens quit dialog
             played_sounds.clear();

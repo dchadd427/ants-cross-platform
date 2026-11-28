@@ -1,4 +1,4 @@
-// The windows of the match in the new look (hud.hpp, window_art.hpp): the quit and alliance questions, "Get ready to play!", the quick help, the options window's veil, the countdown card, and the
+// The windows of the match in the new look (hud.hpp, window_art.hpp): the quit and alliance questions, "Get ready to play!", the quick help, the countdown card, and the
 // Fullscreen button. Each draws the HUD art's pieces when the set has every piece of the window and fits the places of the original's, and the original's own pictures otherwise (window_pieces).
 #include <algorithm>
 #include <cmath>
@@ -69,15 +69,6 @@ void HUD::render_quick_help_new(IRenderer& renderer, const assets::AssetArchive&
     hud_art::draw_animation(renderer, *art_, "qh_window", 0, layout_);
     kept_pictures_.draw(renderer);
     hud_art::draw_animation(renderer, *art_, quick_help_return_.pressed() ? "qh_return3" : (quick_help_return_.hovered() ? "qh_return2" : "qh_return1"), 0, layout_);
-}
-
-// The dim behind the options window of the new look: a dark see-through fill over everything of the picture that the card does not cover, where the original lays its checker (render_options_dim). The
-// card is the window's own rectangle moved to where the picture puts it; the four bands and the card cover the picture once. The window is modal as it always was: nothing under the veil takes a click.
-void HUD::render_veil(IRenderer& renderer) {
-    const LayoutPoint o = layout_.options_offset();
-    for (const LayoutRect& band : window_art::veil_bands(LayoutRect{0, 0, layout_.width, layout_.height}, window_art::kOptionsRect.moved(o.x, o.y))) {
-        if (band.w > 0 && band.h > 0) renderer.fill_rect(band.x, band.y, band.w, band.h, window_art::kVeil);
-    }
 }
 
 namespace {
@@ -165,7 +156,7 @@ void HUD::render_match_countdown_new(IRenderer& renderer, const assets::AssetArc
 
     size_t people_in = 0;
     for (const CountdownSeat& who : countdown_seats_) people_in += who.plays && !who.computer ? 1u : 0u;
-    sentence(people_in <= 1 ? "Get ready. Fullscreen is one press away." : (options_.state().chat ? "Everybody is in. Say hello in the chat." : "Everybody is in. The match starts soon."), card.x(24), card.y(211), 12.0, 0);
+    sentence(people_in <= 1 ? "Get ready. Fullscreen is one press away." : (options_.chat ? "Everybody is in. Say hello in the chat." : "Everybody is in. The match starts soon."), card.x(24), card.y(211), 12.0, 0);
 
 #if !defined(__EMSCRIPTEN__)
     // the native game draws its own Fullscreen button (the browser's page lays a real one over this place: a request for fullscreen needs the click of a real button)

@@ -269,7 +269,8 @@ bool Application::init(const ApplicationConfig& config) {
     hud_.set_on_quit([this]() {
         confirm_quit();
     });
-    hud_.set_on_menu_request([this]() { request_game_menu(); });         // (Esc with nothing to cancel: the page's settings panel)
+    hud_.set_on_menu_request([this]() { request_game_menu(); });         // (Esc with nothing to cancel, Ctrl+O, the Options button: the page's settings panel, or the desktop's drawn one)
+    make_game_menu_panel();
     hud_.set_on_fullscreen([this]() { toggle_fullscreen(); });          // (the countdown card's Fullscreen button, protocol 21: the native game's own; the page's button does it in the browser)
 
     hud_.set_on_sfx_volume([this](int32_t v) {
@@ -443,9 +444,7 @@ bool Application::init(const ApplicationConfig& config) {
         } else if (config_.select_base_team >= 0) {
             hud_.select_base(config_.select_base_team);
         }
-        if (config_.open_options) {
-            hud_.open_options();
-        }
+        if (config_.open_menu) open_game_menu_panel();
         if (config_.show_scorecard) {
             sim::MatchResult mr{};                                   // a sample: four teams, the first two allied
             mr.is_over = true;
@@ -583,6 +582,7 @@ void Application::run_frame_with_delta(float delta_time) {
     }
 
     handle_events();
+    update_game_menu_panel();
 
     enforce_zoom_limits();                      // the camera's zoom is one that is allowed and drawn (never below the map's limit; no offscreen target: 1)
 

@@ -270,7 +270,7 @@ void hud_scenarios(const assets::AssetArchive& arc) {
         s.shoot("hud.antheavy");
     }
 
-    // Dialogs: the quit dialog (resting, hover Yes, pressed No), the options screen, the in-match quick help, the three alliance dialogs
+    // Dialogs: the quit dialog (resting, hover Yes, pressed No), the in-match quick help, the three alliance dialogs
     {
         Scene s(arc, 0);
         s.hud.open_quit_dialog();
@@ -280,24 +280,6 @@ void hud_scenarios(const assets::AssetArchive& arc) {
         s.move(300, 270);
         s.press(300, 270);                                       // No (292, 260)
         s.shoot("hud.quit.pressed_no");
-    }
-    {
-        Scene s(arc, 0);
-        s.hud.open_options();
-        s.shoot("hud.options.open");
-        s.shoot("hud.options.open.caret_off", 10150);
-        Scene t(arc, 0);
-        t.hud.options().sound_volume = 30;
-        t.hud.options().music_volume = 80;
-        t.hud.options().scroll_speed = 99;
-        t.hud.options().chat = false;
-        t.hud.options().quick_help = false;
-        t.hud.options().quick_chat[0] = "Hello!";
-        t.hud.options().quick_chat[2] = "A very long quick chat text that does not fit into its edit field of 141 pixels";
-        t.hud.open_options();
-        t.shoot("hud.options.changed");
-        t.move(375, 435);                                        // hover Return (351, 425, 98 x 26)
-        t.shoot("hud.options.hover_return");
     }
     {
         Scene s(arc, 0);

@@ -483,7 +483,7 @@ void Application::return_to_map_select() {
     update_picture();
     hud_.close_quit_dialog();
     hud_.close_quick_help();
-    hud_.close_options();
+    if (menu_panel_) menu_panel_->close();
     if (background_stepping_) pending_music_ = PendingMusic::Intro;      // (a hidden page starts no music: it does when the page is shown)
     else start_intro_music();                                  // (the pointer is one global in the original: it is neither reset nor moved here)
 }

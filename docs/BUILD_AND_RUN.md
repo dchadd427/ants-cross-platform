@@ -198,7 +198,7 @@ Every build also has a **build id**, which says which build it is. Where the ver
 |---|---|
 | `ants --version`, `ants_server --version` | one line: the program's name, the version, the build id and the network protocol, for example `ants vX.Y.Z build abc1234 (network protocol N)`. No window and no assets; native builds only |
 | the server's start-up log line | the same words, followed by the maps folder |
-| the corner of the game window, next to the FPS meter | the version only |
+| the corner of the game window, next to the FPS meter (when Show FPS is on) | the version only |
 | the footer of the web pages, and the last line of the Menu | "Version vX.Y.Z - build abc1234" in the footer of the front page; the same line ends the Menu of the bar at the top of the other pages, the game page and the changelog page included |
 
 Where the id comes from:

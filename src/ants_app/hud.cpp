@@ -1,5 +1,6 @@
 #include "ants_app/hud.hpp"
 #include "hud_internal.hpp"
+#include "ants_app/display_name.hpp"
 #include "ants_app/minimap_tables.hpp"
 #include <cstdio>
 #include "ants_sim/game_strings.hpp"
@@ -54,7 +55,6 @@ void draw_score_digits(IRenderer& renderer, const assets::AssetArchive& archive,
 } // anonymous namespace
 
 HUD::HUD() {
-    options_.set_on_change([this](OptionSetting setting) { apply_option(setting); });
     init(0);
 }
 
@@ -118,7 +118,6 @@ void HUD::init(uint8_t local_player_id, bool announce) {
     match_countdown_ = false; match_countdown_left_ms_ = 0; countdown_seats_ = {}; countdown_button_pressed_ = false;          // (protocol 21)
     show_quit_dialog_ = false;
     show_quick_help_ = false;
-    options_.close();
     close_alliance_dialog();
     pending_break_ = PendingBreak{};
     suppressed_invite_from_ = 255;
@@ -256,10 +255,9 @@ void HUD::update(const sim::WorldState& world, uint32_t delta_ticks) {
     apply_selection_status(world);
     check_selected_pickups(world);
 
-    // The INPUT task polls the pointer every 50 ms (FUN_0102653f dispatches the move to the top window): the pictures of the options' controls follow it
+    // The INPUT task polls the pointer every 50 ms (FUN_0102653f dispatches the move to the top window): the picture of the quick help's button follows it
     // (the window's numbers are the original's own: the pointer is taken back to them, as the event handlers do)
     const LayoutPoint window = open_window_offset();
-    if (options_.is_open()) options_.on_move(mouse_x_ - window.x, mouse_y_ - window.y);
     if (show_quick_help_) quick_help_return_.on_move(mouse_x_ - window.x, mouse_y_ - window.y);
 
     // 3. Alliance team status
@@ -555,12 +553,12 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     // Chat text input box wtype.bmp (143x14) at (479, 423): the edit control of FUN_0100dbe2 (docs 5.51) in the rectangle (481, 424) - (620, 436): 12 px letters in
     // (7, 11, 15), active from the moment the screen is built (its caret toggles every 150 ms from then on) and hidden while the chat option is off. A text that does
     // not fit shows its end (the control always has the focus).
-    if (options_.state().chat) {
+    if (chat_writable()) {
         const bool caret = ((clock_ms() - chat_focus_ms_) / ScreenEdit::CARET_HALF_PERIOD_MS) % 2 == 0;
         draw_edit_line(renderer, chat_input_, layout_.right(481), layout_.bottom(424), 139, true, caret, assets::ColorRGBA{7, 11, 15, 255}, FontSize::Px12, layout_.width);
     }
-    // Chat switched off in the options: chatcovr (three chcovr2 tiles at (478,421/436/445)) covers the input box
-    if (!options_.state().chat) {
+    // Chat switched off in the options, or a recording watched: chatcovr (three chcovr2 tiles at (478,421/436/445)) covers the input box
+    if (!chat_writable()) {
         if (art_ != nullptr) {
             const LayoutRect box{layout_.right(480), layout_.bottom(424), 141, 12};         // (the art's input box, inside its frame: a dim field, no text, no caret)
             renderer.fill_rect(box.x, box.y, box.w, box.h, assets::ColorRGBA{24, 78, 60, 255});
@@ -574,7 +572,7 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     auto send_button = [&](bool down, bool hovered, const char* up, const char* hover, const char* pressed) {
         draw_ui(renderer, assets, down ? pressed : (hovered ? hover : up), layout_.dx(), layout_.dy());       // (bottom of the panel: right and down)
     };
-    if (options_.state().chat) {
+    if (chat_writable()) {
         send_button(send_to_button_.is_pressed, send_to_button_.is_hovered, "butallu", "butallr", "butalld");
         if (is_on_team_) send_button(team_button_.is_pressed, team_button_.is_hovered, "butalsu", "butalsr", "butalsd");
     }
@@ -590,20 +588,16 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
         render_marquee_box(renderer);
     }
 
-    // 5. Overlays and Dialogs: the options window and the quick help are the original's own pictures (their own numbers) and sit over the map view, centred in it, with the HUD visible
-    //    around them (as the options window does in the original's picture); the dialogs are its dialog frame, moved so that it is centred over the map view too. They are drawn with
-    //    their own numbers, moved by the renderer's origin (IRenderer::set_origin: nothing moves in the original's own picture)
+    // 5. Overlays and Dialogs: the quick help is the original's own picture (its own numbers) and sits over the map view, centred in it, with the HUD visible around it; the dialogs are
+    //    its dialog frame, moved so that it is centred over the map view too. They are drawn with their own numbers, moved by the renderer's origin (IRenderer::set_origin: nothing moves in
+    //    the original's own picture)
     const LayoutPoint modal = layout_.modal_offset();
-    if (show_quick_help_ || options_.is_open()) {
+    if (show_quick_help_) {
         const LayoutPoint window = open_window_offset();
         const bool inset = window != LayoutPoint{};                     // (in the original's own picture the window is where it always was: nothing to cut)
-        const bool new_options = !show_quick_help_ && art_ != nullptr && window_pieces(assets).options;      // (the set has the options window: its veil dims the picture round the card, in any shape)
-        if (new_options) render_veil(renderer);
-        else if (inset && !show_quick_help_) render_options_dim(renderer);   // (the original's window dims the whole picture around its card: in its own picture the window's pieces do that themselves)
         renderer.set_origin(window.x, window.y);
         if (inset) renderer.set_clip_rect(layout_.view().x - window.x, layout_.view().y - window.y, layout_.view().w, layout_.view().h);       // the pieces of a window reach beyond the map view: they stop at it
-        if (show_quick_help_) render_quick_help(renderer, assets);
-        else options_.render(renderer, assets, clock_ms(), new_options ? art_ : nullptr);
+        render_quick_help(renderer, assets);
         if (inset) renderer.clear_clip_rect();
         renderer.set_origin(0, 0);
     } else if (show_quit_dialog_ || alliance_dialog_ != AllianceDialog::None || show_match_start_modal_) {
@@ -612,33 +606,6 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
         else if (alliance_dialog_ != AllianceDialog::None) render_alliance_dialog(renderer, assets);
         else render_match_start_modal(renderer, assets);
         renderer.set_origin(0, 0);
-    }
-}
-
-// The options window of the original dims everything of its picture that the card does not cover: op_screen carries 25 pieces of the checker dither (dith100x, dith100y and dith200: every
-// second pixel black, in the pixels where x + y is odd of the window's own numbers), a ring of 20 pixels around the 442 x 440 card and the whole panel to the right of it. In a bigger picture
-// those pieces keep the window's place (they are clipped to the map view with the rest of it, so they dim the view's surroundings of the card only on its left and right, from the ring's width
-// on), and the rest of the picture is dimmed here in the same checker: four bands around the card (above, below, left and right of it, over the whole picture: the map around the card, the
-// frame and the panel), tiled from the corner of the first strip of the original (its own phase: the dithered pixels are the same ones whatever the offset of the window is)
-void HUD::render_options_dim(IRenderer& renderer) {
-    const LayoutRect card = layout_.options_card();
-    const LayoutRect picture{0, 0, layout_.width, layout_.height};
-    const LayoutPoint o = layout_.options_offset();
-    constexpr int32_t kTile = 200;                                       // dith200.bmp
-    const int32_t anchor_x = o.x - 1;                                    // (the top strip's first piece: dith100x at (-1, 0) of the window)
-    const int32_t anchor_y = o.y;
-    const LayoutRect bands[4] = {LayoutRect{picture.x, picture.y, picture.w, card.y - picture.y},
-                                 LayoutRect{picture.x, card.y + card.h, picture.w, picture.y + picture.h - (card.y + card.h)},
-                                 LayoutRect{picture.x, card.y, card.x - picture.x, card.h},
-                                 LayoutRect{card.x + card.w, card.y, picture.x + picture.w - (card.x + card.w), card.h}};
-    for (const LayoutRect& band : bands) {
-        if (band.w <= 0 || band.h <= 0) continue;
-        const auto first = [](int32_t from, int32_t anchor) { const int32_t d = from - anchor; return anchor + (d >= 0 ? d / kTile : -((-d + kTile - 1) / kTile)) * kTile; };
-        renderer.set_clip_rect(band.x, band.y, band.w, band.h);
-        for (int32_t y = first(band.y, anchor_y); y < band.y + band.h; y += kTile) {
-            for (int32_t x = first(band.x, anchor_x); x < band.x + band.w; x += kTile) renderer.draw_named_sprite("dith200.bmp", x, y);
-        }
-        renderer.clear_clip_rect();
     }
 }
 
@@ -701,7 +668,7 @@ void HUD::render_top_bar(IRenderer& renderer, const assets::AssetArchive& archiv
     // while the screen it opened is showing.
     draw_top_buttons_corner(renderer, archive);
     draw_top_button(renderer, archive, "buthlpu", "buthlpr", "buthlpd", help_button_.is_pressed || show_quick_help_, help_button_.is_hovered);
-    draw_top_button(renderer, archive, "butoptu", "butoptr", "butoptd", options_button_.is_pressed || options_.is_open(), options_button_.is_hovered);
+    draw_top_button(renderer, archive, "butoptu", "butoptr", "butoptd", options_button_.is_pressed || menu_latched_, options_button_.is_hovered);
     draw_top_button(renderer, archive, "butqitu", "butqitr", "butqitd", quit_button_.is_pressed || show_quit_dialog_, quit_button_.is_hovered);
     draw_fullscreen_button(renderer, archive);
 }
@@ -734,12 +701,18 @@ void HUD::render_score_team(IRenderer& renderer, const assets::AssetArchive& ass
         static const char* TEAM_NAMES[4] = {"Green", "Red", "Blue", "Black"};
         std::string name = team == local_player_id_ ? (player_name_.empty() ? std::string(TEAM_NAMES[team % 4]) : player_name_)
                                                     : (team_names_[team].empty() ? std::string(TEAM_NAMES[team % 4]) : team_names_[team]);
+        name = without_clan_tag(name);                                                        // (the clan tag is not shown: the label's 15 characters are for the name)
         if (name.size() > 15) name = name.substr(0, 15);
         std::string label = name + ":";
-        while (label.size() > 1 && renderer.get_text_width(label, FontSize::Px14) > slot.label_right - slot.label_left) label.erase(0, 1);
-        const int32_t label_w = renderer.get_text_width(label, FontSize::Px14);
-        const int32_t label_h = renderer.get_text_height(FontSize::Px14);
-        renderer.draw_text(label, slot.label_right - label_w, slot.top + (14 - label_h) / 2, {255, 255, 255, 255}, FontSize::Px14);
+        FontSize label_font = FontSize::Px14;                                                  // a name that does not fit at 14 px is set at 12 px, then at 10 px, before the front of it is cut
+        for (const FontSize f : {FontSize::Px14, FontSize::Px12, FontSize::Px10}) {
+            label_font = f;
+            if (renderer.get_text_width(label, f) <= slot.label_right - slot.label_left) break;
+        }
+        while (label.size() > 1 && renderer.get_text_width(label, label_font) > slot.label_right - slot.label_left) label.erase(0, 1);
+        const int32_t label_w = renderer.get_text_width(label, label_font);
+        const int32_t label_h = renderer.get_text_height(label_font);
+        renderer.draw_text(label, slot.label_right - label_w, slot.top + (14 - label_h) / 2, {255, 255, 255, 255}, label_font);
     }
 
     // The box (FUN_01021e36): a team that exists and has not dropped out is filled with its color; with an ally the right half (from left + (right - left) / 2) takes the

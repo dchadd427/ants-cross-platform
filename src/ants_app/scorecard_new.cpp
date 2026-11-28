@@ -206,7 +206,18 @@ void draw_ant(const Ctx& c, uint8_t team, double ux, double uy, double a, bool h
     const auto& parts = anim->subitems[frame].frames;
     const auto edge = [&](double u) { return static_cast<int32_t>(std::lround(u * c.s.f)); };
     if (head) {
-        const LayoutRect clip = c.s.rect(static_cast<int32_t>(std::lround(ux)), static_cast<int32_t>(std::lround(uy)), kAntW + 2, kAntHeadH);
+        // The cut keeps the ant's whole top whatever frame is up: the frames of the animation do not all start where the first one does (some reach a unit higher, some a unit further left), and a cut at the
+        // first frame's edge shaved a unit off the feelers' tips, which at 4 device pixels to the unit is a flat top. The bottom stays where it was: only the head is shown.
+        int32_t up = 0, left = 0, right = kAntW + 2;
+        for (const auto& item : anim->subitems) {
+            for (const auto& part : item.frames) {
+                up = std::max(up, by - static_cast<int32_t>(part.dy));
+                left = std::max(left, bx - static_cast<int32_t>(part.dx));
+                right = std::max(right, static_cast<int32_t>(part.dx) - bx + static_cast<int32_t>(c.assets.get_sprite(part.sprite_index).width));
+            }
+        }
+        const int32_t cx = static_cast<int32_t>(std::lround(ux)), cy = static_cast<int32_t>(std::lround(uy));
+        const LayoutRect clip = c.s.rect(cx - left, cy - up, left + right, up + kAntHeadH);
         c.r.set_clip_rect(clip.x, clip.y, clip.w, clip.h);
     }
     c.r.set_hud_team(team);

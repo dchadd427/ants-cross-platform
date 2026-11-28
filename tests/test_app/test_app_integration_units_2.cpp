@@ -1130,19 +1130,16 @@ void run_suite_12_unit_selection_and_occupied_tile_movement_2() {
         hud.handle_mouse_up(500, 428, SDL_BUTTON_LEFT, sim, camera);
         ASSERT_EQ(hud.get_chat_input(), "a");
 
-        // Switched off in the options ("Participate In Chat"): the box is covered and takes nothing
-        hud.open_options();
-        hud.handle_mouse_down(151, 289, SDL_BUTTON_LEFT, sim, camera);      // the OFF toggle of the chat option
-        ASSERT_TRUE(hud.is_chat_enabled());                                 // a switch acts at the release
-        hud.handle_mouse_up(151, 289, SDL_BUTTON_LEFT, sim, camera);
-        hud.close_options();
+        // Switched off in the settings menu ("Participate in chat"): the box is covered and takes nothing
+        ASSERT_TRUE(hud.is_chat_enabled());
+        hud.set_option(OptionSetting::Chat, 0);
         ASSERT_FALSE(hud.is_chat_enabled());
         hud.handle_key_down('b', sim, camera, 0);
         hud.handle_text_input("c");
         ASSERT_EQ(hud.get_chat_input(), "a");
     } TEST_END();
 
-    TEST_CASE("12.59 Options Dialog F9-F12 Quick Chat Editing & In-Game Broadcast Keys") {
+    TEST_CASE("12.59 Quick Chat Texts (the settings menu's Quick Chat section) & In-Game Broadcast Keys") {
         HUD hud;
         hud.init(0);
         SimulationEngine sim;
@@ -1155,31 +1152,20 @@ void run_suite_12_unit_selection_and_occupied_tile_movement_2() {
         ASSERT_EQ(hud.get_quick_chat_key(2), "Attack!");
         ASSERT_EQ(hud.get_quick_chat_key(3), "Do you want to ally?");
 
-        // Open options dialog: the F9 field has the focus (FUN_0101487c focuses the first edit field)
-        hud.open_options();
-        ASSERT_TRUE(hud.is_options_open());
-        ASSERT_TRUE(hud.options_screen().edit(0).focused());
-        ASSERT_FALSE(hud.options_screen().edit(1).focused());
-
-        // A press on the F9 field (92..233, 370..385) keeps the focus there
-        hud.handle_mouse_down(120, 375, SDL_BUTTON_LEFT, sim, camera);
-        hud.handle_mouse_up(120, 375, SDL_BUTTON_LEFT, sim, camera);
-        ASSERT_TRUE(hud.options_screen().edit(0).focused());
-
-        // Backspace to delete "!"
-        hud.handle_key_down(SDLK_BACKSPACE, sim, camera);
-        ASSERT_EQ(hud.get_quick_chat_key(0), "Now you are in for it");
-
-        // Type characters
-        hud.handle_text_input(" all!");
+        // The menu changes a text: kept as the original's edit field keeps it (printable ASCII, at most 100 characters), and written to the profile
+        ConfigStore store;
+        hud.set_config_store(&store);
+        hud.set_quick_chat(0, "Now you are in for it all!");
         ASSERT_EQ(hud.get_quick_chat_key(0), "Now you are in for it all!");
-
-        // Esc does nothing; Return closes the dialog whatever has the focus (FUN_01014f12) and the text stays
-        hud.handle_key_down(SDLK_ESCAPE, sim, camera);
-        ASSERT_TRUE(hud.is_options_open());
-        hud.handle_key_down(SDLK_RETURN, sim, camera);
-        ASSERT_FALSE(hud.is_options_open());
-        ASSERT_EQ(hud.get_quick_chat_key(0), "Now you are in for it all!");
+        ASSERT_EQ(store.get_string("Quick Chat F9", "", 100), "Now you are in for it all!");
+        hud.set_quick_chat(1, std::string(130, 'x'));
+        ASSERT_EQ(hud.get_quick_chat_key(1), std::string(100, 'x'));
+        hud.set_quick_chat(2, "caf\xC3\xA9 \x01ok");
+        ASSERT_EQ(hud.get_quick_chat_key(2), "caf ok");
+        hud.set_quick_chat(2, "");
+        ASSERT_EQ(hud.get_quick_chat_key(2), "");
+        hud.set_quick_chat(7, "no such text");                             // (there are four)
+        ASSERT_EQ(hud.get_quick_chat_key(3), "Do you want to ally?");
 
         // Press F9 in gameplay: broadcasts quick chat 0
         size_t initial_log_size = hud.get_chat_log().size();
@@ -1190,6 +1176,10 @@ void run_suite_12_unit_selection_and_occupied_tile_movement_2() {
             recent_text += hud.get_chat_log()[li] + " ";
         }
         ASSERT_TRUE(recent_text.find("Now you are in for it all!") != std::string::npos);
+        // an empty text says nothing
+        initial_log_size = hud.get_chat_log().size();
+        hud.handle_key_down(SDLK_F11, sim, camera);
+        ASSERT_EQ(hud.get_chat_log().size(), initial_log_size);
     } TEST_END();
 
     TEST_CASE("12.60 Bridge Expiry No-Spam CantGo and Movement Cancellation") {
@@ -1297,9 +1287,9 @@ void run_suite_12_unit_selection_and_occupied_tile_movement_2() {
         camera.world_y = 320;
 
         // A. Overlays: Normal cursor
-        hud.open_options();
+        hud.open_quick_help();
         ASSERT_EQ(hud.evaluate_cursor(200, 200, sim.get_world_state(), sim.grid(), camera), CursorType::Normal);
-        hud.close_options();
+        hud.close_quick_help();
 
         // B. Edge Panning Bounds Check (0x1026b09..0x1026d11)
         ASSERT_EQ(hud.evaluate_cursor(5, 5, sim.get_world_state(), sim.grid(), camera), CursorType::ScrollNW);

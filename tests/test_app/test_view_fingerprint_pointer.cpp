@@ -238,7 +238,6 @@ void cursor_scenarios() {
         {"hill_enemy", false, [](HUD& h, PointerScene&, ViewportCamera&) { h.select_base(1); }},
         {"fog_idle", true, [](HUD&, PointerScene&, ViewportCamera&) {}},
         {"fog_own_worker", true, [](HUD& h, PointerScene& p, ViewportCamera&) { h.select_ant(p.worker); }},
-        {"options_open", false, [](HUD& h, PointerScene&, ViewportCamera&) { h.open_options(); }},
         {"band_dragging", false,
          [](HUD& h, PointerScene& p, ViewportCamera& cam) {
              h.select_ant(p.worker);
@@ -319,7 +318,6 @@ void click_scenarios() {
         // the dialogs and screens that take every click: where their buttons are
         {"dialog.quit", [](HUD& h, PointerScene&) { h.open_quit_dialog(); }, 4, SDL_BUTTON_LEFT, no_scene, "qx"},
         {"dialog.quickhelp", [](HUD& h, PointerScene&) { h.open_quick_help(); }, 4, SDL_BUTTON_LEFT, no_scene, "x"},
-        {"dialog.options", [](HUD& h, PointerScene&) { h.open_options(); }, 4, SDL_BUTTON_LEFT, no_scene, "ox"},
         {"dialog.start_modal", [](HUD& h, PointerScene&) { h.start_match_modal(); }, 4, SDL_BUTTON_LEFT, no_scene, ""},
         {"dialog.invitation", [](HUD&, PointerScene&) {}, 4, SDL_BUTTON_LEFT, [](PointerScene& p) { p.sim.propose_alliance(1, 0); p.sim.tick(); }, "cd"},
         {"dialog.waiting", [](HUD&, PointerScene&) {}, 4, SDL_BUTTON_LEFT, [](PointerScene& p) { p.sim.propose_alliance(0, 1); p.sim.tick(); }, "cd"},

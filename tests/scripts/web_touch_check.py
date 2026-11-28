@@ -19,7 +19,7 @@ What is checked, for each profile:
     swipe on the guide does); nothing zooms (no page zoom by a pinch or a double tap); the browser's pinch (gesturestart / gesturechange / gestureend) and the context menu are cancelled
     over the game and left alone elsewhere; a touchcancel reaches the game (Module._ants_touch_cancel) and the game drops its fingers; the slop the game uses is 8 CSS pixels of the box
     in picture pixels (never under 6 device pixels);
-  * the GAME's gestures through the page: a TAP on the map (a click), on a HUD button (the Options button opens its window; a tap on its Return button closes it: the original's windows
+  * the GAME's gestures through the page: a TAP on the map (a click), on a HUD button (the Help button opens the quick help; a tap on its Return button closes it: the original's windows
     close with their own button, not Esc) with the game's own model counting the taps, a HOLD (the right click: counted at 450 ms, its feedback is the buzz where the browser has one,
     nothing where it has not), a hold that moves becomes a drag (counted as one), a DRAG, TWO FINGERS that pan the map by the distance they move (the picture follows them: the view's
     origin moves by the distance in picture pixels) and pinch it a level at a time (200 % when the fingers spread to twice, 50 % back), nothing pans or zooms under a dialog, a cancel
@@ -39,7 +39,6 @@ check could not be made because the environment is not there (no browser, nothin
 import argparse
 import json
 import os
-import re
 import sys
 import time
 
@@ -49,29 +48,16 @@ from web_aspect_check import Browser, NotReachable, Tab, screen_of_canvas    # n
 from web_hidden_check import find_browser                                    # noqa: E402
 
 CANVAS_W, CANVAS_H = 960, 540                                                # the game's canvas (?aspect=16:9)
-OPTIONS_BUTTON = (845 + 26, 7 + 11)                                          # the Options button of the 16:9 picture, its middle
+HELP_BUTTON = (796 + 23, 7 + 11)                                             # the Help button of the 16:9 picture, its middle (opens the quick help)
 MAP_VIEW = (16, 21, 762, 500)                                                # the map view of the 16:9 picture: x, y, width, height
 
 
 
-def options_return_button():
-    """Where a person taps the Return button of the options window, in the canvas's own pixels (the middle of its rectangle), for the 16:9 picture: the window is the original's 442 x 440 card
-    centred in the map view (ScreenLayout::options_offset), and it closes by that button and by nothing else (not Esc: the original's windows close with their own button). The numbers are read
-    from the headers, so that a change of the layout moves the check with it."""
-    include = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "include", "ants_app")
-    with open(os.path.join(include, "options_screen.hpp"), encoding="utf-8") as f:
-        button = re.search(r"RETURN_X = (\d+), RETURN_Y = (\d+), RETURN_W = (\d+), RETURN_H = (\d+);", f.read())
-    with open(os.path.join(include, "screen_layout.hpp"), encoding="utf-8") as f:
-        layout = f.read()
-    card = [re.search(r"kClassicView%s = (\d+);" % axis, layout) for axis in "XYWH"]
-    if button is None or None in card:
-        raise RuntimeError("the options window's Return button or its card is not in include/ants_app any more: the check cannot find where to tap")
-    cx, cy, cw, ch = (int(m.group(1)) for m in card)
-    x, y, w, h = (int(v) for v in button.groups())
-    vx, vy, vw, vh = MAP_VIEW
-    offset_x = vx + vw // 2 - (cx + cw // 2)                                 # (integer divisions, as the layout's)
-    offset_y = vy + vh // 2 - (cy + ch // 2)
-    return offset_x + x + w / 2, offset_y + y + h / 2
+def quick_help_return_button():
+    """Where a person taps the Return button of the quick help, in the canvas's own pixels (the middle of its rectangle), for the 16:9 picture: the page is the original's 640 x 480 quick
+    help, put in the middle of the map view (ScreenLayout::quick_help_offset), and it closes by that button and by nothing else (not Esc: a window of the original closes with its own button).
+    The numbers are the original's (Return at (529, 437), 98 x 26) and the offset of a 960 x 540 picture, (77, 31)."""
+    return 77 + 529 + 98 / 2, 31 + 437 + 26 / 2
 
 
 # TIME. The game stamps a touch when the page hands it over, and the DevTools call that sends a touch returns when the page has acknowledged it, which on a loaded machine (the game at 13 frames a
@@ -243,9 +229,9 @@ class Game:
         time.sleep(hold)
         self.fingers.up(1)
 
-    def close_options(self, g):
-        """Close the options window the way the game does: a tap on its Return button. True when the game says that no window is open any more."""
-        x, y = self.at(g, *options_return_button())
+    def close_window(self, g):
+        """Close the quick help the way the game does: a tap on its Return button. True when the game says that no window is open any more."""
+        x, y = self.at(g, *quick_help_return_button())
         self.tap(x, y)
         return bool(wait_for(lambda: self.probe(5) == 0, 3.0))
 
@@ -254,7 +240,7 @@ class Game:
         if self.fingers.points:
             self.fingers.cancel()
         if self.probe(5) == 1:
-            self.close_options(g)
+            self.close_window(g)
         wait_for(lambda: self.probe(34) == 0 and self.probe(35) == 0, 3.0, 0.05)
 
 
@@ -492,18 +478,18 @@ def run_profile(name, profile, tab, game, fingers, check, wanted, args):
                 check(after["taps"] == before["taps"] + 1 and after["holds"] == before["holds"] and after["drags"] == before["drags"],
                       "%s: a tap on the map (a touch of at most %d ms) is a tap, and only a tap (%s -> %s)" % (label, lasted * 1000, before, after))
             # (the boundary between a tap and a hold, and the finger that lingers between them, is not for a browser: see TIME above; the model's tests pin it)
-            # a tap on a HUD button: the Options button opens its window, a tap on the window's Return button closes it (a tap works on a window too)
-            bx, by = game.at(g, *OPTIONS_BUTTON)
+            # a tap on a HUD button: the Help button opens the quick help, a tap on its Return button closes it (a tap works on a window too)
+            bx, by = game.at(g, *HELP_BUTTON)
             game.tap(bx, by)
-            check(wait_for(lambda: game.probe(5) == 1, 3.0), "%s: a tap on the Options button opens the options window (the game says %s)" % (label, game.probe(5)))
+            check(wait_for(lambda: game.probe(5) == 1, 3.0), "%s: a tap on the Help button opens the quick help (the game says %s)" % (label, game.probe(5)))
             settle()
-            check(game.close_options(g), "%s: a tap on the options window's Return button closes it (the game says %s)" % (label, game.probe(5)))
+            check(game.close_window(g), "%s: a tap on the quick help's Return button closes it (the game says %s)" % (label, game.probe(5)))
             settle()
         if wanted("gates"):
             begin("two fingers under a window do nothing")
-            bx, by = game.at(g, *OPTIONS_BUTTON)
+            bx, by = game.at(g, *HELP_BUTTON)
             game.tap(bx, by)
-            check(wait_for(lambda: game.probe(5) == 1, 3.0), "%s: (the options window is open: the game says %s)" % (label, game.probe(5)))
+            check(wait_for(lambda: game.probe(5) == 1, 3.0), "%s: (the quick help is open: the game says %s)" % (label, game.probe(5)))
             settle()
             view = game.view()
             two = game.counters()["two"]
@@ -515,8 +501,8 @@ def run_profile(name, profile, tab, game, fingers, check, wanted, args):
             fingers.up_all()
             settle()
             now = game.view()
-            check(now["x"] == view["x"] and now["y"] == view["y"] and now["zoom"] == view["zoom"] and game.counters()["two"] == two, "%s: two fingers under the options window do not pan or zoom (%s -> %s)" % (label, view, now))
-            check(game.close_options(g), "%s: and a tap on its Return button closes it (the game says %s)" % (label, game.probe(5)))
+            check(now["x"] == view["x"] and now["y"] == view["y"] and now["zoom"] == view["zoom"] and game.counters()["two"] == two, "%s: two fingers under the quick help do not pan or zoom (%s -> %s)" % (label, view, now))
+            check(game.close_window(g), "%s: and a tap on its Return button closes it (the game says %s)" % (label, game.probe(5)))
             settle()
         if wanted("hold"):
             begin("hold")

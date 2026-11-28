@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-"""A phone's keyboard for the match's chat box and the options window's four quick chat fields (run by ./run_tests.sh --fast and by the CI). The page (web/shell.html) keeps an invisible text field
-that a TAP on a box focuses, so that a phone's own keyboard comes up, and mirrors what is typed into the game's chat line or the options field (src/ants_app/application_touch.cpp, native test:
+"""A phone's keyboard for the match's chat box (run by ./run_tests.sh --fast and by the CI). The page (web/shell.html) keeps an invisible text field
+that a TAP on a box focuses, so that a phone's own keyboard comes up, and mirrors what is typed into the game's chat line (src/ants_app/application_touch.cpp, native test:
 tests/test_app/test_web_chat.cpp). A phone cannot be driven here, so everything that the page can say about it without one is checked:
 
   - the field: a real text input of the game's box (opacity 0, not display: none, which cannot be focused), at least 16px (iOS Safari zooms the page into a smaller field), out of the tab order,
     taking no tap itself, with the attributes that keep a phone's keyboard from correcting a chat line;
   - the script: the block exists once and is RUN with fakes for the page (node, when it is installed: tests/scripts/web_chat_check.js): the tap that opens the keyboard and the touches that do
-    not, the mirror of the typing into the game, Enter and Esc, the other ways to close it, the options window's fields (a tap on one, the keyboard moving to another, Done that does not close the
-    window) and the field's keys that never reach the game's own handler;
+    not, the mirror of the typing into the game, Enter and Esc, the other ways to close it, and the field's keys that never reach the game's own handler;
   - the page's other code: it adds no touchmove listener and cancels no touch (the touch guards' rules), and only the game's two exports are used;
   - the exports of the game that the page reads, and the browser check (tests/scripts/web_chat_check.py, opt-in) that drives the page in a real browser: its profiles and exit status.
 """

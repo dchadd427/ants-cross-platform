@@ -1,7 +1,7 @@
 #pragma once
 
 // The original's screen controls besides the plain button (screen_button.hpp): the latching button, the slider and the edit field, as pure models without
-// drawing. They are the classes of Ants.exe that the options screen (and, for the edit field, the chat box) is made of; every rule below was read from the
+// drawing. They are the classes of Ants.exe that its screens (the setup screens; the edit field, also the chat box) are made of; every rule below was read from the
 // disassembly (docs/GAME_REVERSE_ENGINEERING.md 5.51).
 
 #include <algorithm>

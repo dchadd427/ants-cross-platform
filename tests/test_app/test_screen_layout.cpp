@@ -1370,6 +1370,7 @@ void test_application() {
     // the corner plate (the version next to the frame rate) is in the bottom right corner of the canvas, whatever the picture is: the sparkline's bars are green
     // pixels; the classic corner (x 514 .. 632, rows 467 .. 479) has none in a 960 x 540 canvas, the canvas's own corner (x 834 .. 952, rows 527 .. 539) has them
     app.set_layout(layout);
+    app.game_menu_set(game_menu::kShowFps, 1, false);                    // (the frame rate and its graph are the setting Show FPS, off by default)
     app.render_frame();
     SDL_Renderer* sr = app.renderer().get_sdl_renderer();
     auto green_bars = [&](int32_t x, int32_t y, int32_t w, int32_t h) {

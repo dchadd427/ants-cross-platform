@@ -1126,7 +1126,7 @@ void run_suite_9_gameplay_mechanics_and_options() {
         ASSERT_EQ(mover.pos.y, 8);
     } TEST_END();
 
-    TEST_CASE("9.4 Options Menu Navigation, Sliders and Return Button") {
+    TEST_CASE("9.4 The Settings Menu's Sliders: The Sound And Music Volume Reach The Mixer And The Player") {
         Application app;
         ApplicationConfig cfg;
         cfg.headless = true;
@@ -1137,29 +1137,17 @@ void run_suite_9_gameplay_mechanics_and_options() {
         auto& sim_engine = app.sim();
         ViewportCamera cam;
 
-        // Open options dialog
-        ASSERT_FALSE(hud.is_options_open());
-        hud.open_options();
-        ASSERT_TRUE(hud.is_options_open());
-
-        // Drag sound volume slider (x=280, y=185)
-        hud.handle_mouse_down(280, 185, SDL_BUTTON_LEFT, sim_engine, cam);
-        hud.handle_mouse_motion(320, 185, sim_engine, cam);
-        hud.handle_mouse_up(320, 185, SDL_BUTTON_LEFT, sim_engine, cam);
-        ASSERT_EQ(hud.get_sound_volume(), 58);                       // the thumb stands for (320 - 211) 100 / 185
+        // The Sound effects volume row of the menu
+        ASSERT_TRUE(app.game_menu_set(game_menu::kEffects, 58));
+        ASSERT_EQ(hud.get_sound_volume(), 58);
         ASSERT_EQ(app.audio_mixer().sound_volume(), 58);
 
-        // Drag music volume slider (x=280, y=223)
-        hud.handle_mouse_down(280, 223, SDL_BUTTON_LEFT, sim_engine, cam);
-        hud.handle_mouse_motion(340, 223, sim_engine, cam);
-        hud.handle_mouse_up(340, 223, SDL_BUTTON_LEFT, sim_engine, cam);
-        ASSERT_EQ(hud.get_music_volume(), 69);                       // (340 - 211) 100 / 185
+        // The Music volume row
+        ASSERT_TRUE(app.game_menu_set(game_menu::kMusic, 69));
+        ASSERT_EQ(hud.get_music_volume(), 69);
         ASSERT_NEAR(app.midi_player().get_volume(), 0.69f, 0.001f);
-
-        // Click Return to Game button at (355, 427, bounds 345..455, 423..455)
-        hud.handle_mouse_down(380, 435, SDL_BUTTON_LEFT, sim_engine, cam);
-        hud.handle_mouse_up(380, 435, SDL_BUTTON_LEFT, sim_engine, cam);
-        ASSERT_FALSE(hud.is_options_open());
+        (void)sim_engine;
+        (void)cam;
     } TEST_END();
 
     TEST_CASE("9.5 Frame Rate Counter and Tile Grid Visibility") {
@@ -1392,18 +1380,12 @@ void run_suite_9_gameplay_mechanics_and_options() {
         ASSERT_TRUE(app.init(cfg));
         auto& mixer = app.audio_mixer();
         ASSERT_TRUE(mixer.music_filepath().find("INTRO") != std::string::npos);
-        ViewportCamera cam;
-        app.hud().open_options();
-        app.hud().handle_mouse_down(300, 185, 1, app.sim(), cam);                 // the Sound slider
-        app.hud().handle_mouse_up(300, 185, 1, app.sim(), cam);
+        ASSERT_TRUE(app.game_menu_set(game_menu::kEffects, 30));                  // the Sound effects volume row
         ASSERT_TRUE(mixer.music_filepath().find("INTRO") != std::string::npos);   // still the intro
-        app.hud().handle_mouse_down(300, 222, 1, app.sim(), cam);                 // the Music slider
-        app.hud().handle_mouse_motion(330, 222, app.sim(), cam);
-        ASSERT_TRUE(mixer.music_filepath().find("INTRO") != std::string::npos);   // dragging changes nothing
-        app.hud().handle_mouse_up(330, 222, 1, app.sim(), cam);
+        ASSERT_TRUE(app.game_menu_set(game_menu::kMusic, 64));                    // the Music volume row (the menu changes it at the release of its slider)
         ASSERT_TRUE(mixer.is_music_playing());
         ASSERT_TRUE(mixer.music_filepath().find("INTRO") == std::string::npos);   // the running piece was closed and a random in-game piece started
-        ASSERT_EQ(app.hud().get_music_volume(), 64);                              // (330 - 211) 100 / 185
+        ASSERT_EQ(app.hud().get_music_volume(), 64);
         ASSERT_NEAR(mixer.get_music_volume(), 0.64f, 0.001f);
     } TEST_END();
 
@@ -1434,7 +1416,6 @@ void run_suite_9_gameplay_mechanics_and_options() {
         std::filesystem::remove_all(dir);
         std::filesystem::create_directories(dir);
         const std::string file = (dir / "settings.ini").string();
-        ViewportCamera cam;
         {
             Application app;
             ApplicationConfig cfg;
@@ -1446,26 +1427,16 @@ void run_suite_9_gameplay_mechanics_and_options() {
             ASSERT_EQ(hud.get_sound_volume(), 100);                   // nothing stored yet: the defaults
             ASSERT_EQ(hud.get_music_volume(), 65);
             ASSERT_EQ(hud.get_scroll_speed(), 50);
-            hud.open_options();
-            auto drag = [&](int32_t y, int32_t x_to) {
-                hud.handle_mouse_down(300, y, SDL_BUTTON_LEFT, app.sim(), cam);
-                hud.handle_mouse_motion(x_to, y, app.sim(), cam);
-                hud.handle_mouse_up(x_to, y, SDL_BUTTON_LEFT, app.sim(), cam);
-            };
-            drag(185, 260);                                           // Sound Volume: (260 - 211) 100 / 185 = 26
-            drag(222, 380);                                           // Music Volume: (380 - 211) 100 / 185 = 91
-            drag(260, 240);                                           // Scroll Speed: (240 - 211) 100 / 185 = 15
+            ASSERT_TRUE(app.game_menu_set(game_menu::kEffects, 26));           // the rows of the settings menu: Sound effects volume
+            ASSERT_TRUE(app.game_menu_set(game_menu::kMusic, 91));             // Music volume
+            ASSERT_TRUE(app.game_menu_set(game_menu::kScroll, 15));            // Map scroll speed
             ASSERT_EQ(hud.get_sound_volume(), 26);
             ASSERT_EQ(hud.get_music_volume(), 91);
             ASSERT_EQ(hud.get_scroll_speed(), 15);
             ASSERT_EQ(app.audio_mixer().sound_volume(), 26);
-            hud.handle_mouse_down(151, 289, SDL_BUTTON_LEFT, app.sim(), cam);            // Chat OFF
-            hud.handle_mouse_up(151, 289, SDL_BUTTON_LEFT, app.sim(), cam);
-            hud.handle_mouse_down(404, 289, SDL_BUTTON_LEFT, app.sim(), cam);            // Quick Help OFF
-            hud.handle_mouse_up(404, 289, SDL_BUTTON_LEFT, app.sim(), cam);
-            hud.handle_mouse_down(150, 410, SDL_BUTTON_LEFT, app.sim(), cam);            // the F10 field
-            hud.handle_mouse_up(150, 410, SDL_BUTTON_LEFT, app.sim(), cam);
-            hud.handle_text_input(" Now!");
+            ASSERT_TRUE(app.game_menu_set(game_menu::kChat, 0));                         // Participate in chat: Off
+            ASSERT_TRUE(app.game_menu_set(game_menu::kQuickHelpAtStart, 0));             // Show quick help at startup: Off
+            app.game_menu_set_text(game_menu::kQuickChat1 + 1, "Let me be! Now!");      // the F10 text of the Quick Chat section
             ASSERT_EQ(hud.get_quick_chat_key(1), "Let me be! Now!");
         }
         {
@@ -1498,12 +1469,12 @@ void run_suite_9_gameplay_mechanics_and_options() {
             ASSERT_EQ(app.audio_mixer().sound_volume(), 26);                     // and applied at the start
             ASSERT_NEAR(app.audio_mixer().get_music_volume(), 0.91f, 0.001f);
             ASSERT_NEAR(app.midi_player().get_volume(), 0.91f, 0.001f);
-            hud.open_options();                                                  // the screen is built from the settings: pos = 211 + 185 v / 99, thumb at pos - 23
-            ASSERT_EQ(hud.options_screen().slider(0).thumb_left(), 236);
-            ASSERT_EQ(hud.options_screen().slider(1).thumb_left(), 358);
-            ASSERT_EQ(hud.options_screen().slider(2).thumb_left(), 216);
-            ASSERT_EQ(hud.options_screen().slider(0).value(), 25);               // the mapping is not its own inverse: 26 is placed where 25 is read back
-            ASSERT_TRUE(hud.options_screen().chat_off().latched() && hud.options_screen().help_off().latched());
+            ASSERT_EQ(app.game_menu_get(game_menu::kEffects), 26);               // the menu shows what was stored
+            ASSERT_EQ(app.game_menu_get(game_menu::kMusic), 91);
+            ASSERT_EQ(app.game_menu_get(game_menu::kScroll), 15);
+            ASSERT_EQ(app.game_menu_get(game_menu::kChat), 0);
+            ASSERT_EQ(app.game_menu_get(game_menu::kQuickHelpAtStart), 0);
+            ASSERT_EQ(app.game_menu_text(game_menu::kQuickChat1 + 1), "Let me be! Now!");
         }
         std::filesystem::remove_all(dir);
     } TEST_END();
@@ -1515,9 +1486,6 @@ void run_suite_9_gameplay_mechanics_and_options() {
         cfg.start_in_map_select = false;
         ASSERT_TRUE(app.init(cfg));
         ASSERT_TRUE(app.hud().options().quick_chat[2] == "Attack!");
-        app.hud().open_options();
-        app.hud().handle_key_down(SDLK_RETURN, app.sim(), app.renderer().camera());
-        ASSERT_FALSE(app.hud().is_options_open());
         ASSERT_TRUE(ConfigStore::default_location().empty() || !std::filesystem::exists(std::filesystem::path(ConfigStore::default_location()).parent_path() / "headless_marker"));
 
         const std::filesystem::path dir = temp_path_of_this_run("ants_test_settings2");

@@ -19,7 +19,7 @@
 #include "ants_app/edge_scroll.hpp"
 #include "ants_app/hud.hpp"
 #include "ants_app/map_select.hpp"
-#include "ants_app/options_screen.hpp"
+#include "ants_app/options_state.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_app/scorecard.hpp"
 #include "ants_app/start_menu.hpp"
@@ -261,7 +261,7 @@ private:
 // =====================================================================================================================================================
 
 
-// The HUD's millisecond clock is injected: pedestals, the caret of the chat box, the options screen and the dialogs read it
+// The HUD's millisecond clock is injected: pedestals, the caret of the chat box and the dialogs read it
 inline uint32_t g_now_ms = 0;
 
 /// The metrics of the text that the HUD measures its chat and labels with (the interface's 6 px per character; the recorder is never hashed here)
@@ -714,7 +714,7 @@ struct ClickProbe {
         h.flag(up);
         h.i32(cam.world_x);
         h.i32(cam.world_y);
-        h.flag(hud.is_options_open());
+        h.flag(false);                                            // (the options window's flag: the window is gone, the flag stays so that the stored numbers do)
         h.flag(hud.is_quick_help_open());
         h.flag(hud.is_quit_dialog_open());
         h.i32(quit_calls);
@@ -762,7 +762,7 @@ struct ClickProbe {
             tally->latched += (hud.is_move_latched() || hud.is_ability_latched()) ? 1u : 0u;
             tally->scrolled += scrolled ? 1u : 0u;
             tally->captured += captured ? 1u : 0u;
-            tally->closed += (!hud.is_options_open() && !hud.is_quick_help_open() && !hud.is_quit_dialog_open() && !hud.is_match_start_modal_active()) ? 1u : 0u;
+            tally->closed += (!hud.is_quick_help_open() && !hud.is_quit_dialog_open() && !hud.is_match_start_modal_active()) ? 1u : 0u;
         }
     }
 };

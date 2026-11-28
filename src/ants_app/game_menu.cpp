@@ -32,7 +32,7 @@ constexpr PictureText picture_words() {
 constexpr PictureText kPictureWords = picture_words();
 
 // The table. Texts are plain ASCII with no markup (a skin puts them in with its text calls). The original's own names stay in the hints, so that a player who knows the options window finds them.
-constexpr std::array<Row, 18> kRows = {{
+constexpr std::array<Row, 23> kRows = {{
     {kMaster, "master", Section::Sound, Kind::Slider, 0, 99, 100, kBoth | kShowWatch | kShowLive | kShowNew, "Master volume", "Everything you hear", ""},
     {kMusic, "music", Section::Sound, Kind::Slider, 0, 99, 65, kBoth | kShowWatch, "Music volume", "The original's \"Music Volume\"", ""},
     {kEffects, "effects", Section::Sound, Kind::Slider, 0, 99, 100, kBoth | kShowWatch, "Sound effects volume", "The original's \"Sound Volume\"", ""},
@@ -43,14 +43,19 @@ constexpr std::array<Row, 18> kRows = {{
     {kAntHealth, "ant_health", Section::Video, Kind::Choice, 0, 2, static_cast<int>(health::When::Hurt), kBoth | kShowWatch | kShowNew, "Ant health", "Shows hit points: a bar over the ant, or a number at its lower right. Every ant has 10 at most.", "Hurt ants|All ants|Off"},
     {kHealthStyle, "ant_health_style", Section::Video, Kind::Choice, 0, 1, static_cast<int>(health::Style::Bar), kBoth | kShowWatch | kShowNew, "Show health as", "A small bar over the ant, or a number at its lower right", "Bar|Number"},
     {kHealthChanges, "health_changes", Section::Video, Kind::Switch, 0, 1, 1, kBoth | kShowWatch | kShowNew, "Damage & heal numbers", "A small -N over an ant that loses hit points and +N over one that is healed at its hill", "On|Off"},
-    {kShowPing, "show_ping", Section::Video, Kind::Switch, 0, 1, 0, kBoth | kShowNew, "Show ping", "Your ping to the server, beside the frame rate, in network games. Click or tap it to see everyone's.", "On|Off"},
+    {kShowFps, "show_fps", Section::Video, Kind::Switch, 0, 1, 0, kBoth | kShowWatch | kShowNew, "Show FPS", "The frame rate and its graph, in the corner", "On|Off"},
+    {kShowPing, "show_ping", Section::Video, Kind::Switch, 0, 1, 0, kBoth | kShowNew, "Show ping", "Your ping to the server, in network games. Click or tap it to see everyone's.", "On|Off"},
     {kHudArt, "hud_art", Section::Video, Kind::Choice, 0, 1, 0, kBoth | kShowWatch | kShowNew, "HUD art", "The look of the frame, buttons and panel around the map: the new pictures, or the original's own", "New|Classic"},
     {kScroll, "scroll", Section::Video, Kind::Slider, 0, 99, 50, kBoth | kShowWatch, "Map scroll speed", "Edge scrolling; the original's \"Scroll Speed\"", ""},
     {kChat, "chat", Section::Game, Kind::Switch, 0, 1, 1, kBoth, "Participate in chat", "The original's option", "On|Off"},
     {kQuickHelpAtStart, "quickhelp_start", Section::Game, Kind::Switch, 0, 1, 1, kBoth, "Show quick help at startup", "The original's option", "On|Off"},
     {kQuickHelp, "quickhelp", Section::Game, Kind::Button, 0, 0, 0, kBoth, "Quick help", "", "Open (F1)"},
-    {kOptionsWindow, "options_window", Section::Game, Kind::Button, 0, 0, 0, kBoth, "Original options window", "Also where the four quick chat texts are edited", "Open (Ctrl+O)"},
     {kVersion, "version", Section::Game, Kind::Info, 0, 0, 0, kBoth, "Version", "", ""},
+    {kQuickChatNote, "quickchat_note", Section::QuickChat, Kind::Info, 0, 0, 0, kBoth, "Say it with one key", "Press F9 to F12 during a match to say one of these to everybody. Up to 100 letters each.", ""},
+    {kQuickChat1, "quickchat_one", Section::QuickChat, Kind::Text, 0, 100, 0, kBoth, "F9", "", "Now you are in for it!"},
+    {kQuickChat1 + 1, "quickchat_two", Section::QuickChat, Kind::Text, 0, 100, 0, kBoth, "F10", "", "Let me be!"},
+    {kQuickChat1 + 2, "quickchat_three", Section::QuickChat, Kind::Text, 0, 100, 0, kBoth, "F11", "", "Attack!"},
+    {kQuickChat4, "quickchat_four", Section::QuickChat, Kind::Text, 0, 100, 0, kBoth, "F12", "", "Do you want to ally?"},
 }};
 
 struct SectionName {
@@ -59,12 +64,22 @@ struct SectionName {
     const char* label;
     bool in_watch;
 };
-constexpr std::array<SectionName, 4> kSections = {{
+constexpr std::array<SectionName, 5> kSections = {{
     {Section::Sound, "sound", "Sound", true},
     {Section::Video, "video", "Video", true},
     {Section::Controls, "controls", "Controls", true},
     {Section::Game, "game", "Game", false},
+    {Section::QuickChat, "quickchat", "Quick Chat", false},
 }};
+
+constexpr std::array<ControlLine, 6> kMouse = {{{"Left click", "Select, order", false}, {"Right click", "Special order, move", false}, {"Drag", "Rubber band", false}, {"Wheel", "Zoom", false},
+                                                  {"Middle button", "Zoom 1", false}, {"Screen edge", "Scroll the map", false}}};
+constexpr std::array<ControlLine, 4> kMouseWatch = {{{"Wheel", "Zoom", false}, {"Middle button", "Zoom 1", false}, {"Screen edge", "Scroll the map", false}, {"Minimap", "Move the view", false}}};
+constexpr std::array<ControlLine, 5> kTouch = {{{"Tap", "Select or order", false}, {"Hold, then lift", "Right click", false}, {"Drag", "Rubber band", false}, {"Two fingers", "Move the map", false}, {"Pinch", "Zoom", false}}};
+constexpr std::array<ControlLine, 3> kTouchWatch = {{{"Two fingers", "Move the map", false}, {"Pinch", "Zoom", false}, {"Minimap", "Move the view", false}}};
+constexpr std::array<ControlLine, 12> kKeys = {{{"Esc", "Deselect; then this menu", false}, {"F1", "Quick help", false}, {"F9|~to|F12", "Quick chat", true}, {"Enter", "Send chat", true}, {"Ctrl|A", "Select all ants", true},
+                                                  {"Ctrl|H", "Home hill", true}, {"Ctrl|N|~/|P", "Next / previous ant", true}, {"Ctrl|S", "Stop", true}, {"Ctrl|L", "Health marks", false},
+                                                  {"Ctrl|O", "This menu", false}, {"Ctrl|Q", "Quit question", false}, {"F2|~/|F3", "Vote (network match)", true}}};
 
 const char* kind_name(Kind kind) noexcept {
     switch (kind) {
@@ -73,6 +88,7 @@ const char* kind_name(Kind kind) noexcept {
         case Kind::Choice: return "choice";
         case Kind::Button: return "button";
         case Kind::Info:   return "info";
+        case Kind::Text:   return "text";
     }
     return "info";
 }
@@ -128,6 +144,45 @@ const Row* find_row(int id) noexcept {
     return nullptr;
 }
 
+std::vector<SectionInfo> sections_for(bool watching) {
+    std::vector<SectionInfo> out;
+    for (const SectionName& s : kSections) {
+        if (section_shown(s.section, watching)) out.push_back(SectionInfo{s.section, s.id, s.label});
+    }
+    return out;
+}
+
+std::vector<const Row*> rows_for(Section section, bool watching, bool web) {
+    std::vector<const Row*> out;
+    for (const Row& row : kRows) {
+        if (row.section == section && shown(row, watching, web) && section_shown(row.section, watching)) out.push_back(&row);
+    }
+    return out;
+}
+
+const ControlLine* control_lines(ControlGroup group, size_t& count) noexcept {
+    switch (group) {
+        case ControlGroup::Mouse:      count = kMouse.size(); return kMouse.data();
+        case ControlGroup::MouseWatch: count = kMouseWatch.size(); return kMouseWatch.data();
+        case ControlGroup::Touch:      count = kTouch.size(); return kTouch.data();
+        case ControlGroup::TouchWatch: count = kTouchWatch.size(); return kTouchWatch.data();
+        case ControlGroup::Keys:       break;
+    }
+    count = kKeys.size();
+    return kKeys.data();
+}
+
+const char* controls_note() noexcept { return "On a Mac, Cmd works as Ctrl."; }
+
+LeaveWords leave_words(LeaveKind kind) noexcept {
+    return LeaveWords{kind == LeaveKind::Forfeit ? "Forfeit and leave?" : "Leave the game?",
+                      kind == LeaveKind::Forfeit ? "You give up this match. It ends now for everybody and counts as a loss for you."
+                      : kind == LeaveKind::DropOut ? "You will drop out. Your ants are lost, the others play on, and you cannot come back to this match."
+                      : kind == LeaveKind::Held ? "The match is held. You leave it for good and cannot come back to this match."
+                                                : "This match ends. Your game is not saved.",
+                      kind == LeaveKind::Forfeit ? "Forfeit" : "Leave game"};
+}
+
 std::string describe_json(bool watching, bool web) {
     std::string out = "{\"v\":1,\"sections\":[";
     bool first = true;
@@ -163,8 +218,37 @@ std::string describe_json(bool watching, bool web) {
         put_words(out, row.words);
         out += std::string(",\"live\":") + ((row.show & kShowLive) != 0 ? "1" : "0") + ",\"new\":" + ((row.show & kShowNew) != 0 ? "1" : "0") + ",\"page\":" + ((row.show & kShowPage) != 0 ? "1" : "0") + '}';
     }
+    // The Controls list (docs/CONTROLS.md): [keys, what, play_only] for each group
+    out += "],\"controls\":{";
+    const auto put_group = [&](const char* name, ControlGroup group) {
+        size_t n = 0;
+        const ControlLine* lines = control_lines(group, n);
+        out += '"';
+        out += name;
+        out += "\":[";
+        for (size_t i = 0; i < n; ++i) {
+            if (i > 0) out += ',';
+            out += '[';
+            put_string(out, lines[i].keys);
+            out += ',';
+            put_string(out, lines[i].what);
+            out += lines[i].play_only ? ",1]" : ",0]";
+        }
+        out += ']';
+    };
+    put_group("mouse", ControlGroup::Mouse);
+    out += ',';
+    put_group("mouseWatch", ControlGroup::MouseWatch);
+    out += ',';
+    put_group("touch", ControlGroup::Touch);
+    out += ',';
+    put_group("touchWatch", ControlGroup::TouchWatch);
+    out += ',';
+    put_group("keys", ControlGroup::Keys);
+    out += ",\"note\":";
+    put_string(out, controls_note());
     // The words that are not a row's: the footer's notes, the tags of a screen that is watched, Resume and Leave, and the question that Leave asks (one entry for each LeaveKind: "asks" says whether it asks, and the words are only there when it does)
-    out += "],\"words\":{\"title\":\"Settings\",\"resume\":\"Resume\",\"leave\":\"Leave game\",\"back\":\"Back to the matches\",\"close\":\"Close the settings\",\"esc\":\"closes\","
+    out += "},\"words\":{\"title\":\"Settings\",\"resume\":\"Resume\",\"leave\":\"Leave game\",\"back\":\"Back to the matches\",\"close\":\"Close the settings\",\"esc\":\"closes\","
            "\"note\":\"The game keeps running while this menu is open.\","
            "\"noteReplay\":\"The replay keeps playing. Pause it with the bar.\",\"noteLive\":\"The match keeps playing.\","
            "\"tagReplay\":\"Watching a replay\",\"tagLive\":\"Watching live\",\"stay\":\"Stay in the game\",\"deciding\":\"The game keeps running while you decide.\","
@@ -179,15 +263,13 @@ std::string describe_json(bool watching, bool web) {
             out += '}';
             continue;
         }
+        const LeaveWords words = leave_words(kind);
         out += ",\"title\":";
-        put_string(out, kind == LeaveKind::Forfeit ? "Forfeit and leave?" : "Leave the game?");
+        put_string(out, words.title);
         out += ",\"body\":";
-        put_string(out, kind == LeaveKind::Forfeit ? "You give up this match. It ends now for everybody and counts as a loss for you."
-                        : kind == LeaveKind::DropOut ? "You will drop out. Your ants are lost, the others play on, and you cannot come back to this match."
-                        : kind == LeaveKind::Held ? "The match is held. You leave it for good and cannot come back to this match."
-                                                  : "This match ends. Your game is not saved.");
+        put_string(out, words.body);
         out += ",\"go\":";
-        put_string(out, kind == LeaveKind::Forfeit ? "Forfeit" : "Leave game");
+        put_string(out, words.go);
         out += '}';
     }
     out += "]}}";
@@ -222,6 +304,7 @@ const char* MenuSettings::key(int row_id) noexcept {
         case kHealthStyle: return "ant_health_style";
         case kHealthChanges: return "health_changes";
         case kShowPing:  return "show_ping";
+        case kShowFps:   return "show_fps";
         case kHudArt:    return "hud_art";
         default:         return "";
     }
@@ -239,6 +322,7 @@ void MenuSettings::load(const ConfigStore& store) {
     health::parse(store.get_string(key(kHealthStyle), "", 8), ant_health.style);
     health_changes = store.get_string(key(kHealthChanges), "on", 8) != "off";                 // (a word that is not "off", or none: on)
     show_ping = store.get_string(key(kShowPing), "off", 8) == "on";                          // (a word that is not "on", or none: off)
+    show_fps = store.get_string(key(kShowFps), "off", 8) == "on";                            // (likewise)
     hud_art_new = store.get_string(key(kHudArt), "new", 8) != "classic";                      // (a word that is not "classic", or none: the new pictures)
 }
 
@@ -250,6 +334,7 @@ void MenuSettings::write(ConfigStore& store, int row_id) const {
         case kHealthStyle: store.set_string(key(kHealthStyle), health::word(ant_health.style)); break;
         case kHealthChanges: store.set_string(key(kHealthChanges), health_changes ? "on" : "off"); break;
         case kShowPing:  store.set_string(key(kShowPing), show_ping ? "on" : "off"); break;
+        case kShowFps:   store.set_string(key(kShowFps), show_fps ? "on" : "off"); break;
         case kHudArt:    store.set_string(key(kHudArt), hud_art_new ? "new" : "classic"); break;
         default: break;
     }

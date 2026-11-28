@@ -17,7 +17,10 @@
 #include "ants_app/health_marks.hpp"
 #include "ants_app/hud_art.hpp"
 #include "ants_app/edge_scroll.hpp"
-#include "ants_app/options_screen.hpp"
+#include "ants_app/hud_art.hpp"
+#include "ants_app/options_state.hpp"
+#include "ants_app/screen_button.hpp"
+#include "ants_app/screen_controls.hpp"
 #include "ants_app/screen_button.hpp"
 #include "ants_app/pedestal.hpp"
 #include "ants_app/screen_layout.hpp"
@@ -67,14 +70,14 @@ public:
 
     HUD();
     ~HUD() = default;
-    HUD(const HUD&) = delete;                     // the options screen calls back into its HUD
+    HUD(const HUD&) = delete;                     // the windows' callbacks point into their HUD
     HUD& operator=(const HUD&) = delete;
 
     /// The geometry of the picture that the HUD works in (screen_layout.hpp; the original's 640 x 480 until it is told otherwise). Every rectangle that used to be a number of the
     /// original's screen is placed from it by ONE function (apply_layout), which `init` (so every new match) and `set_layout` both run: a layout that was set earlier is not lost
     /// when the next match resets the HUD. The map view, the minimap, the chat log, the top bar's buttons, the pedestals, the [All] / [Team] buttons, the score slots, the status
-    /// line and the chat input follow it, and so do the pointer's zones (over_map, over_minimap, in_chat_view). The dialogs (quit, alliance, the "get ready" modal) and the pages (options,
-    /// quick help) are pictures of the original's screen with their own numbers: render() draws them moved by layout().modal_offset() / options_offset() / quick_help_offset() (IRenderer::set_origin: over
+    /// line and the chat input follow it, and so do the pointer's zones (over_map, over_minimap, in_chat_view). The dialogs (quit, alliance, the "get ready" modal) and the page (the
+    /// quick help) are pictures of the original's screen with their own numbers: render() draws them moved by layout().modal_offset() / quick_help_offset() (IRenderer::set_origin: over
     /// the map view, the rest of the HUD visible around them) and the pointer handlers take the pointer back to those numbers.
     void set_layout(const ScreenLayout& layout);
     const ScreenLayout& layout() const noexcept { return layout_; }
@@ -83,9 +86,9 @@ public:
     /// The point is on the map's ground: in the view, and not on the black around a map that is smaller than the view (the camera's origin is negative there). Nothing on the black
     /// acts: no order, no selection, no marker; the pointer over it is the plain arrow.
     bool over_ground(int32_t x, int32_t y, const ViewportCamera& camera, const sim::Grid& grid) const noexcept;
-    /// Where the numbers of the open window (the options screen, the quick help) are moved to in this picture: layout().options_offset() / quick_help_offset(), (0, 0) in the
-    /// original's own picture. Every pointer handler, the 50 ms poll of update() and the drawing use this one place.
-    LayoutPoint open_window_offset() const noexcept { return show_quick_help_ ? layout_.quick_help_offset() : layout_.options_offset(); }
+    /// Where the numbers of the open window (the quick help) are moved to in this picture: layout().quick_help_offset(), (0, 0) in the original's own picture. Every pointer handler,
+    /// the 50 ms poll of update() and the drawing use this one place.
+    LayoutPoint open_window_offset() const noexcept { return layout_.quick_help_offset(); }
     LayoutRect minimap_rect() const noexcept { return layout_.minimap_for_map(static_cast<int32_t>(radar_map_w_), static_cast<int32_t>(radar_map_h_)); }
     bool over_minimap(int32_t x, int32_t y) const noexcept { return minimap_rect().contains(x, y); }
     /// The rectangles that the layout places (for the widescreen work and the tests); the pedestal buttons are the pedestal slots' rectangles too
@@ -176,8 +179,11 @@ public:
         const LayoutRect view = layout_.chat_view();
         return LayoutRect{layout_.right(479), view.y, 143, layout_.bottom(437) - view.y};
     }
-    /// The input box takes text now: the option "Participate In Chat" is on and no dialog is open (the same conditions as handle_text_input)
-    bool chat_takes_text() const noexcept { return options_.state().chat && (!is_modal_open() || countdown_takes_chat()); }
+    /// A player may write: the option "Participate In Chat" is on and the screen is a match that is played. A recording and a live match that is watched have a chat to read, and no input box, no Send to
+    /// buttons, no quick chat keys and no text (view_only(): the watcher is not a player, and what it typed would stand in the log under the name of the first color)
+    bool chat_writable() const noexcept { return options_.chat && !view_only_; }
+    /// The input box takes text now: the player may write and no dialog is open (the same conditions as handle_text_input)
+    bool chat_takes_text() const noexcept { return chat_writable() && (!is_modal_open() || countdown_takes_chat()); }
     /// Enter (FUN_010103eb with hasAlly): sends the text to the team when the local player has an ally, else to everybody, and clears the box.
     void send_chat_message() { send_chat(is_on_team_); }
     /// The [All] / [Team] buttons and Enter: sends the text of the chat box (FUN_010103eb) and clears it; nothing when it is empty or chat is off.
@@ -263,14 +269,14 @@ public:
     bool input_tick(ViewportCamera& camera, uint32_t map_w, uint32_t map_h, int32_t mouse_x, int32_t mouse_y);
     /// The countdown card is the only dialog that is up (protocol 21): the chat is open behind it
     bool countdown_takes_chat() const noexcept {
-        return show_match_start_modal_ && match_countdown_ && !options_.is_open() && !show_quit_dialog_ && !show_quick_help_ && alliance_dialog_ == AllianceDialog::None;
+        return show_match_start_modal_ && match_countdown_ && !show_quit_dialog_ && !show_quick_help_ && alliance_dialog_ == AllianceDialog::None;
     }
     /// While the card is the only dialog that is up the player may LOOK AROUND: the edge strips, the minimap, a drag on the map, the wheel and two fingers move and zoom the view, and nothing of the
     /// match can be picked or ordered (docs/VIEW_AND_HUD.md, "The countdown card")
     bool countdown_takes_camera() const noexcept { return countdown_takes_chat(); }
     /// A dialog (options, quit, quick help, the "get ready" modal) is open: it gets all input, the hover and scroll logic does not run.
     bool is_modal_open() const noexcept {
-        return options_.is_open() || show_quit_dialog_ || show_quick_help_ || show_match_start_modal_ || alliance_dialog_ != AllianceDialog::None;
+        return show_quit_dialog_ || show_quick_help_ || show_match_start_modal_ || alliance_dialog_ != AllianceDialog::None;
     }
     /// The left button is captured by the map (a rubber band), the minimap or a button (`[5534]` != 0): no edge scrolling then.
     bool is_input_captured() const noexcept;
@@ -303,8 +309,7 @@ public:
     bool camera_ring_shown() const noexcept { return ring_shown_; }
     bool camera_ring_solid() const noexcept { return ring_solid_; }
     /// Every press that is in progress ends with no act: the rubber band (no selection), the minimap's and the right button's press (no order), the chat log's drag and the pressed buttons
-    /// (nothing fires). For a touch that the browser took away, or that a second finger turned into a gesture. The options window's own press ends here too (a slider's drag, with no value written);
-    /// the other dialogs' and pages' buttons end as a release away from them.
+    /// (nothing fires). For a touch that the browser took away, or that a second finger turned into a gesture. The dialogs' and pages' buttons end as a release away from them.
     void cancel_press() noexcept;
 
     // Status line (Ants.exe PostStatus): one slot, 5 s life, flash flag; see status_line.hpp
@@ -400,8 +405,12 @@ public:
     void set_on_quit(std::function<void()> cb) { on_quit_ = std::move(cb); }
     /// Esc with nothing to cancel (nothing selected, no pedestal latched; a first press, not a held key): the settings menu is asked for (application_game_menu.cpp)
     void set_on_menu_request(std::function<void()> cb) { on_menu_request_ = std::move(cb); }
-    /// What the settings menu's panel does to a setting of the options window: the value is taken, stored and applied as that window's callback does it (the same state: the two always agree)
+    /// What the settings menu does to one of the original's options: the value is taken, stored and applied (the same state that the sound, the chat and the edge scroll read)
     void set_option(OptionSetting setting, int32_t value);
+    /// A quick chat text (index 0 .. 3: F9 .. F12) from the settings menu: printable ASCII, at most 100 characters, kept and written to the profile
+    void set_quick_chat(size_t index, const std::string& text);
+    /// The settings menu is drawn over the match (the desktop's panel): the Options button stays down while it is up
+    void set_menu_latched(bool on) noexcept { menu_latched_ = on; }
     /// A drag or a held button that began before the settings menu opened is let go without its act
     void release_input() noexcept { release_capture(); }
     bool has_selection() const noexcept { return selected_ant_id_ != 0 || !selected_ant_ids_.empty() || selected_base_team_id_ >= 0; }
@@ -413,20 +422,11 @@ public:
     bool is_quick_help_open() const noexcept { return show_quick_help_; }
     const ScreenButton& quick_help_return_button() const noexcept { return quick_help_return_; }
 
-    /// The options screen (FUN_0101487c, docs 5.51): a window that takes every event while it is open. Its settings are `options()`; a setting that a callback of
-    /// the screen changes is written to the config store (when there is one) and applied at once: the Sound Volume slider calls `set_on_sfx_volume` and plays the
-    /// test voice, the Music Volume slider calls `set_on_music_volume`, the Scroll Speed is read by the input tick, the chat switch by the chat box.
-    void open_options() { release_capture(); options_.open(clock_ms()); }
-    void close_options() noexcept { options_.close(); }
-    bool is_options_open() const noexcept { return options_.is_open(); }
-    /// A phone's keyboard for the options window's four quick chat fields (Application::web_chat_do): the field with the focus, a field given the focus, a text left in it and the text written to the profile
-    std::optional<size_t> options_focused_edit() const noexcept { return options_.focused_edit(); }
-    void options_focus_edit(size_t index) { options_.focus_edit(index, clock_ms()); }
-    bool options_set_edit(size_t index, const std::string& text) { return options_.set_edit_text(index, text); }
-    void options_commit_edit(size_t index) { options_.commit_edit(index); }
-    const OptionsScreen& options_screen() const noexcept { return options_; }
-    OptionsState& options() noexcept { return options_.state(); }
-    const OptionsState& options() const noexcept { return options_.state(); }
+    /// The original's options that the game keeps (the settings menu changes them: sound and music volume, scroll speed, chat, quick help at startup, the four quick chat texts). A setting that is
+    /// changed is written to the config store (when there is one) and applied at once: the Sound Volume calls `set_on_sfx_volume` and plays the test voice, the Music Volume calls
+    /// `set_on_music_volume`, the Scroll Speed is read by the input tick, the chat switch by the chat box.
+    OptionsState& options() noexcept { return options_; }
+    const OptionsState& options() const noexcept { return options_; }
     /// Where the profile is written (null: nowhere); the program's start loads `options()` from the same store
     void set_config_store(ConfigStore* store) noexcept { config_store_ = store; }
 
@@ -436,15 +436,15 @@ public:
     void set_on_play_sfx(std::function<void(uint32_t)> cb) { on_play_sfx_ = std::move(cb); }
     void play_sfx(uint32_t sound_id) { if (on_play_sfx_) on_play_sfx_(sound_id); }
 
-    int32_t get_sound_volume() const noexcept { return options_.state().sound_volume; }
-    int32_t get_music_volume() const noexcept { return options_.state().music_volume; }
+    int32_t get_sound_volume() const noexcept { return options_.sound_volume; }
+    int32_t get_music_volume() const noexcept { return options_.music_volume; }
     /// The Scroll Speed 0 .. 99 that the edge scroll uses (its half extent is this + 10)
-    int32_t get_scroll_speed() const noexcept { return options_.state().scroll_speed; }
-    bool is_chat_enabled() const noexcept { return options_.state().chat; }
-    bool is_quick_help_enabled() const noexcept { return options_.state().quick_help; }
+    int32_t get_scroll_speed() const noexcept { return options_.scroll_speed; }
+    bool is_chat_enabled() const noexcept { return options_.chat; }
+    bool is_quick_help_enabled() const noexcept { return options_.quick_help; }
     const std::string& get_quick_chat_key(size_t index) const {
         static const std::string empty;
-        return (index < 4) ? options_.state().quick_chat[index] : empty;
+        return (index < 4) ? options_.quick_chat[index] : empty;
     }
 
     /// Ctrl+L (0x1026440): the original prints the hit points of every ant as text. Here it flips the ant health marks (health_marks.hpp: a bar over the ants, or a number at the lower right of each) between Off and the
@@ -571,10 +571,8 @@ private:
                               int32_t original_w, FontSize original_size);
     void render_quick_help_new(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_match_countdown_new(IRenderer& renderer, const assets::AssetArchive& assets);
-    void render_veil(IRenderer& renderer);                 // the new look's dim behind the options window (a see-through dark fill over the picture but the card)
     void draw_top_buttons_corner(IRenderer& renderer, const assets::AssetArchive& assets);
     void draw_fullscreen_button(IRenderer& renderer, const assets::AssetArchive& assets);
-    void render_options_dim(IRenderer& renderer);          // a bigger picture: the checker dither over everything outside the options card, as the original's pieces do in its own picture
     void render_match_start_modal(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_marquee_box(IRenderer& renderer);
     void render_pedestal_glow(IRenderer& renderer, const assets::AssetArchive& assets, int pedestal_idx);
@@ -817,8 +815,9 @@ private:
     bool show_quick_help_{false};
     ScreenButton quick_help_return_{ButtonRect{529, 437, 98, 26}, ButtonRect{527, 437, 97, 24}};      // the pictures qh_return1 / 2 and qh_return3 (the hit test is the rectangle of the picture that shows)
 
-    // The options screen and what it changes
-    OptionsScreen options_;
+    // The original's options and where they are written
+    OptionsState options_;
+    bool menu_latched_{false};
     ConfigStore* config_store_{nullptr};
     void apply_option(OptionSetting setting);
     uint32_t clock_ms() const noexcept { return ticks_fn_ ? ticks_fn_() : SDL_GetTicks(); }

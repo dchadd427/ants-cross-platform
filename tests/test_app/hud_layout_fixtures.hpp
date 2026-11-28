@@ -13,7 +13,7 @@
 #include "ants_app/latency_corner.hpp"
 #include "ants_app/map_select.hpp"
 #include "ants_app/net_overlay.hpp"
-#include "ants_app/options_screen.hpp"
+#include "ants_app/options_state.hpp"
 #include "ants_app/ui_anim.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_app/scorecard.hpp"
@@ -174,7 +174,8 @@ void test_button_zones(const assets::AssetArchive& arc);
 void test_latency_corner(const assets::AssetArchive& arc);
 void test_net_overlay();
 void test_connections_overlay(const assets::AssetArchive& arc);
-void test_more_button_zones(const assets::AssetArchive& arc);
+void test_more_button_zones();
+void test_corner_without_the_frame_rate();
 void test_pedestal_chains(const assets::AssetArchive& arc);
 void test_pedestal_timeline(const assets::AssetArchive& arc);
 void test_minimap(const assets::AssetArchive& arc);

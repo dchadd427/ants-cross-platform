@@ -868,6 +868,11 @@ void test_centred_pixels() {
         for (size_t i = 0; i + 3 < p.size(); i += 4) n += (p[i + 1] >= 185 && p[i] < 100 && p[i + 2] < 120) ? 1 : 0;
         return n;
     };
+    check(bar_pixels(wide.app, 834, 527, 118, 13) == 0 && bar_pixels(classic.app, 514, 467, 118, 13) == 0, "Show FPS is off by default: no sparkline in either corner (the version alone stands there)");
+    wide.app.game_menu_set(game_menu::kShowFps, 1, false);                    // (the frame rate and its graph are the setting Show FPS: the checks below look at them)
+    classic.app.game_menu_set(game_menu::kShowFps, 1, false);
+    wide.app.render_frame();
+    classic.app.render_frame();
     check(bar_pixels(wide.app, 834, 527, 118, 13) > 20, "16:9: the sparkline is in the canvas's bottom right corner (rows 527 .. 539)");
     check(bar_pixels(wide.app, 514, 467, 118, 13) == 0, "16:9: and not where the 4:3 picture's corner is (the original's place of the plate)");
     check(bar_pixels(classic.app, 514, 467, 118, 13) > 20, "4:3: it is in the picture's corner, as it was");

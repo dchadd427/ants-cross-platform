@@ -185,23 +185,9 @@ struct ScreenLayout {
     /// place is the classic picture's (no move), so a layout without extra size gives (0, 0).
     constexpr LayoutPoint modal_offset() const noexcept { return centred_in_view(kDialogX, kDialogY, kDialogW, kDialogH); }
 
-    /// Where the windows of the original's own pages that open DURING a match are drawn in a bigger picture: over the map view, centred in it, the HUD staying visible around them (as in the
-    /// original's picture, where the options window sits over the map view and the panel is still there). The options window is the original's 442 x 440 card over its map view; the quick
-    /// help is the 640 x 480 page. The original's own picture has no move.
-    constexpr LayoutPoint options_offset() const noexcept { return centred_in_view(kClassicViewX, kClassicViewY, kClassicViewW, kClassicViewH); }
+    /// Where the window of the original's own pages that opens DURING a match is drawn in a bigger picture: over the map view, centred in it, the HUD staying visible around it (as in the
+    /// original's picture). The quick help is the 640 x 480 page. The original's own picture has no move.
     constexpr LayoutPoint quick_help_offset() const noexcept { return centred_in_view(0, 0, kClassicWidth, kClassicHeight); }
-
-    /// The part of the options window's picture that the original does not dim (measured on ants.chd: op_screen's 25 pieces of checker dither are a ring around the card, the left strip at
-    /// x -3 .. 16, the top one at y 0 .. 19, the bottom one from y 460, and the whole panel to the right of it from x 459, so the card is 442 x 440 at the window's own (17, 20)). The original's
-    /// whole picture outside the card is dimmed; in a bigger picture the card is where options_offset() puts it and the rest of the picture is dimmed the same way (HUD::render_options_dim).
-    static constexpr int32_t kOptionsCardX = 17;
-    static constexpr int32_t kOptionsCardY = 20;
-    static constexpr int32_t kOptionsCardW = 442;
-    static constexpr int32_t kOptionsCardH = 440;
-    constexpr LayoutRect options_card() const noexcept {
-        const LayoutPoint o = options_offset();
-        return LayoutRect{kOptionsCardX + o.x, kOptionsCardY + o.y, kOptionsCardW, kOptionsCardH};
-    }
 
 private:
     /// The offset that puts the window (x, y, w, h) of the original's pages at the centre of the map view; none for the original's own picture

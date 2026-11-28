@@ -51,6 +51,7 @@ class Art;
 /// of a multi-line label. The renderer opens its TrueType font so that its cell height is exactly this number. Heights and where they are used:
 /// docs/GAME_REVERSE_ENGINEERING.md 5.14.
 enum class FontSize : uint8_t {
+    Px10 = 10,   // the remake's own (not an original height): a score label's name that does not fit at 14 or 12 px
     Px12 = 12,   // a label's default (FUN_0102ad16): the status line, the chat log
     Px14 = 14,   // the score bars' player labels, the setup screen's prompt
     Px18 = 18,   // the setup screen's names and map name, the results screen's rows
@@ -244,7 +245,7 @@ public:
     virtual void draw_art(const hud_art::Art& art, int32_t sprite, int32_t x, int32_t y, int32_t w, int32_t h, int32_t sx, int32_t sy, int32_t sw, int32_t sh) {
         (void)art; (void)sprite; (void)x; (void)y; (void)w; (void)h; (void)sx; (void)sy; (void)sw; (void)sh;
     }
-    /// Everything that is drawn afterwards is moved by (x, y), until set_origin(0, 0): a window of the original's own 640 x 480 screen (the options screen, the quick help, a dialog) is drawn
+    /// Everything that is drawn afterwards is moved by (x, y), until set_origin(0, 0): a window of the original's own 640 x 480 screen (the quick help, a dialog) is drawn
     /// with its own numbers and put where the picture wants it. Not a clip: nothing is cut. A renderer that records its calls sees them as they are given (without the move).
     virtual void set_origin(int32_t x, int32_t y) { (void)x; (void)y; }
     /// Everything that is drawn afterwards (rectangles, text, the pieces of the HUD art) is laid over what is there with this share of its own opacity, 0 (not at all) .. 255 (as it is), until
@@ -735,7 +736,7 @@ private:
     mutable std::unordered_map<int32_t, TTF_Font*> face_fonts_;    // the game's face at any size (face_text_ready), by em in tenths of a pixel, opened at twice the size
     std::unordered_map<std::string, CachedTextEntry> face_cache_;
     TTF_Font* face_font(int32_t em_tenths) const;
-    static constexpr size_t kFontSizes = 8;          // the enumerators of FontSize
+    static constexpr size_t kFontSizes = 9;          // the enumerators of FontSize
     static size_t font_index(FontSize size) noexcept;
     TTF_Font* font_for(FontSize size) const noexcept { return fonts_[font_index(size)]; }
     std::array<TTF_Font*, kFontSizes> fonts_{};

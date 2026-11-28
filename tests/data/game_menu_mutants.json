@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the settings menu for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the page's script web/game_menu.js against tests/scripts/web_game_menu_check.js (node, on a strict fake of the DOM), and the game's side (src/ants_app/game_menu.cpp, application_game_menu.cpp, the HUD's Esc, the event loop's gate, the mixer's gain) against tests/test_app/test_game_menu.cpp and the mixer's case 4.5b of test_app_integration, and the corner's ping (Show ping: application_net.cpp, latency_corner.cpp) against N5.29b and N5.103 of test_network_app and test_hud_layout. Run from the checkout: tools/mutate.py tests/data/game_menu_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_game_menu.py runs the script's mutants, the scrolling's and the style's on a copy of the files.",
+  "note": "Mutants of the settings menu for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the page's script web/game_menu.js against tests/scripts/web_game_menu_check.js (node, on a strict fake of the DOM), and the game's side (src/ants_app/game_menu.cpp, application_game_menu.cpp, the HUD's Esc, the event loop's gate, the mixer's gain) against tests/test_app/test_game_menu.cpp and the mixer's case 4.5b of test_app_integration, the desktop's drawn panel (game_menu_panel.cpp) against test_game_menu, the Quick Chat texts (options_state.cpp) against test_options, Ctrl+O and the Options button (hud_keys.cpp, hud_pointer.cpp) against test_pointer_model, and the corner (Show FPS and Show ping: fps_overlay.hpp, application_net.cpp, latency_corner.cpp) and the score labels' sizes (hud.cpp) against N5.29b and N5.103 of test_network_app and test_hud_layout. Run from the checkout: tools/mutate.py tests/data/game_menu_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_game_menu.py runs the script's mutants, the scrolling's and the style's on a copy of the files.",
   "mutants": [
     {
       "id": "held_esc_closes",
@@ -184,17 +184,17 @@
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
-      "id": "quick_help_and_options_swapped",
+      "id": "quick_help_button_calls_another_act",
       "file": "web/game_menu.js",
-      "old": "row.key === 'quickhelp' ? 2 : 3",
-      "new": "row.key === 'quickhelp' ? 3 : 2",
+      "old": "close({ relock: false }); call('_ants_menu_do', 2); });",
+      "new": "close({ relock: false }); call('_ants_menu_do', 3); });",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
       "id": "act_before_close",
       "file": "web/game_menu.js",
-      "old": "close({ relock: false }); call('_ants_menu_do', which);",
-      "new": "call('_ants_menu_do', which); close({ relock: false });",
+      "old": "close({ relock: false }); call('_ants_menu_do', 2);",
+      "new": "call('_ants_menu_do', 2); close({ relock: false });",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
@@ -375,7 +375,7 @@
     {
       "id": "recording_lists_a_seats_keys",
       "file": "web/game_menu.js",
-      "old": "if (watching && item[2] === 'watch') return;",
+      "old": "if (watching && item[2]) return;",
       "new": "",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
@@ -805,7 +805,7 @@
       "test": "./build/tests/test_app/test_game_menu"
     },
     {
-      "id": "options_window_over_a_dialog",
+      "id": "quick_help_over_a_dialog",
       "file": "src/ants_app/application_game_menu.cpp",
       "old": "if (game_menu_needs_answer() || replay_mode_) return false;",
       "new": "if (replay_mode_) return false;",
@@ -1007,8 +1007,8 @@
     {
       "id": "wheel_reaches_the_map",
       "file": "src/ants_app/application_game_menu.cpp",
-      "old": "        case SDL_MOUSEWHEEL:\n",
-      "new": "",
+      "old": "        case SDL_MOUSEBUTTONDOWN:\n        case SDL_MOUSEWHEEL:\n",
+      "new": "        case SDL_MOUSEBUTTONDOWN:\n",
       "build": [
         "test_game_menu"
       ],
@@ -1791,8 +1791,8 @@
     {
       "id": "ping_drawn_when_off",
       "file": "src/ants_app/application_net.cpp",
-      "old": "if (!network_active() || !menu_settings_.show_ping) return;",
-      "new": "if (!network_active()) return;",
+      "old": "if (!network_active() || !menu_settings_.show_ping) return std::nullopt;",
+      "new": "if (!network_active()) return std::nullopt;",
       "build": [
         "test_network_app"
       ],
@@ -1813,6 +1813,207 @@
       "file": "src/ants_app/latency_corner.cpp",
       "old": "layout.stacked = row_right - widest_w < left_limit;",
       "new": "layout.stacked = (static_cast<void>(widest_w), row_right - ping_w < left_limit);",
+      "build": [
+        "test_hud_layout"
+      ],
+      "test": "./build/tests/test_app/test_hud_layout"
+    },
+    {
+      "id": "text_row_not_written_to_the_game",
+      "file": "web/game_menu.js",
+      "old": "                writeText(row.id, clean);\n",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "text_row_not_cut_at_its_maximum",
+      "file": "web/game_menu.js",
+      "old": ".replace(/[^\\x20-\\x7e]/g, '').slice(0, row.max);",
+      "new": ".replace(/[^\\x20-\\x7e]/g, '');",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "text_row_takes_what_the_game_refuses",
+      "file": "web/game_menu.js",
+      "old": ".replace(/[^\\x20-\\x7e]/g, '').slice(0, row.max);",
+      "new": ".slice(0, row.max);",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "show_fps_on_by_default",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "{kShowFps, \"show_fps\", Section::Video, Kind::Switch, 0, 1, 0,",
+      "new": "{kShowFps, \"show_fps\", Section::Video, Kind::Switch, 0, 1, 1,",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "show_fps_row_not_in_recordings",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "{kShowFps, \"show_fps\", Section::Video, Kind::Switch, 0, 1, 0, kBoth | kShowWatch | kShowNew,",
+      "new": "{kShowFps, \"show_fps\", Section::Video, Kind::Switch, 0, 1, 0, kBoth | kShowNew,",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "quick_chat_section_in_recordings",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "{Section::QuickChat, \"quickchat\", \"Quick Chat\", false},",
+      "new": "{Section::QuickChat, \"quickchat\", \"Quick Chat\", true},",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "show_fps_not_remembered",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "case kShowFps:   store.set_string(key(kShowFps), show_fps ? \"on\" : \"off\"); break;",
+      "new": "case kShowFps:   break;",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "quick_chat_takes_an_accent",
+      "file": "src/ants_app/options_state.cpp",
+      "old": "if (c >= 0x20 && c <= 0x7e && out.size() < QUICK_CHAT_MAX) out += c;",
+      "new": "if (c >= 0x20 && out.size() < QUICK_CHAT_MAX) out += c;",
+      "build": [
+        "test_options"
+      ],
+      "test": "./build/tests/test_app/test_options"
+    },
+    {
+      "id": "quick_chat_not_cut_at_100",
+      "file": "src/ants_app/options_state.cpp",
+      "old": "if (c >= 0x20 && c <= 0x7e && out.size() < QUICK_CHAT_MAX) out += c;",
+      "new": "if (c >= 0x20 && c <= 0x7e) out += c;",
+      "build": [
+        "test_options"
+      ],
+      "test": "./build/tests/test_app/test_options"
+    },
+    {
+      "id": "panel_held_esc_closes",
+      "file": "src/ants_app/game_menu_panel.cpp",
+      "old": "        if (repeat) return true;                                          // (a held Esc does not close it)\n",
+      "new": "",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "panel_music_heard_while_dragged",
+      "file": "src/ants_app/game_menu_panel.cpp",
+      "old": "if ((row->show & game_menu::kShowLive) != 0 || save) host_.set(row->id, value, save);",
+      "new": "host_.set(row->id, value, save);",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "panel_release_elsewhere_acts",
+      "file": "src/ants_app/game_menu_panel.cpp",
+      "old": "if (at >= 0 && list[static_cast<size_t>(at)].part == item.part && list[static_cast<size_t>(at)].row == item.row && list[static_cast<size_t>(at)].word == item.word) fire(item);",
+      "new": "static_cast<void>(at);\n    fire(item);",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "panel_text_not_cut_at_100",
+      "file": "src/ants_app/game_menu_panel.cpp",
+      "old": "if (c >= 0x20 && c <= 0x7e && static_cast<int>(now.size()) < game_menu::kQuickChatMax) now += c;",
+      "new": "if (c >= 0x20 && c <= 0x7e) now += c;",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "panel_text_takes_controls",
+      "file": "src/ants_app/game_menu_panel.cpp",
+      "old": "if (c >= 0x20 && c <= 0x7e && static_cast<int>(now.size()) < game_menu::kQuickChatMax) now += c;",
+      "new": "if (c >= 0x01 && static_cast<int>(now.size()) < game_menu::kQuickChatMax) now += c;",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "panel_fullscreen_closes_the_menu",
+      "file": "src/ants_app/game_menu_panel.cpp",
+      "old": "} else if (item.row == game_menu::kFullscreen) {\n                host_.act(game_menu::kActFullscreen);",
+      "new": "} else if (item.row == game_menu::kFullscreen) {\n                host_.act(game_menu::kActFullscreen);\n                close();",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "ctrl_o_opens_nothing",
+      "file": "src/ants_app/hud_keys.cpp",
+      "old": "            if (on_menu_request_) on_menu_request_();                 // Ctrl+O: the settings menu",
+      "new": "            // Ctrl+O: the settings menu",
+      "build": [
+        "test_pointer_model"
+      ],
+      "test": "./build/tests/test_app/test_pointer_model"
+    },
+    {
+      "id": "options_button_opens_nothing",
+      "file": "src/ants_app/hud_pointer.cpp",
+      "old": "else if (fire_options) { if (on_menu_request_) on_menu_request_(); }",
+      "new": "else if (fire_options) {}",
+      "build": [
+        "test_pointer_model"
+      ],
+      "test": "./build/tests/test_app/test_pointer_model"
+    },
+    {
+      "id": "score_label_never_steps_down",
+      "file": "src/ants_app/hud.cpp",
+      "old": "for (const FontSize f : {FontSize::Px14, FontSize::Px12, FontSize::Px10}) {",
+      "new": "for (const FontSize f : {FontSize::Px14}) {",
+      "build": [
+        "test_hud_layout"
+      ],
+      "test": "./build/tests/test_app/test_hud_layout"
+    },
+    {
+      "id": "score_label_skips_the_middle_size",
+      "file": "src/ants_app/hud.cpp",
+      "old": "for (const FontSize f : {FontSize::Px14, FontSize::Px12, FontSize::Px10}) {",
+      "new": "for (const FontSize f : {FontSize::Px14, FontSize::Px10}) {",
+      "build": [
+        "test_hud_layout"
+      ],
+      "test": "./build/tests/test_app/test_hud_layout"
+    },
+    {
+      "id": "corner_ping_beside_the_version_needs_more_room",
+      "file": "include/ants_app/fps_overlay.hpp",
+      "old": "if (beside >= *ping_limit) {",
+      "new": "if (beside > *ping_limit) {",
+      "build": [
+        "test_hud_layout"
+      ],
+      "test": "./build/tests/test_app/test_hud_layout"
+    },
+    {
+      "id": "corner_version_off_the_edge_without_the_frame_rate",
+      "file": "include/ants_app/fps_overlay.hpp",
+      "old": "out.version_x = plate.right_edge - ver_w;\n        if (ping_limit) {",
+      "new": "out.version_x = plate.right_edge - ver_w - 1;\n        if (ping_limit) {",
       "build": [
         "test_hud_layout"
       ],

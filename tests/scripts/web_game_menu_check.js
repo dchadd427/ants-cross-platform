@@ -33,10 +33,11 @@ const AntsShapes = require(path.resolve(__dirname, '..', '..', 'web', 'shapes.js
 const AntsShapePicker = require(path.resolve(__dirname, '..', '..', 'web', 'shape_picker.js'));       // (the page's picker of the shape: the page hands the menu a function that makes one)
 const MATCH = fs.readFileSync(path.join(dataDir, 'game_menu_match.json'), 'utf8').trim();
 const WATCH = fs.readFileSync(path.join(dataDir, 'game_menu_watch.json'), 'utf8').trim();
+const CONTROLS = JSON.parse(MATCH).controls;                                      // (the Controls list is the game's table: the page draws what the JSON says)
 
 // ---- the strict fake of the DOM --------------------------------------------------------------------------------------------------------------------------------------------------
 const NEVER = new Set(['innerHTML', 'outerHTML', 'insertAdjacentHTML', 'outerText', 'innerText', 'insertAdjacentElement', 'write']);
-const SETTABLE = new Set(['id', 'className', 'type', 'value', 'min', 'max', 'step', 'hidden', 'disabled', 'title', 'rel', 'href', 'onload', 'onerror', 'checked', 'textContent', 'parentNode', 'own', 'name']);
+const SETTABLE = new Set(['id', 'className', 'type', 'value', 'min', 'max', 'step', 'hidden', 'disabled', 'title', 'rel', 'href', 'onload', 'onerror', 'checked', 'textContent', 'parentNode', 'own', 'name', 'maxLength', 'spellcheck']);
 const READABLE_EMPTY = new Set(['then', 'toJSON', 'nodeType', 'asymmetricMatch', 'constructor']);
 
 function makeDocument() {
@@ -195,8 +196,9 @@ function makeDocument() {
 function makeGame(json) {
     const g = {
         where: 0, needsAnswer: 0, leave: 2, opened: false, calls: [],
-        values: { 1: 100, 2: 65, 3: 99, 4: 0, 8: 0, 9: 50, 10: 1, 11: 1, 15: 0, 16: 1, 18: 0 },
+        values: { 1: 100, 2: 65, 3: 99, 4: 0, 8: 0, 9: 50, 10: 1, 11: 1, 15: 0, 16: 1, 18: 0, 19: 0 },
         describes: 0, saves: [],
+        texts: { 20: 'Now you are in for it!', 21: 'Let me be!', 22: 'Attack!', 23: 'Do you want to ally?' }, written: [],
     };
     g.module = {
         UTF8ToString: (p) => p,
@@ -204,6 +206,15 @@ function makeGame(json) {
         _ants_menu_get: (what) => (what === 100 ? g.where : what === 101 ? g.needsAnswer : what === 102 ? g.leave : (what in g.values ? g.values[what] : -1)),
         _ants_menu_set: (id, v, save) => { g.calls.push(['set', id, v]); g.saves.push([id, v, save]); if (!(id in g.values)) return 0; g.values[id] = v; return 1; },
         _ants_menu_do: (what) => { g.calls.push(['do', what]); return 1; },
+        // a text row: the code of the character at `index` (-1 past the end); a text is written a character at a time (index 0 starts it) and kept by index -1, as the game does it
+        _ants_menu_text: (id, index) => (id in g.texts && index >= 0 && index < g.texts[id].length ? g.texts[id].charCodeAt(index) : -1),
+        _ants_menu_text_set: (id, index, code) => {
+            if (!(id in g.texts)) return 0;
+            if (index < 0) { g.written.push([id, g.texts[id]]); return 1; }
+            if (index === 0) g.texts[id] = '';
+            if (code >= 0x20 && code <= 0x7e && g.texts[id].length < 100) g.texts[id] += String.fromCharCode(code);
+            return 1;
+        },
         _ants_menu_open: (on) => { g.calls.push(['open', on]); g.opened = !!on; },
     };
     return g;
@@ -339,8 +350,8 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     ok('it is a child of the stage, the element that goes fullscreen', scrim.parentNode === p.stage);
     const panel = p.q('.gm-panel');
     expect('a modal dialog named by its title', [panel.getAttribute('role'), panel.getAttribute('aria-modal'), panel.getAttribute('aria-labelledby'), p.q('#gm-title').textContent], ['dialog', 'true', 'gm-title', 'Settings']);
-    expect('four sections in a tab list', p.qa('[role=tab]').map((t) => t.textContent), ['Sound', 'Video', 'Controls', 'Game']);
-    expect('the first is chosen, and the only one in the tab order', p.qa('[role=tab]').map((t) => [t.getAttribute('aria-selected'), t.getAttribute('tabindex')]), [['true', '0'], ['false', '-1'], ['false', '-1'], ['false', '-1']]);
+    expect('five sections in a tab list', p.qa('[role=tab]').map((t) => t.textContent), ['Sound', 'Video', 'Controls', 'Game', 'Quick Chat']);
+    expect('the first is chosen, and the only one in the tab order', p.qa('[role=tab]').map((t) => [t.getAttribute('aria-selected'), t.getAttribute('tabindex')]), [['true', '0'], ['false', '-1'], ['false', '-1'], ['false', '-1'], ['false', '-1']]);
     expect('the Sound section: the table\'s rows in the table\'s order', p.rows().map((r) => r.name), names(MATCH_ROWS, 'sound'));
     expect('the NEW tags are on Master volume and Mute only', p.rows().map((r) => r.fresh), [true, false, false, true]);
     expect('the hints are the table\'s', p.rows().map((r) => r.hint), MATCH_ROWS.filter((r) => r.sec === 'sound').map((r) => r.hint));
@@ -352,11 +363,11 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     expect('the Game section', p.rows().map((r) => r.name), names(MATCH_ROWS, 'game'));
     ok('the version is the page\'s', p.qa('.gm-info').length === 1 && p.q('.gm-info').textContent === 'v0.12.111');
     const drawn = [];
-    ['sound', 'video', 'game'].forEach((s) => { p.tab(s); drawn.push.apply(drawn, p.rows().map((r) => r.name)); });
+    ['sound', 'video', 'game', 'quickchat'].forEach((s) => { p.tab(s); drawn.push.apply(drawn, p.rows().map((r) => r.name)); });
     expect('every row of the table is drawn once, and nothing else', drawn.slice().sort(), MATCH_ROWS.map((r) => r.label).sort());
     p.tab('controls');
-    ok('the Controls list: the mouse, the keys, and a note, with no control in it', p.qa('.gm-gh').map((h) => h.textContent).join() === 'MOUSE,KEYS' && p.qa('.gm-krow').length === Menu.CONTROLS.mouse.length + Menu.CONTROLS.keys.length && p.qa('.gm-fine').length === 1 && p.qa('.gm-panel input').length === 0);
-    ok('...each group\'s lines are in one grid under its heading (two columns of pairs on a wide panel: both columns have the heading above them)', p.qa('.gm-kgrid').length === 2 && p.qa('.gm-kgrid')[0].children.length === Menu.CONTROLS.mouse.length && p.qa('.gm-kgrid')[1].children.length === Menu.CONTROLS.keys.length);
+    ok('the Controls list: the mouse, the keys, and a note, with no control in it', p.qa('.gm-gh').map((h) => h.textContent).join() === 'MOUSE,KEYS' && p.qa('.gm-krow').length === CONTROLS.mouse.length + CONTROLS.keys.length && p.qa('.gm-fine').length === 1 && p.qa('.gm-panel input').length === 0);
+    ok('...each group\'s lines are in one grid under its heading (two columns of pairs on a wide panel: both columns have the heading above them)', p.qa('.gm-kgrid').length === 2 && p.qa('.gm-kgrid')[0].children.length === CONTROLS.mouse.length && p.qa('.gm-kgrid')[1].children.length === CONTROLS.keys.length);
     ok('...the Esc line says what Esc does now', p.qa('.gm-krow').some((r) => r.textContent.indexOf('Esc') === 0 && r.textContent.indexOf('Deselect; then this menu') > 0));
     ok('...a chord is its keys', p.qa('.gm-krow').some((r) => r.querySelectorAll('.gm-kbd').map((k) => k.textContent).join('+') === 'Ctrl+N+P' && r.textContent.indexOf('/') > 0));
     p.menu.close();
@@ -365,7 +376,7 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     const p = makePage({ touch: true }).ready();
     p.open();
     p.tab('controls');
-    ok('a touch screen has the touch list and not the mouse\'s', p.qa('.gm-gh').map((h) => h.textContent).join() === 'TOUCH,KEYS' && p.qa('.gm-krow').length === Menu.CONTROLS.touch.length + Menu.CONTROLS.keys.length);
+    ok('a touch screen has the touch list and not the mouse\'s', p.qa('.gm-gh').map((h) => h.textContent).join() === 'TOUCH,KEYS' && p.qa('.gm-krow').length === CONTROLS.touch.length + CONTROLS.keys.length);
     p.tab('video');
     ok('...and no Fullscreen mouse row (a finger never locks)', p.rows().map((r) => r.name).indexOf('Fullscreen mouse') < 0 && p.rows().length === names(MATCH_ROWS, 'video').length - 1);
     expect('the tabs are a row there', p.q('[role=tablist]').getAttribute('aria-orientation'), 'horizontal');
@@ -451,7 +462,7 @@ const outsideTouch = (() => { const o = makePage({ touch: true, touchKeys: true 
     p.tab('video');
     expect('the Video section is the same rows', p.rows().map((r) => r.name), names(WATCH_ROWS, 'video'));
     p.tab('controls');
-    ok('the Controls list is the view-only one', p.qa('.gm-krow').length === Menu.CONTROLS.mouseWatch.length + Menu.CONTROLS.keys.filter((k) => k[2] !== 'watch').length);
+    ok('the Controls list is the view-only one', p.qa('.gm-krow').length === CONTROLS.mouseWatch.length + CONTROLS.keys.filter((k) => !k[2]).length);
     p.menu.close();
     const live = makePage({ watch: true, live: true }).ready();
     live.open();
@@ -501,7 +512,7 @@ const outsideTouch = (() => { const o = makePage({ touch: true, touchKeys: true 
     p.game.calls.length = 0;
     p.tab('video');
     const video = p.qa('[role=radiogroup]');
-    expect('the Video section: the mouse, the two rows of the ant health, the damage and heal numbers, Show ping and the HUD art are button groups (the picture\'s shape is a dropdown)', video.map((g) => g.children.map((b) => b.textContent)), [['Locked', 'Free'], ['Hurt ants', 'All ants', 'Off'], ['Bar', 'Number'], ['On', 'Off'], ['On', 'Off'], ['New', 'Classic']]);
+    expect('the Video section: the mouse, the two rows of the ant health, the damage and heal numbers, Show FPS, Show ping and the HUD art are button groups (the picture\'s shape is a dropdown)', video.map((g) => g.children.map((b) => b.textContent)), [['Locked', 'Free'], ['Hurt ants', 'All ants', 'Off'], ['Bar', 'Number'], ['On', 'Off'], ['On', 'Off'], ['On', 'Off'], ['New', 'Classic']]);
     const dropdown = p.qa('.pick-select');
     expect('one dropdown in the panel: the picture\'s shape, the page\'s picker (a button), in the row of its own', [dropdown.length, dropdown[0].tagName, dropdown[0].parentNode.className + '/' + dropdown[0].parentNode.parentNode.className, dropdown[0].parentNode.parentNode.parentNode.querySelector('.gm-name').textContent], [1, 'button', 'pick/gm-ctl gm-pick', 'Picture shape']);
     ok('...no native select is in the panel', !p.q('select') && p.qa('option').length === 0);
@@ -545,11 +556,16 @@ const outsideTouch = (() => { const o = makePage({ touch: true, touchKeys: true 
     expect('Off is row 16, value 0, shown pressed in, and kept at once', [p.game.calls[5], video[3].children.map((b) => b.getAttribute('aria-checked')), p.game.saves[p.game.saves.length - 1]], [['set', 16, 0], ['false', 'true'], [16, 0, 1]]);
     video[3].children[0].click();
     expect('On is value 1 of row 16', [p.game.calls[6], video[3].children.map((b) => b.getAttribute('aria-checked'))], [['set', 16, 1], ['true', 'false']]);
-    expect('Show ping is the row of its name, Off (value 0) by default, a switch after Damage & heal numbers and before the HUD art, tagged new', [p.qa('.gm-name').map((n) => n.textContent).filter((t) => /^(Damage|Show ping|HUD)/.test(t)), video[4].children.map((b) => b.getAttribute('aria-checked'))], [['Damage & heal numbers', 'Show ping', 'HUD art'], ['false', 'true']]);
+    expect('Show FPS is the row of its name, Off (value 0) by default, a switch after Damage & heal numbers and before Show ping', [p.qa('.gm-name').map((n) => n.textContent).filter((t) => /^(Damage|Show FPS|Show ping)/.test(t)), video[4].children.map((b) => b.getAttribute('aria-checked'))], [['Damage & heal numbers', 'Show FPS', 'Show ping'], ['false', 'true']]);
     video[4].children[0].click();
-    expect('On is row 18, value 1, shown pressed in, and kept at once', [p.game.calls[7], video[4].children.map((b) => b.getAttribute('aria-checked')), p.game.saves[p.game.saves.length - 1]], [['set', 18, 1], ['true', 'false'], [18, 1, 1]]);
+    expect('On is row 19, value 1, shown pressed in, and kept at once', [p.game.calls[7], video[4].children.map((b) => b.getAttribute('aria-checked')), p.game.saves[p.game.saves.length - 1]], [['set', 19, 1], ['true', 'false'], [19, 1, 1]]);
     video[4].children[1].click();
-    expect('Off is value 0 of row 18', [p.game.calls[8], video[4].children.map((b) => b.getAttribute('aria-checked'))], [['set', 18, 0], ['false', 'true']]);
+    expect('Off is value 0 of row 19', [p.game.calls[8], video[4].children.map((b) => b.getAttribute('aria-checked'))], [['set', 19, 0], ['false', 'true']]);
+    expect('Show ping is the row of its name, Off (value 0) by default, a switch after Show FPS and before the HUD art, tagged new', [p.qa('.gm-name').map((n) => n.textContent).filter((t) => /^(Show FPS|Show ping|HUD)/.test(t)), video[5].children.map((b) => b.getAttribute('aria-checked'))], [['Show FPS', 'Show ping', 'HUD art'], ['false', 'true']]);
+    video[5].children[0].click();
+    expect('On is row 18, value 1, shown pressed in, and kept at once', [p.game.calls[9], video[5].children.map((b) => b.getAttribute('aria-checked')), p.game.saves[p.game.saves.length - 1]], [['set', 18, 1], ['true', 'false'], [18, 1, 1]]);
+    video[5].children[1].click();
+    expect('Off is value 0 of row 18', [p.game.calls[10], video[5].children.map((b) => b.getAttribute('aria-checked'))], [['set', 18, 0], ['false', 'true']]);
 
     p.game.calls.length = 0;
     const fsButton = p.qa('.gm-act')[0];
@@ -573,9 +589,34 @@ const outsideTouch = (() => { const o = makePage({ touch: true, touchKeys: true 
     const q = makePage().ready();
     q.open();
     q.tab('game');
-    q.game.calls.length = 0;
-    q.qa('.gm-act')[1].click();
-    expect('the original\'s options window is act 3, after the panel closed', [q.menu.isOpen(), q.game.calls], [false, [['open', 0], ['do', 3]]]);
+    expect('the Quick help button is the only act of the Game section (the original\'s options window is gone: its settings are rows)', q.qa('.gm-act').map((b) => b.textContent), ['Open (F1)']);
+}
+
+// ---- the Quick Chat section: the note and four text rows (F9 - F12) that are the game's: read from it, written to it as they are typed
+{
+    const p = makePage().ready();
+    p.open();
+    p.tab('quickchat');
+    const labels = p.qa('.gm-name').map((n) => n.textContent);
+    expect('the Quick Chat section: a line to say what it is, and F9 to F12', labels, ['Say it with one key', 'F9', 'F10', 'F11', 'F12']);
+    const fields = p.qa('.gm-text input');
+    expect('four text fields, the game\'s texts in them, up to 100 letters, each named by its key', [fields.map((f) => f.value), fields.map((f) => f.maxLength), fields.every((f) => !!f.getAttribute('aria-labelledby'))], [['Now you are in for it!', 'Let me be!', 'Attack!', 'Do you want to ally?'], [100, 100, 100, 100], true]);
+    fields[1].value = 'Hold the line';
+    fields[1].fire('input', {});
+    expect('typing writes the text to the game (the row\'s id 21) a character at a time and keeps it at the end', [p.game.texts[21], p.game.written], ['Hold the line', [[21, 'Hold the line']]]);
+    fields[2].value = 'caf\u00e9 ok\t!';
+    fields[2].fire('input', {});
+    expect('what the game does not take (an accent, a tab) is taken out of the field and the text', [fields[2].value, p.game.texts[22]], ['caf ok!', 'caf ok!']);
+    fields[3].value = '';
+    fields[3].fire('input', {});
+    expect('an emptied field empties the game\'s text', p.game.texts[23], '');
+    fields[0].value = 'x'.repeat(130);
+    fields[0].fire('input', {});
+    expect('at most 100 letters', [fields[0].value.length, p.game.texts[20].length], [100, 100]);
+    p.menu.close();
+    const w = makePage({ watch: true }).ready();
+    w.open();
+    expect('a recording has no Quick Chat section', w.qa('[role=tab]').map((t) => t.textContent), ['Sound', 'Video', 'Controls']);
 }
 
 // ---- opening and closing -------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -654,7 +695,7 @@ const outsideTouch = (() => { const o = makePage({ touch: true, touchKeys: true 
     e = p.doc.key('ArrowDown');
     expect('the arrow keys move between the sections, and the section follows', [e.prevented, p.doc.activeElement.textContent, p.qa('[role=tab]')[1].getAttribute('aria-selected')], [true, 'Video', 'true']);
     p.doc.key('End');
-    expect('End goes to the last', p.doc.activeElement.textContent, 'Game');
+    expect('End goes to the last', p.doc.activeElement.textContent, 'Quick Chat');
     p.doc.key('ArrowRight');
     expect('...and the arrows wrap', p.doc.activeElement.textContent, 'Sound');
     p.doc.key('Home');
@@ -984,7 +1025,7 @@ const outside = (opts) => { const p = makePage(opts).ready(); p.game.where = -1;
     ok('...nor under a dialog', !p.open() && !p.menu.isOpen());
     p.game.needsAnswer = 0;
     p.poll();
-    ok('...and in a match with nothing waiting it opens the full menu', !!p.open() && p.qa('[role=tab]').length === 4);
+    ok('...and in a match with nothing waiting it opens the full menu', !!p.open() && p.qa('[role=tab]').length === 5);
 }
 
 // ---- which form a press on the button opens, in each state ---------------------------------------------------------------------------------------------------------------------
@@ -1187,7 +1228,7 @@ function sdlModel(p) {
     n.menu.close();
     const m = makePage().ready();
     m.q('#settings-btn').fire('keydown', { key: ' ', code: p.doc.codeOf(' ') });
-    ok('in a match the gear\'s Space opens the full menu', m.menu.isOpen() && m.qa('[role=tab]').length === 4);
+    ok('in a match the gear\'s Space opens the full menu', m.menu.isOpen() && m.qa('[role=tab]').length === 5);
     m.menu.close();
 }
 
