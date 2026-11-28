@@ -169,6 +169,7 @@ tests/data/mode_187_screens_mutants.json
 tests/data/names_wire_mutants.json
 tests/data/nearest_first_mutants.json
 tests/data/no_drops_187_mutants.json
+tests/data/order_tick_mutants.json
 tests/data/others_confirmed_mutants.json
 tests/data/own_hop_mutants.json
 tests/data/p2p_mutants.json
