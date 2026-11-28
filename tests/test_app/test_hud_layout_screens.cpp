@@ -794,6 +794,17 @@ void test_text_sizes(const assets::AssetArchive& arc) {
         const auto* mine = find(rr, "Player:");                      // the HUD's default player name
         check(mine != nullptr && mine->size == FontSize::Px14 && mine->x + 7 * 6 == 399 && mine->y == 4, "hud: the own score label is 14 px high, right aligned to x = 399, at the top of its box");
     }
+    // the score labels show the name, not the clan tag: "[ANTS1] Wolfgang" is "Wolfgang:" (the label holds 15 characters, and the tag used to take seven of them)
+    {
+        RecordingRenderer rr(arc);
+        sim::WorldState world;
+        HUD hud;
+        hud.init(0);
+        hud.set_player_name("[ANTS1] Wolfgang");
+        ViewportCamera camera;
+        hud.render(rr, arc, world, camera);
+        check(find(rr, "Wolfgang:") != nullptr && find(rr, "[ANTS1] Wolfgang:") == nullptr, "hud: the own score label shows the name without the clan tag");
+    }
     // the quit dialog: one centred label of 24 px letters in (130, 180) 260 x 160
     {
         RecordingRenderer rr(arc);
@@ -1389,6 +1400,9 @@ void test_countdown_card_geometry() {
         const CountdownRowWords f = countdown_row_words(CountdownSeat{true, false, "", net::PeerLink::None, -1, false}, false, "Red");
         check(f.name == "Red" && f.tag == "in" && f.ping.empty(), "row words: no name is the color; a game on this computer shows no number");
         check(countdown_row_words(CountdownSeat{true, false, "X", net::PeerLink::Direct, 123456, true}, false, "Red").ping == "999 ms", "row words: a number is cut at 999 ms");
+        check(countdown_row_words(CountdownSeat{true, false, "[ANTS1] Wolfgang", net::PeerLink::Direct, 24, true}, false, "Red").name == "Wolfgang" &&
+                  countdown_row_words(CountdownSeat{true, false, "[ANTS1] Wolfgang", net::PeerLink::None, 38, true}, true, "Green").name == "Wolfgang (you)",
+              "row words: a clan tag is not shown, and (you) follows the name");
         check(ping_color(79).g == 240 && ping_color(80).r == 246 && ping_color(149).r == 246 && ping_color(150).r == 255 && ping_color(-1).r == 168, "the colors of a number: green under 80, gold under 150, red from there, gray for none");
     }
 }

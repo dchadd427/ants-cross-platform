@@ -30,6 +30,11 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - Other players' ants no longer rubber-band in network matches: those of other people and of computer players are drawn from the confirmed game, a moment behind your own and never corrected. Your own ants still answer a click at once. `?others=predicted` on the game page's address brings the old picture back, to compare, until v0.22.3 at the latest.
+- In a match the chat, the score labels and the countdown card show your name without the clan tag, so a long name fits (the tag stays on the results and on the pages).
+
+**Fixes:**
+- A recording or a live match that you watch has no chat to write in any more (the input box is covered and the Send to buttons are gone; the players' lines stay readable): what a watcher typed showed in its own log under the name of the first player, and went nowhere else.
+- The ants' heads in the ranked rows of the results screen are no longer cut off at the top of their feelers on large screens.
 
 ## v0.22.1 - 2026-11-27 - Smoother ants online, fewer freezes, Show ping
 

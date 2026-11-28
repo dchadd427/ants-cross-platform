@@ -413,6 +413,41 @@ void test_podium(const assets::AssetArchive& arc, const hud_art::Art& art) {
         whole += ok ? 1 : 0;
     }
     check(whole == 8, "every line that is drawn is well formed UTF-8, whatever the names are made of (" + std::to_string(whole) + " of 8)");
+
+    // a ranked row shows the head of its ants and never loses the top or a side of it, at any size and in whichever frame of their animation: the frames do not all start where the first does
+    {
+        const Screen sizes[] = {kWide720, kPhoneUp, kPhoneSide, kUltra, kSmall43, {"1080p", 960, 540, 1920, 1080}, {"1440p", 960, 540, 2560, 1440}, {"4K", 960, 540, 3840, 2160}, {"laptop", 960, 540, 1536, 864}, {"16:10", 960, 600, 2560, 1600}};
+        size_t heads = 0, frames_seen = 0;
+        bool clip_ok = true;
+        std::string where;
+        for (const Screen& s : sizes) {
+            for (const bool alliance : {false, true}) {
+                ScorecardModal rows;
+                open(rows, &art, s, sample(alliance));
+                for (int step = 0; step < 36; ++step) {                      // (the ants' animation is 1.65 s long: every one of its frames is up in 36 steps of 50 ms)
+                    rows.update(0.05f);
+                    const auto frame = draw(arc, rows, s);
+                    frames_seen += 1;
+                    bool clipped = false;
+                    LayoutRect clip;
+                    for (const Spy::Ev& e : frame->events) {
+                        if (e.kind == Spy::Kind::Clip) {
+                            clipped = true;
+                            clip = LayoutRect{e.x, e.y, e.w, e.h};
+                            heads += 1;
+                        } else if (e.kind == Spy::Kind::ClearClip) {
+                            clipped = false;
+                        } else if (clipped && e.kind == Spy::Kind::Region && (e.y < clip.y || e.x < clip.x || e.x + e.w > clip.right())) {
+                            if (clip_ok) where = std::string(s.name) + (alliance ? " (an alliance)" : "") + ", step " + std::to_string(step) + ": a part at " + std::to_string(e.x) + "," + std::to_string(e.y) + " " + std::to_string(e.w) + "x" + std::to_string(e.h) + " over a clip at " + std::to_string(clip.x) + "," + std::to_string(clip.y) + " " + std::to_string(clip.w) + "x" + std::to_string(clip.h);
+                            clip_ok = false;
+                        }
+                    }
+                }
+            }
+        }
+        check(heads > 0 && frames_seen > 0, "the ranked rows show heads (" + std::to_string(heads) + " heads in " + std::to_string(frames_seen) + " frames)");
+        check(clip_ok, "no head of a ranked row is cut above or at its sides, at ten sizes and in every frame of the animation" + (where.empty() ? std::string() : " (" + where + ")"));
+    }
 }
 
 void test_counted(const assets::AssetArchive& arc, const hud_art::Art& art) {

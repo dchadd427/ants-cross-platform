@@ -126,7 +126,7 @@ void HUD::render_match_countdown(IRenderer& renderer, const assets::AssetArchive
         renderer.fill_rect(r.x, r.y, r.w, r.h, ColorRGBA{5, 10, 8, 235});
         renderer.fill_rect(r.x + 7, r.y + (r.h - 12) / 2, 12, 12, black);
         renderer.fill_rect(r.x + 8, r.y + (r.h - 12) / 2 + 1, 10, 10, kDots[seat]);
-        std::string name = who.name.empty() ? std::string(kTeamNames[seat]) : who.name;
+        std::string name = who.name.empty() ? std::string(kTeamNames[seat]) : without_clan_tag(who.name);
         if (seat == local_player_id_ && !who.computer) name += " (you)";
         const bool mine = seat == local_player_id_ && !who.computer;
         const CountdownRowWords words = countdown_row_words(who, mine, kTeamNames[seat]);

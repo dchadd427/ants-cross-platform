@@ -176,8 +176,11 @@ public:
         const LayoutRect view = layout_.chat_view();
         return LayoutRect{layout_.right(479), view.y, 143, layout_.bottom(437) - view.y};
     }
-    /// The input box takes text now: the option "Participate In Chat" is on and no dialog is open (the same conditions as handle_text_input)
-    bool chat_takes_text() const noexcept { return options_.state().chat && (!is_modal_open() || countdown_takes_chat()); }
+    /// A player may write: the option "Participate In Chat" is on and the screen is a match that is played. A recording and a live match that is watched have a chat to read, and no input box, no Send to
+    /// buttons, no quick chat keys and no text (view_only(): the watcher is not a player, and what it typed would stand in the log under the name of the first color)
+    bool chat_writable() const noexcept { return options_.state().chat && !view_only_; }
+    /// The input box takes text now: the player may write and no dialog is open (the same conditions as handle_text_input)
+    bool chat_takes_text() const noexcept { return chat_writable() && (!is_modal_open() || countdown_takes_chat()); }
     /// Enter (FUN_010103eb with hasAlly): sends the text to the team when the local player has an ally, else to everybody, and clears the box.
     void send_chat_message() { send_chat(is_on_team_); }
     /// The [All] / [Team] buttons and Enter: sends the text of the chat box (FUN_010103eb) and clears it; nothing when it is empty or chat is off.

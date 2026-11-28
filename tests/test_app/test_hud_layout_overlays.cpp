@@ -180,6 +180,59 @@ void test_chat_log(const assets::AssetArchive& arc) {
         check(found, "a header wider than 138 px is drawn right aligned with its front cut off");
     }
 
+    // a clan tag is not in the chat's headers: "[ANTS1] Wolfgang" is Wolfgang, in a team message too; what only looks like a tag (one letter, no space after it, nothing after it) and a computer player stay as they are
+    {
+        HUD h4;
+        h4.init(0);
+        h4.add_chat_entry("[ANTS1] Wolfgang", "hi", false, 2);
+        h4.add_chat_entry("[N\xC3\x84T] Zoe", "yo", true, 1);
+        h4.add_chat_entry("[x] Zoe", "a", false, 1);
+        h4.add_chat_entry("[ANT]Zoe", "b", false, 1);
+        h4.add_chat_entry("[ANT] ", "c", false, 1);
+        h4.add_chat_entry("Pip (bot, Hard)", "d", false, 1);
+        const auto& log = h4.get_chat_log();
+        const auto has = [&](const std::string& line) { return std::find(log.begin(), log.end(), line) != log.end(); };
+        check(has("Wolfgang:") && !has("[ANTS1] Wolfgang:"), "chat: a clan tag is left out of a header");
+        check(has("Zoe (To Teammate):"), "chat: ...also in a message to a teammate (a tag of letters with accents too)");
+        check(has("[x] Zoe:") && has("[ANT]Zoe:") && has("[ANT] :") && has("Pip (bot, Hard):"), "chat: a name that only looks like a tag, and a computer player's, are shown as they are");
+    }
+
+    // a recording or a live match that is watched: the chat is there to read and nobody writes in it (no text, no Enter, no quick chat key, no Send to button, and the input box is covered): what a watcher typed
+    // used to stand in the log under the name of the first color
+    {
+        HUD watcher;
+        watcher.init(0);
+        bool sent = false;
+        watcher.set_on_chat_send([&sent](const std::string&, bool) { sent = true; });
+        watcher.set_view_only(true);
+        check(!watcher.chat_writable() && !watcher.chat_takes_text(), "a watched match: nobody writes in the chat");
+        const size_t before = watcher.get_chat_log().size();
+        watcher.handle_text_input("canichat?");
+        check(watcher.get_chat_input().empty(), "a watcher's typed text goes nowhere");
+        watcher.set_chat_input("hello");
+        watcher.send_chat_message();
+        watcher.send_chat(false);
+        check(watcher.get_chat_input().empty() && watcher.get_chat_log().size() == before && !sent, "Enter and the Send to buttons send nothing, and the box is emptied");
+        sim::SimulationEngine eng;
+        eng.init_test_world(60, 60, 1);
+        watcher.handle_key_down(SDLK_F9, eng, camera);
+        check(watcher.get_chat_log().size() == before && !sent, "a quick chat key says nothing");
+        watcher.receive_chat_message(1, "Bea", "gg", false, eng.get_world_state());
+        check(watcher.get_chat_log().size() > before, "what the players say is still in the log, to read");
+        RecordingRenderer rr(arc);
+        watcher.render(rr, arc, eng.get_world_state(), camera);
+        RecordingRenderer playing(arc);
+        HUD player;
+        player.init(0);
+        player.render(playing, arc, eng.get_world_state(), camera);
+        check(playing.has_sprite_at("butallu.bmp", 532, 443) && !rr.has_sprite_at("butallu.bmp", 532, 443), "the Send to button is there for a player and not for a watcher");
+        const size_t read_only = watcher.get_chat_log().size();
+        watcher.set_chat_input("x");
+        watcher.handle_mouse_down(550, 450, SDL_BUTTON_LEFT, eng, camera);
+        watcher.handle_mouse_up(550, 450, SDL_BUTTON_LEFT, eng, camera);
+        check(watcher.get_chat_log().size() == read_only && !sent, "a click where the Send to button was does nothing");
+    }
+
     // the body wraps by PIXELS with the measure that the HUD was given (the original measures a label with GDI when it is made): 'i' is 3 px, so eight "iiii" words (117 px) fit
     {
         NarrowRenderer narrow;

@@ -1,5 +1,6 @@
 // The chat of the match screen (hud.hpp): the entries and their lines, the news flashes, the scroll and the drag of the chat box, its drawing and the transcript that is written when the program ends.
 #include "ants_app/hud.hpp"
+#include "ants_app/display_name.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_app/text_layout.hpp"
 
@@ -36,7 +37,7 @@ const IRenderer& default_text_metrics() {
 
 void HUD::add_chat_entry(const std::string& sender, const std::string& message, bool team_only, int color_index) {
     const uint8_t color = static_cast<uint8_t>(color_index >= 0 && color_index <= 3 ? color_index : (3 - (local_player_id_ & 3)));
-    push_chat_entry(sender + (team_only ? " (To Teammate):" : ":"), message, color);
+    push_chat_entry(without_clan_tag(sender) + (team_only ? " (To Teammate):" : ":"), message, color);        // (a name here is the nickname: the clan tag takes the room that the name needs)
 }
 
 void HUD::set_text_metrics(const IRenderer* metrics) {

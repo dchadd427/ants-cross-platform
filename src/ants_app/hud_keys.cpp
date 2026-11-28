@@ -84,7 +84,7 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
     if (view_only_ && ctrl && (key == 'a' || key == 'A' || key == 'h' || key == 'H' || key == 'n' || key == 'N' || key == 'p' || key == 'P' || key == 's' || key == 'S')) return true;     // (a replay picks nothing)
 
     // The chat edit control is always active while chat is on: it takes 0x20 - 0x7E and Backspace unless Ctrl is held
-    if (options_.state().chat && !ctrl) {
+    if (chat_writable() && !ctrl) {
         if (key >= 32 && key <= 126) {
             if (chat_input_.size() < kChatInputMax) chat_input_.push_back(static_cast<char>(key));
             return true;
@@ -101,7 +101,7 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
             open_quick_help();
             return true;
         case SDLK_F9: case SDLK_F10: case SDLK_F11: case SDLK_F12:
-            if (!repeat && options_.state().chat) trigger_quick_chat(static_cast<size_t>(key - SDLK_F9));
+            if (!repeat && chat_writable()) trigger_quick_chat(static_cast<size_t>(key - SDLK_F9));
             return true;
         case SDLK_RETURN: case SDLK_KP_ENTER:                  // FUN_010103eb: the team when the player has an ally, else everybody
             send_chat_message();
@@ -188,7 +188,7 @@ void HUD::handle_text_input(const std::string& text) {
         options_.on_text(text);                   // the focused edit field takes the printable characters (at most 100)
         return;
     }
-    if (show_quit_dialog_ || show_quick_help_ || (show_match_start_modal_ && !match_countdown_) || !options_.state().chat) return;     // a dialog or the chat cover takes the keys (the countdown card does not: protocol 21)
+    if (show_quit_dialog_ || show_quick_help_ || (show_match_start_modal_ && !match_countdown_) || !chat_writable()) return;     // a dialog or the chat cover takes the keys (the countdown card does not: protocol 21)
     for (char c : text) {
         if (c >= 32 && c <= 126) {
             if (chat_input_.size() < kChatInputMax) {
@@ -200,7 +200,7 @@ void HUD::handle_text_input(const std::string& text) {
 
 void HUD::send_chat(bool to_team) {
     if (chat_input_.empty()) return;
-    if (!options_.state().chat) {                     // "Participate In Chat" off: the box is covered and nothing is sent
+    if (!chat_writable()) {                           // "Participate In Chat" off, or a recording watched: the box is covered and nothing is sent
         chat_input_.clear();
         return;
     }
@@ -242,7 +242,7 @@ void HUD::set_option(OptionSetting setting, int32_t value) {
 }
 
 void HUD::trigger_quick_chat(size_t index) {
-    if (index >= 4 || !options_.state().chat) return;
+    if (index >= 4 || !chat_writable()) return;
     if (options_.state().quick_chat[index].empty()) return;
     add_chat_entry(player_name_.empty() ? "Player" : player_name_, options_.state().quick_chat[index], false);   // F9 - F12 always go to all
     if (on_chat_send_) on_chat_send_(options_.state().quick_chat[index], false);

@@ -226,7 +226,7 @@ Teaming up follows the original's protocol ([`GAME_REVERSE_ENGINEERING.md`](GAME
 
 - The proposer reads "%s accepted teaming up" or "%s rejected teaming up". The invitee reads "%s withdrew offer to team up" when the proposer takes the offer back.
 - A team that is made flashes "A team has been made." and writes the News Flash "%s (%s) and %s (%s) are a team now!" into the chat log. Breaking it writes "... are no longer a team!". A drop-out writes "%s dropped out of the game!".
-- The chat log keeps the original's entries: a header in the sender's team color ("Name:" or "Name (To Teammate):", "[m:ss] News Flash:" for news) and a body of up to 100 characters, wrapped by pixels and set 10 px in (see Chat Log Window).
+- The chat log keeps the original's entries: a header in the sender's team color ("Name:" or "Name (To Teammate):", "[m:ss] News Flash:" for news) and a body of up to 100 characters, wrapped by pixels and set 10 px in (see Chat Log Window). **A name here is the nickname, never the clan tag** ("[ANTS1] Wolfgang" is "Wolfgang"): the chat's headers, the score labels (the original's 15 characters) and the rows of the countdown card and of the list of connections are left without it, because the tag took the room the name needs (`without_clan_tag`, `include/ants_app/display_name.hpp`); the results, the replays and the pages keep it.
 - Chat needs the "Participate In Chat" option. F9 - F12 chat the quick-chat texts to everybody. A team message reaches only the sender and the sender's allies.
 
 ## The countdown card

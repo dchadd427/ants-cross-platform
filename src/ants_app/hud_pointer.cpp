@@ -236,14 +236,14 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
     if (pedestal_press(sim, x, y)) return true;
 
     // [All] button (532, 443, 44x24): hidden while chat is off
-    if (options_.state().chat && send_to_button_.contains(x, y)) {
+    if (chat_writable() && send_to_button_.contains(x, y)) {
         send_to_button_.is_pressed = true;
         play_sfx(sim::SoundID::ButtonClick);
         return true;
     }
 
     // [Team] button (579, 443, 46x24): exists while the local player has an ally
-    if (options_.state().chat && is_on_team_ && team_button_.contains(x, y)) {
+    if (chat_writable() && is_on_team_ && team_button_.contains(x, y)) {
         team_button_.is_pressed = true;
         play_sfx(sim::SoundID::ButtonClick);
         return true;
@@ -280,8 +280,8 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
     const bool fire_options = left_release && options_button_.is_pressed && options_button_.contains(x, y);
     const bool fire_quit = left_release && quit_button_.is_pressed && quit_button_.contains(x, y);
     const bool fire_fullscreen = left_release && fullscreen_button_.is_pressed && fullscreen_button_.contains(x, y);
-    const bool fire_all = left_release && options_.state().chat && send_to_button_.is_pressed && send_to_button_.contains(x, y);
-    const bool fire_team = left_release && options_.state().chat && is_on_team_ && team_button_.is_pressed && team_button_.contains(x, y);
+    const bool fire_all = left_release && chat_writable() && send_to_button_.is_pressed && send_to_button_.contains(x, y);
+    const bool fire_team = left_release && chat_writable() && is_on_team_ && team_button_.is_pressed && team_button_.contains(x, y);
     help_button_.is_pressed = false;
     options_button_.is_pressed = false;
     quit_button_.is_pressed = false;

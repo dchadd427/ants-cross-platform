@@ -1,5 +1,6 @@
 #include "ants_app/hud.hpp"
 #include "hud_internal.hpp"
+#include "ants_app/display_name.hpp"
 #include "ants_app/minimap_tables.hpp"
 #include <cstdio>
 #include "ants_sim/game_strings.hpp"
@@ -555,12 +556,12 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     // Chat text input box wtype.bmp (143x14) at (479, 423): the edit control of FUN_0100dbe2 (docs 5.51) in the rectangle (481, 424) - (620, 436): 12 px letters in
     // (7, 11, 15), active from the moment the screen is built (its caret toggles every 150 ms from then on) and hidden while the chat option is off. A text that does
     // not fit shows its end (the control always has the focus).
-    if (options_.state().chat) {
+    if (chat_writable()) {
         const bool caret = ((clock_ms() - chat_focus_ms_) / ScreenEdit::CARET_HALF_PERIOD_MS) % 2 == 0;
         draw_edit_line(renderer, chat_input_, layout_.right(481), layout_.bottom(424), 139, true, caret, assets::ColorRGBA{7, 11, 15, 255}, FontSize::Px12, layout_.width);
     }
-    // Chat switched off in the options: chatcovr (three chcovr2 tiles at (478,421/436/445)) covers the input box
-    if (!options_.state().chat) {
+    // Chat switched off in the options, or a recording watched: chatcovr (three chcovr2 tiles at (478,421/436/445)) covers the input box
+    if (!chat_writable()) {
         if (art_ != nullptr) {
             const LayoutRect box{layout_.right(480), layout_.bottom(424), 141, 12};         // (the art's input box, inside its frame: a dim field, no text, no caret)
             renderer.fill_rect(box.x, box.y, box.w, box.h, assets::ColorRGBA{24, 78, 60, 255});
@@ -574,7 +575,7 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     auto send_button = [&](bool down, bool hovered, const char* up, const char* hover, const char* pressed) {
         draw_ui(renderer, assets, down ? pressed : (hovered ? hover : up), layout_.dx(), layout_.dy());       // (bottom of the panel: right and down)
     };
-    if (options_.state().chat) {
+    if (chat_writable()) {
         send_button(send_to_button_.is_pressed, send_to_button_.is_hovered, "butallu", "butallr", "butalld");
         if (is_on_team_) send_button(team_button_.is_pressed, team_button_.is_hovered, "butalsu", "butalsr", "butalsd");
     }
@@ -734,6 +735,7 @@ void HUD::render_score_team(IRenderer& renderer, const assets::AssetArchive& ass
         static const char* TEAM_NAMES[4] = {"Green", "Red", "Blue", "Black"};
         std::string name = team == local_player_id_ ? (player_name_.empty() ? std::string(TEAM_NAMES[team % 4]) : player_name_)
                                                     : (team_names_[team].empty() ? std::string(TEAM_NAMES[team % 4]) : team_names_[team]);
+        name = without_clan_tag(name);                                                        // (the clan tag is not shown: the label's 15 characters are for the name)
         if (name.size() > 15) name = name.substr(0, 15);
         std::string label = name + ":";
         while (label.size() > 1 && renderer.get_text_width(label, FontSize::Px14) > slot.label_right - slot.label_left) label.erase(0, 1);
