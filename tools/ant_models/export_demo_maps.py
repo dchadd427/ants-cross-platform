@@ -59,17 +59,45 @@ def build_smooth_ground_masks(t4_entries, sprites_dir, out_path, atlas_cols=16, 
     atlas_rows = (count + atlas_cols - 1) // atlas_cols
     atlas = np.zeros((atlas_rows * tile_out, atlas_cols * tile_out, 4), dtype=np.uint8)
 
-    # 1D Gaussian kernel (sigma ~ 1.25 px at 64x64) for smooth staircase-free organic contours
-    rad = 3
-    ks = np.arange(-rad, rad + 1, dtype=np.float32)
-    kern = np.exp(-0.5 * (ks / 1.35) ** 2)
-    kern /= kern.sum()
+    # 1D Gaussian kernels: soft organic (sigma=1.35) for earth/mud/sand/water, tight (sigma=0.82) for stepped slate ledges
+    def make_kernel(rad, sigma):
+        ks = np.arange(-rad, rad + 1, dtype=np.float32)
+        k = np.exp(-0.5 * (ks / sigma) ** 2)
+        return k / k.sum()
 
-    def blur2d(arr):
+    kern_soft = make_kernel(3, 1.35)
+    kern_slate = make_kernel(2, 0.82)
+
+    def blur2d(arr, kern):
+        rad = len(kern) // 2
         p = np.pad(arr, ((rad, rad), (rad, rad)), mode="edge")
         tmp = sum(kern[i + rad] * p[rad:-rad, i + rad : i + rad + arr.shape[1]] for i in range(-rad, rad + 1))
         p2 = np.pad(tmp, ((rad, rad), (0, 0)), mode="edge")
         return sum(kern[i + rad] * p2[i + rad : i + rad + arr.shape[0], :] for i in range(-rad, rad + 1))
+
+    def classify_slate_mask(rgb, other_key):
+        """Chroma/palette slate classifier preserving dark rock-shelf ledges without clipping OOR drop-shadows."""
+        r, g, b = rgb[:, :, 0], rgb[:, :, 1], rgb[:, :, 2]
+        if other_key == "m":
+            # Dark mud is [75,75,75]; slate faces & dark ledge cliffs [99..183] have luminance > 86.
+            return ((0.299 * r + 0.587 * g + 0.114 * b) > 86.0).astype(np.float32)
+        # Warm sand/dirt (and their cast ledge drop-shadows [159,151,135] / [115,115,95]) always have R - B >= 16.
+        # Cool/neutral slate faces & dark cliff shadows [99,99,99] have R - B <= 4.
+        # Geodesic dilation into neutral [127,127,127] keeps connected slate bevels while excluding isolated dirt specks.
+        is_127 = (np.abs(r - 127.0) < 2.0) & (np.abs(g - 127.0) < 2.0) & (np.abs(b - 127.0) < 2.0)
+        slate = ((r - b) <= 6.0) & (~is_127)
+        for _ in range(3):
+            p = np.pad(slate, 1, mode="edge")
+            nb = (
+                p[:-2, :-2] | p[:-2, 1:-1] | p[:-2, 2:]
+                | p[1:-1, :-2] | p[1:-1, 1:-1] | p[1:-1, 2:]
+                | p[2:, :-2] | p[2:, 1:-1] | p[2:, 2:]
+            )
+            nxt = slate | (is_127 & nb)
+            if np.array_equal(nxt, slate):
+                break
+            slate = nxt
+        return slate.astype(np.float32)
 
     for idx in range(count):
         tid = GROUND_FIRST + idx
@@ -84,10 +112,15 @@ def build_smooth_ground_masks(t4_entries, sprites_dir, out_path, atlas_cols=16, 
             a_key, b_key = nm[0], nm[1]
             sp_idx = t4_entries[tid]["subitems"][0]["frames"][0]["sprite_index"]
             rgb = np.asarray(Image.open(os.path.join(sprites_dir, f"sprite_{sp_idx:04d}.png")).convert("RGB"), dtype=np.float32)
+            is_slate_edge = "s" in (a_key, b_key)
             if {a_key, b_key} == {"m", "w"}:
                 # Water vs mud: detect blue water chroma (B - R > 12) cleanly even across 1px dark shore rim
                 is_w = ((rgb[:, :, 2] - rgb[:, :, 0]) > 12.0).astype(np.float32)
                 t_b = is_w if b_key == "w" else (1.0 - is_w)
+            elif is_slate_edge:
+                other_key = a_key if b_key == "s" else b_key
+                is_s = classify_slate_mask(rgb, other_key)
+                t_b = is_s if b_key == "s" else (1.0 - is_s)
             else:
                 ca = np.array(TERRAIN_RGB[a_key], dtype=np.float32)
                 cb = np.array(TERRAIN_RGB[b_key], dtype=np.float32)
@@ -98,9 +131,12 @@ def build_smooth_ground_masks(t4_entries, sprites_dir, out_path, atlas_cols=16, 
 
             # Upsample 32x32 -> 64x64 with bilinear + Gaussian contour smoothing + crisp organic S-curve
             up = np.asarray(Image.fromarray(np.clip(t_b * 255.0, 0, 255).astype(np.uint8)).resize((tile_out, tile_out), Image.BILINEAR), dtype=np.float32) / 255.0
-            sm = blur2d(up)
-            # Crisp yet anti-aliased edge (kills 32px blocky stairs while keeping authentic shoreline waves)
-            u = np.clip((sm - 0.24) / 0.52, 0.0, 1.0)
+            sm = blur2d(up, kern_slate if is_slate_edge else kern_soft)
+            # Keep slate rock ledges crisp and stepped while smoothing soft earth/sand/water shorelines
+            if is_slate_edge:
+                u = np.clip((sm - 0.34) / 0.32, 0.0, 1.0)
+            else:
+                u = np.clip((sm - 0.24) / 0.52, 0.0, 1.0)
             w_b = u * u * (3.0 - 2.0 * u)
             w_a = 1.0 - w_b
             if a_key in TERRAIN_CHAN:
@@ -140,24 +176,38 @@ def build_continuous_map_mask(parsed, tile_atlas, atlas_cols, out_path, tile_out
             rc, cc = divmod(idx, atlas_cols)
             grid[r0 : r0 + px_per_tile, c * px_per_tile : (c + 1) * px_per_tile] = a_small[rc, :, cc, :, :]
 
-    # Map-wide continuous Gaussian blur across every tile border (sigma ~ 0.22 tiles)
-    rad = 9
-    ks = np.arange(-rad, rad + 1, dtype=np.float32)
-    kern = np.exp(-0.5 * (ks / 3.5) ** 2)
-    kern /= kern.sum()
-    p = np.pad(grid, ((rad, rad), (rad, rad), (0, 0)), mode="edge")
-    tmp = sum(kern[i + rad] * p[rad:-rad, i + rad : i + rad + grid.shape[1], :] for i in range(-rad, rad + 1))
-    p2 = np.pad(tmp, ((rad, rad), (0, 0), (0, 0)), mode="edge")
-    sm = sum(kern[i + rad] * p2[i + rad : i + rad + grid.shape[0], :, :] for i in range(-rad, rad + 1))
+    # Map-wide continuous Gaussian blur across tile borders: soft organic (sigma=3.5) for mud/sand/water,
+    # tighter stepped shelf (sigma=1.35) for slate ledges so rock cliffs stay crisp!
+    def blur_chan(arr, rad, sigma):
+        ks = np.arange(-rad, rad + 1, dtype=np.float32)
+        kern = np.exp(-0.5 * (ks / sigma) ** 2)
+        kern /= kern.sum()
+        p = np.pad(arr, ((rad, rad), (rad, rad)), mode="edge")
+        tmp = sum(kern[i + rad] * p[rad:-rad, i + rad : i + rad + arr.shape[1]] for i in range(-rad, rad + 1))
+        p2 = np.pad(tmp, ((rad, rad), (0, 0)), mode="edge")
+        return sum(kern[i + rad] * p2[i + rad : i + rad + arr.shape[0], :] for i in range(-rad, rad + 1))
 
-    # Crisp yet smooth organic S-curve so shorelines & mud/sand borders stay lively & never blocky
-    u = np.clip((sm - 0.16) / 0.68, 0.0, 1.0)
-    out = u * u * (3.0 - 2.0 * u)
-    # Keep water (alpha) crisp and avoid exceeding sum > 1 on mud/sand/slate
-    rgb_sum = out[:, :, 0] + out[:, :, 1] + out[:, :, 2] + out[:, :, 3]
-    over = rgb_sum > 1.0
+    sm = np.empty_like(grid)
+    for ch in (0, 1, 3):
+        sm[:, :, ch] = blur_chan(grid[:, :, ch], 9, 3.5)
+    sm[:, :, 2] = blur_chan(grid[:, :, 2], 4, 1.35)
+
+    # Organic S-curve for soft ground/water, sharper stepped ledge curve for slate rock shelves
+    out = np.empty_like(sm)
+    for ch in (0, 1, 3):
+        u = np.clip((sm[:, :, ch] - 0.16) / 0.68, 0.0, 1.0)
+        out[:, :, ch] = u * u * (3.0 - 2.0 * u)
+    u_s = np.clip((sm[:, :, 2] - 0.30) / 0.40, 0.0, 1.0)
+    out[:, :, 2] = u_s * u_s * (3.0 - 2.0 * u_s)
+
+    # Preserve crisp slate ledges while keeping total material weights <= 1.0
+    non_slate = out[:, :, 0] + out[:, :, 1] + out[:, :, 3]
+    rem = np.maximum(0.0, 1.0 - out[:, :, 2])
+    over = non_slate > rem
     if np.any(over):
-        out[over] /= rgb_sum[over, None]
+        scale = rem[over] / np.maximum(non_slate[over], 1e-5)
+        for ch in (0, 1, 3):
+            out[:, :, ch][over] *= scale
     Image.fromarray(np.clip(np.round(out * 255.0), 0, 255).astype(np.uint8), mode="RGBA").save(out_path, optimize=True)
 
 
@@ -330,7 +380,7 @@ def parse_lvl(path, t4_entries, metrics):
             if GROUND_FIRST <= t4_id <= GROUND_LAST:
                 g_idx = t4_id - GROUND_FIRST
                 tiles.append(g_idx)
-                if t4_id == 476:  # w01a water tile
+                if 476 <= t4_id <= 484:  # w01a + wm02a..wm09a water & water-shore tiles (idx 45..53)
                     water_cells.append([c, r])
             else:
                 tiles.append(54)  # fallback g01a (485 - 431 = 54)
@@ -508,6 +558,7 @@ def main():
         "atlas_rows": (GROUND_LAST - GROUND_FIRST + 1 + map_atlas.GROUND_COLUMNS - 1) // map_atlas.GROUND_COLUMNS,
         "ground_first_id": GROUND_FIRST,
         "water_tile_index": 476 - GROUND_FIRST,
+        "water_tile_indices": list(range(476 - GROUND_FIRST, 485 - GROUND_FIRST)),
         "maps": maps_out,
     }
     maps_path = os.path.join(out_dir, "maps.json")

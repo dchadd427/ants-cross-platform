@@ -641,10 +641,49 @@
     float microM = tgFbm(wp * 4.2);
     float duneS = 0.5 + 0.5 * sin(wp.x * 6.8 + wp.y * 4.2 + tgNoise(wp * 2.2) * 3.1);
     float microL = tgNoise(wp * 8.4) * 0.65 + tgNoise(wp * 22.0) * 0.35;
-    float baseH = wG * (0.14 + 0.16 * microG) + wM * (-0.30 + 0.11 * microM) + wS * (0.28 + 0.14 * duneS) + wL * (0.20 + 0.14 * microL) - wW * 0.55;
+    float baseH = wG * (0.14 + 0.16 * microG) + wM * (-0.30 + 0.11 * microM) + wS * (0.24 + 0.12 * duneS) + wL * (0.38 + 0.10 * microL) - wW * 0.55;
     return baseH;
   }
   float tgDggx(float NoH, float a) { float a2 = a * a, d = (NoH * NoH) * (a2 - 1.0) + 1.0; return a2 / (3.14159265 * d * d + 1e-5); }
+  float tgHash(vec2 c) { return fract(sin(dot(c, vec2(127.1, 311.7))) * 43758.5453); }
+  // Rising/popping dark-glossy mud bubble + expanding concentric mud-ring ripples (1998 M01b..e, m01d/e_*)
+  vec4 tgMudBubble(vec2 luv, vec2 ctr, float maxR, float per, float ph, float t) {
+    float cyc = fract(t / per + ph);
+    if (cyc >= 0.44) return vec4(0.0);
+    float u = cyc / 0.44, edgeF = smoothstep(0.0, 0.08, min(min(luv.x, 1.0 - luv.x), min(luv.y, 1.0 - luv.y)));
+    vec2 dv = luv - ctr; float d = length(dv); vec2 dir = dv / max(d, 1e-4);
+    if (u < 0.54) {
+      float g = pow(smoothstep(0.0, 0.54, u), 0.76), q = d / max(maxR * (0.28 + 0.72 * g), 1e-4);
+      float dome = sqrt(max(0.0, 1.0 - q * q)), inD = smoothstep(1.04, 0.86, q), rim = exp(-pow((q - 1.05) / 0.18, 2.0));
+      return vec4(dir * (inD * (q / max(dome, 0.22)) * (0.68 + 0.72 * g) - rim * 0.38) * edgeF,
+                  (smoothstep(1.20, 0.12, q) * (0.55 + 0.45 * g) + rim * 0.28) * edgeF, (rim * 0.34 - inD * dome * 0.22) * edgeF);
+    }
+    float p = (u - 0.54) / 0.46, pit = smoothstep(maxR * 0.94, maxR * 0.16, d) * (1.0 - smoothstep(0.0, 0.54, p)) * edgeF;
+    float r1 = mix(maxR * 0.68, maxR * 1.94, p), r2 = mix(maxR * 0.32, maxR * 1.44, p), w1 = maxR * 0.22, w2 = maxR * 0.19;
+    float e1 = exp(-pow((d - r1) / w1, 2.0)) * (1.0 - p) * (1.0 - p);
+    float e2 = exp(-pow((d - r2) / w2, 2.0)) * (1.0 - p) * smoothstep(0.05, 0.22, p) * 0.78;
+    float slope = (-(d - r1) / w1 * e1 - (d - r2) / w2 * e2) * 1.12;
+    return vec4(dir * (slope - pit * 0.92 * smoothstep(0.0, maxR * 0.6, d)) * edgeF, clamp((e1 + e2) * 0.92 + pit * 0.38, 0.0, 1.0) * edgeF, pit * 0.78);
+  }
+  // Smooth embedded sunlit river pebble on white sand (1998 d01c..d, rawIdx 58..59)
+  vec4 tgRiverPebble(vec2 luv, vec2 ctr, vec2 rad, float cs, float sn, vec2 wp) {
+    vec2 dv = luv - ctr, rdv = vec2(dv.x * cs + dv.y * sn, -dv.x * sn + dv.y * cs), q = rdv / rad;
+    float dist = length(q) + (tgNoise(wp * 9.5 + ctr * 11.0) - 0.5) * 0.11;
+    float mask = smoothstep(1.04, 0.78, dist), rimAo = smoothstep(0.84, 1.04, dist) * (1.0 - smoothstep(1.04, 1.42, dist));
+    vec2 lG = (q / max(rad, vec2(0.02))) * mask * 0.105;
+    return vec4(lG.x * cs - lG.y * sn, lG.x * sn + lG.y * cs, mask, rimAo);
+  }
+  // Carved 1998 authored flagstone crack depth from linear atlas with per-tile rotation diversity (s01c..i, rawIdx 142..148)
+  vec2 tgRotUv(vec2 uv, float q) {
+    if (q < 1.0) return uv; if (q < 2.0) return vec2(1.0 - uv.y, uv.x);
+    if (q < 3.0) return vec2(1.0 - uv.x, 1.0 - uv.y); return vec2(uv.y, 1.0 - uv.x);
+  }
+  float tgSlateCrack(vec2 aBase, vec2 uv, float rotQ, vec2 wp) {
+    vec2 warp = (vec2(tgNoise(wp * 4.2 + vec2(1.3, 5.7)), tgNoise(wp * 4.2 + vec2(8.9, 2.1))) - 0.5) * 0.15;
+    vec2 cuv = clamp(tgRotUv(uv + warp, rotQ), vec2(0.5 / 32.0), vec2(31.5 / 32.0));
+    float lum = dot(texture(u_atlasTex, (aBase + cuv) / u_atlasGrid).rgb, vec3(0.299, 0.587, 0.114));
+    return smoothstep(0.545, 0.405, lum + (tgNoise(wp * 22.0) - 0.5) * 0.04);
+  }
 
   float sampleTileShadow(vec3 wp) {
     if (u_useShadowMap == 0) return 1.0;
@@ -714,30 +753,16 @@
 
     // Pass 1 (u_waterPass == 1): deep rich royal-sapphire pond bed with soft flowing liquid sun dapples (ZERO cracked-ice lines!)
     if (u_waterPass == 1) {
-      float bNear = 0.25 * (
-        sampleMask(p + vec2(0.45, 0.0)).a + sampleMask(p - vec2(0.45, 0.0)).a +
-        sampleMask(p + vec2(0.0, 0.45)).a + sampleMask(p - vec2(0.0, 0.45)).a
-      );
-      float bFar = 0.25 * (
-        sampleMask(p + vec2(1.15, 0.75)).a + sampleMask(p - vec2(1.15, 0.75)).a +
-        sampleMask(p + vec2(-0.75, 1.15)).a + sampleMask(p - vec2(-0.75, 1.15)).a
-      );
-      float bedDepth = smoothstep(0.14, 0.96, bNear * 0.45 + bFar * 0.55);
-      float bedMacro = tgFbm(p * 0.72);
-      float bedPeb = tgNoise(p * 2.1 + vec2(3.7, 1.9));
-      // Broad smooth flowing liquid sun-dapple caustics (calm transparent pond floor, NO ice cracks or noisy grain!)
-      vec2 wFlow = vec2(
-        tgNoise(p * 0.55 + vec2(u_time * 0.14, -u_time * 0.09)),
-        tgNoise(p * 0.55 + vec2(4.7 - u_time * 0.11, 2.3 + u_time * 0.13))
-      );
+      float bNear = 0.25 * (sampleMask(p + vec2(0.45, 0.0)).a + sampleMask(p - vec2(0.45, 0.0)).a + sampleMask(p + vec2(0.0, 0.45)).a + sampleMask(p - vec2(0.0, 0.45)).a);
+      float bFar = 0.25 * (sampleMask(p + vec2(1.15, 0.75)).a + sampleMask(p - vec2(1.15, 0.75)).a + sampleMask(p + vec2(-0.75, 1.15)).a + sampleMask(p - vec2(-0.75, 1.15)).a);
+      float bedDepth = smoothstep(0.14, 0.96, bNear * 0.45 + bFar * 0.55), bedMacro = tgFbm(p * 0.72), bedPeb = tgNoise(p * 2.1 + vec2(3.7, 1.9));
+      vec2 wFlow = vec2(tgNoise(p * 0.55 + vec2(u_time * 0.14, -u_time * 0.09)), tgNoise(p * 0.55 + vec2(4.7 - u_time * 0.11, 2.3 + u_time * 0.13)));
       float c1 = tgNoise(mat2(0.84, 0.54, -0.54, 0.84) * p * 1.05 + wFlow * 0.85 + vec2(u_time * 0.18, -u_time * 0.12));
       float c2 = tgNoise(mat2(0.56, -0.83, 0.83, 0.56) * p * 1.45 - wFlow * 0.70 + vec2(-u_time * 0.13, u_time * 0.17));
       float caust = smoothstep(0.50, 0.88, c1 * 0.55 + c2 * 0.45);
-      // Clear submerged shore shelf descending into deep royal-sapphire pond depths!
       vec3 shallowBed = mix(vec3(0.010, 0.042, 0.118), vec3(0.020, 0.068, 0.158), bedMacro * 0.65 + bedPeb * 0.35);
       vec3 deepBed = mix(vec3(0.001, 0.010, 0.066), vec3(0.004, 0.026, 0.128), bedMacro * 0.65 + bedPeb * 0.35);
-      vec3 bedCol = mix(shallowBed, deepBed, bedDepth);
-      bedCol += mix(vec3(0.010, 0.062, 0.185), vec3(0.004, 0.036, 0.145), bedDepth) * caust * mix(0.46, 0.28, bedDepth);
+      vec3 bedCol = mix(shallowBed, deepBed, bedDepth) + mix(vec3(0.010, 0.062, 0.185), vec3(0.004, 0.036, 0.145), bedDepth) * caust * mix(0.46, 0.28, bedDepth);
       float keyLum = clamp(dot(u_keyColor, vec3(0.299, 0.587, 0.114)) * 0.34, 0.16, 1.08);
       fragColor = vec4(tgToSrgb(tgAces(bedCol * (0.58 + 0.66 * keyLum) * u_lightMix.z)), 1.0);
       return;
@@ -769,15 +794,8 @@
     float outAlpha = 1.0;
 
     if (u_waterPass == 2) {
-      // Wide two-ring coastal depth sampling: clear turquoise-aqua shallow shelf -> deep inviting marine sapphire-teal!
-      float wNear = 0.25 * (
-        sampleMask(p + vec2(0.38, 0.0)).a + sampleMask(p - vec2(0.38, 0.0)).a +
-        sampleMask(p + vec2(0.0, 0.38)).a + sampleMask(p - vec2(0.0, 0.38)).a
-      );
-      float wFar = 0.25 * (
-        sampleMask(p + vec2(1.15, 0.80)).a + sampleMask(p - vec2(1.15, 0.80)).a +
-        sampleMask(p + vec2(-0.80, 1.15)).a + sampleMask(p - vec2(-0.80, 1.15)).a
-      );
+      float wNear = 0.25 * (sampleMask(p + vec2(0.38, 0.0)).a + sampleMask(p - vec2(0.38, 0.0)).a + sampleMask(p + vec2(0.0, 0.38)).a + sampleMask(p - vec2(0.0, 0.38)).a);
+      float wFar = 0.25 * (sampleMask(p + vec2(1.15, 0.80)).a + sampleMask(p - vec2(1.15, 0.80)).a + sampleMask(p + vec2(-0.80, 1.15)).a + sampleMask(p - vec2(-0.80, 1.15)).a);
       float wDeep = smoothstep(0.14, 0.96, wNear * 0.42 + wFar * 0.58);
 
       // Calm silky broad liquid swells (smooth glassy ripples, ZERO choppy noisy crinkles!)
@@ -921,9 +939,59 @@
       float hU = pbrTerrainHeight(p + vec2(0.0, eps), sampleMask(p + vec2(0.0, eps)));
       N = normalize(vec3((hL - hR) * 1.45, 1.0, (hD - hU) * 1.45));
 
-      // Subtle crevice darkening right along sloped terrain transition banks
+      // Subtle crevice darkening + crisp stepped slate rock-shelf drop-shadow rim
       float slope = clamp(length(N.xz), 0.0, 1.0);
-      albedo *= 1.0 - slope * 0.14;
+      float ledgeFace = smoothstep(0.08, 0.45, wL) * (1.0 - smoothstep(0.56, 0.92, wL));
+      float ledgeBaseAo = smoothstep(0.01, 0.16, wL) * (1.0 - smoothstep(0.22, 0.50, wL));
+      albedo *= (1.0 - slope * 0.15 - ledgeBaseAo * 0.24);
+      albedo = mix(albedo, vec3(0.145, 0.152, 0.215), ledgeFace * 0.38);
+
+      // 5. Animated bubbling mud (rawIdx 9..12, 229..238 -> CHD 440..443, 660..669)
+      if (((rawIdx > 8.5 && rawIdx < 12.5) || (rawIdx > 228.5 && rawIdx < 238.5)) && wM > 0.30) {
+        float h1 = tgHash(cell + vec2(rawIdx * 0.13, 1.7)), h2 = tgHash(cell + vec2(3.1, rawIdx * 0.19));
+        vec4 bub;
+        if (abs(rawIdx - 11.0) < 0.5 || (rawIdx > 228.5 && rawIdx < 233.5)) {
+          float per = 2.6 + h1 * 1.7;
+          vec4 b1 = tgMudBubble(localUv, vec2(0.70 + (h1 - 0.5) * 0.10, 0.72 + (h2 - 0.5) * 0.10), 0.165, per, h2, u_time);
+          vec4 b2 = tgMudBubble(localUv, vec2(0.26 + (h2 - 0.5) * 0.10, 0.26 + (h1 - 0.5) * 0.10), 0.135, per, fract(h2 + 0.43), u_time);
+          bub = vec4(b1.xy + b2.xy, max(b1.z, b2.z), clamp(b1.w + b2.w, -0.25, 0.85));
+        } else {
+          bool lg = rawIdx > 9.5;
+          bub = tgMudBubble(localUv, vec2(0.49 + (h1 - 0.5) * 0.16, 0.50 + (h2 - 0.5) * 0.16), lg ? 0.23 : 0.18, (lg ? 2.8 : 2.3) + h1 * 1.8, h2, u_time);
+        }
+        N = normalize(N + vec3(bub.x, 0.0, bub.y) * (1.35 * wM));
+        albedo *= mix(1.0, clamp(1.0 - bub.w * 0.76, 0.24, 1.22), wM);
+        albedo = mix(albedo, vec3(0.110, 0.092, 0.075), max(0.0, -bub.w) * 1.6 * wM);
+        rough = mix(rough, 0.14, bub.z * wM); specBoost = mix(specBoost, 0.30, bub.z * wM);
+      }
+
+      // 6. White sand embedded river stones (rawIdx 58..59 -> CHD 489..490, d01c..d)
+      if (rawIdx > 57.5 && rawIdx < 59.5 && wS > 0.30) {
+        vec4 s1 = rawIdx < 58.5 ? tgRiverPebble(localUv, vec2(0.80, 0.77), vec2(0.125, 0.100), -0.11, 0.99, p) : tgRiverPebble(localUv, vec2(0.69, 0.30), vec2(0.175, 0.112), -0.57, 0.82, p);
+        vec4 s2 = rawIdx < 58.5 ? tgRiverPebble(localUv, vec2(0.66, 0.58), vec2(0.068, 0.044),  0.32, 0.95, p) : tgRiverPebble(localUv, vec2(0.26, 0.82), vec2(0.145, 0.082), -0.99, 0.06, p);
+        float pMask = clamp(max(s1.z, s2.z) * wS, 0.0, 1.0), pAo = clamp(max(s1.w, s2.w) * (1.0 - pMask) * wS, 0.0, 1.0);
+        vec3 pebCol = mix(vec3(0.18, 0.175, 0.178), vec3(0.39, 0.375, 0.360), tgNoise(p * 17.0) * 0.6 + fine * 0.4);
+        albedo = mix(albedo * (1.0 - pAo * 0.28), pebCol, pMask);
+        N = normalize(N + vec3(s1.x + s2.x, 0.0, s1.y + s2.y) * (2.8 * wS));
+        rough = mix(rough, 0.38, pMask); specBoost = mix(specBoost, 0.14, pMask);
+      }
+
+      // 7. Authored slate flagstone cracks & chisel bevels (rawIdx 142..148 -> CHD 573..579, s01c..i)
+      if (rawIdx > 141.5 && rawIdx < 148.5 && wL > 0.30) {
+        vec2 aBase = vec2(aCol, aRow);
+        float rotQ = floor(tgHash(cell + vec2(rawIdx * 0.37, 5.1)) * 4.0), dC = 0.042;
+        float c0 = tgSlateCrack(aBase, localUv, rotQ, p);
+        float cL = tgSlateCrack(aBase, localUv - vec2(dC, 0.0), rotQ, p - vec2(dC, 0.0)), cR = tgSlateCrack(aBase, localUv + vec2(dC, 0.0), rotQ, p + vec2(dC, 0.0));
+        float cD = tgSlateCrack(aBase, localUv - vec2(0.0, dC), rotQ, p - vec2(0.0, dC)), cU = tgSlateCrack(aBase, localUv + vec2(0.0, dC), rotQ, p + vec2(0.0, dC));
+        float cC = c0 * 0.52 + 0.12 * (cL + cR + cD + cU);
+        float branch = pow(clamp(1.0 - abs(2.0 * tgNoise(p * 3.9 + vec2(med * 1.35, -macro)) - 1.0), 0.0, 1.0), 9.5) * 0.48;
+        float fiss = clamp(max(smoothstep(0.20, 0.76, cC) * 0.80, branch), 0.0, 1.0) * wL;
+        vec2 cBev = vec2(cR - cL, cU - cD) * (2.2 * wL);
+        N = normalize(N + vec3(cBev.x, 0.0, cBev.y));
+        float lip = smoothstep(0.06, 0.36, cC) * (1.0 - smoothstep(0.42, 0.84, cC)) * max(dot(normalize(vec3(cBev.x, 0.32, cBev.y)), u_keyDir), 0.0);
+        albedo = mix(albedo + vec3(0.115, 0.122, 0.145) * lip * wL, vec3(0.095, 0.105, 0.150), fiss * 0.62);
+        rough = mix(rough, 0.90, fiss); specBoost = mix(specBoost, 0.025, fiss);
+      }
     } else {
       albedo = tgToLinear(texSrgb);
       rough = 0.88;
@@ -987,19 +1055,10 @@
 
   function buildTileGroundMesh(gl, cols, rows, pad = 6.0) {
     const x0 = -pad, z0 = -pad, x1 = cols + pad, z1 = rows + pad;
-    const verts = new Float32Array([
-      x0, 0, z0,
-      x1, 0, z0,
-      x1, 0, z1,
-      x0, 0, z1,
-    ]);
-    const idx = new Uint16Array([0, 2, 1, 0, 3, 2]);
-    const vao = gl.createVertexArray();
+    const verts = new Float32Array([x0, 0, z0, x1, 0, z0, x1, 0, z1, x0, 0, z1]);
+    const idx = new Uint16Array([0, 2, 1, 0, 3, 2]), vao = gl.createVertexArray();
     gl.bindVertexArray(vao);
-    const bufs = [
-      uploadBuffer(gl, gl.ARRAY_BUFFER, verts, 0, 3),
-      uploadBuffer(gl, gl.ELEMENT_ARRAY_BUFFER, idx),
-    ];
+    const bufs = [uploadBuffer(gl, gl.ARRAY_BUFFER, verts, 0, 3), uploadBuffer(gl, gl.ELEMENT_ARRAY_BUFFER, idx)];
     gl.bindVertexArray(null);
     return { vao, count: idx.length, cols, rows, dispose() { gl.deleteVertexArray(vao); bufs.forEach((b) => gl.deleteBuffer(b)); } };
   }
@@ -1179,11 +1238,8 @@
   }`;
 
   function createAtmoDrawer(gl, compileFn) {
-    const prog = compileFn(gl, ATMO_VS, ATMO_FS);
-    const u = {};
-    for (const k of ["u_viewProj", "u_camRight", "u_camUp", "u_time", "u_scaleBoost", "u_colA", "u_colB", "u_alpha"]) {
-      u[k] = gl.getUniformLocation(prog, k);
-    }
+    const prog = compileFn(gl, ATMO_VS, ATMO_FS), u = {};
+    for (const k of ["u_viewProj", "u_camRight", "u_camUp", "u_time", "u_scaleBoost", "u_colA", "u_colB", "u_alpha"]) u[k] = gl.getUniformLocation(prog, k);
     const PAL = {
       daylight:  { a: [1.00, 0.95, 0.72], b: [0.98, 0.99, 0.90], alpha: 0.42, boost: 1.00, add: false },
       golden:    { a: [1.00, 0.78, 0.34], b: [1.00, 0.92, 0.56], alpha: 0.58, boost: 1.15, add: true },
@@ -1195,37 +1251,99 @@
     };
     return {
       draw(mesh, camera, lighting, time) {
-        if (!mesh || !mesh.count) return;
         const p = PAL[lighting] || PAL.daylight;
-        if (p.alpha <= 0.001) return;
-        gl.useProgram(prog);
-        gl.enable(gl.DEPTH_TEST); gl.depthMask(false); gl.disable(gl.CULL_FACE);
-        gl.enable(gl.BLEND);
+        if (!mesh || !mesh.count || p.alpha <= 0.001) return;
+        gl.useProgram(prog); gl.enable(gl.DEPTH_TEST); gl.depthMask(false); gl.disable(gl.CULL_FACE); gl.enable(gl.BLEND);
         gl.blendFuncSeparate(gl.SRC_ALPHA, p.add ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-        const vd = camera.viewDir;
-        const rx = vd[2], rz = -vd[0], rL = Math.hypot(rx, rz) || 1;
-        const camRight = [rx / rL, 0, rz / rL];
-        const camUp = [vd[1] * camRight[2], vd[2] * camRight[0] - vd[0] * camRight[2], -vd[1] * camRight[0]];
-        gl.uniformMatrix4fv(u.u_viewProj, false, camera.viewProj);
-        gl.uniform3fv(u.u_camRight, camRight); gl.uniform3fv(u.u_camUp, camUp);
+        const vd = camera.viewDir, rx = vd[2], rz = -vd[0], rL = Math.hypot(rx, rz) || 1;
+        const camRight = [rx / rL, 0, rz / rL], camUp = [vd[1] * camRight[2], vd[2] * camRight[0] - vd[0] * camRight[2], -vd[1] * camRight[0]];
+        gl.uniformMatrix4fv(u.u_viewProj, false, camera.viewProj); gl.uniform3fv(u.u_camRight, camRight); gl.uniform3fv(u.u_camUp, camUp);
         gl.uniform1f(u.u_time, time || 0); gl.uniform1f(u.u_scaleBoost, p.boost);
         gl.uniform3fv(u.u_colA, p.a); gl.uniform3fv(u.u_colB, p.b); gl.uniform1f(u.u_alpha, p.alpha);
-        gl.bindVertexArray(mesh.vao);
-        gl.drawElements(gl.TRIANGLES, mesh.count, gl.UNSIGNED_SHORT, 0);
-        gl.bindVertexArray(null);
+        gl.bindVertexArray(mesh.vao); gl.drawElements(gl.TRIANGLES, mesh.count, gl.UNSIGNED_SHORT, 0); gl.bindVertexArray(null);
+      },
+    };
+  }
+
+  // --- On-Demand GPU Map Terrain Mask Builder (2-pass separable blur FBO from 16x15 ground_masks.png) ---
+  const MASK_VS = `#version 300 es
+  out vec2 v_uv;
+  void main() { vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); v_uv = p; gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }`;
+  const MASK_STITCH_FS = `#version 300 es
+  precision highp float; in vec2 v_uv; out vec4 fragColor;
+  uniform sampler2D u_mapTex, u_atlasMask; uniform vec2 u_mapSize, u_atlasGrid;
+  void main() {
+    vec2 wp = v_uv * u_mapSize, luv = fract(wp), lo = vec2(0.5 / 64.0), hi = vec2(63.5 / 64.0);
+    float idx = floor(texture(u_mapTex, (floor(wp) + 0.5) / u_mapSize).r * 255.0 + 0.5), o = 1.0 / 64.0;
+    vec2 ac = vec2(mod(idx, u_atlasGrid.x), floor(idx / u_atlasGrid.x));
+    fragColor = 0.25 * (texture(u_atlasMask, (ac + clamp(luv + vec2(-o, -o), lo, hi)) / u_atlasGrid) + texture(u_atlasMask, (ac + clamp(luv + vec2(o, -o), lo, hi)) / u_atlasGrid)
+                      + texture(u_atlasMask, (ac + clamp(luv + vec2(-o,  o), lo, hi)) / u_atlasGrid) + texture(u_atlasMask, (ac + clamp(luv + vec2(o,  o), lo, hi)) / u_atlasGrid));
+  }`;
+  const MASK_BLUR_FS = `#version 300 es
+  precision highp float; in vec2 v_uv; out vec4 fragColor;
+  uniform sampler2D u_srcTex; uniform vec2 u_step, u_clampMin, u_clampMax; uniform int u_final;
+  void main() {
+    vec3 accS = vec3(0.0); float accB = 0.0, sumS = 0.0, sumL = 0.0;
+    for (int k = -9; k <= 9; k++) {
+      float fk = float(k), ws = exp(-0.5 * (fk / 3.5) * (fk / 3.5)), wl = exp(-0.5 * (fk / 1.35) * (fk / 1.35));
+      vec4 s = texture(u_srcTex, clamp(v_uv + u_step * fk, u_clampMin, u_clampMax));
+      accS += s.rga * ws; sumS += ws; accB += s.b * wl; sumL += wl;
+    }
+    vec4 sm = vec4(accS.x / sumS, accS.y / sumS, accB / sumL, accS.z / sumS);
+    if (u_final != 0) {
+      vec3 uS = clamp((sm.rga - 0.16) / 0.68, 0.0, 1.0); uS = uS * uS * (3.0 - 2.0 * uS);
+      float uL = clamp((sm.b - 0.30) / 0.40, 0.0, 1.0); uL = uL * uL * (3.0 - 2.0 * uL);
+      float ns = uS.x + uS.y + uS.z, rem = max(0.0, 1.0 - uL);
+      if (ns > rem && ns > 1e-4) uS *= rem / ns;
+      sm = vec4(uS.x, uS.y, uL, uS.z);
+    }
+    fragColor = sm;
+  }`;
+
+  function createMaskBuilder(gl, compileFn) {
+    let stitchProg = null, blurProg = null, uS = null, uB = null;
+    const mkTex = (w, h) => {
+      const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      return t;
+    };
+    return {
+      build(cols, rows, mapTex, atlasMaskTex, emptyVao, opts = {}) {
+        if (!stitchProg) {
+          stitchProg = compileFn(gl, MASK_VS, MASK_STITCH_FS); blurProg = compileFn(gl, MASK_VS, MASK_BLUR_FS);
+          uS = { map: gl.getUniformLocation(stitchProg, "u_mapTex"), atlas: gl.getUniformLocation(stitchProg, "u_atlasMask"), size: gl.getUniformLocation(stitchProg, "u_mapSize"), grid: gl.getUniformLocation(stitchProg, "u_atlasGrid") };
+          uB = { src: gl.getUniformLocation(blurProg, "u_srcTex"), step: gl.getUniformLocation(blurProg, "u_step"), cMin: gl.getUniformLocation(blurProg, "u_clampMin"), cMax: gl.getUniformLocation(blurProg, "u_clampMax"), fin: gl.getUniformLocation(blurProg, "u_final") };
+        }
+        const ppt = Math.max(4, Math.min(opts.pxPerTile || 16, Math.floor((gl.getParameter(gl.MAX_TEXTURE_SIZE) || 4096) / Math.max(cols, rows, 1))));
+        const w = cols * ppt, h = rows * ppt, prevFbo = gl.getParameter(gl.FRAMEBUFFER_BINDING), prevVp = gl.getParameter(gl.VIEWPORT), prevProg = gl.getParameter(gl.CURRENT_PROGRAM);
+        const fbo = gl.createFramebuffer(), texA = mkTex(w, h), texB = mkTex(w, h), outTex = mkTex(w, h);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo); gl.viewport(0, 0, w, h);
+        gl.disable(gl.BLEND); gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.SCISSOR_TEST);
+        gl.colorMask(true, true, true, true); gl.bindVertexArray(emptyVao);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texA, 0);
+        gl.useProgram(stitchProg);
+        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, mapTex); gl.uniform1i(uS.map, 0);
+        gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, atlasMaskTex); gl.uniform1i(uS.atlas, 1);
+        gl.uniform2f(uS.size, cols, rows); gl.uniform2f(uS.grid, opts.atlasCols || 16, opts.atlasRows || 15);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        gl.useProgram(blurProg); gl.uniform1i(uB.src, 0); gl.uniform2f(uB.cMin, 0.5 / w, 0.5 / h); gl.uniform2f(uB.cMax, 1 - 0.5 / w, 1 - 0.5 / h);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texB, 0);
+        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texA); gl.uniform2f(uB.step, 1 / w, 0); gl.uniform1i(uB.fin, 0); gl.drawArrays(gl.TRIANGLES, 0, 3);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, outTex, 0);
+        gl.bindTexture(gl.TEXTURE_2D, texB); gl.uniform2f(uB.step, 0, 1 / h); gl.uniform1i(uB.fin, 1); gl.drawArrays(gl.TRIANGLES, 0, 3);
+        gl.bindVertexArray(null); gl.bindFramebuffer(gl.FRAMEBUFFER, prevFbo); gl.viewport(prevVp[0], prevVp[1], prevVp[2], prevVp[3]); gl.useProgram(prevProg);
+        gl.deleteFramebuffer(fbo); gl.deleteTexture(texA); gl.deleteTexture(texB);
+        return outTex;
       },
     };
   }
 
   window.__antFx = {
-    FIRE_VS, FIRE_FS, buildFireParticles,
-    SPARK_VS, SPARK_FS, buildSparkParticles,
-    FUR_PROFILES, FUR_VS, FUR_FS,
-    PLINTH_VS, PLINTH_FS, buildPlinthMesh,
-    SHADOW_VS, SHADOW_FS,
-    TILE_GROUND_VS, TILE_GROUND_FS, buildTileGroundMesh,
-    BORDER_GRASS_VS, BORDER_GRASS_FS, drawBorderGrassMesh,
-    createAtmoDrawer,
-    evalJelloWobble,
+    FIRE_VS, FIRE_FS, buildFireParticles, SPARK_VS, SPARK_FS, buildSparkParticles,
+    FUR_PROFILES, FUR_VS, FUR_FS, PLINTH_VS, PLINTH_FS, buildPlinthMesh, SHADOW_VS, SHADOW_FS,
+    TILE_GROUND_VS, TILE_GROUND_FS, buildTileGroundMesh, BORDER_GRASS_VS, BORDER_GRASS_FS, drawBorderGrassMesh,
+    createAtmoDrawer, createMaskBuilder, evalJelloWobble,
   };
 })();
