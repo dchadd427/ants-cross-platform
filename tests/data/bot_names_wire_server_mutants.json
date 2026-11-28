@@ -1,0 +1,37 @@
+{
+ "note": "The private half of tests/data/bot_names_wire_mutants.json (tools/mutate.py runs it together with the public half): the mutants of files that are not in the public repository, and the ones that only a test that is not there catches. Mutants of the wiring of the bots' names (network protocol 20) for tools/mutate.py: python3 tools/mutate.py tests/data/bot_names_wire_mutants.json --keep-going --jobs 1 --timeout 600. Every mutant must be caught (the commands have their own timeouts). (The mutant that drops the key-0 line of bot_room_name is equivalent: bot_label of an empty name is the legacy label anyway.) (A mutant that checks the Hello's name before it is cleaned is equivalent: the room refuses a Hello whose name holds a byte outside the table, and the client's encoder cleans it first.)",
+ "mutants": [
+  {
+   "id": "room_has_no_key",
+   "file": "src/ants_server/room.cpp",
+   "old": "cfg.bot_name_key = ai::bot_name_key(spec.code);",
+   "new": "cfg.bot_name_key = 0;",
+   "build": "test_server",
+   "test": "timeout 300 env ANTS_TEST_FILTER=S3.135 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "room_seats_legacy_names",
+   "file": "src/ants_server/room.cpp",
+   "old": "return ai::bot_room_label(ai::bot_name_key(spec_.code), bot);",
+   "new": "return ai::bot_display_name(bot);",
+   "build": "test_server",
+   "test": "timeout 300 env ANTS_TEST_FILTER=S3.135 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "history_loses_the_bot_name",
+   "file": "src/ants_server/history_record.cpp",
+   "old": "            s.name = bot_name;",
+   "new": "            s.name.clear();",
+   "build": "test_history_rooms",
+   "test": "timeout 120 ./build/tests/test_server/test_history_rooms"
+  },
+  {
+   "id": "search_shows_the_legacy_name",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "return label.empty() ? \"Bot (\" + s.bot + \")\" : label;",
+   "new": "return \"Bot (\" + s.bot + \")\";",
+   "build": "test_history_store",
+   "test": "timeout 120 env ANTS_TEST_FILTER=HS2.4b ./build/tests/test_server/test_history_store"
+  }
+ ]
+}

@@ -1,0 +1,257 @@
+{
+ "note": "The private half of tests/data/live_delay_mutants.json (tools/mutate.py runs it together with the public half): the mutants of files that are not in the public repository, and the ones that only a test that is not there catches. Mutants of the delay of the public live door (docs/SERVER_REPLAYS.md \"Live matches\"; docs/TESTING.md, 'Mutation checks'): a match with two or more people is shown 30 seconds late, counted from the seats when the match begins, and the snapshot that the board hands out is cut there by the recorder. Each rule is held by a test that runs the code: test_live_board (LB1.2, LB1.2b, LB1.4, LB1.5, LB1.9), test_replay (RP8.3), test_server (S3.176 to S3.176d, which also ask the door every way and drop a person) and test_ctl (CTL2.18b: the header's safety). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/live_delay_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "delay_from_one_person",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "people >= kDelayMinPeople ?",
+   "new": "people >= 1 ?",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.9"
+  },
+  {
+   "id": "delay_from_three_people",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "people >= kDelayMinPeople ?",
+   "new": "people >= 3 ?",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.9"
+  },
+  {
+   "id": "delay_never",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "match.delay_turns = people >= kDelayMinPeople ? delay_s_ * static_cast<uint32_t>(net::kTurnsPerSecond) : 0u;",
+   "new": "match.delay_turns = people >= kDelayMinPeople ? 0u : 0u;",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.9"
+  },
+  {
+   "id": "delay_for_computer_players_only",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "people >= kDelayMinPeople ?",
+   "new": "people == 0 ?",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.9"
+  },
+  {
+   "id": "delay_counts_the_seconds_wrong",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "delay_s_ * static_cast<uint32_t>(net::kTurnsPerSecond)",
+   "new": "delay_s_ * 10u",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.9"
+  },
+  {
+   "id": "snapshot_is_not_cut",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "const uint32_t shown = run > it->delay_turns ? run - it->delay_turns : 0u;",
+   "new": "const uint32_t shown = run;",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.9"
+  },
+  {
+   "id": "snapshot_is_cut_a_second_late",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "const uint32_t shown = run > it->delay_turns ? run - it->delay_turns : 0u;",
+   "new": "const uint32_t shown = run > it->delay_turns ? run - it->delay_turns + 20u : 0u;",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.9"
+  },
+  {
+   "id": "a_young_match_is_shown_whole",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "const uint32_t shown = run > it->delay_turns ? run - it->delay_turns : 0u;",
+   "new": "const uint32_t shown = run > it->delay_turns ? run - it->delay_turns : run;",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.9"
+  },
+  {
+   "id": "the_header_says_no_delay",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "    out.delay = it->delay_turns;\n",
+   "new": "    out.delay = 0;\n",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.9"
+  },
+  {
+   "id": "the_header_says_shown_is_run",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "    out.shown = it->cache_shown;\n",
+   "new": "    out.shown = it->cache_now;\n",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.9"
+  },
+  {
+   "id": "the_cache_is_never_remade",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "if (it->cache.empty() || now < it->cache_s || now - it->cache_s >= kSnapshotMaxAgeS) {",
+   "new": "if (it->cache.empty()) {",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.4"
+  },
+  {
+   "id": "the_delay_is_counted_again_from_the_setting",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "const uint32_t shown = run > it->delay_turns ? run - it->delay_turns : 0u;",
+   "new": "const uint32_t shown = run > delay_s_ * 20u ? run - delay_s_ * 20u : 0u;",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.9"
+  },
+  {
+   "id": "the_setting_has_no_top",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "delay_s_ = std::min(seconds, kMaxDelayS);",
+   "new": "delay_s_ = seconds;",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.9"
+  },
+  {
+   "id": "the_list_wants_30_seconds_again",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "return match.recorder != nullptr && match.recorder->failure().empty() && !match.recorder->finished();",
+   "new": "return match.recorder != nullptr && match.recorder->turns() >= kReplayMinTurns && match.recorder->failure().empty() && !match.recorder->finished();",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.2"
+  },
+  {
+   "id": "a_short_match_is_not_remembered",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "ended.brief = ended.turns < kReplayMinTurns;",
+   "new": "ended.brief = false; if (ended.turns < kReplayMinTurns) { running_.erase(it); return; }",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.5"
+  },
+  {
+   "id": "the_list_pushes_old_matches_off",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "if (!listed(*it) || (it->recorder->turns() >= kReplayMinTurns) != old) continue;",
+   "new": "if (!listed(*it) || !old) continue;",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.2b"
+  },
+  {
+   "id": "the_snapshot_cut_includes_the_turn_it_shows",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "return tc.turn < t; });",
+   "new": "return tc.turn <= t; });",
+   "build": "test_live_board test_replay",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.9"
+  },
+  {
+   "id": "the_snapshot_cut_keeps_every_hash",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "std::min<size_t>(r.hashes.size(), turns / r.head.hash_period);",
+   "new": "r.hashes.size();",
+   "build": "test_live_board test_replay",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.9"
+  },
+  {
+   "id": "the_cut_is_not_made_for_a_match_that_runs",
+   "file": "src/ants_replay/recorder.cpp",
+   "old": "return encode_snapshot_until(replay_, shown_turns, error);",
+   "new": "return encode_snapshot_until(replay_, turns_, error);",
+   "build": "test_live_board test_replay",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.9"
+  },
+  {
+   "id": "the_room_counts_computer_players_as_people",
+   "file": "src/ants_server/room.cpp",
+   "old": "(state == net::SlotState::Host || state == net::SlotState::Client)) ++people;",
+   "new": "state != net::SlotState::Empty) ++people;",
+   "build": "test_server",
+   "test": "timeout 1500 env ANTS_TEST_FILTER=S3.176b ./build/tests/test_server/test_server",
+   "expect": "S3.176b"
+  },
+  {
+   "id": "the_room_counts_one_at_most",
+   "file": "src/ants_server/room.cpp",
+   "old": "(state == net::SlotState::Host || state == net::SlotState::Client)) ++people;",
+   "new": "(state == net::SlotState::Host || state == net::SlotState::Client)) people = 1;",
+   "build": "test_server",
+   "test": "timeout 1500 env ANTS_TEST_FILTER=S3.176 ./build/tests/test_server/test_server",
+   "expect": "S3.176"
+  },
+  {
+   "id": "the_room_counts_nobody",
+   "file": "src/ants_server/room.cpp",
+   "old": "(state == net::SlotState::Host || state == net::SlotState::Client)) ++people;",
+   "new": "(state == net::SlotState::Host || state == net::SlotState::Client)) people += 0;",
+   "build": "test_server",
+   "test": "timeout 1500 env ANTS_TEST_FILTER=S3.176 ./build/tests/test_server/test_server",
+   "expect": "S3.176"
+  },
+  {
+   "id": "the_server_setting_never_reaches_the_board",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "    live_board_.set_delay_seconds(limits_.live_delay_s);\n",
+   "new": "",
+   "build": "test_server",
+   "test": "timeout 1500 env ANTS_TEST_FILTER=S3.176c ./build/tests/test_server/test_server",
+   "expect": "S3.176c"
+  },
+  {
+   "id": "the_door_says_the_turns_of_a_short_match_wrongly",
+   "file": "src/ants_server/control.cpp",
+   "old": "if (ended) o.set(\"turns\", JsonValue::make_int(turns));",
+   "new": "if (ended) o.set(\"turns\", JsonValue::make_int(turns + 600));",
+   "build": "test_server",
+   "test": "timeout 1500 env ANTS_TEST_FILTER=S3.176d ./build/tests/test_server/test_server",
+   "expect": "S3.176d"
+  },
+  {
+   "id": "the_door_gives_no_header",
+   "file": "src/ants_server/control.cpp",
+   "old": "        r.headers.emplace_back(\"X-Ants-Live\",",
+   "new": "        r.headers.emplace_back(\"X-Ants-Other\",",
+   "build": "test_server",
+   "test": "timeout 1500 env ANTS_TEST_FILTER=S3.176 ./build/tests/test_server/test_server",
+   "expect": "S3.176"
+  },
+  {
+   "id": "a_header_name_can_be_anything",
+   "file": "src/ants_ctl/http.cpp",
+   "old": "if (s.size() < 3 || s.size() > 40 || s[0] != 'X' || s[1] != '-') return false;",
+   "new": "if (s.empty()) return false;",
+   "build": "test_ctl",
+   "test": "timeout 900 ./build/tests/test_ctl/test_ctl",
+   "expect": "CTL2.18b"
+  },
+  {
+   "id": "a_header_value_can_hold_a_line_end",
+   "file": "src/ants_ctl/http.cpp",
+   "old": "if (safe_extra_header_name(header.first) && safe_header_value(header.second)) extra +=",
+   "new": "if (safe_extra_header_name(header.first)) extra +=",
+   "build": "test_ctl",
+   "test": "timeout 900 ./build/tests/test_ctl/test_ctl",
+   "expect": "CTL2.18b"
+  },
+  {
+   "id": "a_handler_can_repeat_the_servers_own_x_header",
+   "file": "src/ants_ctl/http.cpp",
+   "old": "if (same) return false;",
+   "new": "if (same) return true;",
+   "build": "test_ctl",
+   "test": "timeout 900 ./build/tests/test_ctl/test_ctl",
+   "expect": "CTL2.18b"
+  }
+ ]
+}

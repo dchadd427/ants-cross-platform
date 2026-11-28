@@ -13,15 +13,16 @@ mode (web/shell.html at play.html?local=<id>) and the code that they share (web/
     runs the same list in the quick tier on a copy of the files): every one is a way to lose a promise (the size is not checked, the checksum is not, a drop that is not taken over, a file that is sent to the
     server, a record that is kept for ever ...).
 """
-import json
 import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 NODE = shutil.which("node")
 CHECK_JS = os.path.join(REPO, "tests", "scripts", "web_replay_open_check.js")
 FIXTURE = os.path.join(REPO, "tests", "data", "replay_bots_tiny.antsrep")
@@ -246,8 +247,8 @@ class TheChecksAreNotVacuous(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        with open(os.path.join(REPO, "tests", "data", "replay_open_mutants.json"), encoding="utf-8") as f:
-            cls.spec = json.load(f)
+        import mutant_specs  # noqa: E402  (here and not at the top: the copies in which the mutants run have this file but not that one)
+        cls.spec = mutant_specs.load(os.path.join(REPO, "tests", "data", "replay_open_mutants.json"))
         cls.folder = tempfile.mkdtemp(prefix="ants_open_mutants.")
         for name in cls.FILES:
             target = os.path.join(cls.folder, *name.split("/"))

@@ -1,0 +1,166 @@
+{
+ "note": "The private half of tests/data/game_bar_mutants.json (tools/mutate.py runs it together with the public half): the mutants of files that are not in the public repository, and the ones that only a test that is not there catches. Mutants of the game page's part of the bar (web/game_bar.js and web/game_bar.css: the links that ask or open a new tab during a match, the keys that are the bar's, the focus after a press, the Menu's own lines, the question that Reload page asks, the Menu through a resize and its refit, the focus after the Menu or the question closes, the room under the bar, the pointer on the bar's blank parts, the controls row under the picture from 320 to 700 px) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: tools/mutate.py tests/data/game_bar_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_game_bar.py runs them on copies.",
+ "mutants": [
+  {
+   "id": "the_menu_closes_at_a_change_of_height",
+   "file": "web/site_nav.js",
+   "old": "window.innerWidth !== openWidth) close(false);",
+   "new": "true) close(false);",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "the_menu_stays_at_a_new_width",
+   "file": "web/site_nav.js",
+   "old": "window.innerWidth !== openWidth) close(false);",
+   "new": "false) close(false);",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "a_refit_of_the_menu_is_missing_after_a_change_of_height",
+   "file": "web/site_nav.js",
+   "old": "if (window.innerWidth !== openWidth) close(false); else fit();",
+   "new": "if (window.innerWidth !== openWidth) close(false);",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "reload_question_backdrop_press_does_nothing",
+   "file": "web/game_bar.js",
+   "old": "            onBackdrop(dialog, closeAsk);\n",
+   "new": "",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "reload_question_drag_into_it_closes",
+   "file": "web/game_bar.js",
+   "old": "hit = down && e.target === node; down = false; });",
+   "new": "hit = down; down = false; });",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "reload_question_drag_out_of_it_closes",
+   "file": "web/game_bar.js",
+   "old": "hit = down && e.target === node; down = false; });",
+   "new": "hit = e.target === node; down = false; });",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "side_home_does_not_close_the_tab",
+   "file": "web/site_nav.js",
+   "old": "try { window.close(); } catch (e) { /* it goes on as a link */ }",
+   "new": "",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "side_home_is_taken_with_no_front_page",
+   "file": "web/site_nav.js",
+   "old": "if (!talk || !heard) return false;",
+   "new": "if (!talk) return false;",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "side_home_closes_without_asking_again",
+   "file": "web/site_nav.js",
+   "old": "        if (waiting) return true;\n",
+   "new": "        if (waiting) return true;\n        try { window.close(); } catch (e) { /* none */ }\n        return true;\n",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "side_home_never_goes_on_as_a_link",
+   "file": "web/site_nav.js",
+   "old": "setTimeout(plain, CLOSE_MS);",
+   "new": "",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "side_home_waits_for_no_answer",
+   "file": "web/site_nav.js",
+   "old": "else timer = setTimeout(plain, ASK_MS);",
+   "new": "else timer = 0;",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "side_a_modified_press_of_home_is_taken",
+   "file": "web/site_nav.js",
+   "old": "&& !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && !e.button && homeBack())",
+   "new": "&& homeBack())",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "side_a_page_with_no_key_asks",
+   "file": "web/site_nav.js",
+   "old": "if (typeof window.BroadcastChannel === 'function' && sideKey()) {",
+   "new": "if (typeof window.BroadcastChannel === 'function') {",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "side_any_answer_is_taken",
+   "file": "web/site_nav.js",
+   "old": "x.t === 'here' && x.token === token",
+   "new": "x.t === 'here'",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "side_a_tab_forgets_its_key",
+   "file": "web/site_nav.js",
+   "old": "ask(function () { heard = true; kept(sideKey()); });",
+   "new": "ask(function () { heard = true; });",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "side_the_key_outlives_a_plain_link",
+   "file": "web/site_nav.js",
+   "old": "then = null; kept(''); window.location.assign('/');",
+   "new": "then = null; window.location.assign('/');",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "side_matches_is_no_key",
+   "file": "web/site_nav.js",
+   "old": "at.pathname === '/matches' ? 'matches'",
+   "new": "false ? 'matches'",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "side_a_live_view_is_no_key",
+   "file": "web/site_nav.js",
+   "old": "at.pathname === '/play' && live ? live[1] : ''",
+   "new": "''",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "side_the_menus_home_is_not_taken",
+   "file": "web/site_nav.js",
+   "old": "(bar.contains(a) || (box && box.contains(a)))",
+   "new": "bar.contains(a)",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "side_a_tab_that_went_there_asks",
+   "file": "web/site_nav.js",
+   "old": "window.history && window.history.length === 1 ? own : ''",
+   "new": "own",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "the_live_row_is_one_row_of_four_on_a_narrow_phone",
+   "file": "web/shell.html",
+   "old": "            .rbar.islive:not(.over) { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }\n",
+   "new": "",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "the_live_row_wraps_only_under_400_px",
+   "file": "web/shell.html",
+   "old": "        @media (max-width: 499px) {\n            .rbar.islive:not(.over) { display: flex;",
+   "new": "        @media (max-width: 399px) {\n            .rbar.islive:not(.over) { display: flex;",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "a_button_of_the_bar_is_smaller_than_a_finger",
+   "file": "web/shell.html",
+   "old": ".rbar:not(.over) .speed button, .rbar:not(.over) .picwrap > .btn, .rbar:not(.over) .jtl { min-height: 44px; }",
+   "new": ".rbar:not(.over) .speed button, .rbar:not(.over) .picwrap > .btn, .rbar:not(.over) .jtl { min-height: 36px; }",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  }
+ ]
+}

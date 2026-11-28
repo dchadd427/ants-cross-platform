@@ -198,14 +198,6 @@
    "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
   },
   {
-   "id": "make_art_writes_into_the_library",
-   "file": "tools/front_page_art/make_art.py",
-   "old": "        library_guard.require_writable(args.out)\n",
-   "new": "        pass\n",
-   "build": [],
-   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
-  },
-  {
    "id": "mutate_changes_a_library_file",
    "file": "tools/mutate.py",
    "old": "        why = library_guard.write_refusal(os.path.join(args.root, m[\"file\"]))\n",
@@ -345,14 +337,6 @@
   {
    "id": "previews_exit_with_one",
    "file": "tools/map_previews.py",
-   "old": "        sys.exit(2)",
-   "new": "        sys.exit(1)",
-   "build": [],
-   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
-  },
-  {
-   "id": "make_art_exits_with_one",
-   "file": "tools/front_page_art/make_art.py",
    "old": "        sys.exit(2)",
    "new": "        sys.exit(1)",
    "build": [],

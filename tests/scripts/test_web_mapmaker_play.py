@@ -10,7 +10,6 @@ map maker, against bots, in a tab of its own.
     the game page's whitelist, its start and its page carry the test game;
   - the opt-in browser check (tests/scripts/test_web_mapmaker.sh, part play) is there and says what it covers.
 """
-import json
 import os
 import re
 import shutil
@@ -20,6 +19,7 @@ import tempfile
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 FRONT = os.path.join(REPO, "web", "front")
 CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_play_check.js")
 NODE = shutil.which("node")
@@ -81,8 +81,8 @@ class ThePlayChecks(unittest.TestCase):
 
     def test_the_checks_can_fail_on_the_broken_copies(self):
         """tests/data/mapmaker_play_mutants.json (tools/mutate.py runs it too, with `--keep-going --jobs 1`): each broken copy must fail the check named for it"""
-        with open(os.path.join(REPO, "tests", "data", "mapmaker_play_mutants.json"), encoding="utf-8") as f:
-            spec = json.load(f)
+        import mutant_specs  # noqa: E402  (here and not at the top: the copies in which the mutants run have this file but not that one)
+        spec = mutant_specs.load(os.path.join(REPO, "tests", "data", "mapmaker_play_mutants.json"))
         self.assertGreaterEqual(len(spec["mutants"]), 120)
         ids = [m["id"] for m in spec["mutants"]]
         self.assertEqual(len(ids), len(set(ids)), "an id twice")
@@ -110,8 +110,8 @@ class ThePlayChecks(unittest.TestCase):
                         print("NOTE: the run of the broken copy %s said that the check failed and then did not end by itself (killed by its watchdog after %d s): %s" % (m["id"], WATCHDOG_S, done.stderr.strip()[-200:]), file=sys.stderr)
 
     def test_every_mutant_of_the_glue_names_a_test_that_exists(self):
-        with open(os.path.join(REPO, "tests", "data", "mapmaker_play_mutants.json"), encoding="utf-8") as f:
-            spec = json.load(f)
+        import mutant_specs  # noqa: E402  (here and not at the top: the copies in which the mutants run have this file but not that one)
+        spec = mutant_specs.load(os.path.join(REPO, "tests", "data", "mapmaker_play_mutants.json"))
         tests = {m["test"] for m in spec["mutants"]}
         self.assertEqual(tests, {"node tests/scripts/web_mapmaker_play_check.js", "node tests/scripts/web_lobby_check.js web/shell.html web/lobby.html", "python3 -m unittest tests.scripts.test_web_report.ThePagesOwnCode", "python3 -m unittest tests.scripts.test_web_mapmaker_play.ThePageWiring"})
         for m in spec["mutants"]:

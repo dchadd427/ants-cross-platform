@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the prediction's default and of the slide of the ants that the prediction moves, for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the product rules that the shaped-link, glide and prediction tests hold: it is on by default and the screen reads it, the player's own orders and attack orders are predicted (and nobody else's, and not a refused one), it is off while the link is away, the lead is the shortest lag, falls a tick at a time and forgets at a stop, a missed order is expected in the next turn, the corrections and the changes of the shown engine slide the right way, never faster than the ant walks, never across the fog, and the pointer picks what is drawn and nothing else.",
+  "note": "Mutants of the prediction's default and of the slide of the ants that the prediction moves, for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the product rules that the glide and prediction tests hold: it is on by default and the screen reads it, the player's own orders and attack orders are predicted (and nobody else's, and not a refused one), it is off while the link is away, the lead is the shortest lag, falls a tick at a time and forgets at a stop, a missed order is expected in the next turn, the corrections and the changes of the shown engine slide the right way, never faster than the ant walks, never across the fog, and the pointer picks what is drawn and nothing else.",
   "mutants": [
     {
       "id": "netgame_default_off",
@@ -24,39 +24,6 @@
       "expect": "PA4"
     },
     {
-      "id": "order_not_predicted",
-      "file": "src/ants_net/netgame_match.cpp",
-      "old": "    if (prediction_ && prediction_->submit(c, result)) {",
-      "new": "    if (false && prediction_ && prediction_->submit(c, result)) {",
-      "build": [
-        "test_prediction_link"
-      ],
-      "test": "./build/tests/test_app_server/test_prediction_link",
-      "expect": "LK"
-    },
-    {
-      "id": "group_attack_not_predicted",
-      "file": "src/ants_net/prediction.cpp",
-      "old": "type == sim::CommandType::GroupSpecial || type == sim::CommandType::GroupAttack || type == sim::CommandType::Stop;",
-      "new": "type == sim::CommandType::GroupSpecial || type == sim::CommandType::Stop;",
-      "build": [
-        "test_prediction_link"
-      ],
-      "test": "./build/tests/test_app_server/test_prediction_link",
-      "expect": "LK3"
-    },
-    {
-      "id": "screen_reads_confirmed_engine",
-      "file": "src/ants_app/application_sim.cpp",
-      "old": "    return network_active() ? net_->view_engine() : sim_;",
-      "new": "    return sim_;",
-      "build": [
-        "test_prediction_link"
-      ],
-      "test": "./build/tests/test_app_server/test_prediction_link",
-      "expect": "LK"
-    },
-    {
       "id": "other_seats_orders_predicted",
       "file": "src/ants_net/prediction.cpp",
       "old": "if (!running_ || suspended_ || command.issuer != cfg_.seat || !predicts(command.type)) return false;",
@@ -77,39 +44,6 @@
       ],
       "test": "./build/tests/test_net/test_netgame",
       "expect": "N3.34"
-    },
-    {
-      "id": "reconnect_keeps_predicting",
-      "file": "src/ants_net/netgame_match.cpp",
-      "old": "off = off || client_session_->mode() != ClientSession::Mode::Normal || client_session_->catching_up();",
-      "new": "off = off || client_session_->catching_up();",
-      "build": [
-        "test_prediction_link"
-      ],
-      "test": "./build/tests/test_app_server/test_prediction_link",
-      "expect": "LK6"
-    },
-    {
-      "id": "glide_not_fed",
-      "file": "src/ants_app/application_sim.cpp",
-      "old": "    for (const net::Prediction::Shift& shift : prediction->take_shifts()) renderer_->view_glide().add(shift.ant, shift.dx, shift.dy);",
-      "new": "    for (const net::Prediction::Shift& shift : prediction->take_shifts()) (void)shift;",
-      "build": [
-        "test_prediction_link"
-      ],
-      "test": "./build/tests/test_app_server/test_prediction_link",
-      "expect": "LK7"
-    },
-    {
-      "id": "glide_wrong_way",
-      "file": "src/ants_net/prediction.cpp",
-      "old": "            add_shift(a.id, b.px - a.px, b.py - a.py);",
-      "new": "            add_shift(a.id, a.px - b.px, a.py - b.py);",
-      "build": [
-        "test_prediction_link"
-      ],
-      "test": "./build/tests/test_app_server/test_prediction_link",
-      "expect": "LK7"
     },
     {
       "id": "glide_drawn_the_wrong_way",
@@ -200,28 +134,6 @@
       "expect": "VG2"
     },
     {
-      "id": "glide_runs_fast_in_the_frame",
-      "file": "src/ants_app/renderer_terrain.cpp",
-      "old": "view_glide_.advance(static_cast<uint32_t>(std::max(0.0f, dt) * 1000.0f + 0.5f));",
-      "new": "view_glide_.advance(static_cast<uint32_t>(std::max(0.0f, dt) * 3000.0f + 0.5f));",
-      "build": [
-        "test_prediction_link"
-      ],
-      "test": "./build/tests/test_app_server/test_prediction_link",
-      "expect": "LK11"
-    },
-    {
-      "id": "glide_fixed_time_in_the_match",
-      "file": "src/ants_app/view_glide.cpp",
-      "old": "const double ms = std::ceil(length * 1000.0 / static_cast<double>(kWalkPxPerSecond));",
-      "new": "const double ms = static_cast<double>(kMinDurationMs) + 0.0 * length;",
-      "build": [
-        "test_prediction_link"
-      ],
-      "test": "./build/tests/test_app_server/test_prediction_link",
-      "expect": "LK11"
-    },
-    {
       "id": "glide_shifts_not_added",
       "file": "src/ants_app/view_glide.cpp",
       "old": "const int32_t sum_x = scaled(entries_[i].dx, entries_[i].left_ms, entries_[i].total_ms) + dx;",
@@ -242,17 +154,6 @@
       ],
       "test": "./build/tests/test_net/test_prediction",
       "expect": "RP3.5"
-    },
-    {
-      "id": "fog_not_adopted",
-      "file": "src/ants_net/prediction.cpp",
-      "old": "    pred_.tick();\n    pred_.adopt_explored_ground_of(*confirmed_);                      // (the picture explores what the confirmed engine has explored: prediction.hpp, \"Fog of war\")\n",
-      "new": "    pred_.tick();\n",
-      "build": [
-        "test_prediction_link"
-      ],
-      "test": "./build/tests/test_app_server/test_prediction_link",
-      "expect": "LK8"
     },
     {
       "id": "fog_not_adopted_in_rebuild",
@@ -286,17 +187,6 @@
       ],
       "test": "./build/tests/test_net/test_prediction",
       "expect": "RP8.2"
-    },
-    {
-      "id": "lead_is_the_longest_lag_on_a_link",
-      "file": "src/ants_net/prediction.cpp",
-      "old": "if (c <= lag.second + cfg_.lag_fresh_ticks && (lowest == 0 || lag.first < lowest)) lowest = lag.first;",
-      "new": "if (c <= lag.second + cfg_.lag_fresh_ticks && (lowest == 0 || lag.first > lowest)) lowest = lag.first;",
-      "build": [
-        "test_prediction_link"
-      ],
-      "test": "./build/tests/test_app_server/test_prediction_link",
-      "expect": "LK2"
     },
     {
       "id": "missed_order_not_expected_in_the_next_turn",
@@ -418,17 +308,6 @@
       ],
       "test": "./build/tests/test_net/test_prediction",
       "expect": "RP3.6"
-    },
-    {
-      "id": "start_and_stop_jump_in_the_frame",
-      "file": "src/ants_app/application_sim.cpp",
-      "old": "void Application::feed_view_glide() {\n    net::Prediction* prediction = net_ != nullptr ? net_->prediction() : nullptr;",
-      "new": "void Application::feed_view_glide() {\n    net::Prediction* prediction = net_ != nullptr && net_->predicting() ? net_->prediction() : nullptr;",
-      "build": [
-        "test_prediction_link"
-      ],
-      "test": "./build/tests/test_app_server/test_prediction_link",
-      "expect": "LK10"
     },
     {
       "id": "pointer_reaches_an_ant_that_is_not_drawn",

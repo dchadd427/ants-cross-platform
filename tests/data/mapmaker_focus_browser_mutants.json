@@ -2,20 +2,6 @@
  "note": "Mutants of the typing in the map maker's boxes, judged by the REAL browser, for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the same broken copies as tests/data/mapmaker_focus_mutants.json that the browser can notice (a box taken out of the page loses the focus, a caret that is not put back), against tests/scripts/web_mapmaker_focus_browser.py --strict, which needs a Chromium-based browser (CHROME=/path/to/it). Run by hand from the checkout: tools/mutate.py tests/data/mapmaker_focus_browser_mutants.json --keep-going --jobs 1; every mutant must be caught.",
  "mutants": [
   {
-   "id": "browser_submit_everything_made_again_each_key",
-   "file": "web/front/mapmaker_submit.js",
-   "old": "if (box.says === says) return;",
-   "new": "if (false) return;",
-   "test": "python3 tests/scripts/web_mapmaker_focus_browser.py --strict"
-  },
-  {
-   "id": "browser_submit_maker_box_made_again_each_key",
-   "file": "web/front/mapmaker_submit.js",
-   "old": "fill(makerBox, editing ? 'edit' : 'show ' + maker,",
-   "new": "fill(makerBox, {},",
-   "test": "python3 tests/scripts/web_mapmaker_focus_browser.py --strict"
-  },
-  {
    "id": "browser_props_description_moved_by_counter",
    "file": "web/front/mapmaker_props.js",
    "old": "textBox.className = over ? 'over' : '';",

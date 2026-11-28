@@ -1,0 +1,29 @@
+{
+ "note": "The private half of tests/data/replay_open_mutants.json (tools/mutate.py runs it together with the public half): the mutants of files that are not in the public repository, and the ones that only a test that is not there catches. Mutants of the page that opens a replay file of your own (docs/REPLAYS.md \"A file of your own\") for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): web/replay_page.js (the size, the checksum, the hand-off, the strip, the card of a map that the game refuses, the header), web/matches.html, web/shell.html (the card, the wrapping of text that cannot wrap), web/map_files.js (the count of the starting ants of a carried map) and the constant of include/ants_replay/replay.hpp against tests/scripts/web_replay_open_check.js (node: the code on the real file, on every cut and every flipped bit of its head, on a fake IndexedDB and a fake page) and the static checks of tests/scripts/test_web_replay_open.py. Run from the checkout: python3 tools/mutate.py tests/data/replay_open_mutants.json --keep-going --jobs 1 --timeout 300. Every mutant must be caught; the same test file runs the list in the quick tier on a copy. Each `why` names what the mutant loses.",
+ "mutants": [
+  {
+   "id": "the_chooser_has_an_accept_filter",
+   "file": "web/matches.html",
+   "old": "<input type=\"file\" id=\"open-file\" class=\"sr\" tabindex=\"-1\" aria-hidden=\"true\">",
+   "new": "<input type=\"file\" id=\"open-file\" accept=\".antsrep\" class=\"sr\" tabindex=\"-1\" aria-hidden=\"true\">",
+   "test": "python3 tests/scripts/test_web_replay_open.py TheStrip ThePlayer",
+   "why": "a phone greys out the file"
+  },
+  {
+   "id": "the_strip_is_not_wired",
+   "file": "web/matches.html",
+   "old": "setTimeout: window.setTimeout, clearTimeout: window.clearTimeout }).wire();",
+   "new": "setTimeout: window.setTimeout, clearTimeout: window.clearTimeout });",
+   "test": "python3 tests/scripts/test_web_replay_open.py TheStrip ThePlayer",
+   "why": "the strip does nothing"
+  },
+  {
+   "id": "the_player_opens_in_a_new_tab",
+   "file": "web/matches.html",
+   "old": "go: function (url) { window.location.assign(url); }",
+   "new": "go: function (url) { window.open(url); }",
+   "test": "python3 tests/scripts/test_web_replay_open.py TheStrip ThePlayer",
+   "why": "a popup that a browser blocks"
+  }
+ ]
+}

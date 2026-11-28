@@ -289,20 +289,6 @@
    "test": "node tests/scripts/web_mapmaker_mine_check.js"
   },
   {
-   "id": "submit_card_has_no_word",
-   "file": "web/front/mapmaker_submit.js",
-   "old": "env.tags(tags, kind, cur.file.rules);",
-   "new": "env.tags(tags, kind);",
-   "test": "node tests/scripts/web_mapmaker_submit_check.js"
-  },
-  {
-   "id": "submit_row_has_no_word",
-   "file": "web/front/mapmaker_submit.js",
-   "old": "env.tags(tags, rec.kind === 'extended' ? 'extended' : 'classic', file && file.rules);",
-   "new": "env.tags(tags, rec.kind === 'extended' ? 'extended' : 'classic');",
-   "test": "node tests/scripts/web_mapmaker_submit_check.js"
-  },
-  {
    "id": "resize_undo_gives_the_word_zero_back",
    "file": "web/front/mapmaker_blocks.js",
    "old": "removed: file.bytes.slice(14, 16), inserted: new Uint8Array([rules & 255, rules >> 8])",

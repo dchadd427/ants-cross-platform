@@ -4,8 +4,10 @@
 usage: mutate.py SPEC.json [--root DIR] [--build-dir DIR] [--jobs N] [--timeout SECONDS] [--keep-going] [--only ID ...] [--report FILE] [--check]
                           [--baseline-every N]
 
-SPEC.json is {"mutants": [...]} (or the list itself); an optional "defaults" object gives every mutant the keys that it does not set. A mutant is
-  id      a name, unique in the file
+SPEC.json is {"mutants": [...]} (or the list itself); an optional "defaults" object gives every mutant the keys that it does not set. A list that has a second half
+(NAME_server_mutants.json beside NAME_mutants.json: the mutants that need files which are not in every copy of the tree) is read together with it, the second half after the
+first; a copy of the tree that does not have the second half runs the first alone. A mutant is
+  id      a name, unique in the list (both halves)
   file    the source to change, relative to the root
   old     the text to replace: it must occur in the file exactly once, else the mutant is an error (and nothing is changed)
   new     what takes its place
@@ -73,8 +75,41 @@ def as_targets(value, where):
     raise SpecError("%s: build must be a target name or a list of target names" % where)
 
 
+SECOND_HALF = "_server_mutants.json"
+
+
+def second_half(path):
+    """The second half of a list (NAME_mutants.json -> NAME_server_mutants.json) when it is there, else None. A second half has none of its own."""
+    folder, name = os.path.split(path)
+    if not name.endswith("_mutants.json") or name.endswith(SECOND_HALF):
+        return None
+    other = os.path.join(folder, name[:-len("_mutants.json")] + SECOND_HALF)
+    return other if os.path.isfile(other) else None
+
+
 def load_spec(path):
-    """(mutants, baseline commands or None)"""
+    """(mutants, baseline commands or None) of a list and of its second half when there is one: the mutants of the first half, then those of the second; the baseline is what
+    each half declares (for a half that declares none, what its own mutants run), each command once"""
+    seen = set()
+    mutants, declared = load_file(path, seen)
+    other = second_half(path)
+    if other is None:
+        return mutants, declared
+    try:
+        more, more_declared = load_file(other, seen)
+    except SpecError as e:
+        raise SpecError("%s (second half): %s" % (os.path.basename(other), e))
+    if declared is None and more_declared is None:
+        return mutants + more, None
+    commands = []
+    for item in baseline_commands(mutants, declared) + baseline_commands(more, more_declared):
+        if item not in commands:
+            commands.append(item)
+    return mutants + more, commands
+
+
+def load_file(path, seen):
+    """(mutants, baseline commands or None) of ONE file; `seen` holds the ids met so far (an id is used once, in both halves together)"""
     try:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
@@ -90,7 +125,6 @@ def load_spec(path):
     if not isinstance(defaults, dict):
         raise SpecError("%s: defaults must be an object" % path)
     mutants = []
-    seen = set()
     for index, raw in enumerate(data["mutants"], 1):
         if not isinstance(raw, dict):
             raise SpecError("mutant %d: must be an object" % index)
