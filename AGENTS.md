@@ -6,6 +6,7 @@ Ants is a C++17 remake of the 1998 RTS (SDL2; native on macOS, Linux and Windows
 - Build: `cmake --build build -j8`. Run: `./start_game.sh`.
 - Quick tier, before every commit: `./run_tests.sh --fast` (about 25 seconds). Full suite: `./run_tests.sh` (CI runs it for every pull request).
 - Web page without Docker (cloud sessions): `tools/web_without_docker.py -- COMMAND` (it runs the Dockerfile's commands on this machine: use it only for code you wrote or have read). Docker build: `docker build -t ants-beta .` (CI does it too).
+- A new file goes on exactly one list of `export/` (public or private: `export/README.md`); the quick tier fails when a file is on neither or on both.
 - Branches, pull requests, releases, deploy: `docs/WORKFLOW.md`.
 
 ## Rules that always apply
