@@ -98,21 +98,6 @@ def discover_available_classes(include_base: bool = False) -> List[str]:
     return found
 
 
-VIEWER_PREFIXES: Tuple[str, ...] = ("viewer", "compare")
-VIEWER_EXTS: Tuple[str, ...] = (".html", ".css", ".js")
-
-
-def _discover_viewer_files() -> List[str]:
-    """Return sorted viewer* / compare* (.html/.css/.js) filenames in tools/ant_models/."""
-    found: List[str] = []
-    if os.path.isdir(THIS_DIR):
-        for fname in sorted(os.listdir(THIS_DIR)):
-            if fname.startswith(VIEWER_PREFIXES) and fname.endswith(VIEWER_EXTS):
-                if os.path.isfile(os.path.join(THIS_DIR, fname)):
-                    found.append(fname)
-    return found
-
-
 def _file_sha256_hex(path: str, length: int = 12) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -126,7 +111,7 @@ def _compute_manifest_hashes(
     *,
     orig_sprites_sha: str = "",
 ) -> Tuple[str, str, str]:
-    """Return deterministic (version, build_hash, models_hash) across models, orig_sprites, and viewer/compare files."""
+    """Return deterministic (version, build_hash, models_hash) across models and orig_sprites."""
     sorted_models = sorted(entries, key=lambda e: str(e.get("id", "")))
     m_hasher = hashlib.sha256()
     for e in sorted_models:
@@ -137,9 +122,6 @@ def _compute_manifest_hashes(
     b_hasher.update(f"models:{models_hash}\n".encode("utf-8"))
     if orig_sprites_sha:
         b_hasher.update(f"orig_sprites.json:{orig_sprites_sha}\n".encode("utf-8"))
-    for fname in _discover_viewer_files():
-        fpath = os.path.join(THIS_DIR, fname)
-        b_hasher.update(f"{fname}:{_file_sha256_hex(fpath, length=64)}\n".encode("utf-8"))
     build_hash = b_hasher.hexdigest()[:16]
     version = f"v-{build_hash[:8]}"
     return version, build_hash, models_hash

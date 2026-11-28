@@ -30,6 +30,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - Other players' ants no longer rubber-band in network matches: those of other people and of computer players are drawn from the confirmed game, a moment behind your own and never corrected. Your own ants still answer a click at once. `?others=predicted` on the game page's address brings the old picture back, to compare, until v0.22.3 at the latest.
+- The 3D ant test page /test_3d is gone.
 
 ## v0.22.1 - 2026-11-27 - Smoother ants online, fewer freezes, Show ping
 
