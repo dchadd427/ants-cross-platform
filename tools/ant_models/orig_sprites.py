@@ -2,7 +2,7 @@
 """Deterministic 1998 original Ants sprite-sheet bundle generator (`orig_sprites.json`).
 
 Reads `docs/chd_table4_animations.json` (or `asset_catalog/catalog_data.js` when `docs/`
-is absent, such as inside Docker builds) and decodes authentic palette-shifted team
+is absent) and decodes authentic palette-shifted team
 sprites from `Original-Ants/ants.chd` via `tools/front_page_art/artlib.py` for all
 6 ant classes x 5 canonical isometric angles x 4 original teams.
 

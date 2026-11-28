@@ -1005,21 +1005,21 @@
   {
    "id": "server_does_not_log_without_the_query",
    "file": "docker/nginx.conf",
-   "old": "\n    access_log /dev/stdout ants_noquery;\n\n    # Gzip compression",
+   "old": "\n    access_log /var/log/ants/web.log ants_noquery;\n\n    # Gzip compression",
    "new": "\n    # Gzip compression",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {
    "id": "server_logs_in_the_stock_format",
    "file": "docker/nginx.conf",
-   "old": "\n    access_log /dev/stdout ants_noquery;\n\n    # Gzip compression",
-   "new": "\n    access_log /dev/stdout main;\n\n    # Gzip compression",
+   "old": "\n    access_log /var/log/ants/web.log ants_noquery;\n\n    # Gzip compression",
+   "new": "\n    access_log /var/log/ants/web.log main;\n\n    # Gzip compression",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {
    "id": "server_logs_nothing",
    "file": "docker/nginx.conf",
-   "old": "\n    access_log /dev/stdout ants_noquery;\n\n    # Gzip compression",
+   "old": "\n    access_log /var/log/ants/web.log ants_noquery;\n\n    # Gzip compression",
    "new": "\n    access_log off;\n\n    # Gzip compression",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },

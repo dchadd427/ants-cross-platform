@@ -243,7 +243,8 @@ class Rig:
             text = re.sub(r"(zone=ants_counts_(?:play_one|play|like|mine):1m rate=)\d+r/m", r"\g<1>100000r/s", text)
         text = text.replace("/srv/community-maps/", self.work + "/srv/").replace("/var/cache/nginx/", self.work + "/cache/")
         self.log_file = os.path.join(self.work, "access.log")
-        text = text.replace("access_log /dev/stdout ants_noquery;", ("access_log %s ants_noquery;" % self.log_file) if log else "access_log off;")          # (the image logs to its output)
+        text = text.replace("access_log /var/log/ants/web.log ants_noquery;", ("access_log %s ants_noquery;" % self.log_file) if log else "access_log off;")          # (the image logs to a folder of its own)
+        text = text.replace("error_log /var/log/ants/web.log", "error_log %s/loc.log" % self.work)
         user = "user root;\n" if hasattr(os, "geteuid") and os.geteuid() == 0 else ""
         full = user + "pid %s/nginx.pid;\nerror_log %s/error.log;\nevents { worker_connections 256; }\nhttp {\n access_log off;\n client_body_temp_path %s/tmp/body;\n proxy_temp_path %s/tmp/proxy;\n fastcgi_temp_path %s/tmp/fcgi;\n uwsgi_temp_path %s/tmp/uwsgi;\n scgi_temp_path %s/tmp/scgi;\n%s\n}\n" % ((self.work,) * 7 + (text,))
 
@@ -445,9 +446,9 @@ class TheText(unittest.TestCase):
         for query in ("$request ", "$request\"", "$request_uri", "$args", "$query_string", "$is_args", "$uri", "$http_referer", "$http_cookie", "$http_authorization"):
             self.assertNotIn(query, fmt)
         for header in ("location = /submissions ", "location ^~ /submissions/ ", "location ^~ /admin/api/ "):
-            self.assertIn("access_log /dev/stdout ants_noquery;", block_of(CONF, header), header)
-        self.assertIn("access_log /dev/stdout ants_noquery;", block_of(CONF, "location = /test-maps "))          # (the name of a test map is in the query: tests/scripts/test_nginx_test_maps.py)
-        self.assertEqual(CONF.count("access_log /dev/stdout ants_noquery;"), 5)             # (these four, and the server block, which gives every other path the same format: tests/scripts/test_nginx_headers.py)
+            self.assertIn("access_log /var/log/ants/web.log ants_noquery;", block_of(CONF, header), header)
+        self.assertIn("access_log /var/log/ants/web.log ants_noquery;", block_of(CONF, "location = /test-maps "))          # (the name of a test map is in the query: tests/scripts/test_nginx_test_maps.py)
+        self.assertEqual(CONF.count("access_log /var/log/ants/web.log ants_noquery;"), 5)             # (these four, and the server block, which gives every other path the same format: tests/scripts/test_nginx_headers.py)
         self.assertNotIn("$request_body", RAW)                                                # (nothing of a body is written down: the access log holds the request line only)
 
     def test_the_stacks_the_image_and_the_documents_agree_with_the_file(self):

@@ -6,7 +6,7 @@
   TheBotLabels    the Python twin of the rule that keeps a person from being called like a computer player answers tests/data/bot_label_cases.tsv, the table of the C++ and the JavaScript twins
   TheStore        the table of nicknames: one owner for a lookalike key, a name that is given up is held, a drop, Forget me
   TheFrames       the `name` frame: a check, a save (both fields or none), every refusal with its word and its time, the rates, a guest's check, the shape of a frame, the `you` that every socket of the account gets
-  TheLimits       a nickname changes once in 30 days (the old one is held for 30 days), a tag once a day, and what a change that is refused leaves
+  TheLimits       the first nickname is free, a nickname changes once in 24 hours (the old one is held for 7 days; the holds of the old rule are cut once), a tag at any time, and what a change that is refused leaves
   TheShownName    the nickname is the name of the chat, with the tag in the line, the list of people and the history; a login's name that is a lookalike of a nickname is not shown
   ThePass         the pass of a name: its words (the same as the game server's: a golden pass is in tests/test_server/test_admin_pass.cpp, ADM1.8), the game name of an account, `/hub/me`
   TheSecrets      no id, reference or username in a frame of a name
@@ -16,6 +16,7 @@ tests/data/hub_names_mutants.json breaks the rules one at a time for tools/mutat
 import json
 import os
 import sys
+import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -174,32 +175,32 @@ class TheStore(Base):
         s = self.w.store
         self.assertIsNone(s.nick_row(ANNA_ID))
         self.assertIsNone(s.nick_owner("zoe"))
-        self.assertIsNone(s.nick_put(ANNA_ID, "Zo\u00eb", "zo\u00eb", "zoe", 100, "ANT", 100, 10 ** 12))
+        self.assertIsNone(s.nick_put(ANNA_ID, "Zo\u00eb", "zo\u00eb", "zoe", 100, "ANT", 10 ** 12))
         self.assertEqual(s.nick_row(ANNA_ID), s.nick_row(ANNA_ID))
-        self.assertEqual(tuple(s.nick_row(ANNA_ID)), ("Zo\u00eb", "zoe", 100, "ANT", 100))
+        self.assertEqual(tuple(s.nick_row(ANNA_ID)), ("Zo\u00eb", "zoe", 100, "ANT"))
         self.assertEqual(s.nick_owner("zoe"), (ANNA_ID, "zo\u00eb"))
-        self.assertEqual(s.nick_put(BEN_ID, "Zoe", "zoe", "zoe", 200, "", 0, 10 ** 12), "zo\u00eb")      # (the other account's folded name: the caller tells taken from lookalike by it)
+        self.assertEqual(s.nick_put(BEN_ID, "Zoe", "zoe", "zoe", 200, "", 10 ** 12), "zo\u00eb")      # (the other account's folded name: the caller tells taken from lookalike by it)
         self.assertIsNone(s.nick_row(BEN_ID))
-        self.assertIsNone(s.nick_put(ANNA_ID, "Zo\u00eb", "zo\u00eb", "zoe", 100, "", 0, 10 ** 12))      # (the account itself may put its own name again: nothing is in its way)
+        self.assertIsNone(s.nick_put(ANNA_ID, "Zo\u00eb", "zo\u00eb", "zoe", 100, "", 10 ** 12))      # (the account itself may put its own name again: nothing is in its way)
 
     def test_a_name_that_is_given_up_is_held_for_its_account_until_the_hold_ends(self):
         s = self.w.store
         now = int(s.clock())
-        self.assertIsNone(s.nick_put(ANNA_ID, "Zo\u00eb", "zo\u00eb", "zoe", now, "", 0, now + 100))
-        self.assertIsNone(s.nick_put(ANNA_ID, "Wren", "wren", "wren", now, "", 0, now + 100))
+        self.assertIsNone(s.nick_put(ANNA_ID, "Zo\u00eb", "zo\u00eb", "zoe", now, "", now + 100))
+        self.assertIsNone(s.nick_put(ANNA_ID, "Wren", "wren", "wren", now, "", now + 100))
         self.assertEqual(s.nick_owner("zoe"), (ANNA_ID, "zo\u00eb"))                                  # (held)
-        self.assertEqual(s.nick_put(BEN_ID, "Zoe", "zoe", "zoe", now, "", 0, now + 100), "zo\u00eb")
-        self.assertIsNone(s.nick_put(ANNA_ID, "Zo\u00eb", "zo\u00eb", "zoe", now, "", 0, now + 100))     # (the account takes its old name back, and the name that it gives up is held in its place)
+        self.assertEqual(s.nick_put(BEN_ID, "Zoe", "zoe", "zoe", now, "", now + 100), "zo\u00eb")
+        self.assertIsNone(s.nick_put(ANNA_ID, "Zo\u00eb", "zo\u00eb", "zoe", now, "", now + 100))     # (the account takes its old name back, and the name that it gives up is held in its place)
         self.assertEqual(s.nick_owner("wren"), (ANNA_ID, "wren"))
         self.w.wall.now += 101
         self.assertIsNone(s.nick_owner("wren"))                                                       # (the hold ended)
-        self.assertIsNone(s.nick_put(BEN_ID, "Wren", "wren", "wren", now, "", 0, now + 100))
+        self.assertIsNone(s.nick_put(BEN_ID, "Wren", "wren", "wren", now, "", now + 100))
 
     def test_a_drop_takes_the_nickname_the_tag_and_what_the_account_holds(self):
         s = self.w.store
         now = int(s.clock())
-        s.nick_put(ANNA_ID, "Zo\u00eb", "zo\u00eb", "zoe", now, "ANT", now, now + 100)
-        s.nick_put(ANNA_ID, "Wren", "wren", "wren", now, "ANT", now, now + 100)
+        s.nick_put(ANNA_ID, "Zo\u00eb", "zo\u00eb", "zoe", now, "ANT", now + 100)
+        s.nick_put(ANNA_ID, "Wren", "wren", "wren", now, "ANT", now + 100)
         self.assertTrue(s.nick_drop(ANNA_ID))
         self.assertFalse(s.nick_drop(ANNA_ID))
         self.assertTrue(s.nick_owner("zoe") is None and s.nick_owner("wren") is None and s.nick_row(ANNA_ID) is None)
@@ -207,9 +208,9 @@ class TheStore(Base):
     def test_forget_me_takes_the_nickname_and_the_holds(self):
         s = self.w.store
         now = int(s.clock())
-        s.nick_put(ANNA_ID, "Zo\u00eb", "zo\u00eb", "zoe", now, "", 0, now + 100)
-        s.nick_put(ANNA_ID, "Wren", "wren", "wren", now, "", 0, now + 100)
-        s.nick_put(BEN_ID, "Pip", "pip", "pip", now, "", 0, now + 100)
+        s.nick_put(ANNA_ID, "Zo\u00eb", "zo\u00eb", "zoe", now, "", now + 100)
+        s.nick_put(ANNA_ID, "Wren", "wren", "wren", now, "", now + 100)
+        s.nick_put(BEN_ID, "Pip", "pip", "pip", now, "", now + 100)
         s.forget(ANNA_ID)
         self.assertTrue(s.nick_row(ANNA_ID) is None and s.nick_owner("zoe") is None and s.nick_owner("wren") is None)
         self.assertEqual(s.nick_owner("pip"), (BEN_ID, "pip"))
@@ -251,7 +252,7 @@ class TheStore(Base):
         self.assertFalse(s.has_nicknames())
         self.assertEqual((s.nick_row(ANNA_ID), s.nick_owner("zoe"), s.nick_drop(ANNA_ID)), (None, None, False))
         self.assertFalse(s.has_nicknames())
-        for bad in ((1, "a", "a", "a", 0, "", 0, 0), (ANNA_ID, None, "a", "a", 0, "", 0, 0)):
+        for bad in ((1, "a", "a", "a", 0, "", 0), (ANNA_ID, None, "a", "a", 0, "", 0)):
             with self.assertRaises(ValueError):
                 s.nick_put(*bad)
 
@@ -402,86 +403,132 @@ class TheFrames(Base):
 
 
 class TheLimits(Base):
-    def test_a_nickname_changes_once_in_30_days_and_says_when(self):
-        self.choose(self.anna, "Zo\u00eb")
+    def test_the_first_nickname_is_free_and_a_nickname_after_it_changes_once_in_24_hours_and_says_when(self):
+        self.choose(self.anna, "Zo\u00eb")                                                                # (the first one waits for nothing)
         start = int(self.w.wall.now)
         answer = self.ask(self.anna, "Wren", save=True)
-        self.assertEqual((answer["ok"], answer["nick"]), (False, {"ok": False, "why": "soon", "until": start + 30 * DAY}))
+        self.assertEqual((answer["ok"], answer["nick"]), (False, {"ok": False, "why": "soon", "until": start + DAY}))
         self.assertEqual(self.w.store.nick_row(ANNA_ID).nick, "Zo\u00eb")
-        self.later(30 * DAY - 1)
+        self.later(DAY - 1)
         self.assertEqual(self.ask(self.anna, "Wren")["nick"]["why"], "soon")
         self.later(1)
         self.assertEqual(self.ask(self.anna, "Wren")["nick"], {"ok": True})
         self.choose(self.anna, "Wren")
         self.assertEqual(self.ask(self.anna, "Pip", save=True)["nick"]["why"], "soon")
+        self.later(DAY)
+        self.choose(self.anna, "Pip")                                                                      # (once a day, as often as the person likes)
 
-    def test_the_old_nickname_is_held_for_30_days_and_its_person_may_take_it_back(self):
+    def test_a_person_who_changed_their_nickname_when_the_wait_was_30_days_may_change_it_24_hours_after_that_change(self):
+        s = self.w.store
+        now = int(self.w.wall.now)
+        s.nick_put(ANNA_ID, "Zo\u00eb", "zo\u00eb", "zoe", now - 20 * 3600, "Ant", now + 1000)            # (a row of the old rule: the time of the change is what is kept, and the wait is worked out from it)
+        s.nick_put(BEN_ID, "Pip", "pip", "pip", now - 29 * DAY, "", now + 1000)
+        answer = self.ask(self.anna, "Wren", save=True)
+        self.assertEqual((answer["ok"], answer["nick"]), (False, {"ok": False, "why": "soon", "until": now + 4 * 3600}))
+        self.later(4 * 3600)
+        self.assertEqual(self.ask(self.anna, "Wren")["nick"], {"ok": True})
+        self.assertEqual(self.ask(self.ben, "Fox")["nick"], {"ok": True})                                  # (29 days ago: allowed now)
+        self.assertNotIn("nickfree", self.you(self.ben))
+
+    def test_the_old_nickname_is_held_for_7_days_and_its_person_may_take_it_back(self):
         self.choose(self.anna, "Zo\u00eb")
-        self.later(31 * DAY)
+        self.later(2 * DAY)
         self.choose(self.anna, "Wren")
         for raw in ("Zo\u00eb", "zoe"):
             self.assertIn(self.ask(self.ben, raw)["nick"]["why"], ("taken", "lookalike"))
-        self.later(29 * DAY)
-        self.assertEqual(self.ask(self.ben, "Zo\u00eb")["nick"]["why"], "taken")                          # (held: 29 days since it was given up)
-        self.later(31 * DAY)
-        self.assertEqual(self.ask(self.ben, "Zo\u00eb")["nick"], {"ok": True})
-        self.choose(self.anna, "Zo\u00eb")                                                                 # (its person takes it back, 60 days on, when nobody has: and it is theirs again)
+        self.later(7 * DAY - 1)
+        self.assertEqual(self.ask(self.ben, "Zo\u00eb")["nick"]["why"], "taken")                          # (held: 7 days less a second since it was given up)
+        self.later(1)
+        self.assertEqual(self.ask(self.ben, "Zo\u00eb")["nick"], {"ok": True})                            # (the hold has ended)
+        self.choose(self.anna, "Zo\u00eb")                                                                 # (its person takes it back when nobody has: and it is theirs again)
         self.assertEqual(self.w.store.nick_row(ANNA_ID).nick, "Zo\u00eb")
 
     def test_a_person_who_changes_back_inside_the_hold_has_the_old_name_and_waits_again(self):
         self.choose(self.anna, "Zo\u00eb")
-        self.later(31 * DAY)
+        self.later(DAY)
         self.choose(self.anna, "Wren")
-        self.later(31 * DAY)
+        self.later(DAY)
         answer = self.choose(self.anna, "Zo\u00eb")
         self.assertEqual(answer["shown"], "Zo\u00eb")
         self.assertEqual(self.ask(self.anna, "Wren", save=True)["nick"]["why"], "soon")
 
-    def test_a_tag_changes_once_a_day_and_says_when(self):
+    def test_the_holds_of_the_old_rule_are_cut_to_7_days_once_when_the_database_is_opened_and_never_twice(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "hub.db")
+            before = World(mods=(), db=path)
+            s = before.store
+            now = int(s.clock())
+            for account, first, second, given_up in ((ANNA_ID, "Zo\u00eb", "Wren", 8 * DAY), (BEN_ID, "Pip", "Fox", 3 * DAY)):         # (a hub of the old rule held a name for 30 days from the day it was given up)
+                s.nick_put(account, first, first.casefold(), text.squash(first), now - 40 * DAY, "", now + 1)
+                s.nick_put(account, second, second.casefold(), text.squash(second), now - given_up, "", now - given_up + 30 * DAY)
+            self.assertEqual((s.nick_owner("zoe"), s.nick_owner("pip")), ((ANNA_ID, "zo\u00eb"), (BEN_ID, "pip")))
+            s.db.execute("DELETE FROM meta WHERE k = 'nick_hold_days'")                                  # (a database that an older hub made does not have the note)
+            before.close()
+            for opening in (1, 2):
+                after = World(mods=(), db=path)
+                try:
+                    self.assertEqual((after.store.nick_owner("zoe"), after.store.nick_owner("pip")), (None, (BEN_ID, "pip")), opening)       # (8 days ago: gone; 3 days ago: held 4 days more)
+                    after.wall.now += 3 * DAY
+                    self.assertEqual(after.store.nick_owner("pip"), (BEN_ID, "pip"), opening)             # (the second opening did not cut it again)
+                    after.wall.now += DAY
+                    self.assertIsNone(after.store.nick_owner("pip"), opening)
+                finally:
+                    after.close()
+
+    def test_a_database_that_this_hub_made_keeps_its_7_day_holds_when_it_is_opened_again(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "hub.db")
+            before = World(mods=(), db=path)
+            now = int(before.store.clock())
+            before.store.nick_put(ANNA_ID, "Zo\u00eb", "zo\u00eb", "zoe", now, "", now + 7 * DAY)
+            before.store.nick_put(ANNA_ID, "Wren", "wren", "wren", now, "", now + 7 * DAY)
+            before.close()
+            after = World(mods=(), db=path)
+            try:
+                after.wall.now += 6 * DAY
+                self.assertEqual(after.store.nick_owner("zoe"), (ANNA_ID, "zo\u00eb"))
+            finally:
+                after.close()
+
+    def test_a_tag_changes_at_any_time_with_no_wait_even_right_after_the_nickname_and_the_last_change(self):
         self.choose(self.anna, "Zo\u00eb", "Ant")
-        start = int(self.w.wall.now)
-        answer = self.ask(self.anna, "Zo\u00eb", "pet", save=True)
-        self.assertEqual((answer["ok"], answer["tag"]), (False, {"ok": False, "why": "soon", "until": start + DAY}))
-        self.assertEqual(self.w.store.nick_row(ANNA_ID).tag, "Ant")
-        self.later(DAY)
-        self.assertTrue(self.ask(self.anna, "Zo\u00eb", "pet", save=True)["saved"])
-        self.later(DAY)
-        answer = self.ask(self.anna, "Zo\u00eb", "", save=True)                                           # (taking the tag away is a change too)
-        self.assertTrue(answer["saved"])
-        self.assertEqual(self.w.store.nick_row(ANNA_ID).tag, "")
-        self.assertEqual(self.ask(self.anna, "Zo\u00eb", "Ant", save=True)["tag"]["why"], "soon")
+        for tag in ("pet", "Pet", "", "Ant", "ANT"):                                                       # (a change of capitals alone is a change too: no wait for it either)
+            answer = self.ask(self.anna, "Zo\u00eb", tag, save=True)
+            self.assertEqual((answer["ok"], answer["saved"], answer["tag"]), (True, True, {"ok": True}), tag)
+            self.assertEqual(self.w.store.nick_row(ANNA_ID).tag, tag)
+        self.assertEqual(self.ask(self.anna, "Zo\u00eb", "ANT", save=True)["tag"], {"ok": True})         # (the same text is no change)
+        self.assertEqual(self.w.store.nick_row(ANNA_ID).nick, "Zo\u00eb")
 
-    def test_a_change_of_capitals_alone_is_a_change_and_waits_a_day_like_any_other(self):
-        self.choose(self.anna, "Zo\u00eb", "ANT")                                                        # (a tag from before capitals were kept: it stays as it is until the person changes it)
-        start = int(self.w.wall.now)
-        answer = self.ask(self.anna, "Zo\u00eb", "Ant", save=True)
-        self.assertEqual((answer["ok"], answer["saved"], answer["tag"]), (False, False, {"ok": False, "why": "soon", "until": start + DAY}))
-        self.assertEqual(self.w.store.nick_row(ANNA_ID).tag, "ANT")
-        self.assertEqual(self.ask(self.anna, "Zo\u00eb", "ANT", save=True)["tag"], {"ok": True})         # (the same text is no change, and no wait is asked of it)
-        self.later(DAY)
-        answer = self.ask(self.anna, "Zo\u00eb", "Ant", save=True)
-        self.assertEqual((answer["saved"], answer["shown"]), (True, "[Ant] Zo\u00eb"))
-        self.assertEqual(self.w.store.nick_row(ANNA_ID).tag, "Ant")
-        self.assertEqual(self.ask(self.anna, "Zo\u00eb", "aNt", save=True)["tag"]["why"], "soon")          # (the day starts again with the change of capitals)
-        self.assertEqual(self.w.store.nick_row(ANNA_ID).tag, "Ant")
+    def test_the_tag_alone_changes_while_the_nickname_waits_and_the_saves_are_still_rate_limited(self):
+        self.choose(self.anna, "Zo\u00eb", "Ant")
+        self.assertTrue(self.ask(self.anna, "Zo\u00eb", "pet", save=True)["saved"])                       # (inside the nickname's day: the nickname does not change, so its wait does not matter)
+        refused = self.ask(self.anna, "Wren", "Ant", save=True)
+        self.assertEqual((refused["saved"], refused["nick"]["why"]), (False, "soon"))
+        self.assertEqual(self.w.store.nick_row(ANNA_ID).tag, "pet")                                        # (both fields or none)
+        got = []
+        for n in range(8):
+            self.w.chat.on_text(self.anna, json.dumps({"t": "name", "r": n, "nick": "Zo\u00eb", "tag": "T%d" % n, "save": True}))
+            got.append(self.names(self.anna)[-1])
+        self.assertTrue(any(a.get("why") == "rate" for a in got))                                         # (3 saves, then one in 20 seconds: a tag is no way round it)
 
-    def test_the_you_says_when_each_may_change_again_and_stops_saying_it(self):
+    def test_the_you_says_when_the_nickname_may_change_again_and_stops_saying_it(self):
         self.choose(self.anna, "Zo\u00eb", "Ant")
         now = int(self.w.wall.now)
         you = self.you(self.anna)
-        self.assertEqual((you["nickat"], you["nickfree"], you["tagfree"]), (now, now + 30 * DAY, now + DAY))
-        self.later(DAY + 1)
-        you = self.you(self.anna)
-        self.assertEqual((you["nickfree"], "tagfree" in you), (now + 30 * DAY, False))
-        self.later(30 * DAY)
+        self.assertEqual((you["nickat"], you["nickfree"], "tagfree" in you), (now, now + DAY, False))
+        self.later(DAY - 1)
+        self.assertEqual(self.you(self.anna)["nickfree"], now + DAY)
+        self.later(1)
         self.assertNotIn("nickfree", self.you(self.anna))
 
     def test_a_refused_change_leaves_the_names_and_costs_no_wait(self):
         self.choose(self.anna, "Zo\u00eb", "Ant")
         row = self.w.store.nick_row(ANNA_ID)
-        self.later(2 * DAY)
-        self.ask(self.anna, "Wren", "pet", save=True)
+        self.later(DAY // 2)
+        self.assertFalse(self.ask(self.anna, "Wren", "pet", save=True)["saved"])
         self.assertEqual(self.w.store.nick_row(ANNA_ID), row)
+        self.later(DAY)
+        self.assertTrue(self.ask(self.anna, "Wren", "pet", save=True)["saved"])                           # (the refusal cost nothing: the day was that of the first change)
 
 
 class TheShownName(Base):
