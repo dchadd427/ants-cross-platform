@@ -192,9 +192,16 @@
     if (!state.ctx || state.ctx.state !== "running") return;
     state.prewarmed = true;
     const mode = state.mode === "classic" ? "classic" : "remastered";
-    for (let i = 0; i < PREWARM_IDS.length; i++) {
-      const entry = state.byId.get(PREWARM_IDS[i]);
-      if (entry) fetchAndDecode(entry, mode).catch(() => {});
+    const queue = PREWARM_IDS.map((id) => state.byId.get(id)).filter(Boolean);
+    let idx = 0;
+    const workers = Math.min(3, queue.length);
+    for (let w = 0; w < workers; w++) {
+      (async () => {
+        while (idx < queue.length) {
+          const entry = queue[idx++];
+          try { await fetchAndDecode(entry, mode); } catch (_err) {}
+        }
+      })();
     }
   }
 

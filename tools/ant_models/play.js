@@ -140,6 +140,17 @@
   const itemMetrics = new Map();
   let mapsCatalog = null, atlasMaskImg = null, baseAssetsReady = null;
 
+  async function runPool(items, limit, fn) {
+    let idx = 0;
+    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (idx < items.length) {
+        const cur = items[idx++];
+        await fn(cur);
+      }
+    });
+    await Promise.all(workers);
+  }
+
   function loadImage(url) {
     return new Promise((resolve, reject) => {
       const img = new Image(); img.decoding = "async";
@@ -228,12 +239,15 @@
   async function ensureBaseAssets() {
     if (baseAssetsReady) return baseAssetsReady;
     baseAssetsReady = (async () => {
-      const [atlasImg, maskImg, cat, man, orig] = await Promise.all([
+      const fetchJson = (u) => fetch(u).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      const [atlasImg, maskImg] = await Promise.all([
         loadImage("models/demo/ground.png"),
         loadImage("models/demo/ground_masks.png"),
-        fetch("models/demo/maps.json").then((r) => (r.ok ? r.json() : null)).catch(() => null),
-        fetch("models/items/manifest.json").then((r) => (r.ok ? r.json() : null)).catch(() => null),
-        fetch("models/items/orig_items.json").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      ]);
+      const [cat, man, orig] = await Promise.all([
+        fetchJson("models/demo/maps.json"),
+        fetchJson("models/items/manifest.json"),
+        fetchJson("models/items/orig_items.json"),
       ]);
       renderer.uploadTileAtlas(atlasImg);
       atlasMaskImg = maskImg;
@@ -245,7 +259,7 @@
         ...["lunchbox", "wallup04", "dflower1", ...BOMB_IDS, ...HILL_IDS, ...DROPPER_FD_IDS,
           "pu_mason", "pu_swim", "pu_bomb", "pu_comb", "pu_thief"].map((id) => [`item:${id}`, `models/items/${id}.glb`]),
       ];
-      await Promise.all(core.map(([k, u]) => loadModel(k, u)));
+      await runPool(core, 4, ([k, u]) => loadModel(k, u));
     })();
     return baseAssetsReady;
   }
@@ -332,10 +346,11 @@
     uiState.activeSeats = seatMask;
 
     const uniq = [...seenIds];
-    for (let i = 0; i < uniq.length; i += 8) {
-      await Promise.all(uniq.slice(i, i + 8).map((id) => loadModel(`item:${id}`, `models/items/${id}.glb`)));
+    await runPool(uniq, 4, async (id) => {
       if (serial !== mapInitSerial) return;
-    }
+      await loadModel(`item:${id}`, `models/items/${id}.glb`);
+    });
+    if (serial !== mapInitSerial) return;
 
     const staticEntries = [];
     for (let i = 0; i < staticSpecs.length; i++) {

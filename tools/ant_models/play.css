@@ -956,6 +956,10 @@ body {
   .map-name-pill {
     display: none;
   }
+  .hud-top-center {
+    inset-block-start: calc(max(10px, env(safe-area-inset-top)) + 74px);
+    max-inline-size: min(400px, 56vw);
+  }
   #hud-minimap {
     inline-size: 120px;
     block-size: 120px;
@@ -963,14 +967,59 @@ body {
 }
 
 @media (max-width: 680px) {
+  .hud-top-left {
+    inset-block-start: max(8px, env(safe-area-inset-top));
+    inset-inline-start: max(8px, env(safe-area-inset-left));
+    gap: 5px;
+    max-inline-size: calc(100vw - 126px);
+  }
+  .hud-top-right {
+    inset-block-start: max(8px, env(safe-area-inset-top));
+    inset-inline-end: max(8px, env(safe-area-inset-right));
+    gap: 5px;
+  }
   .score-bar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, auto));
     gap: 4px;
-    padding: 4px 5px;
+    padding: 4px;
+    border-radius: 14px;
   }
   .team-score-pill {
-    padding: 3px 7px 3px 6px;
-    font-size: 11.5px;
+    padding: 3px 6px 3px 5px;
+    font-size: 11px;
     gap: 4px;
+    justify-content: space-between;
+  }
+  .team-emblem {
+    inline-size: 7px;
+    block-size: 7px;
+  }
+  .team-egg-chip {
+    padding: 1px 4px;
+    font-size: 9.5px;
+  }
+  .timer-pill,
+  .conn-pill {
+    padding: 3px 8px;
+    font-size: 11px;
+    gap: 5px;
+  }
+  .hud-top-center {
+    inset-block-start: calc(max(8px, env(safe-area-inset-top)) + 98px);
+    inset-inline-start: max(8px, env(safe-area-inset-left));
+    transform: none;
+    align-items: flex-start;
+    max-inline-size: calc(100vw - 134px);
+  }
+  .news-stack {
+    align-items: flex-start;
+  }
+  .news-toast {
+    padding: 4px 10px;
+    border-radius: 10px;
+    font-size: 11px;
+    text-align: left;
   }
   .sel-summary {
     display: none;
@@ -982,14 +1031,25 @@ body {
     inline-size: 52px;
     block-size: 46px;
   }
+  .minimap-frame {
+    padding: 4px;
+    border-radius: 10px;
+  }
+  #hud-minimap {
+    inline-size: 92px;
+    block-size: 92px;
+  }
   .quick-tools {
-    max-inline-size: 160px;
+    max-inline-size: 104px;
+    gap: 3px;
+    padding: 3px;
+  }
+  .tool-btn {
+    inline-size: 28px;
+    block-size: 28px;
+    padding: 0;
   }
   .tool-btn span {
     display: none;
-  }
-  #hud-minimap {
-    inline-size: 102px;
-    block-size: 102px;
   }
 }

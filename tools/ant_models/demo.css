@@ -319,7 +319,26 @@
   }
 }
 
+@media (max-width: 1680px) {
+  .demo-app-shell .app-topbar {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .demo-app-shell .topbar-toolbar {
+    order: 3;
+    flex-basis: 100%;
+    justify-content: center;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding-block-end: 2px;
+  }
+}
+
 @media (max-width: 720px) {
+  .demo-app-shell .topbar-toolbar {
+    justify-content: flex-start;
+  }
   .demo-hud-card {
     inset-block-start: 8px;
     inset-inline-start: 8px;
