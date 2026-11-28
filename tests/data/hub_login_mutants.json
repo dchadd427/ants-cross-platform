@@ -1904,7 +1904,7 @@
   {
    "id": "legal_does_not_say_how_long_a_nickname_is_held",
    "file": "web/legal.html",
-   "old": "A nickname that you give up is held for you for 30 days, so that nobody takes it to pass for you. ",
+   "old": "A nickname that you give up is held for you for 7 days, so that nobody takes it to pass for you. ",
    "new": "",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
   },
