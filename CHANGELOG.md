@@ -31,6 +31,9 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - An ant that walks and is given a new order no longer hops by up to half a tile in the picture: the game puts it on the middle of its tile at once, as the original does, and the picture now carries it there in a moment instead of jumping, for your own ants and everybody else's, in a game on one computer and online.
 
+**Fixes:**
+- The activity curve above the timeline now shows in the replay on a match page too, as on the replay's own page.
+
 ## v0.22.3 - 2026-11-27 - Tags any time, nicknames once a day, web logs kept 14 days
 
 **For players:**

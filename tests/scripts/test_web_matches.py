@@ -220,7 +220,7 @@ class TheGamePagesStats(unittest.TestCase):
     page = read("web", "shell.html")
 
     def test_the_stats_are_asked_for_only_for_a_replay_of_the_servers_own_store(self):
-        self.assertIn("if (ANTS_REPLAY_MODE && !ANTS_LIVE_MODE && !ANTS_EMBED && ANTS_REPLAY_FILE && typeof fetch === 'function') window.AntsHistory.replayStats({ document: document, fetch: fetch.bind(window), file: ANTS_REPLAY_FILE, redraw: window.AntsDeathMap && window.AntsDeathMap.redraw, deathMap: window.AntsDeathMap && window.AntsDeathMap.create(", self.page)
+        self.assertIn("if (ANTS_REPLAY_MODE && !ANTS_LIVE_MODE && ANTS_REPLAY_FILE && typeof fetch === 'function') window.AntsHistory.replayStats({ document: document, fetch: fetch.bind(window), file: ANTS_REPLAY_FILE, curveOnly: ANTS_EMBED, redraw: window.AntsDeathMap && window.AntsDeathMap.redraw, deathMap: window.AntsDeathMap && window.AntsDeathMap.create(", self.page)           # (the frame of a match page asks too, for the curve alone: tests/scripts/web_activity_check.js runs this call)
         helpers = read("web", "history_page.js")
         self.assertIn("id = idOfFile(env.file);", helpers)
         self.assertIn("env.fetch('/history/' + id, { cache: 'no-store', credentials: 'omit' })", helpers)
