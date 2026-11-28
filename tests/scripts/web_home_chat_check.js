@@ -1671,10 +1671,10 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
     const sentBefore = r.sockets.reduce((n, x) => n + x.sent.length, 0);
     button.fire('click', {});
     same('the button tells the dock\'s listeners that the sheet is wanted, and sends nothing to the hub', [heard, r.sockets.reduce((n, x) => n + x.sent.length, 0) - sentBefore], [['names'], 0]);
-    r.s().recv({ t: 'you', you: Object.assign({}, ME, { nick: 'Zoe', tag: 'ANT', nickat: 1700000000, nickfree: 1702592000, tagfree: 0 }) });
-    same('the dock tells the sheet who the visitor is (the name, the role, the nickname and the tag and when each was set and may change): after a `you` of the hub with a nickname and a tag, and after the next one: the hub\'s words (the tag may change again at the time that it says)',
-        [r.dock.you(), (r.s().recv({ t: 'you', you: Object.assign({}, ME, { nick: 'Zoe', tag: 'ANT', nickat: 1700000000, nickfree: 1702592000, tagfree: 1700086400 }) }), r.dock.you())],
-        [{ name: 'maple.leaf', role: 'none', nick: 'Zoe', tag: 'ANT', nickat: 1700000000, nickfree: 1702592000, tagfree: 0 }, { name: 'maple.leaf', role: 'none', nick: 'Zoe', tag: 'ANT', nickat: 1700000000, nickfree: 1702592000, tagfree: 1700086400 }]);
+    r.s().recv({ t: 'you', you: Object.assign({}, ME, { nick: 'Zoe', tag: 'ANT', nickat: 1700000000, nickfree: 1700086400 }) });
+    same('the dock tells the sheet who the visitor is (the name, the role, the nickname and the tag, when the nickname was set and when it may change): after a `you` of the hub with a nickname and a tag, and after the next one: the hub\'s words (the nickname may change again at the time that it says)',
+        [r.dock.you(), (r.s().recv({ t: 'you', you: Object.assign({}, ME, { nick: 'Zoe', tag: 'ANT', nickat: 1700000000, nickfree: 1702592000 }) }), r.dock.you())],
+        [{ name: 'maple.leaf', role: 'none', nick: 'Zoe', tag: 'ANT', nickat: 1700000000, nickfree: 1700086400 }, { name: 'maple.leaf', role: 'none', nick: 'Zoe', tag: 'ANT', nickat: 1700000000, nickfree: 1702592000 }]);
     same('a person with a nickname and a tag sees both in the menu, and the button changes its words', [line.textContent, button.textContent], ['Nickname Zoe \u00b7 Tag ANT', 'Nickname and tag']);
     r.s().recv({ t: 'you', you: Object.assign({}, ME, { nick: 'Zoe' }) });
     same('... a nickname with no tag says so', line.textContent, 'Nickname Zoe \u00b7 No tag');

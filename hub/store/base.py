@@ -16,7 +16,7 @@ Image.__repr__ = lambda self: "<Image>"
 Action = collections.namedtuple("Action", "id at actor action target detail")         # a row of the moderators' log (see StoreBase.actions)
 Usage = collections.namedtuple("Usage", "bytes free lines oldest log")         # (see StoreBase.usage)
 Profile = collections.namedtuple("Profile", "username display pick")
-Nick = collections.namedtuple("Nick", "nick key nick_at tag tag_at")      # an account's nickname (docs/HUB_NICKNAMES.md): the text, its lookalike key (text.squash), when it was set, the tag ('' for none) and when the tag was set (0 for never)
+Nick = collections.namedtuple("Nick", "nick key nick_at tag")      # an account's nickname (docs/HUB_NICKNAMES.md): the text, its lookalike key (text.squash), when it was set and the tag ('' for none)
 Alert = collections.namedtuple("Alert", "id at kind body line unread")         # a row of an account's list of alerts (docs/HUB_PEOPLE.md): `body` is the small JSON text that hub/people.py made, `line` the chat line that a mention is of (or None)
 ALERT_KINDS = ("invite", "mention", "join", "over", "room", "msg")
 ALERT_BODY_MAX = 600                        # the longest body that is kept (bytes): hub/people.py writes a few short fields, never more
@@ -257,7 +257,7 @@ class StoreBase:
         """(account, the folded nickname) of the account that has a nickname with this lookalike key (text.squash) or holds one that it gave up (the hold has not ended), or None."""
         raise NotImplementedError
 
-    def nick_put(self, account, nick, folded, key, nick_at, tag, tag_at, hold_until):
+    def nick_put(self, account, nick, folded, key, nick_at, tag, hold_until):
         """Give the account this nickname and tag in one step. None when it is done; else the folded nickname of the OTHER account that has the key (its nickname, or one that it holds): nothing is changed then. A nickname
         that replaces another is held for the account until `hold_until`, so that nobody takes it (a name that the account holds itself is its own again when it takes it back)."""
         raise NotImplementedError

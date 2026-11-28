@@ -22,8 +22,8 @@
         tagLabel: 'Tag', tagHint: 'optional, 2 to 5', tagPick: 'ABC', tagHelp: 'Letters or digits, with the capitals you type. Shown as [Tag] before your name.',
         guestLabel: 'Name', guestPick: 'Pick a name',
         firstNote: 'In the chat, the players list, rooms and match results.', guestNote: 'In rooms and in the game.', guestFirst: 'This is your name until you set one.',
-        sinceNow: function (date) { return 'Your nickname since ' + date + '. You can change it now; after that you wait 30 days.'; }, sinceLater: function (date, free) { return 'Your nickname since ' + date + '. You can change it again on ' + free + '.'; },
-        rules: ['Your nickname is yours alone: nobody else can use it.', 'You can change it once every 30 days. The old one stays yours for 30 days.', 'A tag can change once a day, and a change of capitals counts. Anyone can use any tag.', 'Names and tags are public and are kept with match results.'],
+        sinceNow: function (date) { return 'Your nickname since ' + date + '. You can change it now; after that you wait a day.'; }, sinceLater: function (date, free) { return 'Your nickname since ' + date + '. You can change it again ' + free + '.'; },
+        rules: ['Your nickname is yours alone: nobody else can use it.', 'You can change it once a day. The old one stays yours for 7 days.', 'A tag can change at any time. Anyone can use any tag.', 'Names and tags are public and are kept with match results.'],
         guestRules: ['You cannot use the name of a player who is logged in.', 'Your name stays in this browser. Another browser starts over.', 'Names are public and are kept with match results.'],
         guestBox: 'Guests cannot chat in the lobby or get messages.', loginWith: 'Log in with Discord',
         menuFirst: 'You show as ', menuFirstEnd: ', your Discord name.', menuChoose: 'Choose a nickname', menuChange: 'Nickname and tag', menuNick: 'Nickname ', menuTag: ' \u00b7 Tag ', menuNoTag: ' \u00b7 No tag',
@@ -64,7 +64,7 @@
         if (left < 3600) return 'in ' + Math.ceil(left / 60) + (Math.ceil(left / 60) === 1 ? ' minute' : ' minutes');
         return 'in ' + hours + (hours === 1 ? ' hour' : ' hours');
     }
-    // The line under a field for what the hub said of it: { text, tone } with tone 'bad' (a refusal), 'lock' (a wait: the field is greyed), 'ok' or '' (nothing). `field` is the hub's { ok, why?, until? }; `asked` is the text
+    // The line under a field for what the hub said of it: { text, tone } with tone 'bad' (a refusal), 'lock' (a wait: the field is dim, and stays editable and focused, so that the person can keep typing or type the old text back; Save is off), 'ok' or '' (nothing). `field` is the hub's { ok, why?, until? }; `asked` is the text
     // that was asked (the name that is free is named); `time` is { date(seconds) -> "4 Dec", words(seconds) -> "in 6 hours" }; `current` is true when the field says what the account has now.
     function say(kind, field, asked, time, current) {
         if (!field || typeof field !== 'object') return { text: '', tone: '' };
@@ -73,10 +73,7 @@
             return { text: kind === 'guest' ? TEXT.fine : kind === 'nick' ? TEXT.free(asked) : '', tone: kind === 'tag' ? '' : 'ok' };
         }
         var why = typeof field.why === 'string' ? field.why : '';
-        if (why === 'soon' && typeof field.until === 'number') {
-            if (kind === 'tag') return { text: 'You changed your tag today. You can change it again ' + time.words(field.until) + '.', tone: 'lock' };
-            return { text: 'You changed your nickname on ' + time.date(field.until - 30 * 86400) + '. You can change it again on ' + time.date(field.until) + '.', tone: 'lock' };       // (a nickname changes once in 30 days: the change was 30 days before the end of the wait)
-        }
+        if (why === 'soon' && typeof field.until === 'number' && kind === 'nick') return { text: 'You changed your nickname less than a day ago. You can change it again ' + time.words(field.until) + '.', tone: 'lock' };       // (a nickname changes once in 24 hours; a tag at any time)
         if (why === 'taken') return { text: asked + ' is taken. Pick another one.', tone: 'bad' };
         var table = WHY[kind] || WHY.nick;
         return { text: Object.prototype.hasOwnProperty.call(table, why) ? table[why] : TEXT.offline, tone: 'bad' };
@@ -228,7 +225,7 @@
             } else {
                 var current = me && me.nick ? (me.tag ? '[' + me.tag + '] ' : '') + me.nick : '';       // (how the person shows now, when they have a nickname)
                 name = shown || current || (me ? me.name : '');
-                note = !current || (shown && shown !== current) ? TEXT.firstNote : me.nickfree ? TEXT.sinceLater(time.date(me.nickat), time.date(me.nickfree)) : TEXT.sinceNow(time.date(me.nickat));
+                note = !current || (shown && shown !== current) ? TEXT.firstNote : me.nickfree > now() ? TEXT.sinceLater(time.date(me.nickat), time.words(me.nickfree)) : TEXT.sinceNow(time.date(me.nickat));
             }
             draw(s.pn, name); s.av.textContent = initial(name); s.ps.textContent = note;
         }
@@ -272,9 +269,8 @@
                 f.msg.hidden = out.text === ''; f.msg.textContent = out.text; f.msg.className = 'nm-msg ' + out.tone;
                 f.help.hidden = !f.help.textContent || out.text !== '';
                 f.wrap.className = 'nm-in' + (out.tone === 'bad' ? ' err' : out.tone === 'ok' ? ' ok' : out.tone === 'lock' ? ' off' : '');
-                f.input.readOnly = out.tone === 'lock';
             }
-            if (!m) { [s.nick, s.tag].forEach(function (f) { if (f) { f.msg.hidden = true; f.help.hidden = !f.help.textContent; f.wrap.className = 'nm-in'; f.input.readOnly = false; } }); s.save.disabled = true; return; }
+            if (!m) { [s.nick, s.tag].forEach(function (f) { if (f) { f.msg.hidden = true; f.help.hidden = !f.help.textContent; f.wrap.className = 'nm-in'; } }); s.save.disabled = true; return; }
             var asked = s.typed.nick.replace(/^ +| +$/g, ''), parts = m.ok === true && typeof m.shown === 'string' && letters && letters.split ? letters.split(m.shown) : null;
             var current = !!me && s.mode === 'login' && !!parts && me.nick === parts.name;
             one(s.nick, s.mode === 'guest' ? 'guest' : 'nick', m.nick, parts && s.mode === 'login' ? parts.name : asked, current);
