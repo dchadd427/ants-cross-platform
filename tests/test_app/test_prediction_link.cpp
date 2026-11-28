@@ -1778,18 +1778,26 @@ int main(int argc, char* argv[]) {
         struct Row {
             uint32_t rtt;
             uint32_t jitter;
+            bool four;                                                                        // four people in the room (the owner's test with four windows): the three others order too
         };
-        const std::vector<Row> rows = table_wanted() ? std::vector<Row>{{2, 0}, {30, 10}, {60, 20}, {100, 30}, {150, 30}, {210, 30}, {210, 60}} : std::vector<Row>{{2, 0}, {60, 20}, {150, 30}, {210, 30}};
-        std::printf("\n    own orders after a warm-up of 15 s (a person's clicks, nobody else orders): orders / sealed at another tick than applied / rebuilds / corrections that moved an ant / ants moved (px mean) / lead at the end\n");
+        const std::vector<Row> rows = table_wanted() ? std::vector<Row>{{2, 0, false}, {30, 10, false}, {60, 20, false}, {100, 30, false}, {150, 30, false}, {210, 30, false}, {210, 60, false}, {100, 30, true}, {210, 30, true}}
+                                                     : std::vector<Row>{{2, 0, false}, {60, 20, false}, {150, 30, false}, {210, 30, false}, {150, 30, true}};
+        std::printf("\n    own orders after a warm-up of 15 s (a person's clicks; nobody else orders, but in the rows of four people): orders / sealed at another tick than applied / rebuilds / corrections that moved an ant / ants moved (px mean) / lead at the end\n");
         for (const Row& row : rows) {
             Params p;
             p.link.rtt_ms = row.rtt;
             p.link.jitter_ms = row.jitter;
             p.seed = 18u + seed_offset() + row.rtt;
+            if (row.four) {
+                p.seats = 4;
+                p.peers = 3;
+                p.peer_link.rtt_ms = 60;
+                p.peer_link.jitter_ms = 20;
+            }
             Session s(p);
             ASSERT_TRUE(s.begin());
             Players players(s);
-            players.peer = false;
+            players.peer = row.four;
             players.play(15000);
             ASSERT_TRUE(s.app().net()->prediction() != nullptr);
             net::Prediction& pred = *s.app().net()->prediction();
@@ -1800,7 +1808,7 @@ int main(int argc, char* argv[]) {
             const uint64_t orders = st.commands_predicted - warm.commands_predicted;
             const uint64_t late = (st.sealed_late - warm.sealed_late) + (st.sealed_early - warm.sealed_early);
             const uint64_t rebuilds = st.rebuilds - warm.rebuilds;
-            std::printf("    rtt %3u jitter %2u: %3llu orders / %3llu later or earlier (%4.1f %%) / %3llu rebuilds / %3llu moved an ant / %.1f px mean / lead %u\n", row.rtt, row.jitter,
+            std::printf("    rtt %3u jitter %2u%s: %3llu orders / %3llu later or earlier (%4.1f %%) / %3llu rebuilds / %3llu moved an ant / %.1f px mean / lead %u\n", row.rtt, row.jitter, row.four ? " four people" : "",
                         static_cast<unsigned long long>(orders), static_cast<unsigned long long>(late), orders != 0 ? 100.0 * static_cast<double>(late) / static_cast<double>(orders) : 0.0, static_cast<unsigned long long>(rebuilds),
                         static_cast<unsigned long long>(st.corrections_visible), st.ants_moved != 0 ? static_cast<double>(st.move_px_total) / static_cast<double>(st.ants_moved) : 0.0, pred.lead_ticks());
             ASSERT_TRUE(orders >= 30);
