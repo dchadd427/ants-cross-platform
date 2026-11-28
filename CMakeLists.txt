@@ -209,7 +209,7 @@ endif()
 
 # The programs of tools/ (below: not part of the normal build, but CMake needs their source files at configure time). -DANTS_BUILD_TOOLS=OFF leaves them out, so that a build that does not
 # make them (the game server's Docker image) does not need the folder tools/ at all and its first, long layer does not change when a file there does. It needs BUILD_TESTS=OFF: the tests run the tools.
-option(ANTS_BUILD_TOOLS "Define the programs of tools/ (gen_food_footprints, map_sweep, bot_arena, bot_watch, replay_tool, lvl_tool)" ON)
+option(ANTS_BUILD_TOOLS "Define the programs of tools/ (gen_food_footprints, map_sweep, bot_arena, bot_watch, replay_tool, lvl_tool, ants_3d_bridge)" ON)
 # Table generator (not part of the normal build): writes src/ants_sim/food_footprints_data.inc from Original-Ants/ants.chd
 #   cmake --build build --target gen_food_footprints && ./build/gen_food_footprints > src/ants_sim/food_footprints_data.inc
 if(NOT EMSCRIPTEN AND ANTS_BUILD_TOOLS)
@@ -242,6 +242,11 @@ if(NOT EMSCRIPTEN AND ANTS_BUILD_TOOLS)
     #   cmake --build build --target lvl_tool && ./build/lvl_tool check map.lvl   (check, info, rewrite and blank; ./build/lvl_tool --selftest checks the tool itself)
     add_executable(lvl_tool EXCLUDE_FROM_ALL tools/lvl_tool.cpp)
     target_link_libraries(lvl_tool PRIVATE ants_assets ants_test_paths)
+
+    # Playable 3D match bridge (not part of the normal build): runs the real 20 Hz simulation and bots over WebSocket for tools/ant_models/play.html
+    #   cmake --build build --target ants_3d_bridge && ./build/ants_3d_bridge --map Original-Ants/Maps/TREASURE.LVL --ws-port 4081
+    add_executable(ants_3d_bridge EXCLUDE_FROM_ALL tools/ants_3d_bridge.cpp)
+    target_link_libraries(ants_3d_bridge PRIVATE ants_sim ants_ai ants_assets ants_net ants_ctl ants_test_paths)
 endif()
 
 # The map core for the browser (docs/MAP_FORMAT.md, "In the browser"): lvl_core.js + lvl_core.wasm, a module of its own (no SDL, no game code, no file system) that offers the
