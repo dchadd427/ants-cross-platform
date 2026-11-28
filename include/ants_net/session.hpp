@@ -67,6 +67,7 @@
 
 #include <array>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <string>
@@ -237,6 +238,8 @@ public:
     /// The orders of a seat that were not sealed: over its budget (Sequencer::Config::order_burst), and naming no ant that the seat can order. And the seats that went over their budget at least once ("heavy order
     /// rate"): the status, the replay's head and the history say so. A seat is never dropped for either: its orders are not carried out, the others' are.
     uint32_t orders_over_budget(uint8_t seat) const noexcept { return sequencer_.dropped_over_budget(seat); }
+    /// The orders of `seat` that the host holds for a turn beyond the next one (protocol 30: stamped with it by the sender); they stay while the seat is held and go when it is dropped
+    size_t orders_held(uint8_t seat) const noexcept { return sequencer_.held_ahead(seat); }
     uint32_t orders_without_ants(uint8_t seat) const noexcept { return sequencer_.dropped_no_ants(seat); }
     uint8_t heavy_order_seats() const noexcept { return sequencer_.heavy_seats(); }
     /// The sequencer's question of an order that names ants (see the definition): what `sim`, the host's engine, would not carry out is taken out of `command` (an ant of another player, an id that no ant has and none
@@ -450,17 +453,28 @@ public:
                                                              // default cap and a minute); from the first Presence on, the cap it named (the last cap_s seen) and kReconnectMarginMs
         uint32_t rejoin_timeout_ms{10000};   // an attempt that has no Welcome after this long is abandoned (the next one follows)
         uint32_t catch_up_ticks{200};        // the turns that one update() runs while catching up (the owner may lower it for a slow machine: a window slices the work into frames)
+        // Host migration: the orders that this player sent to the old host and that no turn has carried are sent again to the new one (see resend_unsealed). An order that is older than this has been taken for lost by
+        // the prediction already (Prediction::Config::pending_timeout_ticks, 5 s), and is not brought back.
+        uint32_t resend_window_ms{5000};
     };
     /// Normal: following the host. Electing / Following / Fetching: the host is gone and a new one is being chosen (no turns arrive meanwhile).
     /// Promoted: this machine is the new host (see promote_to_host). Lost: the other players cannot be reached, or this machine was cut off, or the server said no (reject_reason()).
     /// Reconnecting: the link to the server was lost and this machine waits for its owner to make a new one (wants_connection, attach); Rejoining: a new link says Hello and waits for
     /// the Welcome; CatchingUp: the server gives this machine the turns it lacks, which it runs without drawing them, and the match goes on (Normal) when the server confirms.
     enum class Mode : uint8_t { Normal, Electing, Following, Fetching, Promoted, Lost, Reconnecting, Rejoining, CatchingUp };
+    /// An order of this player that was sent to the host (submit) and that no turn that this machine holds carries yet: what a new host is given again after a host change
+    struct SentOrder {
+        sim::Command command;
+        uint32_t turn{0};                    // the stamp that it was sent with (CommandMsg::turn)
+        uint32_t seq{0};                     // ... and the number (CommandMsg::seq)
+        uint32_t at_ms{0};                   // the clock of update() when it was sent
+    };
     struct Promotion {
         uint8_t epoch{0};
         uint8_t old_host{255};
         uint32_t resume_turn{0};
         std::vector<PeerState> survivors;    // the guests that agreed, with the links to them
+        std::vector<SentOrder> unsealed;     // this machine's own orders that no turn it holds carries: the new host (this machine) seals them itself (promote_to_host)
     };
 
     ClientSession(sim::SimulationEngine& sim, Config config);
@@ -626,6 +640,11 @@ private:
     void ping_while_catching_up(uint32_t now_ms);
     void begin_normal(uint32_t now_ms);
     void apply_presence(PresenceMsg p, uint32_t now_ms);
+    // host migration: the orders that the old host may not have sealed
+    bool take_turn(TurnMsg turn);
+    void settle_orders(const std::vector<sim::Command>& sealed);
+    void forget_old_orders(uint32_t now_ms);
+    void resend_unsealed(uint32_t now_ms);
 
     Config cfg_;
     sim::SimulationEngine* sim_;                        // (the state hash that CaughtUp carries)
@@ -698,6 +717,9 @@ private:
     std::array<Answer, sim::MAX_PLAYERS> answers_{};
     std::array<bool, sim::MAX_PLAYERS> dead_{};         // seats given up on in this election
     Promotion promotion_;
+    std::deque<SentOrder> unsealed_;                    // the orders that were sent and that no turn has carried yet, in the order sent (a turn that carries an order takes it and every one before it: the host did not take those)
+    bool resend_due_{false};                            // the new host has said Resume: the unsealed orders go to it once the turns up to resend_from_turn_ are here (a turn among them may carry one)
+    uint32_t resend_from_turn_{0};
 };
 
 /// Turns a promoted ClientSession into the HostSession of the new host: it keeps the runner, tells the survivors (Resume) and drops the old host and

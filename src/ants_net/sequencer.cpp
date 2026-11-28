@@ -22,18 +22,23 @@ Sequencer::Sequencer(Config config) : cfg_(config) {
 
 void Sequencer::set_active(uint8_t player, bool active) {
     if (player >= sim::MAX_PLAYERS) return;
-    active_[player] = active;
     if (!active) {
-        carry_[player].clear();                        // a player that is gone has no commands waiting for a later turn
+        hold(player);
+        carry_[player].clear();                        // a player that is gone for good has no commands waiting for a later turn
         drop_ahead(player);
-        if (host_player_ >= sim::MAX_PLAYERS) {        // (a seat that leaves the table of a dedicated server takes its reports with it: they were made in a stay that is over)
-            for (auto& entry : have_report_) entry.second[player] = false;
-        }
+        return;
     }
+    active_[player] = true;
     // a player that joins is level with the sequencer: it has "executed" everything before the current turn (and was not at the table for any of them)
-    if (active) {
-        acked_[player] = next_turn_;
-        joined_[player] = next_turn_;
+    acked_[player] = next_turn_;
+    joined_[player] = next_turn_;
+}
+
+void Sequencer::hold(uint8_t player) {
+    if (player >= sim::MAX_PLAYERS) return;
+    active_[player] = false;
+    if (host_player_ >= sim::MAX_PLAYERS) {            // (a seat that leaves the table of a dedicated server takes its reports with it: they were made in a stay that is over)
+        for (auto& entry : have_report_) entry.second[player] = false;
     }
 }
 

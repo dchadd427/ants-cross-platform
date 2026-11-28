@@ -132,6 +132,7 @@ void NetGame::make_prediction() {
     pc.work_hook = prediction_work_hook_;
     pc.wall_clock = prediction_wall_clock_;
     pc.cpu_clock = prediction_cpu_clock_;
+    pc.first_seq = next_order_seq_;                             // (the numbers go on where the last prediction of this match stopped: an answer on its way is never taken for a new order's)
     prediction_ = std::make_unique<Prediction>(sim_, *r, pc);
 }
 
@@ -146,6 +147,7 @@ uint32_t NetGame::expected_command_delay_ms() const {
 
 void NetGame::drop_prediction() {
     if (!prediction_) return;
+    next_order_seq_ = prediction_->next_seq();
     prediction_.reset();
     if (on_prediction_dropped_) on_prediction_dropped_();
 }

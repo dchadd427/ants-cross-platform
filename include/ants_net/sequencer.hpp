@@ -78,8 +78,13 @@ public:
     Sequencer() : Sequencer(Config{}) {}
     explicit Sequencer(Config config);
 
-    /// A slot takes part in the match (its turns are awaited and its commands accepted) or not.
+    /// A slot takes part in the match (its turns are awaited and its commands accepted) or not. Not: the seat is gone for good (it left, was dropped), so nothing that it handed in waits for a later turn any more:
+    /// the commands carried beyond a turn's limit and the orders held for a later turn (protocol 30) go with it. What it handed in for the NEXT turn stays, as ever (the host accepted and charged it).
     void set_active(uint8_t player, bool active);
+    /// The seat's link is lost and the seat is HELD (a room that holds seats: the player may come back with its key): like set_active(player, false) for what the sequencer awaits and accepts (its acknowledgements no
+    /// longer count and its commands are refused), but everything that the host accepted from it and charged to it, the orders held for a later turn included, stays and is sealed in its turn when the match goes
+    /// on. Gone for good after all (the others vote it out, the cap on the pauses): set_active(player, false) takes what is left.
+    void hold(uint8_t player);
     bool is_active(uint8_t player) const noexcept { return player < sim::MAX_PLAYERS && active_[player]; }
 
     /// The question that decides whether an order is sealed at all: asked for every command that a seat hands in, with the issuer set; it may take ants out of the command (and must say false when none is left).

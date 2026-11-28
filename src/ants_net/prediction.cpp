@@ -68,6 +68,7 @@ Prediction::Prediction(const sim::SimulationEngine& confirmed, const LockstepRun
     cfg_.min_lead_ticks = std::min(cfg_.min_lead_ticks, cfg_.max_lead_ticks);
     lead_ = target_lead_ = std::clamp<uint32_t>(estimate_lag_ + cfg_.lead_bias_ticks, cfg_.min_lead_ticks, cfg_.max_lead_ticks);
     cooldown_next_ = std::min(cfg_.cooldown_ticks, cfg_.cooldown_max_ticks);
+    next_seq_ = std::max<uint32_t>(cfg_.first_seq, 1u);
 }
 
 const std::vector<sim::Command>& Prediction::applied_at_display() const noexcept {
@@ -253,6 +254,7 @@ void Prediction::stop() {
     news_.clear();
     lags_.clear();                                                   // (what the orders taught is about the link and the buffer as they were: a host change, a rejoin or a pause may end with another lag)
     sent_.clear();                                                   // (and the answers that are still on their way are about orders of a prediction that is gone)
+    planned_.reset();                                                // (a plan that was not used: its number stays taken, and no order has it)
 }
 
 sim::SimulationEngine& Prediction::engine() {
@@ -468,19 +470,31 @@ bool Prediction::ready_for(const sim::Command& command) {
     return running_;
 }
 
+uint32_t Prediction::take_seq() noexcept {
+    const uint32_t seq = next_seq_++;
+    if (next_seq_ == 0) next_seq_ = 1;                               // (a number is never 0: the host answers an order that carries one)
+    return seq;
+}
+
 std::optional<Prediction::OrderPlan> Prediction::plan_order(const sim::Command& command) {
     if (!ready_for(command)) return std::nullopt;
-    return OrderPlan{display_, next_seq_};
+    if (planned_ && planned_->command == command) {                  // the same order again before it was submitted (the first was not sent): the number that it has is still unused
+        planned_->plan.tick = display_;
+        return planned_->plan;
+    }
+    planned_ = Planned{command, OrderPlan{display_, take_seq()}};
+    return planned_->plan;
 }
 
 bool Prediction::submit(const sim::Command& command, sim::CommandResult& result) {
+    const std::optional<Planned> plan = std::move(planned_);         // (whatever happens next, the number that was planned is used up: it may have been sent)
+    planned_.reset();
     if (!ready_for(command)) return false;
     result = pred_.apply_command(command);
     assumed_.back().push_back(command);
     pending_.push_back(Pending{command, display_, confirmed_tick(), display_});
     last_order_tick_ = display_;                                     // (the tick that the order is stamped with, and the tick that a hint of it names: the host seals it there when that turn is still open)
-    last_order_seq_ = next_seq_++;
-    if (next_seq_ == 0) next_seq_ = 1;                               // (a number is never 0: the host answers an order that carries one)
+    last_order_seq_ = plan && plan->command == command ? plan->plan.seq : take_seq();
     sent_.push_back(Sent{last_order_seq_, confirmed_tick(), display_});
     while (sent_.size() > 64u) sent_.pop_front();                    // (an answer that is not here by now is not coming)
     ++stats_.commands_predicted;
@@ -496,7 +510,10 @@ void Prediction::on_order_ack(uint32_t seq, uint64_t open_turn) {
     if (open_turn > order.stamp) ++stats_.order_acks_late;
     if (!cfg_.learn_lead) return;
     const uint64_t lag = open_turn > order.born ? open_turn - order.born : 0u;      // the ticks from the confirmed tick at which the order was given to the first turn that was still open when it arrived
-    lags_.emplace_back(static_cast<uint32_t>(std::clamp<uint64_t>(lag, 1u, cfg_.max_lead_ticks)), confirmed_tick());
+    const uint32_t learned = static_cast<uint32_t>(std::clamp<uint64_t>(lag, 1u, cfg_.max_lead_ticks));
+    // An answer at the link's own pace ends a stall: the older lags that stand far above it were the stall's, which a second of orders fills the twelve with (Config::lag_forget_ticks)
+    lags_.erase(std::remove_if(lags_.begin(), lags_.end(), [&](const std::pair<uint32_t, uint64_t>& s) { return s.first > learned + cfg_.lag_forget_ticks; }), lags_.end());
+    lags_.emplace_back(learned, confirmed_tick());
     while (lags_.size() > cfg_.lag_samples) lags_.pop_front();
     target_lead_ = wanted_lead();
     if (running_ && !suspended_ && target_lead_ > lead_) {           // (a lag that is longer than the lead raises it at once: the next tick runs the display on, and the next order is stamped with the longer lead)

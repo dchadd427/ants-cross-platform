@@ -628,6 +628,7 @@ private:
     std::unique_ptr<Prediction> prediction_;     // (after the sessions: it holds their runner and goes first; made by refresh_prediction() when it is wanted, never otherwise)
     bool prediction_enabled_{true};
     bool app_suspends_prediction_{false};
+    uint32_t next_order_seq_{1};                 // the number that the next order of the match gets (Prediction::next_seq of the last prediction: the numbers of one game never repeat)
     uint64_t prediction_budget_ns_{default_prediction_budget_ns()};
     uint32_t prediction_budget_strikes_{Prediction::Config{}.budget_strikes};
     uint32_t prediction_cooldown_ticks_{Prediction::Config{}.cooldown_ticks};

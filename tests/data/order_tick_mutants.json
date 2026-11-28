@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the tick of an order (network protocol 30, docs/NETWORK_PORT.md 'The tick of an order') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the product rules that the lock-step, prediction, netgame and glide tests hold. The sequencer seals an order into the turn that its sender stamped it with when that turn is still open, else into the first open one, never more than 16 turns beyond it, an order of a seat never before an earlier one of that seat, what is held is bounded, charged and gone with its seat or a new host; the host answers every order that carries a number with the first open turn and the order's own message carries both; the game stamps and numbers every order that the prediction applies and hands the answers to it; the lead is the longest lag of the fresh orders, no more than two ticks above their middle, learned from the answers; the picture holds an ant whose engine snap went back along its walk until the engine's ant has passed that place, and carries it by the slide when it turns another way, stops, or has been held 600 ms.",
+ "note": "Mutants of the tick of an order (network protocol 30, docs/NETWORK_PORT.md 'The tick of an order') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the product rules that the lock-step, prediction, netgame and glide tests hold. The sequencer seals an order into the turn that its sender stamped it with when that turn is still open, else into the first open one, never more than 16 turns beyond it, an order of a seat never before an earlier one of that seat, what is held is bounded, charged and gone with its seat or a new host; the host answers every order that carries a number with the first open turn and the order's own message carries both; the game stamps and numbers every order that the prediction applies and hands the answers to it; the lead is the longest lag of the fresh orders, no more than two ticks above their middle, learned from the answers, the older lags more than four ticks above a newer answer forgotten (a stall ends with the first answer at the link's pace), the number of an order taken when it is planned and never repeated; the host does not answer an order over the budget; a seat that is only held keeps the orders the host holds for it, a seat that is dropped does not; a guest sends the orders that no turn carries to the new host after a host change, once, with their stamp and number; the picture holds an ant whose engine snap went back along its walk until the engine's ant has passed that place, and carries it by the slide when it turns another way, stops, or has been held 600 ms.",
  "mutants": [
   {
    "id": "stamp_cap_removed",
@@ -323,7 +323,7 @@
   {
    "id": "answers_teach_nothing",
    "file": "src/ants_net/prediction.cpp",
-   "old": "    lags_.emplace_back(static_cast<uint32_t>(std::clamp<uint64_t>(lag, 1u, cfg_.max_lead_ticks)), confirmed_tick());\n",
+   "old": "    lags_.emplace_back(learned, confirmed_tick());\n",
    "new": "    (void)lag;\n",
    "build": [
     "test_prediction"
@@ -367,8 +367,8 @@
   {
    "id": "plan_names_another_tick_than_the_order_is_applied_at",
    "file": "src/ants_net/prediction.cpp",
-   "old": "    return OrderPlan{display_, next_seq_};",
-   "new": "    return OrderPlan{display_ + 1, next_seq_};",
+   "old": "    planned_ = Planned{command, OrderPlan{display_, take_seq()}};",
+   "new": "    planned_ = Planned{command, OrderPlan{display_ + 1, take_seq()}};",
    "build": [
     "test_prediction_hints"
    ],
@@ -378,8 +378,8 @@
   {
    "id": "plan_names_another_number_than_the_order_gets",
    "file": "src/ants_net/prediction.cpp",
-   "old": "    return OrderPlan{display_, next_seq_};",
-   "new": "    return OrderPlan{display_, next_seq_ + 1};",
+   "old": "    last_order_seq_ = plan && plan->command == command ? plan->plan.seq : take_seq();",
+   "new": "    last_order_seq_ = take_seq();",
    "build": [
     "test_prediction_hints"
    ],
@@ -495,6 +495,281 @@
    ],
    "test": "ANTS_TEST_FILTER=VG1 timeout 900 ./build/tests/test_app/test_view_glide",
    "expect": "VG16"
+  },
+  {
+   "id": "stall_lags_are_never_forgotten",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "    lags_.erase(std::remove_if(lags_.begin(), lags_.end(), [&](const std::pair<uint32_t, uint64_t>& s) { return s.first > learned + cfg_.lag_forget_ticks; }), lags_.end());\n",
+   "new": "",
+   "build": [
+    "test_prediction"
+   ],
+   "test": "ANTS_TEST_FILTER=RP8.9 timeout 900 ./build/tests/test_net/test_prediction",
+   "expect": "RP8.9"
+  },
+  {
+   "id": "lags_just_above_a_newer_answer_are_forgotten",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "return s.first > learned + cfg_.lag_forget_ticks;",
+   "new": "return s.first > learned;",
+   "build": [
+    "test_prediction"
+   ],
+   "test": "ANTS_TEST_FILTER=RP8.2 timeout 900 ./build/tests/test_net/test_prediction",
+   "expect": "RP8.2"
+  },
+  {
+   "id": "lags_exactly_the_margin_above_are_forgotten",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "return s.first > learned + cfg_.lag_forget_ticks;",
+   "new": "return s.first >= learned + cfg_.lag_forget_ticks;",
+   "build": [
+    "test_prediction"
+   ],
+   "test": "ANTS_TEST_FILTER=RP8.2 timeout 900 ./build/tests/test_net/test_prediction",
+   "expect": "RP8.2"
+  },
+  {
+   "id": "lags_stay_fresh_for_twenty_seconds",
+   "file": "include/ants_net/prediction.hpp",
+   "old": "uint32_t lag_fresh_ticks{200};",
+   "new": "uint32_t lag_fresh_ticks{400};",
+   "build": [
+    "test_prediction"
+   ],
+   "test": "timeout 900 sh -c 'for t in RP8.9 RP8.6; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_prediction || exit 1; done'",
+   "expect": "RP8.9"
+  },
+  {
+   "id": "plan_does_not_take_the_number",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "    planned_ = Planned{command, OrderPlan{display_, take_seq()}};",
+   "new": "    planned_ = Planned{command, OrderPlan{display_, next_seq_}};",
+   "build": [
+    "test_prediction"
+   ],
+   "test": "ANTS_TEST_FILTER=RP8.11 timeout 900 ./build/tests/test_net/test_prediction",
+   "expect": "RP8.11"
+  },
+  {
+   "id": "planning_an_order_again_takes_another_number",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "    if (planned_ && planned_->command == command) {",
+   "new": "    if (false) {",
+   "build": [
+    "test_prediction"
+   ],
+   "test": "ANTS_TEST_FILTER=RP8.11 timeout 900 ./build/tests/test_net/test_prediction",
+   "expect": "RP8.11"
+  },
+  {
+   "id": "prediction_ignores_the_number_it_is_told_to_begin_at",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "    next_seq_ = std::max<uint32_t>(cfg_.first_seq, 1u);\n",
+   "new": "",
+   "build": [
+    "test_prediction"
+   ],
+   "test": "ANTS_TEST_FILTER=RP8.11 timeout 900 ./build/tests/test_net/test_prediction",
+   "expect": "RP8.11"
+  },
+  {
+   "id": "game_begins_the_new_prediction_at_one",
+   "file": "src/ants_net/netgame_match.cpp",
+   "old": "pc.first_seq = next_order_seq_;",
+   "new": "pc.first_seq = 1u;",
+   "build": [
+    "test_netgame"
+   ],
+   "test": "ANTS_TEST_FILTER=N25.9 timeout 900 ./build/tests/test_net/test_netgame",
+   "expect": "N25.9"
+  },
+  {
+   "id": "game_forgets_the_last_number_of_the_prediction",
+   "file": "src/ants_net/netgame_match.cpp",
+   "old": "    next_order_seq_ = prediction_->next_seq();\n",
+   "new": "",
+   "build": [
+    "test_netgame"
+   ],
+   "test": "ANTS_TEST_FILTER=N25.9 timeout 900 ./build/tests/test_net/test_netgame",
+   "expect": "N25.9"
+  },
+  {
+   "id": "lost_seat_loses_the_orders_the_host_holds",
+   "file": "src/ants_net/session.cpp",
+   "old": "sequencer_.hold(player);",
+   "new": "sequencer_.set_active(player, false);",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "timeout 900 sh -c 'for t in S2.77; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "expect": "S2.77"
+  },
+  {
+   "id": "replaced_link_loses_the_orders_the_host_holds",
+   "file": "src/ants_net/session.cpp",
+   "old": "sequencer_.hold(seat);",
+   "new": "sequencer_.set_active(seat, false);",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "timeout 900 sh -c 'for t in N2.52; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "expect": "N2.52"
+  },
+  {
+   "id": "dropped_seat_leaves_its_held_orders_to_be_sealed",
+   "file": "src/ants_net/session.cpp",
+   "old": "    sequencer_.set_active(player, false);            // gone for good (a seat that was held leaves what it handed in for a later turn behind: nothing of it is sealed after its Drop)\n",
+   "new": "",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "timeout 900 sh -c 'for t in S2.77; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "expect": "S2.77"
+  },
+  {
+   "id": "host_answers_the_orders_over_its_budget",
+   "file": "src/ants_net/session.cpp",
+   "old": "if (verdict == Submit::OverBudget) return;",
+   "new": "",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "timeout 900 sh -c 'for t in S2.75; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "expect": "S2.75"
+  },
+  {
+   "id": "held_seat_stays_active",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "void Sequencer::hold(uint8_t player) {\n    if (player >= sim::MAX_PLAYERS) return;\n    active_[player] = false;\n",
+   "new": "void Sequencer::hold(uint8_t player) {\n    if (player >= sim::MAX_PLAYERS) return;\n",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "timeout 900 sh -c 'for t in S2.76; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "expect": "S2.76"
+  },
+  {
+   "id": "held_seat_loses_its_carried_commands",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "void Sequencer::hold(uint8_t player) {\n    if (player >= sim::MAX_PLAYERS) return;\n",
+   "new": "void Sequencer::hold(uint8_t player) {\n    if (player >= sim::MAX_PLAYERS) return;\n    carry_[player].clear();\n",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "timeout 900 sh -c 'for t in S2.76; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "expect": "S2.76"
+  },
+  {
+   "id": "held_seat_loses_its_held_orders",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "void Sequencer::hold(uint8_t player) {\n    if (player >= sim::MAX_PLAYERS) return;\n",
+   "new": "void Sequencer::hold(uint8_t player) {\n    if (player >= sim::MAX_PLAYERS) return;\n    drop_ahead(player);\n",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "timeout 900 sh -c 'for t in S2.76; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "expect": "S2.76"
+  },
+  {
+   "id": "orders_are_sent_again_before_the_turns_of_the_new_host_are_here",
+   "file": "src/ants_net/session_client.cpp",
+   "old": "if (resend_due_ && mode_ == Mode::Normal && runner_->next_turn_expected() >= resend_from_turn_) resend_unsealed(now_ms);",
+   "new": "if (resend_due_ && mode_ == Mode::Normal) resend_unsealed(now_ms);",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "timeout 900 sh -c 'for t in S2.78; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "expect": "S2.78"
+  },
+  {
+   "id": "orders_are_never_sent_again",
+   "file": "src/ants_net/session_client.cpp",
+   "old": "resend_due_ = true;",
+   "new": "resend_due_ = false;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "timeout 900 sh -c 'for t in S2.78; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "expect": "S2.78"
+  },
+  {
+   "id": "orders_are_sent_again_without_their_stamp",
+   "file": "src/ants_net/session_client.cpp",
+   "old": "m.turn = o.turn;",
+   "new": "m.turn = 0;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "timeout 900 sh -c 'for t in S2.78; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "expect": "S2.78"
+  },
+  {
+   "id": "orders_are_sent_again_without_their_number",
+   "file": "src/ants_net/session_client.cpp",
+   "old": "m.seq = o.seq;",
+   "new": "m.seq = 0;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "timeout 900 sh -c 'for t in S2.78; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "expect": "S2.78"
+  },
+  {
+   "id": "sealed_orders_stay_on_the_list",
+   "file": "src/ants_net/session_client.cpp",
+   "old": "        if (it != unsealed_.end()) unsealed_.erase(unsealed_.begin(), it + 1);",
+   "new": "        (void)it;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "timeout 900 sh -c 'for t in S2.78; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "expect": "S2.78"
+  },
+  {
+   "id": "sealed_order_leaves_the_orders_before_it_on_the_list",
+   "file": "src/ants_net/session_client.cpp",
+   "old": "unsealed_.erase(unsealed_.begin(), it + 1);",
+   "new": "unsealed_.erase(it);",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "timeout 900 sh -c 'for t in S2.78; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "expect": "S2.78"
+  },
+  {
+   "id": "sealed_order_must_have_all_the_ants_it_was_sent_with",
+   "file": "src/ants_net/session_client.cpp",
+   "old": "    size_t next = 0;\n    for (const uint32_t id : sealed.ants) {",
+   "new": "    if (sent.ants != sealed.ants) return false;\n    size_t next = 0;\n    for (const uint32_t id : sealed.ants) {",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "timeout 900 sh -c 'for t in S2.78; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "expect": "S2.78"
+  },
+  {
+   "id": "orders_older_than_the_window_are_sent_again",
+   "file": "src/ants_net/session_client.cpp",
+   "old": "now_ms - unsealed_.front().at_ms > cfg_.resend_window_ms",
+   "new": "now_ms - unsealed_.front().at_ms > cfg_.resend_window_ms + 1000000u",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "timeout 900 sh -c 'for t in S2.78; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "expect": "S2.78"
+  },
+  {
+   "id": "new_host_does_not_seal_its_own_unsealed_orders",
+   "file": "src/ants_net/session_client.cpp",
+   "old": "    for (const ClientSession::SentOrder& o : p.unsealed) host->submit_local(o.command, o.turn);",
+   "new": "",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "timeout 900 sh -c 'for t in S2.78; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "expect": "S2.78"
   }
  ]
 }

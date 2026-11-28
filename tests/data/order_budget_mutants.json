@@ -180,8 +180,8 @@
   {
    "id": "over_budget_is_a_violation",
    "file": "src/ants_net/session.cpp",
-   "old": "submit_checked(player, std::move(m.command), m.turn) == Submit::Refused) return violation(player);",
-   "new": "submit_checked(player, std::move(m.command), m.turn) != Submit::Queued) return violation(player);",
+   "old": "if (verdict == Submit::Refused) return violation(player);",
+   "new": "if (verdict != Submit::Queued) return violation(player);",
    "build": "test_lockstep",
    "test": "timeout 900 sh -c 'for t in S2.63; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
   },

@@ -1384,7 +1384,7 @@ void run_cue_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("RP8.2 The Lag Is The Longest Of The Last Twelve Orders, No More Than Two Ticks Above Their Middle: One Order That A Stall Held Up Raises The Lead By The Two Ticks, Not To Its Own Lag; A Lag That Has Grown For Good Raises It At Once (The Host's Answer Says That The Order Was Late); It Falls When The Longer Lags Leave The Twelve") {
+    TEST_CASE("RP8.2 The Lag Is The Longest Of The Last Twelve Orders, No More Than Two Ticks Above Their Middle: One Order That A Stall Held Up Raises The Lead By The Two Ticks, Not To Its Own Lag, And The First Answer At The Link's Own Pace Forgets It; A Lag That Has Grown For Good Raises It At Once (The Host's Answer Says That The Order Was Late); It Falls When The Longer Lags Leave The Twelve") {
         Scenario sc;
         sc.seed = 120;
         sc.buffer_turns = 1;
@@ -1400,21 +1400,28 @@ void run_cue_tests() {
         Prediction& p = *rig.prediction();
         rig.run(16);
         std::vector<uint32_t> lags;                                                              // (the lags that the orders had, as the rule sees them: at most the longest lead)
-        // the rule, written down again here: the longest of the last 12, no more than 2 above the middle (the one at index n / 2 of the sorted ones)
+        // the rule, written down again here: an answer drops the older lags that stand more than 4 above it (a stall that is over), the last 12 are kept, and the lag is the longest of them, no more than 2 above the
+        // middle (the one at index n / 2 of the sorted ones)
+        const auto learn = [&](uint32_t lag) {
+            lags.erase(std::remove_if(lags.begin(), lags.end(), [lag](uint32_t older) { return older > lag + 4u; }), lags.end());
+            lags.push_back(lag);
+            if (lags.size() > 12) lags.erase(lags.begin());
+        };
         const auto rule = [&]() {
-            std::vector<uint32_t> last(lags.end() - static_cast<std::ptrdiff_t>(std::min<size_t>(12, lags.size())), lags.end());
+            std::vector<uint32_t> last(lags);
             std::sort(last.begin(), last.end());
             return std::min(last.back(), last[last.size() / 2] + 2u);
         };
         const auto order_with_uplink = [&](uint32_t uplink) {
             rig.set_uplink(uplink);
             rig.issue(random_order(rng, rig.ids, 0));
-            lags.push_back(std::min<uint32_t>(2u + uplink, 12u));
+            learn(std::min<uint32_t>(2u + uplink, 12u));
             rig.run(uplink + 25);                                                                // (sealed, back, run)
             return p.learned_lag_ticks();
         };
         // lags 3 3 3, then a stall (32: held to 12), 3 3, then the link is slower for good: 5 5 5 5 5 5, then one order that is quick again: 3, and then quick ones until the slower lags leave the twelve
         std::vector<uint32_t> uplinks = {1, 1, 1, 30, 1, 1, 3, 3, 3, 3, 3, 3, 1};
+        for (const uint32_t uplink : {5u, 1u, 6u, 1u}) uplinks.push_back(uplink);                // a lag of 7 and then 3 (exactly 4 above: kept), a lag of 8 and then 3 (5 above: forgotten)
         for (int i = 0; i < 12; ++i) uplinks.push_back(1);
         for (size_t i = 0; i < uplinks.size(); ++i) {
             const uint32_t learned = order_with_uplink(uplinks[i]);
@@ -1424,7 +1431,8 @@ void run_cue_tests() {
                 ASSERT_EQ(learned, 5u);                                                          // the stall raised it by the two ticks that a single lag may stand above the middle, not to its own 12
                 ASSERT_EQ(p.lead_ticks(), 5u);                                                   // (at once: the order was late)
             }
-            if (i == 6) ASSERT_EQ(p.lead_ticks(), 5u);                                           // the slower link: its lags of 5 are within the lead already
+            if (i == 4) ASSERT_EQ(learned, 3u);                                                  // the first answer at the link's own pace forgot the stall (its 12 stands more than 4 above it)
+            if (i == 6) ASSERT_EQ(p.lead_ticks(), 5u);                                           // the slower link: the first of its lags of 5 was late (the lead had fallen back to 3 by then) and raised it at once
             if (i == 11) ASSERT_TRUE(p.lead_ticks() >= 5u);                                      // the link of 5 is covered
         }
         ASSERT_EQ(p.learned_lag_ticks(), 3u);                                                    // the slower lags and the stall have left the twelve: the lag of the link now
@@ -1458,6 +1466,123 @@ void run_cue_tests() {
         ASSERT_EQ(p.learned_lag_ticks(), 4u);
         ASSERT_EQ(p.lead_ticks(), 4u);
         ASSERT_EQ(p.stats().order_acks_late, uint64_t{1});
+    } TEST_END();
+
+    TEST_CASE("RP8.9 A Stall Of A Second Or Two With Several Orders In It Does Not Hold The Lead Up: Eight Orders Whose Answers All Report The Stall Fill The Twelve And Raise The Lead To Its Longest, And The First Answer At The Link's Own Pace Forgets Them, So That The Lead Is Back Within Two Seconds; Without An Order The Lags Of The Stall Are Forgotten When They Are Not Fresh (200 Ticks)") {
+        for (const bool then_an_order : {true, false}) {
+            Scenario sc;
+            sc.seed = then_an_order ? 140 : 141;
+            sc.buffer_turns = 1;
+            sc.down_delay = 1;
+            sc.uplink = 1;                                                                       // the lag is 3
+            sc.lead_ms = 150;                                                                    // the estimate: 3
+            sc.prediction.learn_lead = true;                                                     // (the lead is the product's: its defaults for everything else)
+            sc.honor_stamps = true;
+            Rig rig(sc);
+            Lcg rng(sc.seed);
+            Prediction& p = *rig.prediction();
+            rig.run(16);
+            for (int i = 0; i < 6; ++i) {
+                rig.issue(random_order(rng, rig.ids, 0));
+                rig.run(26);
+            }
+            ASSERT_EQ(p.lead_ticks(), 3u);
+            const uint32_t end = rig.step_no() + 60;                                             // the link is held for three seconds: what is given meanwhile reaches the host when it is over
+            for (int i = 0; i < 8; ++i) {
+                rig.set_uplink(end - rig.step_no());
+                rig.issue(random_order(rng, rig.ids, 0));
+                rig.run(2);
+            }
+            rig.set_uplink(1);
+            rig.run(end - rig.step_no() + 3);                                                    // (the answers of the stall arrive: eight lags of 12 in the twelve)
+            ASSERT_EQ(p.learned_lag_ticks(), 12u);
+            ASSERT_EQ(p.lead_ticks(), 12u);
+            if (then_an_order) {
+                rig.issue(random_order(rng, rig.ids, 0));                                        // an order at the link's own pace (lag 3) ...
+                rig.run(8);
+                ASSERT_EQ(p.learned_lag_ticks(), 3u);                                            // ... is the answer that ends the stall: the twelve are the link's again
+                rig.run_quiet(40);                                                               // (the lead falls one tick in four ticks, the first at once: 9 ticks of lead are 33 ticks)
+                ASSERT_EQ(p.lead_ticks(), 3u);                                                   // two seconds after that order's answer the picture is back at the link's lead
+            } else {
+                rig.run_quiet(205);                                                              // no order: the answers of the stall are older than 200 ticks now
+                ASSERT_EQ(p.learned_lag_ticks(), 0u);
+                rig.run_quiet(40);                                                               // (and the lead falls to the owner's estimate, one tick in four ticks)
+                ASSERT_EQ(p.lead_ticks(), 3u);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("RP8.10 The Honest Margin Is The Jitter: An Order That Waits For Its Stamp Is Held At The Host For The Lead Less Its Own Lag, And The Lead Is The Longest Of The Fresh Lags, So On A Link Whose Lags Are Spread Over Three Ticks (3 To 5) No Order Waits More Than Two Ticks Beyond Its First Open Turn, Which Is What An Order Sent With No Tick Gains Over It (A Stamp Of 0 Or In The Past Is Sealed In The First Open Turn); Some Orders Do Wait (The Margin Is The Price Of A Stamp That Is Open For Nearly Every Order)") {
+        for (const uint32_t seed : {150u, 151u, 152u}) {
+            Scenario sc;
+            sc.seed = seed;
+            sc.buffer_turns = 1;
+            sc.down_delay = 1;
+            sc.uplink = 1;
+            sc.lead_ms = 150;
+            sc.prediction.learn_lead = true;
+            sc.honor_stamps = true;
+            Rig rig(sc);
+            Lcg rng(seed);
+            Prediction& p = *rig.prediction();
+            rig.run(16);
+            uint32_t most = 0;
+            uint32_t waited = 0;
+            uint32_t counted = 0;
+            for (uint32_t i = 0; i < 160; ++i) {
+                const uint32_t uplink = 1u + rng.below(3);                                       // the lag is 2 + the uplink: 3, 4 or 5
+                rig.set_uplink(uplink);
+                const uint64_t open = rig.step_no() + uplink;                                    // the first turn that is open when the order reaches the host
+                rig.issue(random_order(rng, rig.ids, 0));
+                if (i >= 24) {                                                                   // (once the twelve are full of the link's own lags)
+                    const uint64_t stamp = p.last_order_tick();
+                    const uint32_t held = stamp > open ? static_cast<uint32_t>(stamp - open) : 0u;
+                    most = std::max(most, held);
+                    waited += held > 0 ? 1u : 0u;
+                    ++counted;
+                }
+                rig.run(6 + rng.below(9));
+            }
+            ASSERT_TRUE(most <= 2u);                                                             // the bound: the longest lag (5) less the shortest (3)
+            ASSERT_TRUE(waited >= counted / 10u);                                                // (the margin is real: an order sent with no tick would have been sealed earlier than these)
+            ASSERT_EQ(p.stats().order_acks, uint64_t{160});
+        }
+    } TEST_END();
+
+    TEST_CASE("RP8.11 The Number Of An Order Is Taken When It Is Planned And Is Never Another Order's: Planning The Order Again Before It Was Submitted Is The Same Plan (Nothing Was Sent), A Plan That Is Never Submitted Leaves Its Number Unused, The Order That Is Submitted Has The Number Of Its Plan, An Order With No Plan The Next One; A Prediction That Is Told Where To Begin (Config::first_seq) Goes On From There, And The Numbers Go On Across A Suspension") {
+        Scenario sc;
+        sc.seed = 160;
+        sc.prediction.first_seq = 100;
+        Rig rig(sc);
+        Lcg rng(160);
+        Prediction& p = *rig.prediction();
+        rig.run(16);
+        const Command a = random_order(rng, rig.ids, 0);
+        const Command b = random_order(rng, rig.ids, 0);
+        const Command c = random_order(rng, rig.ids, 0);
+        const Command d = random_order(rng, rig.ids, 0);
+        sim::CommandResult r;
+        const auto plan_a = p.plan_order(a);
+        ASSERT_TRUE(plan_a.has_value());
+        ASSERT_EQ(plan_a->seq, 100u);                                                            // (it begins where it was told to)
+        ASSERT_TRUE(p.submit(a, r));
+        ASSERT_EQ(p.last_order_seq(), 100u);
+        ASSERT_EQ(p.plan_order(b)->seq, 101u);
+        ASSERT_EQ(p.plan_order(b)->seq, 101u);                                                   // (the same order planned again: nothing was sent, the number is still unused)
+        ASSERT_TRUE(p.submit(b, r));
+        ASSERT_EQ(p.last_order_seq(), 101u);
+        ASSERT_EQ(p.plan_order(c)->seq, 102u);                                                   // c is planned and never submitted ...
+        ASSERT_EQ(p.plan_order(d)->seq, 103u);
+        ASSERT_TRUE(p.submit(d, r));
+        ASSERT_EQ(p.last_order_seq(), 103u);                                                     // ... its number is not given to another order
+        ASSERT_TRUE(p.submit(c, r));                                                             // (c was not the order that was planned last: a number of its own)
+        ASSERT_EQ(p.last_order_seq(), 104u);
+        ASSERT_EQ(p.next_seq(), 105u);
+        p.set_suspended(true);
+        p.set_suspended(false);
+        rig.run(4);
+        ASSERT_TRUE(p.active());
+        ASSERT_EQ(p.plan_order(a)->seq, 105u);                                                   // the numbers go on across a suspension
     } TEST_END();
 
     TEST_CASE("RP8.3 A Lag That Is Not Fresh Is Forgotten (lag_fresh_ticks): The Lead Goes Back To The Owner's Estimate Once The Orders Are Old, And The Orders That Come After A Quiet Spell Teach It Again") {
@@ -1612,12 +1737,14 @@ void run_cue_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("RP8.6 The Product's Defaults Are The Documented Numbers (docs/NETWORK_PORT.md, README): The Lead Learns From The Longest Lag Of The Last Twelve Orders (No More Than Two Ticks Above Their Middle) No Older Than 400 Ticks With No Bias (An Order Is Put Where The Host Seals It), Between 1 And 12 Ticks, Rises By One Tick After 40 Ticks; A Lost Order Is Dropped After 100; The Budget Is 12 ms, Four Strikes In 200 Ticks, A Cool-Down Of 200 Ticks That Doubles Up To 3200") {
+    TEST_CASE("RP8.6 The Product's Defaults Are The Documented Numbers (docs/NETWORK_PORT.md, README): The Lead Learns From The Longest Lag Of The Last Twelve Orders (No More Than Two Ticks Above Their Middle, The Lags More Than Four Ticks Above A Newer Answer Forgotten) No Older Than 200 Ticks With No Bias (An Order Is Put Where The Host Seals It), Between 1 And 12 Ticks, Rises By One Tick After 40 Ticks; A Lost Order Is Dropped After 100; The Budget Is 12 ms, Four Strikes In 200 Ticks, A Cool-Down Of 200 Ticks That Doubles Up To 3200") {
         const Prediction::Config c;
         ASSERT_TRUE(c.learn_lead);
         ASSERT_EQ(c.lag_samples, 12u);
         ASSERT_EQ(c.lag_spike_cap_ticks, 2u);
-        ASSERT_EQ(c.lag_fresh_ticks, 400u);
+        ASSERT_EQ(c.lag_forget_ticks, 4u);
+        ASSERT_EQ(c.lag_fresh_ticks, 200u);
+        ASSERT_EQ(c.first_seq, 1u);
         ASSERT_EQ(c.lead_bias_ticks, 0u);                                                        // (a project decision: the lead is the lag; a bias of 1 stamps a tick beyond it)
         ASSERT_EQ(c.min_lead_ticks, 1u);
         ASSERT_EQ(c.max_lead_ticks, 12u);

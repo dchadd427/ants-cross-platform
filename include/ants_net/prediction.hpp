@@ -99,13 +99,21 @@ public:
         // The lead is the LONGEST lag of the last `lag_samples` own orders, none older than `lag_fresh_ticks`, plus `lead_bias_ticks`. The lag of an order is the ticks from the confirmed tick at which it was given to the first
         // turn that was open when it reached the host (the host's OrderAck). It varies by a tick with the moment of the click (the phase of the host's seals) and with the link's jitter, and the host seals an order into the
         // tick that it is stamped with when that tick is still open: with the longest lag of the fresh orders the stamp is open for nearly every order, so it is sealed where this screen put it and nothing is corrected. The
-        // price is that an order runs in the confirmed engine a little later than it could (the lag's spread, a tick on average at most); the picture is not later, it shows the order at once.
-        // One order that a stall held up must not hold the lead high for as long as it is fresh: no lag counts for more than `lag_spike_cap_ticks` above the MEDIAN of the fresh ones (a link whose lags are spread over
-        // more than that is learned by its middle plus the cap, and the orders beyond it are late). Off: the owner's estimate alone (the tests that hold a wrong lead to account).
+        // price is that an order runs in the confirmed engine a little later than it could (the lag's spread, a tick on average at most); the picture is not later, it shows the order at once. The same margin is all that an
+        // order that is sent with no tick gains over one that waits for its stamp (NETWORK_PORT.md, "Protocol 30"): it is never more than the lead less the order's own lag, and the lead is held down twice:
+        //  - no lag counts for more than `lag_spike_cap_ticks` above the MEDIAN of the fresh ones (one order that a stall held up must not hold the lead high for as long as it is fresh; a link whose lags are spread over
+        //    more than that is learned by its middle plus the cap, and the orders beyond it are late);
+        //  - a stall ends with the first answer that comes back at the link's own pace: the older lags that stand more than `lag_forget_ticks` above a NEWER answer are dropped (the stall's orders all report the stall, several
+        //    of them in a second, and would otherwise be most of the twelve and set the middle too), so the lead is back to the link's lag as fast as it falls (one tick at a time: `lead_fall_every_ticks`).
+        // Off: the owner's estimate alone (the tests that hold a wrong lead to account).
         bool learn_lead{true};
         uint32_t lag_samples{12};
         uint32_t lag_spike_cap_ticks{2};
-        uint32_t lag_fresh_ticks{400};                     // 20 s
+        uint32_t lag_forget_ticks{4};                      // 200 ms: more than the spread that the links measured have (jitter up to 60 ms: three ticks), less than any stall that is worth a longer lead
+        uint32_t lag_fresh_ticks{200};                     // 10 s: a stall that no order has come back from since is forgotten after this long (LK18: the same orders late as with 20 s)
+        // The number of the first order (1, 2, 3 ...). A game that makes a new prediction in a match that goes on (the player switched it off and on) gives it the number where the last one stopped: an answer that is
+        // still on its way is about an order of the old one, and its number is never an order of the new one's.
+        uint32_t first_seq{1};
         // Ticks that the display stands beyond the lag. 0: an order is put where the host runs it, so nothing is corrected while the lag holds. 1: a tick more room for a jitter that the lag has not seen yet.
         uint32_t lead_bias_ticks{0};
         // Hints (see above). A hint whose tick is more than this many ticks behind the next turn that is expected is older than any order that is not sealed yet: it is late. At most `max_hints` wait at a
@@ -208,11 +216,13 @@ public:
     /// The player's command, as the HUD gave it (the issuer is the seat). A predicted kind is applied to the predicted engine at once, at the tick it stands at, and `result` is what the
     /// engine said (Applied, the ant that acknowledges, the ants that needed the order): true. False (nothing happened, `result` untouched) when the prediction is off or the command is of a
     /// kind that waits for the confirmation: the caller answers as it did before the prediction existed.
-    /// The order is numbered (last_order_seq(): the `seq` that planned order carried, 1, 2, 3 ...) and waits for the host's answer (on_order_ack).
+    /// The order is numbered (last_order_seq(): the number that plan_order() took for it, else the next one, 1, 2, 3 ...) and waits for the host's answer (on_order_ack).
     bool submit(const sim::Command& command, sim::CommandResult& result);
-    /// Where an order given NOW is applied (protocol 30): `tick` is the turn that the host is asked to seal it into (CommandMsg::turn), `seq` the number that submit() gives it and the host answers with (CommandMsg::seq).
+    /// Where an order given NOW is applied (protocol 30): `tick` is the turn that the host is asked to seal it into (CommandMsg::turn), `seq` the number that the host answers with (CommandMsg::seq).
     /// Nothing is applied: the engine is only brought to the state that submit() would apply it to (a stale one is rebuilt, one that stands behind the turns in hand runs up to them), so the plan is the tick
-    /// that submit() then uses, in the same call of the caller. Empty when submit() would refuse the order (the prediction is off, the order is another seat's or of a kind that waits): the order is sent without a tick.
+    /// that submit() then uses, in the same call of the caller. The number is TAKEN here, once and for all: submit() of the same command gives the order this number, and no other order ever has it (a plan whose order
+    /// was not sent leaves a number unused, never one that two orders share). Planning the same command again before it was submitted is the same plan. Empty when submit() would refuse the order (the prediction is off,
+    /// the order is another seat's or of a kind that waits): the order is sent without a tick.
     struct OrderPlan {
         uint64_t tick{0};
         uint32_t seq{0};
@@ -254,6 +264,8 @@ public:
     uint64_t last_order_tick() const noexcept { return last_order_tick_; }
     /// The number that the last order that submit() took carries (0 before there is one)
     uint32_t last_order_seq() const noexcept { return last_order_seq_; }
+    /// The number that the next order gets: what a new prediction in the same match starts from (Config::first_seq)
+    uint32_t next_seq() const noexcept { return next_seq_; }
     const Stats& stats() const noexcept { return stats_; }
     /// The cues and news that the predicted ticks made since the last call (each tick that the engine ran, once per run: see PredictedAudio::generation). Nothing is kept while off.
     std::vector<PredictedAudio> take_audio();
@@ -355,7 +367,13 @@ private:
     bool stale_hint_{false};                       // a hint is why it went stale (the statistics)
     uint64_t last_order_tick_{0};
     uint32_t last_order_seq_{0};
-    uint32_t next_seq_{1};                        // the number of the next order (never reset: an answer to an order of a prediction that was off since matches no order of the next one)
+    uint32_t next_seq_{1};                        // the number of the next order (never reset, not by a suspension and not by a new prediction in the same match: an answer to an order of a prediction that was off since matches no order of the next one)
+    struct Planned {
+        sim::Command command;
+        OrderPlan plan;
+    };
+    std::optional<Planned> planned_;              // the number that plan_order() took and submit() has not used yet
+    uint32_t take_seq() noexcept;
     std::deque<Sent> sent_;
     uint32_t lead_{3};
     uint32_t target_lead_{3};

@@ -364,6 +364,29 @@ private:
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 
+// A link whose reader finds nothing at its next poll after it has read a Resume: what follows the Resume (the turns that the new host gives) arrives in a later update, as it does over a link
+// that scatters its packets, and not in the update that read the Resume
+class ResumeThenNothing final : public Connection {
+public:
+    explicit ResumeThenNothing(Connection* inner) : inner_(inner) {}
+    bool send(const std::vector<uint8_t>& m) override { return inner_->send(m); }
+    bool poll(std::vector<uint8_t>& m) override {
+        if (skip_) {
+            skip_ = false;
+            return false;
+        }
+        if (!inner_->poll(m)) return false;
+        skip_ = peek_type(m) == MsgType::Resume;
+        return true;
+    }
+    State state() const override { return inner_->state(); }
+    void close() override { inner_->close(); }
+
+private:
+    Connection* inner_;
+    bool skip_{false};
+};
+
 // True when any decoder of the protocol accepts the bytes
 inline bool any_decodes(const std::vector<uint8_t>& b) {
     HelloMsg m1;
@@ -794,6 +817,142 @@ struct HoldMatch {
         return true;
     }
     uint32_t sealed() const { return host->turns_sealed(); }
+};
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Host migration (docs/NETWORK_PORT.md): the guests are linked to each other as well, so the game outlives its host
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+using LinkFn = std::function<LoopbackNetwork::Link(uint8_t, uint8_t)>;
+
+inline LinkFn same_link(LoopbackNetwork::Link link) {
+    return [link](uint8_t, uint8_t) { return link; };
+}
+
+// A match of `players` machines: seat 0 hosts, every guest is linked to the host and to every other guest
+struct Mesh {
+    LoopbackNetwork net;
+    std::vector<std::unique_ptr<sim::SimulationEngine>> sims;
+    Ids ids;
+    std::vector<std::unique_ptr<HostSession>> hosts;         // by seat: the first host, and every guest that took over
+    std::vector<std::unique_ptr<ClientSession>> clients;     // by seat; reset when the seat took over
+    std::vector<std::vector<Connection*>> link;              // link[a][b]: the endpoint that seat a holds of its link to seat b
+    std::vector<bool> alive;                                 // a machine that is not alive is no longer updated
+    std::vector<std::pair<uint8_t, uint8_t>> left;           // (host seat, player) of every drop-out a host announced
+    std::vector<std::vector<ChatMsg>> chats;                 // what each machine's chat callback saw
+    uint32_t now{0};
+    uint32_t seed{1};
+    uint8_t players{4};
+    int promotions{0};
+
+    Mesh(uint32_t seed_, uint8_t players_, const LinkFn& link_of, ClientSession::Config cc = {}) : net(seed_ * 17u), seed(seed_), players(players_) {
+        for (uint8_t p = 0; p < players; ++p) {
+            sims.push_back(std::make_unique<sim::SimulationEngine>());
+            ids = build_world(*sims.back(), seed);
+        }
+        hosts.resize(players);
+        clients.resize(players);
+        alive.assign(players, true);
+        chats.resize(players);
+        link.assign(players, std::vector<Connection*>(players, nullptr));
+        hosts[0] = std::make_unique<HostSession>(*sims[0], HostSession::Config{});
+        hosts[0]->set_on_player_left([this](uint8_t p) { left.emplace_back(0, p); });
+        hosts[0]->set_on_chat([this](const ChatMsg& c) { chats[0].push_back(c); });
+        for (uint8_t p = 1; p < players; ++p) {
+            ClientSession::Config c = cc;
+            c.player = p;
+            c.host = 0;
+            clients[p] = std::make_unique<ClientSession>(*sims[p], c);
+            clients[p]->set_on_chat([this, p](const ChatMsg& m) { chats[p].push_back(m); });
+            auto ends = net.connect(link_of(0, p));
+            link[0][p] = ends.first;
+            link[p][0] = ends.second;
+            hosts[0]->add_client(p, ends.first);
+            clients[p]->set_connection(ends.second);
+        }
+        for (uint8_t a = 1; a < players; ++a) {
+            for (uint8_t b = static_cast<uint8_t>(a + 1); b < players; ++b) {
+                auto ends = net.connect(link_of(a, b));
+                link[a][b] = ends.first;
+                link[b][a] = ends.second;
+                clients[a]->set_peer(b, ends.first);
+                clients[b]->set_peer(a, ends.second);
+            }
+        }
+        hosts[0]->start(0);
+        for (uint8_t p = 1; p < players; ++p) clients[p]->start(0);
+    }
+
+    // The machine of `seat` dies: its links are cut at once (abrupt), or it simply stops answering while its links stay open (a frozen process)
+    void kill(uint8_t seat, bool abrupt = true) {
+        alive[seat] = false;
+        if (abrupt) isolate(seat);
+    }
+    // Every link of the seat is cut, but the machine goes on (a partition)
+    void isolate(uint8_t seat) {
+        for (uint8_t o = 0; o < players; ++o) {
+            if (o != seat && link[seat][o] != nullptr) net.cut(link[seat][o]);
+        }
+    }
+    void cut_link(uint8_t a, uint8_t b) { net.cut(link[a][b]); }
+
+    void step_promotions() {
+        for (uint8_t s = 0; s < players; ++s) {
+            if (!alive[s] || !clients[s] || !clients[s]->promoted()) continue;
+            hosts[s] = promote_to_host(*clients[s], *sims[s], HostSession::Config{}, now, [this, s](HostSession& h) {
+                h.set_on_player_left([this, s](uint8_t p) { left.emplace_back(s, p); });
+                h.set_on_chat([this, s](const ChatMsg& c) { chats[s].push_back(c); });
+            });
+            clients[s].reset();
+            ++promotions;
+        }
+    }
+
+    // Advances virtual time by `ms` in 10 ms steps; every machine that plays issues its scripted commands when `scripted`
+    void run(uint32_t ms, bool scripted = true, const std::function<void(uint32_t)>& each_step = {}) {
+        const uint32_t end = now + ms;
+        while (now < end) {
+            now += 10;
+            net.set_time(now);
+            for (uint8_t s = 0; s < players; ++s) {
+                Command c;
+                if (!alive[s] || !scripted || !script(ids, seed, now, s, c)) continue;
+                if (hosts[s]) hosts[s]->submit_local(c);
+                else if (clients[s]) clients[s]->submit(c);
+            }
+            if (each_step) each_step(now);
+            for (uint8_t s = 0; s < players; ++s) {
+                if (!alive[s]) continue;
+                if (hosts[s]) hosts[s]->update(now);
+                else if (clients[s]) clients[s]->update(now);
+            }
+            step_promotions();
+        }
+    }
+    bool playing(uint8_t s) const { return alive[s] && (hosts[s] != nullptr || (clients[s] && !clients[s]->lost())); }
+    void settle(uint32_t ms = 3000) {
+        for (uint8_t s = 0; s < players; ++s) {
+            if (alive[s] && hosts[s]) hosts[s]->freeze();
+        }
+        run(ms, false);
+    }
+    // Every machine that still plays holds the same state (the hosts' desync detectors stayed silent as well)
+    bool survivors_equal(uint8_t except = 255) const {
+        const sim::StateHash* first = nullptr;
+        sim::StateHash hash;
+        for (uint8_t s = 0; s < players; ++s) {
+            if (!playing(s) || s == except) continue;
+            if (hosts[s] && !hosts[s]->desyncs().empty()) return false;
+            hash = sims[s]->state_hash();
+            if (first == nullptr) {
+                first = &hash;
+                continue;
+            }
+            if (hash != *first) return false;
+        }
+        return true;
+    }
+    uint32_t tick(uint8_t s) const { return static_cast<uint32_t>(sims[s]->current_tick()); }
 };
 
 // A link that is still being made when it is handed over (a TCP connection that opens without blocking): Connecting until `open_at`, then it is the link behind it

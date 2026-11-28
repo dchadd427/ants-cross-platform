@@ -281,6 +281,31 @@ void run_hint_netgame_tests() {
         }
         ASSERT_TRUE(at_stamp >= 11u);                                                    // (the first orders may be late, before the answers have taught the lead)
     } TEST_END();
+
+    TEST_CASE("N25.9 The Numbers Of The Orders Go On When The Prediction Is Made Again In The Same Match (Switched Off And On): The Answer That Was On Its Way When It Went Off Is About An Order Of The Old Prediction, And No Order Of The New One Has Its Number; Only The Orders Of The Match Are Counted") {
+        HintMatch m;
+        ASSERT_TRUE(m.ok);
+        m.t.run(2500);
+        ASSERT_TRUE(m.guest->net.predicting());
+        const uint32_t ant = m.own_ant();
+        for (int16_t j = 0; j < 3; ++j) {
+            ASSERT_EQ(m.guest->net.submit(order(1, ant, static_cast<int16_t>(10 + j), 12)).status, sim::CommandResult::Status::Applied);
+            m.t.run(200);
+        }
+        ASSERT_EQ(m.guest->net.prediction()->last_order_seq(), 3u);
+        m.guest->net.set_prediction_enabled(false);                                      // (the player switches it off: the prediction is gone, and so is its count)
+        m.t.run(300);
+        ASSERT_TRUE(m.guest->net.prediction() == nullptr);
+        ASSERT_EQ(m.guest->net.submit(order(1, ant, 20, 12)).status, sim::CommandResult::Status::Applied);       // (an order with no prediction carries no number)
+        m.t.run(200);
+        m.guest->net.set_prediction_enabled(true);
+        m.t.run(600);
+        ASSERT_TRUE(m.guest->net.predicting());
+        ASSERT_EQ(m.guest->net.submit(order(1, ant, 21, 12)).status, sim::CommandResult::Status::Applied);
+        ASSERT_EQ(m.guest->net.prediction()->last_order_seq(), 4u);                      // the number after the last one of the old prediction, not 1 again
+        m.t.run(400);
+        ASSERT_EQ(m.guest->net.prediction()->stats().order_acks, uint64_t{1});          // (and the host's answer to it is the only one that this prediction took)
+    } TEST_END();
 }
 
 }  // namespace
