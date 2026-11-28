@@ -1,21 +1,18 @@
 """The windows' geometry (README.md, "The windows"): what each window draws that never changes, in the window's own numbers.
 
-The numbers are those of the original's 640 x 480 picture, the same ones its animations use (the game draws a window at an offset that it applies itself): the options card is 442 x 440 at (18, 20),
-the quick help is the whole 640 x 480, the dialogs are 320 x 224. Each function here returns one SVG: the drawing of the fixed layer WITHOUT the panel behind it and without what changes while the
+The numbers are those of the original's 640 x 480 picture, the same ones its animations use (the game draws a window at an offset that it applies itself): the quick help is the whole 640 x 480, the dialogs are 320 x 224. Each function here returns one SVG: the drawing of the fixed layer WITHOUT the panel behind it and without what changes while the
 window is open (switches, slider thumbs, buttons, the text of the edit fields, everything the game writes). dialog_pieces.py cuts such a layer into sprites.
 """
 import dialog_kit as K
 from dialog_kit import text, measure
 
-CARD = (18, 20, 442, 440)              # the options card: x, y, w, h
+CARD = (18, 20, 442, 440)              # the corner that the switches', the thumb's and the Return button's drawings are laid from (the card of the original's options window, which they were first drawn for: their pixels depend on it)
 SLIDER_Y = (179, 216, 253)             # the three sliders: the thumb's top (the track's top is one row above)
-TRACK_X, TRACK_W, TRACK_H = 188, 235, 18
+TRACK_X = 188
 THUMB_W, THUMB_H = 49, 16
 THUMB_ROW = 1                          # the thumb sprite is 18 rows high and holds the grip from its row 1 (room for the grip's shadow)
 SWITCH_Y = 290                         # the four switches' tops; their lefts: chat on, chat off, quick help on, quick help off
 SWITCH_X = {'chat_on': 103, 'chat_off': 151, 'help_on': 356, 'help_off': 404}
-FIELD_SPOTS = (('F9', 79, 89, 370), ('F10', 79, 89, 401), ('F11', 287, 298, 370), ('F12', 287, 298, 401))      # label's right end, the ground's left and top
-FIELD_W, FIELD_H = 144, 15
 
 QH = (640, 480)
 BODY = 9.4            # the quick help's small text (canvas pixels): the largest size at which Libre Baskerville keeps the original's line breaks in the original's boxes
@@ -33,41 +30,8 @@ TITLE = ('Get ready to play!', 240, 37, 15.5, 1.7)           # the words, the mi
 TITLE_MOVES = ((1.12, 0, -4), (.92, 1, 3), (1.0, -1, -2), (.95, 1, 4), (1.06, 0, -3), (.9, -1, 2), (1.0, 1, -4), (1.05, 0, 3))      # (size factor, lift, tilt) of each letter that is not a space
 TITLE_STRIP = 56                       # the height of the strip the title is drawn in: from the card's top, it holds the letters with their shadows and the descenders
 
-# the title's letters: (letter, middle x, middle y, height of the capital, tilt clockwise, width factor), in the window's numbers. The numbers are the original title's own letter boxes, each letter is
-# set from the face and then moved: nothing is traced
-OPTIONS_LETTERS = (('O', 76, 96, 49, -9, 1.12), ('P', 124.5, 102, 38, 6, 1.12), ('T', 162, 76, 61, -6, .80), ('I', 205, 77, 43, 4, 1.10),
-                   ('O', 253, 74, 63, -2, 1.10), ('N', 326, 86, 53, 8, 1.0), ('S', 393, 93, 58, 13, 1.26))
 # the headings that dance a little: (size factor, lift, tilt) letter by letter
-SETTINGS_MOVES = ((1.06, 0, -3), (.97, .6, 2), (1.02, -.4, -2), (.98, .9, 3), (1.0, 0, -1.5), (1.04, -.5, 2), (.97, .5, -2.5), (1.02, 0, 2))
-KEYS_MOVES = ((1.07, 0, -3), (.97, .5, 2), (1.0, 0, -1.5), (1.03, -.4, 2.5), (.98, .7, -2), (1.06, 0, 2), (.98, .4, -2.5), (1.02, -.3, 1.5), (.97, .6, 3), (1.04, 0, -2), (.98, .4, 2), (1.02, -.4, -1.5), (1.0, .3, 2.5))
 QH_MOVES = ((1.05, 0, -2), (.98, .4, 1.5), (1.0, 0, -1), (1.02, -.3, 2), (.98, .4, -1.5), (1.04, 0, 1.5), (.98, .3, -2), (1.0, 0, 1), (1.02, -.3, -1.5))
-
-
-def options_layer():
-    """the options card's fixed layer, (w, h, svg) in the card's own numbers (the svg's origin is the card's corner)"""
-    cx0, cy0, cw, ch = CARD
-    u = K.new_uid()
-    X = lambda x: x - cx0
-    Y = lambda y: y - cy0
-    mid = cw / 2.0
-    b = K.jade_letters([(c, X(x), Y(y), h, rot, sx, 0) for c, x, y, h, rot, sx in OPTIONS_LETTERS])
-    b += K.jade_ant(u + 'ant', X(OPTIONS_LETTERS[4][1]) - 12.6, Y(OPTIONS_LETTERS[4][2]) - 13.0, .84)       # the ant in the second O
-    b += K.jade_letters(K.playful('Settings', mid, Y(157.5), 21.5, 2.2, SETTINGS_MOVES))
-    for name, yb in (('Sound Volume', 189), ('Music Volume', 226), ('Map Scroll Rate', 264)):
-        b += text(name, X(179), Y(yb), 15, 'jade', 'end')
-    for i, sy in enumerate(SLIDER_Y):
-        b += K.track(u, X(TRACK_X), Y(sy - 1), TRACK_W, TRACK_H)
-        lo, hi = (('low', 'high'), ('low', 'high'), ('slow', 'fast'))[i]
-        b += text(lo, X(189), Y(sy + 27), 10, 'small') + text(hi, X(421), Y(sy + 27), 10, 'small', 'end')
-    b += text('Chat', X(40), Y(307), 21, 'jade')
-    b += text('Quick Help', X(214), Y(307), 21, 'jade')
-    b += text('at game start', X(215), Y(319.5), 9.5, 'small')
-    b += K.jade_letters(K.playful('Quick Chat keys', mid + 6, Y(352), 21.5, 3.0, KEYS_MOVES))
-    for lab, lx, fx, fy in FIELD_SPOTS:
-        b += text(lab, X(lx), Y(fy + 13.5), 16, 'jade', 'end')
-        b += K.field(u, X(fx), Y(fy), FIELD_W, FIELD_H)
-    b += text('Type in your own message for use in QuickChat', X(31), Y(433), 9.6, 'small')
-    return cw, ch, K.svg(cw, ch, b, u)
 
 
 # ---- the quick help ---------------------------------------------------------------------------------------------------------------------------------------------

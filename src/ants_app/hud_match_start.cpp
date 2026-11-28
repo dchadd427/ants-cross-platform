@@ -55,13 +55,13 @@ void HUD::render_match_start_modal(IRenderer& renderer, const assets::AssetArchi
 // a key event beside it would type every letter twice (the application does not hand a printable key to the HUD when no dialog is up; with the card up it does).
 bool HUD::handle_countdown_key(int32_t key, uint16_t mod, bool repeat) {
     const bool ctrl = (mod & KMOD_CTRL) != 0 || (mod & KMOD_GUI) != 0;
-    if (options_.state().chat && !ctrl && key == SDLK_BACKSPACE) {
+    if (options_.chat && !ctrl && key == SDLK_BACKSPACE) {
         if (!chat_input_.empty()) chat_input_.pop_back();
         return true;
     }
     switch (key) {
         case SDLK_F9: case SDLK_F10: case SDLK_F11: case SDLK_F12:
-            if (!repeat && options_.state().chat) trigger_quick_chat(static_cast<size_t>(key - SDLK_F9));
+            if (!repeat && options_.chat) trigger_quick_chat(static_cast<size_t>(key - SDLK_F9));
             return true;
         case SDLK_RETURN: case SDLK_KP_ENTER:
             send_chat_message();
@@ -148,7 +148,7 @@ void HUD::render_match_countdown(IRenderer& renderer, const assets::AssetArchive
     size_t people_in = 0;
     for (const CountdownSeat& who : countdown_seats_) people_in += who.plays && !who.computer ? 1u : 0u;
     centred(people_in <= 1 ? "Get ready. Fullscreen is one press away."
-                           : (options_.state().chat ? "Everybody is in. Say hello in the chat." : "Everybody is in. The match starts soon."),
+                           : (options_.chat ? "Everybody is in. Say hello in the chat." : "Everybody is in. The match starts soon."),
             c, l.hint_y, FontSize::Px18, ink);
 
 #if !defined(__EMSCRIPTEN__)
@@ -174,10 +174,10 @@ bool HUD::handle_countdown_mouse_down(int32_t x, int32_t y, uint8_t button) {
     if (quit_button_.contains(x, y)) {
         quit_button_.is_pressed = true;
         play_sfx(sim::SoundID::ButtonClick);
-    } else if (options_.state().chat && send_to_button_.contains(x, y)) {
+    } else if (options_.chat && send_to_button_.contains(x, y)) {
         send_to_button_.is_pressed = true;
         play_sfx(sim::SoundID::ButtonClick);
-    } else if (options_.state().chat && is_on_team_ && team_button_.contains(x, y)) {
+    } else if (options_.chat && is_on_team_ && team_button_.contains(x, y)) {
         team_button_.is_pressed = true;
         play_sfx(sim::SoundID::ButtonClick);
     } else if (countdown_button_rect().contains(x, y)) {

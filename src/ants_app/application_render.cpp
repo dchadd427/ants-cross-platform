@@ -1,6 +1,8 @@
 // The picture of a frame in the application (application.hpp): the render of the match and of every screen, the music that goes with them, the loading screen and the quick help.
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstdlib>
 
 #include "ants_app/application.hpp"
@@ -17,6 +19,44 @@ static constexpr bool kPhoneDigits = true;
 #else
 static constexpr bool kPhoneDigits = false;
 #endif
+
+// The frame rate's plate and its graph of the last frame times (oldest on the left, newest on the right), drawn while Show FPS is on
+template <size_t N>
+static void draw_frame_graph(IRenderer& renderer, const CornerPlate& plate, int32_t spark_x, int32_t spark_y, int32_t spark_w, int32_t spark_h, const std::array<float, N>& history, size_t index) {
+    // Dark translucent background plate + subtle border
+    renderer.fill_rect(spark_x - 1, plate.top, spark_w + 2, plate.bottom - plate.top, ants::assets::ColorRGBA{0, 0, 0, 160});
+    renderer.draw_rect(spark_x - 1, plate.top, spark_w + 2, plate.bottom - plate.top, ants::assets::ColorRGBA{80, 85, 90, 180});
+
+    // 60 FPS reference guide line (16.67ms -> 5 pixels from bottom)
+    const int32_t ref_line_y = spark_y + spark_h - 5;
+    renderer.fill_rect(spark_x, ref_line_y, spark_w, 1, ants::assets::ColorRGBA{50, 80, 70, 150});
+
+    // Render each frame history sample (oldest on left, newest on right)
+    for (int32_t i = 0; i < spark_w; ++i) {
+        const size_t sample_idx = (index + static_cast<size_t>(i)) % N;
+        const float ft = history[sample_idx];
+
+        // 33.3ms (30 FPS) is full box height (11px); 16.67ms (60 FPS) is ~5.5px
+        int32_t bar_h = static_cast<int32_t>(std::round((ft / 33.333f) * static_cast<float>(spark_h)));
+        bar_h = std::clamp(bar_h, 1, spark_h);
+        const int32_t bar_y = spark_y + spark_h - bar_h;
+
+        // Color coding based on frame pacing:
+        // Green: <= 18.0ms (55-60+ FPS, solid)
+        // Yellow: 18.1 - 25.0ms (40-55 FPS, minor drop)
+        // Red: > 25.0ms (< 40 FPS, stutter spike)
+        ants::assets::ColorRGBA bar_color;
+        if (ft <= 18.0f) {
+            bar_color = ants::assets::ColorRGBA{60, 230, 90, 220};
+        } else if (ft <= 25.0f) {
+            bar_color = ants::assets::ColorRGBA{240, 210, 50, 220};
+        } else {
+            bar_color = ants::assets::ColorRGBA{240, 60, 60, 240};
+        }
+
+        renderer.fill_rect(spark_x + i, bar_y, 1, bar_h, bar_color);
+    }
+}
 
 void Application::render_frame() {
     renderer_->begin_frame();
@@ -52,6 +92,7 @@ void Application::render_frame() {
                                 tick_accumulator_);
         hud_.render(*renderer_, assets_, world, renderer_->camera());
         render_net_overlay();
+        render_game_menu_panel();                            // (the desktop's settings menu, over everything of the match)
     }
 
     // Frame rate counter and frametime sparkline in the bottom right hand corner of the canvas (the viewport: the version stands next to the counter in every layout):
@@ -61,7 +102,8 @@ void Application::render_frame() {
     const CornerPlate plate = CornerPlate::for_canvas(corner.w, corner.h);
     int fps_val = std::max(1, static_cast<int>(std::round(fps_display_value_)));
     std::string fps_text = std::to_string(fps_val) + " FPS";
-    int32_t text_w = renderer_->get_text_width(fps_text, FontSize::Px12);
+    const bool show_fps = menu_settings_.show_fps;
+    int32_t text_w = show_fps ? renderer_->get_text_width(fps_text, FontSize::Px12) : 0;
     int32_t text_h = renderer_->get_text_height(FontSize::Px12);
     constexpr int32_t spark_w = static_cast<int32_t>(SPARKLINE_SAMPLES);
     constexpr int32_t spark_h = FPS_OVERLAY_SPARK_H;
@@ -72,56 +114,29 @@ void Application::render_frame() {
     const int32_t spark_x = row.spark_x;
     const int32_t spark_y = row.spark_y;
     const int32_t text_y = row.text_y;
-    renderer_->draw_text(fps_text, text_x, text_y, {255, 255, 255, 255}, FontSize::Px12);
+    if (show_fps) renderer_->draw_text(fps_text, text_x, text_y, {255, 255, 255, 255}, FontSize::Px12);
 
-    // Version number display (bottom-right next to FPS sparkline)
-    const int32_t ver_x = row.version_x;
-    const int32_t ver_y = text_y;
-    renderer_->draw_text(ver_text, ver_x, ver_y, {180, 190, 200, 220}, FontSize::Px12);
-
-    // Dark translucent background plate + subtle border
-    renderer_->fill_rect(spark_x - 1, plate.top, spark_w + 2, plate.bottom - plate.top, ants::assets::ColorRGBA{0, 0, 0, 160});
-    renderer_->draw_rect(spark_x - 1, plate.top, spark_w + 2, plate.bottom - plate.top, ants::assets::ColorRGBA{80, 85, 90, 180});
-
-    // 60 FPS reference guide line (16.67ms -> 5 pixels from bottom)
-    int32_t ref_line_y = spark_y + spark_h - 5;
-    renderer_->fill_rect(spark_x, ref_line_y, spark_w, 1, ants::assets::ColorRGBA{50, 80, 70, 150});
-
-    // Render each frame history sample (oldest on left, newest on right)
-    for (int32_t i = 0; i < spark_w; ++i) {
-        size_t sample_idx = (frametime_index_ + static_cast<size_t>(i)) % SPARKLINE_SAMPLES;
-        float ft = frametime_history_[sample_idx];
-
-        // 33.3ms (30 FPS) is full box height (11px); 16.67ms (60 FPS) is ~5.5px
-        int32_t bar_h = static_cast<int32_t>(std::round((ft / 33.333f) * static_cast<float>(spark_h)));
-        bar_h = std::clamp(bar_h, 1, spark_h);
-        int32_t bar_y = spark_y + spark_h - bar_h;
-
-        // Color coding based on frame pacing:
-        // Green: <= 18.0ms (55-60+ FPS, solid)
-        // Yellow: 18.1 - 25.0ms (40-55 FPS, minor drop)
-        // Red: > 25.0ms (< 40 FPS, stutter spike)
-        ants::assets::ColorRGBA bar_color;
-        if (ft <= 18.0f) {
-            bar_color = ants::assets::ColorRGBA{60, 230, 90, 220};
-        } else if (ft <= 25.0f) {
-            bar_color = ants::assets::ColorRGBA{240, 210, 50, 220};
-        } else {
-            bar_color = ants::assets::ColorRGBA{240, 60, 60, 240};
-        }
-
-        renderer_->fill_rect(spark_x + i, bar_y, 1, bar_h, bar_color);
+    // Version number display (bottom-right next to FPS sparkline). With the frame rate off the version takes the right edge, and "ping NN ms" (when it is shown and fits) takes the frame rate's place beside it
+    const std::optional<int32_t> ping_limit = latency_limit_now();
+    int32_t ver_x = row.version_x;
+    bool ping_in_fps_place = false;
+    if (!show_fps) {
+        const CornerWithoutFps alone = CornerWithoutFps::of(plate, ver_w, renderer_->get_text_width(ping_text(LATENCY_SHOWN_MAX_MS), FontSize::Px12), LATENCY_VERSION_GAP, ping_limit);
+        ver_x = alone.version_x;
+        ping_in_fps_place = alone.ping_in_fps_place;
     }
+    renderer_->draw_text(ver_text, ver_x, text_y, {180, 190, 200, 220}, FontSize::Px12);
+    if (show_fps) draw_frame_graph(*renderer_, plate, spark_x, spark_y, spark_w, spark_h, frametime_history_, frametime_index_);
 
     connections_hit_ = LayoutRect{};                         // (set again by the corner, in a match of a network game)
-    render_latency_corner(ver_x, text_y, plate);
+    render_latency_corner(ver_x, text_y, plate, ping_limit, ping_in_fps_place);
     render_connections();
 
     // Authentic Software Cursor (Matching Ants.exe 0x1026c5c / 0x1027e65): the pointer is the picture's
     renderer_->set_picture(picture_);
     render_touch_feedback();                                 // (the ring of a coming hold: over everything of the picture, under the pointer)
     CursorType cur = CursorType::Normal;
-    if (state_ == AppState::Playing && !scorecard_.is_open() && !catch_up_screen_active()) {         // (the catch-up screen has no map to point at)
+    if (state_ == AppState::Playing && !scorecard_.is_open() && !catch_up_screen_active() && !game_menu_open_) {         // (the catch-up screen has no map to point at, nor has a settings panel)
         sim::SimulationEngine& view = view_sim();
         hud_.set_sim_query(&view);                           // (the cursor's special-target question is asked of the picture's own engine)
         cur = hud_.evaluate_cursor(mouse_screen_x_, mouse_screen_y_, shown_world(), view.grid(), renderer_->camera());

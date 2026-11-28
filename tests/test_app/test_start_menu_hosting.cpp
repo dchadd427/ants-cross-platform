@@ -676,7 +676,7 @@ void run_start_menu_hosting_tests() {
         const std::vector<std::vector<std::string>> skipping = {
             {"--map", "Original-Ants/Maps/TINY.LVL"}, {"--map-select"}, {"--play"}, {"--host"}, {"--host", "4002"}, {"--join", "127.0.0.1:4001"}, {"--join-url", "wss://x/ws"}, {"--room", "abc"},
             {"--token", "t"}, {"--seat", "1"}, {"--bot", "1:easy"}, {"--alone"}, {"--headless"}, {"--screenshot", "x.png"}, {"--player", "1"}, {"-pnum:1"}, {"-pnum=2"}, {"--select-ant", "3"},
-            {"--select-base", "1"}, {"--open-options"}, {"--scorecard"}};
+            {"--select-base", "1"}, {"--open-menu"}, {"--scorecard"}};
         for (const auto& args : skipping) {
             const ApplicationConfig c = menu_for(args);
             if (c.start_menu) std::cout << "\n    the menu was not skipped by " << args[0];
@@ -702,7 +702,7 @@ void run_start_menu_hosting_tests() {
         }
         // the menu comes first and chooses the match: an option that starts a match or a room at once cannot be combined with it
         for (const auto& args : std::vector<std::vector<std::string>>{{"--start-menu", "--map", "x.lvl"}, {"--start-menu", "--host"}, {"--start-menu", "--join", "h:1"},
-                                                                       {"--join-url", "wss://x", "--start-menu"}, {"--start-menu", "--open-options"}, {"--start-menu", "--scorecard"}}) {
+                                                                       {"--join-url", "wss://x", "--start-menu"}, {"--start-menu", "--open-menu"}, {"--start-menu", "--scorecard"}}) {
             const ApplicationConfig c = menu_for(args);
             ASSERT_FALSE(c.startup_error.empty());
             ASSERT_TRUE(c.startup_error.find("--start-menu") != std::string::npos);

@@ -1,6 +1,6 @@
 #pragma once
 
-// The windows of the match in the new look (docs/VIEW_AND_HUD.md, "Windows"): which windows a HUD art set can draw, the veil behind the options window, the pictures that the game cuts out of the
+// The windows of the match in the new look (docs/VIEW_AND_HUD.md, "Windows"): which windows a HUD art set can draw, the pictures that the game cuts out of the
 // original's quick help, and the pieces of the original's own corner that the Classic look needs for the Fullscreen button. Look only: nothing here reaches the simulation, the rules or a replay.
 
 #include <array>
@@ -17,7 +17,6 @@ namespace ants::app::window_art {
 /// The windows that the set draws in the new look: every piece of a window must be in the manifest and must fit the place of the original's piece it replaces, or the window is the original's
 struct Pieces {
     bool dialogs{false};        // the quit question, the three alliance questions, "Get ready to play!"
-    bool options{false};
     bool quick_help{false};
     bool countdown{false};      // the countdown card of a room
     bool fullscreen{false};     // the Fullscreen button of the HUD
@@ -29,6 +28,10 @@ Pieces check(const hud_art::Art& art, const assets::AssetArchive& assets);
 /// True when the set has the six pictures of the Fullscreen button (the three states, and the three that leave fullscreen)
 bool has_fullscreen_button(const hud_art::Art& art) noexcept;
 
+/// True when the set has the pieces of the settings menu's drawn panel (game_menu_panel.hpp): the panel, the wells, the small steel buttons in their three states, the On / Off switches and the slider's thumb.
+/// A set without them leaves the panel to plain rectangles
+bool has_menu_panel(const hud_art::Art& art);
+
 /// True when the set has the panel and every piece of the new results screen (scorecard_layout.hpp kSprites), each of the size that the layout counts on: a set that lacks one gives the original's page
 bool has_results_page(const hud_art::Art& art);
 
@@ -37,13 +40,7 @@ bool fits(const LayoutRect& art_piece, const LayoutRect& original, int32_t shado
 
 /// The rectangles of the windows, in the original's own numbers (the renderer's origin puts them where the picture wants them)
 inline constexpr LayoutRect kDialogRect{ScreenLayout::kDialogX, ScreenLayout::kDialogY, ScreenLayout::kDialogW, ScreenLayout::kDialogH};
-inline constexpr LayoutRect kOptionsRect{18, 20, 442, 440};              // the card as it is drawn (the original's pieces lie one column further left under their dither)
 inline constexpr LayoutRect kQuickHelpRect{0, 0, 640, 480};
-
-/// The veil behind the options window: a dark see-through fill over the whole picture but the card, where the original lays its checker. Four bands, as the checker's: above, below, left of and right of
-/// the card; together with the card they cover the picture once
-inline constexpr assets::ColorRGBA kVeil{0, 0, 0, 128};
-std::array<LayoutRect, 4> veil_bands(const LayoutRect& picture, const LayoutRect& card) noexcept;
 
 /// The sentences of the dialogs: where they are (window numbers: the dialog's own numbers plus its corner), their size (em in tenths of a pixel) and line pitch
 struct SentenceStyle {

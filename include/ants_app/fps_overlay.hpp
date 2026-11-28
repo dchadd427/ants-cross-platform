@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 
 #include "ants_app/screen_layout.hpp"
 
@@ -57,6 +58,27 @@ struct CornerRow {
         row.text_y = row.spark_y + (spark_h - text_h) / 2;
         row.version_x = row.spark_x - ver_w - kRowGap;
         return row;
+    }
+};
+
+/// The corner while Show FPS is off (the settings menu; docs/VIEW_AND_HUD.md, "The corner"): the version stands at the plate's right edge. When the network's `ping NN ms` is shown too, and its widest text
+/// (`widest_ping_w`) and the version fit between the ping's left limit (`ping_limit`, latency_corner.hpp) and the right edge, the ping takes the place that the frame rate had at the right edge and the
+/// version stands to its left (`gap` between them); else the ping stays where it always stood, left of the version.
+struct CornerWithoutFps {
+    int32_t version_x{0};             // the version text's left edge
+    bool ping_in_fps_place{false};    // the ping stands at the right edge, right aligned, where the frame rate's number stood
+
+    static constexpr CornerWithoutFps of(const CornerPlate& plate, int32_t ver_w, int32_t widest_ping_w, int32_t gap, std::optional<int32_t> ping_limit) noexcept {
+        CornerWithoutFps out;
+        out.version_x = plate.right_edge - ver_w;
+        if (ping_limit) {
+            const int32_t beside = plate.right_edge - widest_ping_w - gap - ver_w;
+            if (beside >= *ping_limit) {
+                out.ping_in_fps_place = true;
+                out.version_x = beside;
+            }
+        }
+        return out;
     }
 };
 

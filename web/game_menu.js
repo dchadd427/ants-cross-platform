@@ -1,5 +1,5 @@
 // The settings menu of the game page (docs/GAME_MENU.md; the game's side: src/ants_app/application_game_menu.cpp and its one table of rows, game_menu.hpp).
-// Esc with nothing to cancel, or a Settings button, opens a panel over the running game: Sound, Video, Controls, Game, Resume and Leave game.
+// Esc with nothing to cancel, Ctrl+O, the game's Options button or a Settings button open a panel over the running game: Sound, Video, Controls, Game, Quick Chat, Resume and Leave game.
 //   * The rows come from the game as one JSON text (Module._ants_menu_describe): this script draws what the table says. A row's value is read with Module._ants_menu_get and changed with Module._ants_menu_set;
 //     Fullscreen, Picture shape and Fullscreen mouse are the page's own (the mouse is its object `lock`, and the shape is its function `pickShape`: one function for the selector, the address and the stored choice). The Picture shape is the page's
 //     picker (`page.picker`, web/shape_picker.js: the game's own row only says how many shapes there are); a choice changes the running game's picture at once and the panel stays open. The Controls list is data of this file.
@@ -24,19 +24,6 @@
     var MODIFIER = /^(Shift|Control|Alt|AltGraph|Meta|OS|CapsLock|NumLock|ScrollLock|Fn)$/; // a bare modifier press passes the small panel (the game's window system keeps count of what is held)
     var FULL_TITLE = 'Settings: sound, picture, controls and Leave game', SMALL_TITLE = 'Settings: picture shape and fullscreen mouse';
     var SMALL_NOTE = 'Sound, ant health, controls and the game\'s own settings are here during a match.', SMALL_NOTE_REPLAY = 'Sound, ant health and controls are here while the recording plays.', SMALL_NOTE_LIVE = 'Sound, ant health and controls are here while the match plays.', SMALL_CLOSE = 'Close';
-
-    // The Controls list: what the game's keys and the mouse do (docs/CONTROLS.md "Camera & Hotkeys"). [keys, what]: the mouse and touch lines name their input in words, a key line is a list of keys (a word that
-    // starts with ~ is the text between two keys); `watch` leaves out what a recording ignores.
-    var CONTROLS = {
-        mouse: [['Left click', 'Select, order'], ['Right click', 'Special order, move'], ['Drag', 'Rubber band'], ['Wheel', 'Zoom'], ['Middle button', 'Zoom 1'], ['Screen edge', 'Scroll the map']],
-        mouseWatch: [['Wheel', 'Zoom'], ['Middle button', 'Zoom 1'], ['Screen edge', 'Scroll the map'], ['Minimap', 'Move the view']],
-        touch: [['Tap', 'Select or order'], ['Hold, then lift', 'Right click'], ['Drag', 'Rubber band'], ['Two fingers', 'Move the map'], ['Pinch', 'Zoom']],
-        touchWatch: [['Two fingers', 'Move the map'], ['Pinch', 'Zoom'], ['Minimap', 'Move the view']],
-        keys: [[['Esc'], 'Deselect; then this menu'], [['F1'], 'Quick help'], [['F9', '~\u2013', 'F12'], 'Quick chat', 'watch'], [['Enter'], 'Send chat', 'watch'], [['Ctrl', 'A'], 'Select all ants', 'watch'],
-               [['Ctrl', 'H'], 'Home hill', 'watch'], [['Ctrl', 'N', '~/', 'P'], 'Next / previous ant', 'watch'], [['Ctrl', 'S'], 'Stop', 'watch'], [['Ctrl', 'L'], 'Health marks'],
-               [['Ctrl', 'O'], 'Original options'], [['Ctrl', 'Q'], 'Quit question'], [['F2', '~/', 'F3'], 'Vote (network match)', 'watch']],
-        note: 'On a Mac, Cmd works as Ctrl.'
-    };
 
     function forPage(page) {
         var doc = page.doc, win = page.win || (doc && doc.defaultView) || {}, stage = page.stage, canvas = page.canvas;
@@ -202,6 +189,27 @@
             return wrap;
         }
 
+        // A text row (the four quick chat messages): a text field of printable ASCII, at most row.max characters, written to the game as it is typed
+        function readText(id) { var s = '', c, i = 0; while (i <= 100 && (c = call('_ants_menu_text', id, i)) >= 0) { s += String.fromCharCode(c); i++; } return s; }
+        function writeText(id, s) { for (var i = 0; i < s.length; i++) call('_ants_menu_text_set', id, i, s.charCodeAt(i)); if (!s.length) call('_ants_menu_text_set', id, 0, 0); call('_ants_menu_text_set', id, -1, 0); }       // (index 0 starts the text, -1 keeps it)
+        function textField(row, labelId) {
+            var wrap = el('div', 'gm-ctl gm-text'), input = el('input');
+            input.type = 'text';
+            input.maxLength = row.max;
+            input.value = readText(row.id);
+            input.setAttribute('aria-labelledby', labelId);
+            input.setAttribute('autocomplete', 'off');
+            input.setAttribute('autocapitalize', 'sentences');
+            input.spellcheck = false;
+            input.addEventListener('input', function () {
+                var clean = input.value.replace(/[^\x20-\x7e]/g, '').slice(0, row.max);
+                if (clean !== input.value) input.value = clean;
+                writeText(row.id, clean);
+            });
+            wrap.appendChild(input);
+            return wrap;
+        }
+
         function action(row, labelId) {
             var b = el('button', 'btn gm-act', row.words[0]);
             b.type = 'button';
@@ -212,8 +220,7 @@
                 b.textContent = row.words[page.isFullscreen && page.isFullscreen() ? 1 : 0];
                 b.addEventListener('click', function () { if (page.isFullscreen()) page.leave(); else page.enter(); });
             } else {
-                var which = row.key === 'quickhelp' ? 2 : 3;
-                b.addEventListener('click', function () { close({ relock: false }); call('_ants_menu_do', which); });
+                b.addEventListener('click', function () { close({ relock: false }); call('_ants_menu_do', 2); });       // (the quick help: the one button that is the game's)
             }
             return b;
         }
@@ -233,31 +240,34 @@
             else if (row.kind === 'switch') control = choice(row, id, mine.read, mine.write, [1, 0]);
             else if (row.kind === 'choice') control = own && own.dropdown ? dropdown(row, id, own) : choice(row, id, (own || mine).read, (own || mine).write, row.words.map(function (w, i) { return i; }));
             else if (row.kind === 'button') control = action(row, id);
-            else { control = el('div', 'gm-ctl gm-info', page.version || ''); }
+            else if (row.kind === 'text') control = textField(row, id);
+            else { control = el('div', 'gm-ctl gm-info', row.key === 'version' ? (page.version || '') : ''); }
             line.appendChild(control);
             return line;
         }
 
+        // The Controls list is the game's table (info.controls: docs/CONTROLS.md "Camera & Hotkeys"): [keys, what, play_only] for each group. The mouse and touch lines name their input in words; a key line is its keys
+        // separated by "|" (a part that starts with "~" is the text between two keys); play_only leaves out what a recording ignores
         function controlsList(watching) {
-            var box = el('div', 'gm-keys'), touch = touchy();
-            function group(title, list) {
+            var box = el('div', 'gm-keys'), touch = touchy(), c = info.controls || {};
+            function group(title, list, keys) {
                 var grid = el('div', 'gm-kgrid'); // (two columns on a wide panel, the lines in pairs under one heading, as the picture has them)
                 box.appendChild(el('h3', 'gm-gh', title));
                 box.appendChild(grid);
-                list.forEach(function (item) {
-                    if (watching && item[2] === 'watch') return;
-                    var line = el('div', 'gm-row gm-krow'), keys = el('div', 'gm-lab');
-                    if (typeof item[0] === 'string') keys.appendChild(el('span', 'gm-input', item[0]));
-                    else item[0].forEach(function (part) { keys.appendChild(part.charAt(0) === '~' ? el('span', 'gm-plus', part.slice(1)) : el('kbd', 'gm-kbd', part)); });
-                    line.appendChild(keys);
+                (list || []).forEach(function (item) {
+                    if (watching && item[2]) return;
+                    var line = el('div', 'gm-row gm-krow'), cell = el('div', 'gm-lab');
+                    if (!keys) cell.appendChild(el('span', 'gm-input', item[0]));
+                    else item[0].split('|').forEach(function (part) { cell.appendChild(part.charAt(0) === '~' ? el('span', 'gm-plus', part.slice(1)) : el('kbd', 'gm-kbd', part)); });
+                    line.appendChild(cell);
                     line.appendChild(el('div', 'gm-ctl gm-what', item[1]));
                     grid.appendChild(line);
                 });
             }
-            if (touch) group('TOUCH', watching ? CONTROLS.touchWatch : CONTROLS.touch);
-            else group('MOUSE', watching ? CONTROLS.mouseWatch : CONTROLS.mouse);
-            group('KEYS', CONTROLS.keys);
-            box.appendChild(el('p', 'gm-fine', 'View only. ' + CONTROLS.note));
+            if (touch) group('TOUCH', watching ? c.touchWatch : c.touch, false);
+            else group('MOUSE', watching ? c.mouseWatch : c.mouse, false);
+            group('KEYS', c.keys, true);
+            box.appendChild(el('p', 'gm-fine', 'View only. ' + (c.note || '')));
             return box;
         }
 
@@ -578,5 +588,5 @@
         return { open: open, close: close, isOpen: function () { return !!state; }, refresh: refresh, buttons: buttons, onKey: onKey };
     }
 
-    return { forPage: forPage, POLL_MS: POLL_MS, CONTROLS: CONTROLS };
+    return { forPage: forPage, POLL_MS: POLL_MS };
 });

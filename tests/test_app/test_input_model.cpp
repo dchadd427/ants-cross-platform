@@ -170,9 +170,9 @@ void test_hud_input_tick() {
 
     // a dialog gets all input
     cam.center_on(960, 960, 60, 60);
-    hud.open_options();
+    hud.open_quick_help();
     check(!hud.input_tick(cam, 60, 60, 639, 240) && cam.world_x == ox, "no scrolling while a dialog is open");
-    hud.close_options();
+    hud.close_quick_help();
 
     // a captured left button (a rubber band) stops the edge scroll
     ants::sim::SimulationEngine sim2;

@@ -73,7 +73,8 @@ add_library(ants_app STATIC
     live_match_stats.cpp
     map_select.cpp
     map_select_wide.cpp
-    options_screen.cpp
+    options_state.cpp
+    game_menu_panel.cpp
     text_layout.cpp
     latency_corner.cpp
     connections_overlay.cpp

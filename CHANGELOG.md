@@ -32,6 +32,10 @@ Work that is not released yet is written in the same template under a heading th
 - **Names: tags change any time, nicknames once a day.** A tag can now be changed as often as you like (it waited a day before, and a change of capitals counted). A nickname changes once every 24 hours after the first (it was once in 30 days), and the old one stays yours for 7 days (it was 30), so that nobody takes it to pass for you. Someone who changed their nickname within the last 30 days may change it again 24 hours after that change.
 - The 3D ant test page /test_3d is gone.
 - In a match the chat, the score labels and the countdown card show your name without the clan tag, so a long name fits (the tag stays on the results and on the pages).
+- **A settings menu in the game itself.** In the desktop game, Esc (when there is nothing to cancel), Ctrl+O and the Options button open a menu drawn in the game's own clay and steel, with the same sections and rows as the browser's: Sound, Video, Controls, Game and the new Quick Chat. The original's options window is gone, and every setting it had is a row of the menu with the same name and numbers.
+- **Quick Chat.** The four texts that F9 to F12 say are edited in the menu's new Quick Chat tab (in the browser too, where a phone's own keyboard opens for them).
+- **Show FPS.** The frame rate and its graph in the corner are now a setting in Video, off by default (the version stays; `--show-fps on` for one run). With it off, the ping takes the frame rate's place beside the version.
+- A name that does not fit its score label is set smaller (14, then 12, then 10 pixels) before any of it is cut.
 
 **Fixes:**
 - A recording or a live match that you watch has no chat to write in any more (the input box is covered and the Send to buttons are gone; the players' lines stay readable): what a watcher typed showed in its own log under the name of the first player, and went nowhere else.

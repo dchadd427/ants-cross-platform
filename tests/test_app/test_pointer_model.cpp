@@ -369,7 +369,6 @@ void test_cursor_misc() {
         close();
         said("after the close the strip decides again", f.cursor_px(639, 240), CursorType::ScrollE);
     };
-    over_dialog("options", [&]() { f.hud.open_options(); }, [&]() { f.hud.close_options(); });
     over_dialog("quit dialog", [&]() { f.hud.open_quit_dialog(); }, [&]() { f.hud.close_quit_dialog(); });
     over_dialog("quick help", [&]() { f.hud.open_quick_help(); }, [&]() { f.hud.close_quick_help(); });
 }
@@ -1977,12 +1976,10 @@ void test_keyboard() {
         check(!zone(626, 462), "(626, 462) is on the resting picture only: captured and cancelled at once, nothing closes");
         check(!zone(528, 450) && !zone(529, 461) && !zone(627, 440), "(528, 450), (529, 461) and (627, 440) close nothing");
         key(SDLK_RETURN);
+        int menu_asked = 0;
+        f.hud.set_on_menu_request([&]() { ++menu_asked; });
         key('o', KMOD_CTRL);
-        check(f.hud.is_options_open(), "Ctrl+O opens the options");
-        key(SDLK_ESCAPE);
-        check(f.hud.is_options_open(), "Esc does not close the options");
-        key(SDLK_RETURN);
-        check(!f.hud.is_options_open(), "Enter does");
+        check(menu_asked == 1 && !f.hud.is_quick_help_open(), "Ctrl+O asks for the settings menu (the original's options window is gone)");
         bool quit = false;
         f.hud.set_on_quit([&]() { quit = true; });
         key('q', KMOD_CTRL);
@@ -2035,10 +2032,7 @@ void test_keyboard() {
         key(SDLK_RETURN);
         check(f.hud.get_chat_input().empty() && f.hud.get_chat_log().size() > base + 5, "Enter sends and clears");
         // with the chat option off the box is covered: nothing is typed, F9 - F12 are silent, Enter sends nothing
-        f.hud.open_options();
-        f.press(151, 289);                                        // the OFF toggle of the chat option (a switch acts at the release)
-        f.release(151, 289);
-        f.hud.close_options();
+        f.hud.set_option(OptionSetting::Chat, 0);
         const size_t now = f.hud.get_chat_log().size();
         check(!key('a') && f.hud.get_chat_input().empty(), "chat off: nothing is typed");
         key(SDLK_F10);
@@ -2061,20 +2055,21 @@ void test_buttons() {
     check(f.hud.is_quick_help_open() && !f.hud.is_input_captured(), "the release on the button opens the quick help");
     f.hud.close_quick_help();
     // leaving the button cancels the capture for good
+    int menu_asked = 0;
+    f.hud.set_on_menu_request([&]() { ++menu_asked; });
     f.press(540, 15);                                                  // Options (525, 7, 52, 23)
     f.hud.handle_mouse_motion(300, 300, f.sim, f.cam);
     check(!f.hud.is_input_captured(), "leaving the button cancels the capture");
     f.hud.handle_mouse_motion(540, 15, f.sim, f.cam);
     check(!f.hud.is_input_captured(), "coming back only hovers");
     f.release(540, 15);
-    check(!f.hud.is_options_open(), "and the release does nothing");
+    check(menu_asked == 0, "and the release does nothing");
     f.press(540, 15);
     f.release(300, 300);
-    check(!f.hud.is_options_open(), "released elsewhere: nothing");
+    check(menu_asked == 0, "released elsewhere: nothing");
     f.press(540, 15);
     f.release(541, 16);
-    check(f.hud.is_options_open(), "released on the button: the options open");
-    f.hud.close_options();
+    check(menu_asked == 1 && !f.hud.is_quick_help_open(), "released on the button: the settings menu is asked for (the original's options window is gone)");
     // Quit (579, 7, 46, 23)
     f.press(590, 15);
     f.release(590, 15);
@@ -2097,10 +2092,7 @@ void test_buttons() {
     check(f.hud.get_chat_log().size() == base, "nothing is sent at the press");
     f.release(545, 450);
     check(f.hud.get_chat_log().size() == base + 2 && f.hud.get_chat_input().empty(), "the release sends and clears");
-    f.hud.open_options();
-    f.press(151, 289);
-    f.release(151, 289);
-    f.hud.close_options();
+    f.hud.set_option(OptionSetting::Chat, 0);
     f.hud.set_chat_input("");
     f.sounds.clear();
     f.press(545, 450);

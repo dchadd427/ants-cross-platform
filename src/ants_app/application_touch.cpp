@@ -272,15 +272,13 @@ void Application::render_touch_feedback() {
     draw_touch_feedback(*renderer_, ring, pulse, touch_.slop());
 }
 
-// ---- A phone's keyboard for the match's chat box and the options window's four quick chat fields (docs/TOUCH.md "The chat box and the on-screen keyboard"). A phone has no keyboard that SDL hears, so
+// ---- A phone's keyboard for the match's chat box (docs/TOUCH.md "The chat box and the on-screen keyboard"). A phone has no keyboard that SDL hears, so
 // the page (web/shell.html, ANTS_CHAT) keeps a real text field that it focuses when a finger taps a box (the browser opens its keyboard only for a field that a tap focuses) and mirrors what is
 // typed into the game's own line through ants_chat_do. The game stays the authority: the chat line is the HUD's (printable ASCII, at most 100 characters, nothing while a dialog is open or the
-// option is off), a field of the options window is the window's (the same characters, the profile written as for typed keys), Enter is the key press of a keyboard's, and the simulation, the
+// option is off), Enter is the key press of a keyboard's, and the simulation, the
 // network and the hashes never see any of it. (The exports are in this file because the file that nothing else refers to is left out of the static library's link.)
 
 namespace {
-constexpr size_t kOptionFields = 4;                                          // F9 - F12
-
 // An Enter key press through SDL's queue, as a keyboard makes it (it is dealt with in the next frame)
 void push_return_key() {
     for (const Uint32 type : {static_cast<Uint32>(SDL_KEYDOWN), static_cast<Uint32>(SDL_KEYUP)}) {
@@ -298,11 +296,7 @@ void push_return_key() {
 
 bool Application::web_chat_available() const noexcept {
     if (state_ != AppState::Playing || scorecard_.is_open() || replay_mode_ || catch_up_screen_active()) return false;
-    return hud_.is_options_open() || hud_.chat_takes_text();                 // (the options window has the screen: its fields take text with chat on or off)
-}
-
-int Application::web_text_mode() const noexcept {
-    return hud_.is_options_open() ? 1 : 0;
+    return hud_.chat_takes_text();
 }
 
 LayoutRect Application::web_chat_box() const noexcept {
@@ -310,53 +304,12 @@ LayoutRect Application::web_chat_box() const noexcept {
     return box.moved(picture_.x, picture_.y);
 }
 
-LayoutRect Application::web_options_field(size_t index) const noexcept {
-    if (index >= kOptionFields) return LayoutRect{};
-    const LayoutPoint window = hud_.open_window_offset();                    // (the window has the original's own numbers, drawn moved by this offset)
-    return LayoutRect{OptionsScreen::EDIT_X[index], OptionsScreen::EDIT_Y[index], OptionsScreen::EDIT_W, OptionsScreen::EDIT_H}.moved(window.x + picture_.x, window.y + picture_.y);
-}
-
 std::string Application::web_text_line() const {
-    if (web_text_mode() != 1) return hud_.get_chat_input();
-    const std::optional<size_t> field = hud_.options_focused_edit();
-    return field ? hud_.options_screen().edit(*field).text() : std::string();
+    return hud_.get_chat_input();
 }
 
 bool Application::web_chat_do(int what, int value) {
     if (!web_chat_available()) return false;
-    if (web_text_mode() == 1) {                                              // the options window's field with the focus
-        if (what == 3) {                                                     // Enter: the window's own key (it closes the window), as a keyboard makes it
-            push_return_key();
-            return true;
-        }
-        if (what == 4) {
-            if (value < 0 || static_cast<size_t>(value) >= kOptionFields) return false;
-            hud_.options_focus_edit(static_cast<size_t>(value));
-            return true;
-        }
-        const std::optional<size_t> field = hud_.options_focused_edit();
-        if (!field) return false;
-        std::string line = hud_.options_screen().edit(*field).text();
-        switch (what) {
-            case 0:
-                line.clear();
-                break;
-            case 1:
-                if (value < 32 || value > 126) return false;                 // (the field takes printable ASCII only)
-                line.push_back(static_cast<char>(value));
-                break;
-            case 2:
-                if (!line.empty()) line.pop_back();
-                break;
-            case 5:
-                hud_.options_commit_edit(*field);
-                return true;
-            default:
-                return false;
-        }
-        hud_.options_set_edit(*field, line);                                 // (shown now; written by the commit, one write for one edit)
-        return true;
-    }
     switch (what) {
         case 0:
             hud_.set_chat_input(std::string());
@@ -385,9 +338,8 @@ bool Application::web_chat_do(int what, int value) {
 extern ants::app::Application* g_web_app;
 
 // For the page (web/shell.html, ANTS_CHAT): what the text boxes are now. 0: 1 while a box takes text (ants::app::Application::web_chat_available), else 0; 1 - 4: the chat box's x, y, width and
-// height in the canvas's pixels (where a tap opens the keyboard); 5: the length of the line that the keyboard edits (the game's chat line, or the text of the options field that has the focus);
-// 6: which boxes there are (Application::web_text_mode: 0 the chat box, 1 the four fields of the options window); 10 + 4 * k + j: the options field k's x (j 0), y, width and height (-1 while the
-// window is not open); 100 + i: the code of the line's character i (-1 past the end). Anything else, or no game: -1.
+// height in the canvas's pixels (where a tap opens the keyboard); 5: the length of the line that the keyboard edits (the game's chat line); 100 + i: the code of the line's character i (-1 past the
+// end). Anything else, or no game: -1.
 extern "C" EMSCRIPTEN_KEEPALIVE int ants_chat_probe(int what) {
     if (g_web_app == nullptr) return -1;
     if (what == 0) return g_web_app->web_chat_available() ? 1 : 0;
@@ -395,20 +347,13 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_chat_probe(int what) {
         const ants::app::LayoutRect box = g_web_app->web_chat_box();
         return what == 1 ? box.x : what == 2 ? box.y : what == 3 ? box.w : box.h;
     }
-    if (what == 6) return g_web_app->web_text_mode();
-    if (what >= 10 && what < 26) {
-        if (g_web_app->web_text_mode() != 1) return -1;
-        const ants::app::LayoutRect field = g_web_app->web_options_field(static_cast<size_t>((what - 10) / 4));
-        const int part = (what - 10) % 4;
-        return part == 0 ? field.x : part == 1 ? field.y : part == 2 ? field.w : field.h;
-    }
     const std::string line = g_web_app->web_text_line();
     if (what == 5) return static_cast<int>(line.size());
     if (what >= 100 && static_cast<size_t>(what - 100) < line.size()) return static_cast<unsigned char>(line[static_cast<size_t>(what - 100)]);
     return -1;
 }
 
-// ... and what the page types: Application::web_chat_do (0 clear, 1 add a character, 2 Backspace, 3 Enter, 4 focus an options field, 5 write its text). 1 when the game took it, 0 when it did not, -1 for no game.
+// ... and what the page types: Application::web_chat_do (0 clear, 1 add a character, 2 Backspace, 3 Enter). 1 when the game took it, 0 when it did not, -1 for no game.
 extern "C" EMSCRIPTEN_KEEPALIVE int ants_chat_do(int what, int value) {
     if (g_web_app == nullptr) return -1;
     return g_web_app->web_chat_do(what, value) ? 1 : 0;

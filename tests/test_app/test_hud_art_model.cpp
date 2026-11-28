@@ -190,8 +190,8 @@ void test_manifest() {
     assets::AssetArchive arc;
     if (arc.load_chd(std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd")) arc_ptr = &arc;
     check(arc_ptr != nullptr, "the original's archive is read");
-    // the set's own animations: the pieces of its windows that the original draws in another way (a switch held down, the window's fixed pieces, the countdown card's); every other is one of the original's
-    const std::set<std::string> own = {"op_conh", "op_coffh", "op_honh", "op_hoffh", "op_window", "qh_window", "cd_card", "cd_row"};
+    // the set's own animations: the pieces of its windows that the original draws in another way (the quick help's fixed pieces, the countdown card's); every other is one of the original's
+    const std::set<std::string> own = {"qh_window", "cd_card", "cd_row"};
     for (const hud_art::Animation& a : art.animations()) {
         check(own.count(a.name) != 0 || (arc_ptr != nullptr && arc.find_animation(a.name) != nullptr), "the art's animation " + a.name + " is one of the original's (a name that the game knows) or one of the windows' own");
         for (const hud_art::Frame& f : a.frames) {
@@ -665,7 +665,8 @@ void test_window_pieces(const assets::AssetArchive& arc, const Art& art) {
     group("windows", "which windows a set draws: every piece there and each at the original's place, else the window is the original's");
     const std::string text = shipped_manifest();
     const window_art::Pieces all = window_art::check(art, arc);
-    check(all.dialogs && all.options && all.quick_help && all.countdown && all.fullscreen, "the shipped art has every window");
+    check(all.dialogs && all.quick_help && all.countdown && all.fullscreen, "the shipped art has every window");
+    check(window_art::has_menu_panel(art), "the shipped art has every piece of the settings menu's drawn panel");
     // the countdown card's pieces that the game draws against: a row's well is placed from the top left of the row's ground (268 x 21) and holds it with a bezel round it, a color square is 11 x 11, the Fullscreen button
     // is a face of 94 x 22 and its cast shadow (3 across, 4 down), and the card's own pieces stand inside the card of 480 x 236
     const std::vector<Draw> row = hud_art::animation_draws_at(art, "cd_row", 0, 0, 0);
@@ -681,9 +682,6 @@ void test_window_pieces(const assets::AssetArchive& arc, const Art& art) {
     const struct { const char* what; std::string manifest; bool window_art::Pieces::*gone; } damaged[] = {
         {"the hover picture of Yes", without_anim(text, "yes2"), &window_art::Pieces::dialogs},
         {"the Accept button's pressed picture", without_anim(text, "dad_bacc3"), &window_art::Pieces::dialogs},
-        {"the held picture of a switch", without_anim(text, "op_conh"), &window_art::Pieces::options},
-        {"the options window's fixed pieces", without_anim(text, "op_window"), &window_art::Pieces::options},
-        {"the pressed picture of Return to Game (the options window's)", without_anim(text, "breturn3"), &window_art::Pieces::options},
         {"the quick help's pieces", without_anim(text, "qh_window"), &window_art::Pieces::quick_help},
         {"the quick help's Return button", without_anim(text, "qh_return2"), &window_art::Pieces::quick_help},
         {"the countdown card's pieces", without_anim(text, "cd_card"), &window_art::Pieces::countdown},
@@ -696,16 +694,21 @@ void test_window_pieces(const assets::AssetArchive& arc, const Art& art) {
         const window_art::Pieces p = pieces_of(d.manifest, arc);
         check(!(p.*d.gone), std::string("without ") + d.what + ": that window is the original's");
         int others = 0;
-        for (const bool b : {p.dialogs, p.options, p.quick_help, p.countdown, p.fullscreen}) others += b ? 1 : 0;
-        check(others == 4, std::string("without ") + d.what + ": the other four windows stay");
+        for (const bool b : {p.dialogs, p.quick_help, p.countdown, p.fullscreen}) others += b ? 1 : 0;
+        check(others == 3, std::string("without ") + d.what + ": the other three windows stay");
     }
-    check(!pieces_of(without_record(text, "sprite panel_c "), arc).dialogs && !pieces_of(without_record(text, "sprite panel_c "), arc).options, "without the panel no window has the new look");
+    check(!pieces_of(without_record(text, "sprite panel_c "), arc).dialogs && !pieces_of(without_record(text, "sprite panel_c "), arc).quick_help, "without the panel no window has the new look");
+    {   // the settings menu's panel needs the panel, the wells, the small steel buttons, the switches and the thumb: a set without one draws plain rectangles
+        for (const char* gone : {"sprite panel_c ", "sprite sc_well_tl ", "sprite sc_sm_m_hover ", "sprite op_on_chosen_hover ", "sprite op_off_down ", "sprite op_thumb_held "}) {
+            Art damaged_set;
+            check(damaged_set.parse(without_record(text, gone)) && !window_art::has_menu_panel(damaged_set), std::string("without ") + gone + ": the settings menu's panel is plain rectangles");
+        }
+    }
     // a piece moved: a pixel is within the original's place, more than that is not
     const std::string yes = "frame 1000 dlg_btn_yes_up 180 260";
     check(text.find(yes) != std::string::npos, "(the manifest places the Yes button at the original's place)");
     check(pieces_of(replaced(text, yes, "frame 1000 dlg_btn_yes_up 181 261"), arc).dialogs, "a dialog button one pixel off the original's place still fits");
     check(!pieces_of(replaced(text, yes, "frame 1000 dlg_btn_yes_up 183 260"), arc).dialogs, "...three pixels right of it does not: the window is the original's");
-    check(!pieces_of(replaced(text, "frame 1000 dlg_btn_return_up 351 425", "frame 1000 dlg_btn_return_up 351 421"), arc).options, "the options window's Return button four pixels up does not fit");
     // the rule itself
     const LayoutRect orig{10, 20, 46, 20};
     check(window_art::fits(LayoutRect{10, 20, 49, 24}, orig) && window_art::fits(LayoutRect{9, 19, 47, 21}, orig) && window_art::fits(LayoutRect{10, 20, 46, 20}, orig), "fits: the same place, with the cast shadow, or a pixel wider each way");
@@ -713,27 +716,7 @@ void test_window_pieces(const assets::AssetArchive& arc, const Art& art) {
 }
 
 void test_window_model(const assets::AssetArchive& arc) {
-    group("window-model", "the veil covers the picture but the card, the pictures cut from the original's quick help, the Classic corner");
-    // the veil and the card cover the picture once
-    const LayoutRect pictures[] = {{0, 0, 640, 480}, {0, 0, 960, 540}, {0, 0, 1200, 540}};
-    for (const LayoutRect& pic : pictures) {
-        const LayoutRect card = window_art::kOptionsRect.moved(pic.w == 640 ? 0 : 160, pic.w == 640 ? 0 : 30);
-        std::vector<int> grid(static_cast<size_t>(pic.w) * static_cast<size_t>(pic.h), 0);
-        for (const LayoutRect& b : window_art::veil_bands(pic, card)) {
-            check(b.w >= 0 && b.h >= 0, "a band has no negative size");
-            for (int32_t y = b.y; y < b.bottom(); ++y) for (int32_t x = b.x; x < b.right(); ++x) ++grid[static_cast<size_t>(y) * static_cast<size_t>(pic.w) + static_cast<size_t>(x)];
-        }
-        bool once = true, card_clear = true;
-        for (int32_t y = 0; y < pic.h; ++y) {
-            for (int32_t x = 0; x < pic.w; ++x) {
-                const int n = grid[static_cast<size_t>(y) * static_cast<size_t>(pic.w) + static_cast<size_t>(x)];
-                if (card.contains(x, y)) card_clear = card_clear && n == 0; else once = once && n == 1;
-            }
-        }
-        check(once && card_clear, std::to_string(pic.w) + " x " + std::to_string(pic.h) + ": the veil covers every pixel outside the card once and none inside it");
-    }
-    check(window_art::kVeil.r == 0 && window_art::kVeil.g == 0 && window_art::kVeil.b == 0 && window_art::kVeil.a > 100 && window_art::kVeil.a < 160, "the veil is an even dark: black at about a half");
-
+    group("window-model", "the pictures cut from the original's quick help, the Classic corner");
     // the pictures of the quick help
     window_art::KeptPictures kept;
     check(kept.build(arc) && kept.ready(), "the original's two bitmaps give the quick help's pictures");

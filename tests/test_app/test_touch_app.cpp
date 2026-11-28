@@ -35,7 +35,6 @@
 #include "ants_app/hud.hpp"
 #include "ants_app/map_select.hpp"
 #include "ants_app/minimap_tables.hpp"
-#include "ants_app/options_screen.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_app/touch_control.hpp"
 #include "ants_app/touch_feedback.hpp"
@@ -1232,7 +1231,6 @@ void test_gates() {
         std::function<void()> close;
     };
     const std::vector<Case> cases = {
-        {"the options window", [&] { app.hud().open_options(); }, [&] { app.hud().handle_key_down(SDLK_RETURN, app.sim(), app.renderer().camera()); }},
         {"the quick help", [&] { app.hud().open_quick_help(); }, [&] { app.hud().close_quick_help(); }},
         {"the quit dialog", [&] { app.hud().open_quit_dialog(); }, [&] { app.hud().close_quit_dialog(); }},
         {"the get ready dialog", [&] { app.hud().start_match_modal(); }, [&] { app.hud().dismiss_match_start_modal(); }},
@@ -1563,7 +1561,7 @@ void test_gates() {
         app.set_zoom(1.0f, 100, 100);
     }
 
-    // taps are still clicks where two fingers do nothing: the quit dialog's No, the options window's Return
+    // taps are still clicks where two fingers do nothing: the quit dialog's No
     {
         app.hud().open_quit_dialog();
         const UIButton no = app.hud().quit_no_button();
@@ -1590,10 +1588,6 @@ void test_gates() {
         hand.up(1, Pt{modal.x + no.x + no.w / 2, modal.y + no.y + no.h / 2});
         hand.frame();
         check(!app.hud().is_quit_dialog_open(), "the first finger's lift on No still closes the dialog: its press was not taken away");
-        app.hud().open_options();
-        const LayoutPoint page = app.layout().options_offset();
-        hand.tap(Pt{page.x + OptionsScreen::RETURN_X + OptionsScreen::RETURN_W / 2, page.y + OptionsScreen::RETURN_Y + OptionsScreen::RETURN_H / 2});
-        check(!app.hud().is_modal_open(), "a tap on the options window's Return closes it");
     }
     (void)s;
 }
@@ -1883,87 +1877,6 @@ void test_cancel() {
             hand.frame();
             check(!app.hud().is_quick_help_open(), "(and the lift that follows opens nothing)");
         }
-        // the options window's Return, and a hold whose dialog opened under it: a held right press ends with no act (no order, nothing held)
-        app.hud().open_options();
-        const LayoutPoint page = app.layout().options_offset();
-        const Pt on_return{page.x + OptionsScreen::RETURN_X + OptionsScreen::RETURN_W / 2, page.y + OptionsScreen::RETURN_Y + OptionsScreen::RETURN_H / 2};
-        hand.down(1, on_return);
-        hand.frame();
-        app.cancel_touch();
-        hand.frame();
-        hand.up(1, on_return);
-        hand.frame();
-        check(app.hud().is_modal_open() && app.touch().fingers() == 0, "Return of the options window under a finger that is cancelled does not close it");
-        hand.tap(on_return);
-        check(!app.hud().is_modal_open(), "(a tap on it does)");
-        // THE OPTIONS WINDOW'S SLIDERS (second review, NEW-2): a cancel during a drag ends it with no act. The release at the corner used to drag the thumb to the left end (a slider follows the
-        // pointer's x, whatever its y) and WRITE and apply 0: a volume or the scroll speed was lost and saved. What is saved is looked at in a store of the test's own.
-        {
-            ConfigStore saved;
-            app.hud().set_config_store(&saved);
-            struct Slider {
-                const char* name;
-                OptionSetting setting;
-                int32_t OptionsState::*field;
-                int32_t start;
-            };
-            const std::vector<Slider> sliders = {{"Sound Volume", OptionSetting::SoundVolume, &OptionsState::sound_volume, 52},
-                                                 {"Music Volume", OptionSetting::MusicVolume, &OptionsState::music_volume, 40},
-                                                 {"Scroll Speed", OptionSetting::ScrollSpeed, &OptionsState::scroll_speed, 30}};
-            const std::vector<Cause> slider_causes = {
-                {"the page's touchcancel", [&] { app.cancel_touch(); }},
-                {"a lost focus", [&] { app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_FOCUS_LOST; return we; }()); }},
-                {"a size change", [&] { app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_SIZE_CHANGED; return we; }()); }},
-            };
-            for (size_t i = 0; i < sliders.size(); ++i) {
-                const Slider& which = sliders[i];
-                for (const Cause& cause : slider_causes) {
-                    if (i > 0 && cause.name[4] != 'p') continue;                  // (the other two sliders: the page's touchcancel only)
-                    app.hud().options().*(which.field) = which.start;
-                    app.hud().open_options();
-                    const LayoutPoint where = app.layout().options_offset();
-                    const ScreenSlider& slider = app.hud().options_screen().slider(i);
-                    const int32_t home = slider.position();
-                    const Pt thumb{where.x + home, where.y + OptionsScreen::SLIDER_Y[i] + 8};
-                    const Pt dragged{thumb.x + 45, thumb.y};
-                    hand.down(1, thumb);
-                    hand.frame();
-                    hand.wait(30);
-                    hand.move(1, dragged);
-                    hand.frame();
-                    check(slider.dragging() && slider.position() == home + 45, std::string("(the finger drags the ") + which.name + " thumb: it follows)");
-                    cause.act();
-                    hand.frame();
-                    check(!slider.dragging() && slider.position() == home && app.hud().options().*(which.field) == which.start && !saved.has(OptionsState::key(which.setting)),
-                          std::string("a cancel (") + cause.name + ") during a drag of " + which.name + ": no drag, the thumb is home, the value in effect is " + std::to_string(which.start) + " and nothing is saved");
-                    hand.up(1, dragged);                                           // (SDL's own lift for the touchcancel: unknown by now)
-                    hand.frame();
-                    check(app.hud().options().*(which.field) == which.start && !saved.has(OptionsState::key(which.setting)) && app.hud().is_options_open(),
-                          "and the lift that follows changes nothing, and the window is still open");
-                    app.hud().close_options();
-                }
-            }
-            // the drag has teeth: the same drag with a plain lift writes the value under the finger
-            app.hud().options().sound_volume = 52;
-            app.hud().open_options();
-            {
-                const LayoutPoint where = app.layout().options_offset();
-                const Pt thumb{where.x + app.hud().options_screen().slider(0).position(), where.y + OptionsScreen::SLIDER_Y[0] + 8};
-                const Pt dragged{thumb.x + 45, thumb.y};
-                hand.down(1, thumb);
-                hand.frame();
-                hand.wait(30);
-                hand.move(1, dragged);
-                hand.frame();
-                hand.wait(30);
-                hand.up(1, dragged);
-                hand.frame();
-                check(app.hud().options().sound_volume > 52 && saved.has(OptionsState::key(OptionSetting::SoundVolume)) &&
-                          saved.get_int(OptionsState::key(OptionSetting::SoundVolume), -1, 0, 100) == app.hud().options().sound_volume,
-                      "(a plain lift writes the value under the finger: " + std::to_string(app.hud().options().sound_volume) + ")");
-            }
-            app.hud().close_options();
-        }
         s.clear();
         s.select({s.worker});
         hand.down(1, g);
@@ -2000,29 +1913,30 @@ void test_late_press() {
     Application& app = m.app();
     Hand hand(app);
     const LayoutRect view = app.layout().view();
-    // a finger goes down on the map; the options window opens (a message, a key); the finger lifts as a tap over the window's Return button: that tap began on the map and must not press Return
-    const LayoutPoint page = app.layout().options_offset();
-    const Pt on_return{page.x + OptionsScreen::RETURN_X + OptionsScreen::RETURN_W / 2, page.y + OptionsScreen::RETURN_Y + OptionsScreen::RETURN_H / 2};
-    check(view.contains(on_return.x, on_return.y), "(the options window's Return lies over the map view)");
-    hand.down(1, on_return);
+    // a finger goes down on the map; the quit dialog opens (a message, a key); the finger lifts as a tap over the dialog's No button: that tap began on the map and must not press No
+    const UIButton no = app.hud().quit_no_button();
+    const LayoutPoint modal = app.layout().modal_offset();
+    const Pt on_no{modal.x + no.x + no.w / 2, modal.y + no.y + no.h / 2};
+    check(view.contains(on_no.x, on_no.y), "(the quit dialog's No lies over the map view)");
+    hand.down(1, on_no);
     hand.frame();
-    app.hud().open_options();
+    app.hud().open_quit_dialog();
     hand.wait(80);
-    hand.up(1, on_return);
+    hand.up(1, on_no);
     hand.frame();
-    check(app.hud().is_modal_open(), "the tap that began on the map did not press the options window's Return");
+    check(app.hud().is_quit_dialog_open(), "the tap that began on the map did not press the dialog's No");
     check(app.touch().fingers() == 0, "and the finger is gone");
-    // the same finger placed after the window opened is a press at once and closes it
-    hand.tap(on_return);
-    check(!app.hud().is_modal_open(), "a tap that begins over the open window presses Return");
+    // the same finger placed after the dialog opened is a press at once and closes it
+    hand.tap(on_no);
+    check(!app.hud().is_quit_dialog_open(), "a tap that begins over the open dialog presses No");
     // a hold whose time came after a dialog opened: nothing is pressed
-    hand.down(1, on_return);
+    hand.down(1, on_no);
     hand.frame();
     app.hud().open_quit_dialog();
     hand.wait(touch::kHoldMs + 20);
     hand.frame();
     check(!app.hud().is_input_captured() && app.touch().fingers() == 0, "a hold that comes due under a dialog is dropped with its finger");
-    hand.up(1, on_return);
+    hand.up(1, on_no);
     hand.frame();
     app.hud().close_quit_dialog();
 }

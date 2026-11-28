@@ -201,21 +201,6 @@ void hud_wide_scenarios(const assets::AssetArchive& arc) {
     }
     {
         auto s = make(0);
-        s->hud.open_options();
-        s->shoot("hud.wide.options.open");
-        auto t = make(0);
-        t->hud.options().sound_volume = 30;
-        t->hud.options().music_volume = 80;
-        t->hud.options().scroll_speed = 99;
-        t->hud.options().chat = false;
-        t->hud.options().quick_chat[0] = "Hello!";
-        t->hud.open_options();
-        t->shoot("hud.wide.options.changed");
-        t->move(375 + 160, 435 + 30);
-        t->shoot("hud.wide.options.hover_return");
-    }
-    {
-        auto s = make(0);
         s->hud.open_quick_help();
         s->shoot("hud.wide.quickhelp.open");
         s->move(540 + 160, 445 + 30);
@@ -479,7 +464,6 @@ void cursor_wide_scenarios() {
         {"enemy_inspected", false, [](HUD& h, PointerScene& p, ViewportCamera&) { h.select_ant(p.foe); }},
         {"hill_own", false, [](HUD& h, PointerScene&, ViewportCamera&) { h.select_base(0); }},
         {"fog_own_worker", true, [](HUD& h, PointerScene& p, ViewportCamera&) { h.select_ant(p.worker); }},
-        {"options_open", false, [](HUD& h, PointerScene&, ViewportCamera&) { h.open_options(); }},
         {"quit_open", false, [](HUD& h, PointerScene&, ViewportCamera&) { h.open_quit_dialog(); }},
         {"band_dragging", false,
          [](HUD& h, PointerScene& p, ViewportCamera& cam) {
@@ -539,7 +523,6 @@ void click_wide_scenarios() {
         {"own_worker.right_button", [](HUD& h, PointerScene& p) { h.select_ant(p.worker); }, SDL_BUTTON_RIGHT, "c"},
         {"dialog.quit", [](HUD& h, PointerScene&) { h.open_quit_dialog(); }, SDL_BUTTON_LEFT, "qx"},
         {"dialog.quickhelp", [](HUD& h, PointerScene&) { h.open_quick_help(); }, SDL_BUTTON_LEFT, "x"},
-        {"dialog.options", [](HUD& h, PointerScene&) { h.open_options(); }, SDL_BUTTON_LEFT, "ox"},
         {"dialog.start_modal", [](HUD& h, PointerScene&) { h.start_match_modal(); }, SDL_BUTTON_LEFT, ""},
     };
     for (const State& s : states) {
@@ -681,11 +664,10 @@ const std::vector<MaskRect> kWMaskQuit = {{265, 237, 529, 401}};
 /// three px.wide.app.setup.* fingerprints that show it (refreshed, hover_start, cursor) were regenerated when the preview changed from minimap color blocks to that render (before_refresh has none)
 const std::vector<MaskRect> kWMaskSetup = {{35, 370, 287, 392}, {35, 438, 401, 460}, {34, 505, 402, 529}, {733, 93, 857, 115}, {733, 143, 857, 165}, {733, 193, 857, 215}, {733, 243, 857, 265}, {349, 359, 657, 381}};
 
-/// The options screen's edit fields and the results rows are text too: the whole page's text boxes are not known one by one, so the pages that carry TrueType text are masked as a
-/// whole where it appears (the results' rows, the options' four quick-chat fields)
+/// The results rows are text too: the whole page's text boxes are not known one by one, so the pages that carry TrueType text are masked as a
+/// whole where it appears (the results' rows)
 const std::vector<MaskRect> kWMaskResults = {{95, 262, 930, 290}, {95, 350, 930, 378}, {95, 400, 930, 428}};      // the three rows' text of the wide results page: the names (x 100) and the numbers (x 805 ...)
 
-const std::vector<MaskRect> kWMaskOptions = {{250, 398, 396, 418}, {250, 430, 396, 450}, {460, 398, 606, 418}, {460, 430, 606, 450}};
 
 std::vector<MaskRect> wide_masks(std::initializer_list<const std::vector<MaskRect>*> lists) {
     std::vector<MaskRect> all{kWMaskPlate};
@@ -900,9 +882,6 @@ void app_pixel_wide_scenarios() {
             rig.app.hud().open_quit_dialog();
             rig.shot("px.wide.app.match.quit_dialog", wide_masks({&kWMaskMatch, &kWMaskQuit}));
             rig.app.hud().close_quit_dialog();
-            rig.app.hud().open_options();
-            rig.shot("px.wide.app.match.options_page", wide_masks({&kWMaskMatch, &kWMaskOptions}));
-            rig.app.hud().close_options();
             rig.app.hud().open_quick_help();
             rig.shot("px.wide.app.match.quickhelp_page", wide_masks({&kWMaskMatch}));
             rig.app.hud().close_quick_help();

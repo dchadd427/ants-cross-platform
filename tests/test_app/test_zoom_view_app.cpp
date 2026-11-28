@@ -185,16 +185,16 @@ void test_app_wheel() {
             check(app.zoom() == in1, pic + "... and zoom after it");
             notch(app, -1);
         }
-        // not while a dialog or a page is open: quit, options, quick help, "get ready", an alliance question
+        // not while a dialog or a page is open: quit, quick help, "get ready", an alliance question
         {
             app.note_pointer(px, py);
             app.hud().open_quit_dialog();
             notch(app, +1);
             check(app.zoom() == 1.0f, pic + "no zoom with the quit dialog open");
             app.hud().close_quit_dialog();
-            app.hud().open_options();
+            app.hud().open_quick_help();
             notch(app, +1);
-            check(app.zoom() == 1.0f, pic + "no zoom with the options window open");
+            check(app.zoom() == 1.0f, pic + "no zoom with the quick help open");
             app.hud().handle_key_down(SDLK_RETURN, app.sim(), app.renderer().camera());     // Enter closes it
             app.hud().open_quick_help();
             notch(app, +1);
@@ -287,9 +287,9 @@ void test_app_middle_button() {
         check(app.zoom() == 2.0f, pic + "... nor during a rubber band");
         app.handle_mouse_button(button_event(SDL_BUTTON_LEFT, SDL_MOUSEBUTTONUP, px, py));
         // with a dialog open
-        app.hud().open_options();
+        app.hud().open_quick_help();
         app.handle_mouse_button(button_event(SDL_BUTTON_MIDDLE, SDL_MOUSEBUTTONDOWN, px, py));
-        check(app.zoom() == 2.0f, pic + "... nor with the options window open");
+        check(app.zoom() == 2.0f, pic + "... nor with the quick help open");
         app.hud().handle_key_down(SDLK_RETURN, app.sim(), app.renderer().camera());
         // the middle button never reaches the HUD: a middle release does not end a minimap drag (it used to clear every pressed state)
         app.handle_mouse_button(button_event(SDL_BUTTON_LEFT, SDL_MOUSEBUTTONDOWN, mini.x + 20, mini.y + 20));

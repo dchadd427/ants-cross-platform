@@ -132,6 +132,7 @@ size_t Renderer::font_index(FontSize size) noexcept {
         case FontSize::Px35: return 5;
         case FontSize::Px96: return 6;
         case FontSize::Px27: return 7;
+        case FontSize::Px10: return 8;
     }
     return 0;
 }

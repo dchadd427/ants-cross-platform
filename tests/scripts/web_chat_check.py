@@ -12,7 +12,7 @@ the zoom, whether a dialog is open). It checks:
   * what is typed (text inserted as a keyboard does, single key presses, Backspace) is the game's own chat line, once (a key press is not typed a second time by the game's own key handler),
     and no key of it is a command: the view, the zoom and the dialogs are as they were;
   * Enter sends the line (the game's line is emptied by the game's own Enter, the field is emptied and the keyboard closes); Esc closes without sending; a tap on the map closes it; a dialog
-    that opens (the Options window) closes it and the dialog gets the keys;
+    that opens (the quick help) closes it and the dialog gets the keys;
   * the desktop is as it was: a mouse click on the chat box focuses nothing, a keyboard types into the game's line as always.
 What headless Chrome cannot show, and a real phone must: that the operating system's keyboard really comes up for this focus on iOS Safari (a focus made inside a touchend) and on Android
 Chrome, what the keyboard covers (the chat box is at the bottom of the picture and a phone's keyboard may hide it), the keyboard's own suggestions and composition, Safari's zoom rule
@@ -177,10 +177,10 @@ def run_profile(name, profile, tab, game, check, args):
     # ---- a dialog closes it
     game.tap(x, y)
     touch.wait_for(lambda: game.active() == "chat-keys", 3.0)
-    ox, oy = game.at(g, *touch.OPTIONS_BUTTON)
+    ox, oy = game.at(g, *touch.HELP_BUTTON)
     tab.ev("document.getElementById('chat-keys').blur(); 1")
     game.tap(ox, oy)
-    check(bool(touch.wait_for(lambda: game.probe(5) == 1, 3.0)), "%s: the Options button opens its window" % name)
+    check(bool(touch.wait_for(lambda: game.probe(5) == 1, 3.0)), "%s: the Help button opens the quick help" % name)
     check(game.chat(0) == 0, "%s: with a dialog open the chat box takes no text" % name)
     game.tap(x, y)
     time.sleep(0.4)

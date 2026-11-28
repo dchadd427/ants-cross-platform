@@ -373,7 +373,7 @@ std::string manifest_text() {
 }  // namespace
 
 void test_windows(const assets::AssetArchive& arc, const Art& art) {
-    group("windows-draw", "the Fullscreen button in both looks; the quit and alliance questions, Get ready, the options window and its veil, the quick help and the countdown card in the new look, and each as the original's without it");
+    group("windows-draw", "the Fullscreen button in both looks; the quit and alliance questions, Get ready, the quick help and the countdown card in the new look, and each as the original's without it");
 
     // ---- the Fullscreen button right of Quit
     for (const Shape& shape : kShapes) {
@@ -412,9 +412,9 @@ void test_windows(const assets::AssetArchive& arc, const Art& art) {
             rig.hud.handle_mouse_up(fb.x + 5, fb.y + 5, SDL_BUTTON_RIGHT, rig.sim, rig.cam);
             check(calls == 1, at + "new art: the right button does not act on it");
             check(rig.hud.fullscreen_button_active(), at + "new art: the button is active over the match");
-            rig.hud.open_options();
+            rig.hud.open_quick_help();
             rig.hud.handle_mouse_down(fb.x + 5, fb.y + 5, SDL_BUTTON_LEFT, rig.sim, rig.cam);
-            check(!rig.hud.fullscreen_button().is_pressed && !rig.hud.fullscreen_button_active(), at + "new art: with the options window open the button takes no press and is not active");
+            check(!rig.hud.fullscreen_button().is_pressed && !rig.hud.fullscreen_button_active(), at + "new art: with the quick help open the button takes no press and is not active");
         }
         {   // the Classic look
             HudRig rig(arc, layout);
@@ -512,91 +512,8 @@ void test_windows(const assets::AssetArchive& arc, const Art& art) {
 }
 
 void test_windows_more(const assets::AssetArchive& arc, const Art& art) {
-    group("windows-more", "the options window and its veil, the quick help, the countdown card and the windows' face with the real renderer");
+    group("windows-more", "the quick help, the countdown card and the windows' face with the real renderer");
     const ScreenLayout wide = ScreenLayout::with_size(960, 540);
-    const ScreenLayout classic = ScreenLayout::classic();
-    const auto veil_fills = [](const ArtSpy& spy) {
-        std::vector<LayoutRect> out;
-        for (const ArtSpy::Ev& e : spy.of(ArtSpy::Kind::Fill)) {
-            if (e.color.a == window_art::kVeil.a && e.color.r == 0 && e.color.g == 0 && e.color.b == 0) out.push_back(LayoutRect{e.x, e.y, e.w, e.h});
-        }
-        return out;
-    };
-    const auto named = [](const ArtSpy& spy, const std::string& prefix) {
-        size_t n = 0;
-        for (const ArtSpy::Ev& e : spy.of(ArtSpy::Kind::Named)) n += e.name.compare(0, prefix.size(), prefix) == 0 ? 1u : 0u;
-        return n;
-    };
-
-    // ---- the options window
-    for (const ScreenLayout& layout : {wide, classic}) {
-        const std::string at = std::string(layout.is_classic() ? "4:3" : "16:9") + ": ";
-        HudRig rig(arc, layout);
-        rig.hud.set_art(&art);
-        rig.hud.open_options();
-        const LayoutPoint o = layout.options_offset();
-        const ArtSpy spy = render_once(rig, arc);
-        check(panel_copies(spy, art) > 0 && copies_with_prefix(spy, art, "op_part_") >= 1, at + "options: the new panel and the window's fixed pieces");
-        bool each_once = true;
-        for (const hud_art::Sprite& s : art.sprites()) {
-            if (s.name.compare(0, 8, "op_part_") == 0) each_once = each_once && copies_of(spy, art, s.name) == 1;
-        }
-        check(each_once, at + "options: every fixed piece once");
-        check(copies_of(spy, art, "op_thumb_up") == 3, at + "options: three sliders, three thumbs");
-        check(once_at(spy, art, "dlg_btn_return_up", 351, 425), at + "options: Return to Game at the original's place");
-        check(copies_of(spy, art, "op_on_chosen") == 2 && copies_of(spy, art, "op_off_up") == 2, at + "options: Chat and Quick Help are On: the On switches are chosen, the Off switches up");
-        bool at_places = true;
-        for (const ArtSpy::Copy& c : spy.of_sprite(art, "op_on_chosen")) at_places = at_places && c.y == 290 && (c.x == 103 || c.x == 356);
-        for (const ArtSpy::Copy& c : spy.of_sprite(art, "op_off_up")) at_places = at_places && c.y == 290 && (c.x == 151 || c.x == 404);
-        check(at_places, at + "options: the switches stand where the original's did");
-        // the veil
-        const std::vector<LayoutRect> bands = veil_fills(spy);
-        const LayoutRect card = window_art::kOptionsRect.moved(o.x, o.y);
-        const LayoutRect pic{0, 0, layout.width, layout.height};
-        std::vector<int> grid(static_cast<size_t>(pic.w) * static_cast<size_t>(pic.h), 0);
-        for (const LayoutRect& b : bands) {
-            for (int32_t y = b.y; y < b.bottom(); ++y) for (int32_t x = b.x; x < b.right(); ++x) ++grid[static_cast<size_t>(y) * static_cast<size_t>(pic.w) + static_cast<size_t>(x)];
-        }
-        bool once = true, clear = true;
-        for (int32_t y = 0; y < pic.h; ++y) {
-            for (int32_t x = 0; x < pic.w; ++x) {
-                const int n = grid[static_cast<size_t>(y) * static_cast<size_t>(pic.w) + static_cast<size_t>(x)];
-                if (card.contains(x, y)) clear = clear && n == 0; else once = once && n == 1;
-            }
-        }
-        check(bands.size() == 4 && once && clear, at + "options: the veil is drawn over every pixel of the picture but the card, once, in any shape");
-        check(named(spy, "dith") == 0 && spy.count(ArtSpy::Kind::Sprite) < 30, at + "options: the original's checker and its pieces are not drawn");
-        // the states of the switches and the thumb
-        rig.hud.handle_mouse_motion(o.x + 175, o.y + 300, rig.sim, rig.cam);                  // over Chat Off (up)
-        check(copies_of(render_once(rig, arc), art, "op_off_hover") == 1, at + "options: the pointer on a switch that is not chosen: its hover picture");
-        rig.hud.handle_mouse_down(o.x + 175, o.y + 300, SDL_BUTTON_LEFT, rig.sim, rig.cam);
-        check(copies_of(render_once(rig, arc), art, "op_off_down") == 1, at + "options: held and not yet chosen: pressed in, plain");
-        rig.hud.handle_mouse_up(o.x + 175, o.y + 300, SDL_BUTTON_LEFT, rig.sim, rig.cam);
-        check(!rig.hud.options().chat && copies_of(render_once(rig, arc), art, "op_off_chosen") == 1 && copies_of(render_once(rig, arc), art, "op_on_up") == 1, at + "options: released: Off is chosen, On is up again");
-        rig.hud.update(rig.world(), 0);                                                       // (the pointer is polled every 50 ms: it is still on the chosen switch)
-        check(copies_of(render_once(rig, arc), art, "op_off_chosen_hover") == 1, at + "options: the pointer on the chosen switch: its hover picture");
-        rig.hud.handle_mouse_motion(o.x + 100, o.y + 100, rig.sim, rig.cam);
-        check(copies_of(render_once(rig, arc), art, "op_off_chosen") == 1, at + "options: the pointer away: the chosen switch");
-        const ScreenSlider& s0 = rig.hud.options_screen().slider(0);
-        rig.hud.handle_mouse_motion(s0.thumb_left() + o.x + 5, s0.thumb_top() + o.y + 5, rig.sim, rig.cam);
-        rig.hud.update(rig.world(), 0);
-        check(copies_of(render_once(rig, arc), art, "op_thumb_hover") == 1, at + "options: the pointer on a slider's thumb: its hover picture");
-        rig.hud.handle_mouse_down(s0.thumb_left() + o.x + 5, s0.thumb_top() + o.y + 5, SDL_BUTTON_LEFT, rig.sim, rig.cam);
-        check(copies_of(render_once(rig, arc), art, "op_thumb_held") == 1, at + "options: dragged: the held thumb");
-        rig.hud.handle_mouse_up(s0.thumb_left() + o.x + 5, s0.thumb_top() + o.y + 5, SDL_BUTTON_LEFT, rig.sim, rig.cam);
-        // the window is modal, veil or not: a press under the veil is the window's, and nothing under it takes it
-        HudRig modal(arc, layout);
-        modal.hud.set_art(&art);
-        modal.hud.open_options();
-        const bool took = modal.hud.handle_mouse_down(modal.hud.help_button().x + 5, 12, SDL_BUTTON_LEFT, modal.sim, modal.cam);
-        check(took && !modal.hud.help_button().is_pressed && modal.hud.options_screen().is_open(), at + "options: a press on Help under the veil is taken by the window, and Help does not act");
-        check(modal.hud.handle_mouse_down(layout.view().x + 5, layout.view().y + 5, SDL_BUTTON_LEFT, modal.sim, modal.cam) && !modal.hud.is_input_captured(), at + "options: a press on the map under the veil captures nothing");
-        // the original's art keeps its checker and draws no veil
-        HudRig plain(arc, layout);
-        plain.hud.open_options();
-        const ArtSpy original = render_once(plain, arc);
-        check(veil_fills(original).empty() && (layout.is_classic() || named(original, "dith200.bmp") > 0), at + "options without the art: no veil, the original's checker round the card");
-    }
 
     // ---- the quick help
     {

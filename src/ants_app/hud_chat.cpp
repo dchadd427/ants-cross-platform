@@ -118,7 +118,7 @@ void HUD::add_news_flash(uint32_t elapsed_ms, const std::string& text) {
 }
 
 void HUD::receive_chat_message(uint8_t sender, const std::string& name, const std::string& text, bool to_team, const sim::WorldState& world) {
-    if (!options_.state().chat) return;                                       // the receive handler drops it (0x102411a)
+    if (!options_.chat) return;                                       // the receive handler drops it (0x102411a)
     if (to_team && sender != local_player_id_) {
         const bool sender_ally_is_me = sender < world.player_alliances.size() && world.player_alliances[sender] == local_player_id_;
         if (!sender_ally_is_me) return;                               // team text: only the sender and the players whose ally the sender is

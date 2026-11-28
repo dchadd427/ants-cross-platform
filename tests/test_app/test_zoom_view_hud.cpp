@@ -480,8 +480,8 @@ void test_hud_gating(const assets::AssetArchive& arc) {
     check(rig.hud.view_zoom_allowed(), "a HUD with nothing open allows the zoom");
     {
         HudRig r(arc, true);
-        r.hud.open_options();
-        check(!r.hud.view_zoom_allowed(), "not while the options window is open");
+        r.hud.open_quick_help();
+        check(!r.hud.view_zoom_allowed(), "not while the quick help is open");
     }
     {
         HudRig r(arc, true);

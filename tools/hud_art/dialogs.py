@@ -3,7 +3,7 @@ cursors.py does (README.md, "The windows").
 
   the panel          panel_c (the clay, one repeat) and eight pieces of frame on a transparent ground (panel_tl .. panel_br): the game tiles the clay over the whole panel, then lays the frame on it
   the buttons        dlg_btn_<yes|no|accept|decline|withdraw|return>_<up|hover|down>, dlg_btn_fullscreen_<up|down>
-  the options window op_on_* and op_off_* (the switches), op_thumb_* (the slider's thumb), op_part_NN (the fixed layer, cut into pieces)
+  the settings menu  op_on_* and op_off_* (the switches), op_thumb_* (the slider's thumb); they have no animation: the game lays the menu out itself
   the quick help     qh_part_NN (the fixed layer), qh_pedestal_move and qh_pedestal_special (small copies of the HUD's pedestals)
   the countdown card cd_title, cd_count_well, cd_row_well, cd_dot_0 .. cd_dot_3 (the Fullscreen button is dlg_btn_fullscreen_<up|down>)
   the results screen sc_* (results_art.py): its lettering, the nine-slice well of its rows and the Leave Game button; they have no animation: the game lays the screen out itself
@@ -25,19 +25,15 @@ PEDESTALS = (('qh_pedestal_move', 'pedestal_move_up', (217, 201)), ('qh_pedestal
 PEDESTAL_SIZE = (41, 56)
 QH_CURSORS = (('cursor_curfd01', (226, 344)), ('cursor_c_normal', (244, 236)), ('cursor_c_normal', (501, 439)))     # the HUD's own cursor sprites that the quick help shows
 DIALOG_CORNER = (100, 100)           # the dialogs' own numbers start here in the original's 640 x 480 picture
-DIALOG_PLACE = {'yes': (180, 260), 'no': (292, 260), 'accept': (152, 260), 'decline': (284, 260), 'withdraw': (220, 260), 'return': (351, 425)}
+DIALOG_PLACE = {'yes': (180, 260), 'no': (292, 260), 'accept': (152, 260), 'decline': (284, 260), 'withdraw': (220, 260), 'return': (529, 437)}
+RETURN_DRAWN_AT = (351, 425)         # the Return button is drawn as if it stood here (where the original's options window had it): its pixels depend on the place, so the place stays what it was
 BUTTON_ANIMS = (        # the original's button animations: (button, (names of the up, hover and down pictures), place)
     ('yes', ('yes1', 'yes2', 'yes3'), (180, 260)), ('yes', ('dyn_byes1', 'dyn_byes2', 'dyn_byes3'), (180, 260)),
     ('no', ('no1', 'no2', 'no3'), (292, 260)), ('no', ('dyn_bno1', 'dyn_bno2', 'dyn_bno3'), (292, 260)),
     ('accept', ('dad_bacc1', 'dad_bacc2', 'dad_bacc3'), (152, 260)), ('decline', ('dad_bdec1', 'dad_bdec2', 'dad_bdec3'), (284, 260)),
     ('withdraw', ('dw_bwith1', 'dw_bwith2', 'dw_bwith3'), (220, 260)),
-    ('return', ('breturn1', 'breturn2', 'breturn3'), (351, 425)), ('return', ('qh_return1', 'qh_return2', 'qh_return3'), (529, 437)),
+    ('return', ('qh_return1', 'qh_return2', 'qh_return3'), (529, 437)),
 )
-SWITCH_ANIMS = (        # (switch, its word, names of the pictures for the states up, hover, chosen, chosen with the pointer on it, down)
-    ('chat_on', 'on', ('op_conu', 'op_conr', 'op_cond', 'op_condr', 'op_conh')), ('chat_off', 'off', ('op_coffu', 'op_coffr', 'op_coffd', 'op_coffdr', 'op_coffh')),
-    ('help_on', 'on', ('op_honu', 'op_honr', 'op_hond', 'optondr', 'op_honh')), ('help_off', 'off', ('op_hoffu', 'op_hoffr', 'op_hoffd', 'op_hoffdr', 'op_hoffh')),
-)
-SWITCH_ORDER = ('up', 'hover', 'chosen', 'chosen_hover', 'down')
 THUMB_STATES = ('up', 'hover', 'held')
 
 
@@ -74,10 +70,10 @@ def _drawings():
     one['_panel'] = (w, h, 0, 0, svg)
     w, h, svg = DP.panel_clay()
     one['panel_c'] = (w, h, 0, 0, svg)
-    card = lambda x, y: (x - DW.CARD[0], y - DW.CARD[1])                      # a place in the window's numbers as a place on the options card
+    card = lambda x, y: (x - DW.CARD[0], y - DW.CARD[1])                      # a place in the window's numbers as a place from the drawings' corner (dialog_windows.CARD)
     for kind in DP.DIALOG_BUTTONS:
         x, y = DIALOG_PLACE[kind]
-        origin = card(x, y) if kind == 'return' else (x - DIALOG_CORNER[0], y - DIALOG_CORNER[1])
+        origin = card(*RETURN_DRAWN_AT) if kind == 'return' else (x - DIALOG_CORNER[0], y - DIALOG_CORNER[1])
         for st in DP.STATES:
             add('dlg_btn_%s_%s' % (kind, st), DP.button_drawing(kind, st, origin), x, y)
     for st in ('up', 'down'):
@@ -94,7 +90,7 @@ def _drawings():
     for i in range(4):
         add('cd_dot_%d' % i, DW.countdown_dot(i), 0, 0, card_one)
     layers = {}
-    for key, (w, h, svg), origin in (('op_part', DW.options_layer(), DW.CARD[:2]), ('qh_part', DW.quickhelp_layer(), (0, 0)), ('cd_title', DW.countdown_title(), (0, 0))):
+    for key, (w, h, svg), origin in (('qh_part', DW.quickhelp_layer(), (0, 0)), ('cd_title', DW.countdown_title(), (0, 0))):
         layers[key] = (w, h, svg, origin)
     return one, card_one, layers
 
@@ -203,10 +199,6 @@ def _animations(parts):
     for kind, names, (x, y) in BUTTON_ANIMS:
         for n, st in zip(names, DP.STATES):
             anims[n] = _anim(_ms(n), [('dlg_btn_%s_%s' % (kind, st), x, y)])
-    for switch, word, names in SWITCH_ANIMS:
-        for n, st in zip(names, SWITCH_ORDER):
-            anims[n] = _anim(_ms(n), [('op_%s_%s' % (word, st), DW.SWITCH_X[switch], DW.SWITCH_Y)])
-    anims['op_window'] = _anim(1000, parts['op_part'])
     anims['qh_window'] = _anim(1000, parts['qh_part'] + [(n, x, y) for n, _, (x, y) in PEDESTALS] + [(n, x, y) for n, (x, y) in QH_CURSORS])
     anims['cd_card'] = _anim(1000, parts['cd_title'] + [('cd_count_well', DW.COUNT_WELL[0] - DW.WELL_MARGIN, DW.COUNT_WELL[1] - DW.WELL_MARGIN)])
     anims['cd_row'] = _anim(1000, [('cd_row_well', -DW.WELL_MARGIN, -DW.WELL_MARGIN)])      # the animation's origin is the top left of a row's ground: the game draws it at each row

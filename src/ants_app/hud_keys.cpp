@@ -13,7 +13,7 @@ namespace ants::app {
 // is held on the minimap, FUN_01009850. The step is in screen pixels (the same distance on the screen at every zoom): the camera moves by step / zoom world pixels.
 bool HUD::input_tick(ViewportCamera& camera, uint32_t map_w, uint32_t map_h, int32_t mouse_x, int32_t mouse_y) {
     if ((is_modal_open() && !countdown_takes_camera()) || map_w == 0 || map_h == 0) return false;      // (the countdown card lets the player look around: the edge strips and the minimap work)
-    const int32_t rate = options_.state().scroll_speed;       // the profile's Scroll Speed 0 .. 99 (FUN_01027329: the half extent is rate + 10)
+    const int32_t rate = options_.scroll_speed;       // the profile's Scroll Speed 0 .. 99 (FUN_01027329: the half extent is rate + 10)
     EdgeScroll step;
     if (is_radar_dragging_) {
         step = minimap_scroll_step_px(mouse_x, mouse_y, camera.origin_screen_x(), camera.origin_screen_y(), zoom::map_screen(static_cast<int64_t>(map_w) * 32, camera.zoom),
@@ -65,15 +65,6 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
         if (key == 'c' || key == 'C' || key == 'x' || key == 'X' || key == SDLK_RETURN || key == SDLK_KP_ENTER || key == SDLK_ESCAPE) {
             close_quick_help();
         }
-        return true;
-    }
-
-    if (options_.is_open()) {
-        // FUN_01014f12: Enter closes the window whatever has the focus; Backspace goes to the edit field that has it; Esc does nothing. Printable keys arrive
-        // as text input (SDL_TEXTINPUT), not as key events.
-        if (key == SDLK_RETURN || key == SDLK_KP_ENTER) options_.on_key(ScreenEdit::KEY_ENTER);
-        else if (key == SDLK_BACKSPACE) options_.on_key(ScreenEdit::KEY_BACKSPACE);
-        else if (key == SDLK_ESCAPE) options_.on_key(ScreenEdit::KEY_ESCAPE);
         return true;
     }
 
@@ -131,7 +122,7 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
             set_ant_health({health_.when == health::When::Off ? health_resume_ : health::When::Off, health_.style});
             return true;
         case 'o': case 'O':
-            open_options();
+            if (on_menu_request_) on_menu_request_();                 // Ctrl+O: the settings menu (the original's options window is gone: its settings are the menu's)
             return true;
         case 'q': case 'Q':
             open_quit_dialog();
@@ -184,10 +175,6 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
 
 void HUD::handle_text_input(const std::string& text) {
     if (text.empty()) return;
-    if (options_.is_open()) {
-        options_.on_text(text);                   // the focused edit field takes the printable characters (at most 100)
-        return;
-    }
     if (show_quit_dialog_ || show_quick_help_ || (show_match_start_modal_ && !match_countdown_) || !chat_writable()) return;     // a dialog or the chat cover takes the keys (the countdown card does not: protocol 21)
     for (char c : text) {
         if (c >= 32 && c <= 126) {
@@ -209,11 +196,10 @@ void HUD::send_chat(bool to_team) {
     chat_input_.clear();
 }
 
-// The callbacks of the options screen (FUN_01015058 / FUN_01015092 / FUN_010150bc, FUN_01014f5a .. FUN_0101501f, FUN_0100bbf2): the profile is written first, then the
-// setting is applied. The Sound Volume sets the volume and plays the test voice (gantrdy, 0x102bd7e), the Music Volume sets the music volume and restarts the
+// What a change of one of the original's options does (the callbacks of its options window, which the settings menu has taken over: FUN_01015058 / FUN_01015092 / FUN_010150bc, FUN_01014f5a .. FUN_0101501f, FUN_0100bbf2): the profile is written first, then the setting is applied. The Sound Volume sets the volume and plays the test voice (gantrdy, 0x102bd7e), the Music Volume sets the music volume and restarts the
 // track (the owner's callback). The Scroll Speed is read by the input tick, the two switches and the quick chats by the chat box and the start of the program.
 void HUD::apply_option(OptionSetting setting) {
-    const OptionsState& state = options_.state();
+    const OptionsState& state = options_;
     if (config_store_ != nullptr) state.write(*config_store_, setting);
     switch (setting) {
         case OptionSetting::SoundVolume:
@@ -229,7 +215,7 @@ void HUD::apply_option(OptionSetting setting) {
 }
 
 void HUD::set_option(OptionSetting setting, int32_t value) {
-    OptionsState& state = options_.state();
+    OptionsState& state = options_;
     switch (setting) {
         case OptionSetting::SoundVolume: state.sound_volume = std::clamp<int32_t>(value, 0, 100); break;
         case OptionSetting::MusicVolume: state.music_volume = std::clamp<int32_t>(value, 0, 100); break;
@@ -241,11 +227,18 @@ void HUD::set_option(OptionSetting setting, int32_t value) {
     apply_option(setting);
 }
 
+// A quick chat text from the settings menu (the original's edit field: printable characters, at most 100): kept, and written to the profile as it is
+void HUD::set_quick_chat(size_t index, const std::string& text) {
+    if (index >= options_.quick_chat.size()) return;
+    options_.quick_chat[index] = OptionsState::clean_quick_chat(text);
+    apply_option(static_cast<OptionSetting>(static_cast<size_t>(OptionSetting::QuickChat1) + index));
+}
+
 void HUD::trigger_quick_chat(size_t index) {
     if (index >= 4 || !chat_writable()) return;
-    if (options_.state().quick_chat[index].empty()) return;
-    add_chat_entry(player_name_.empty() ? "Player" : player_name_, options_.state().quick_chat[index], false);   // F9 - F12 always go to all
-    if (on_chat_send_) on_chat_send_(options_.state().quick_chat[index], false);
+    if (options_.quick_chat[index].empty()) return;
+    add_chat_entry(player_name_.empty() ? "Player" : player_name_, options_.quick_chat[index], false);   // F9 - F12 always go to all
+    if (on_chat_send_) on_chat_send_(options_.quick_chat[index], false);
 }
 
 } // namespace ants::app

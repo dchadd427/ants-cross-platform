@@ -931,11 +931,7 @@ void test_chat_gate_and_filter() {
     check(hud.get_chat_line_color(log.size() - 2) == 2, "in the color of Bob's team (red)");
 
     // the option off: nothing is sent, nothing is received, quick chat is silent
-    ViewportCamera camera;
-    hud.open_options();
-    hud.handle_mouse_down(151, 289, SDL_BUTTON_LEFT, sim, camera);      // the OFF toggle of the chat option (a switch acts at the release)
-    hud.handle_mouse_up(151, 289, SDL_BUTTON_LEFT, sim, camera);
-    hud.close_options();
+    hud.set_option(OptionSetting::Chat, 0);
     check(!hud.is_chat_enabled(), "chat switched off");
     before = log.size();
     hud.set_chat_input("hello");

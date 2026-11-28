@@ -706,13 +706,11 @@ void run_start_menu_app_options_tests() {
             ASSERT_EQ(app.hud().local_player_id(), 1);
             app.hud().open_quit_dialog();
             app.hud().open_quick_help();
-            app.hud().open_options();
-            ASSERT_TRUE(app.hud().is_quit_dialog_open() && app.hud().is_quick_help_open() && app.hud().is_options_open());
+            ASSERT_TRUE(app.hud().is_quit_dialog_open() && app.hud().is_quick_help_open());
             ASSERT_TRUE(server.mgr.close_room("gone0001", server.now));
             ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::StartMenu; }, 12000));
             ASSERT_FALSE(app.hud().is_quit_dialog_open());                                    // (a dialog of the match that is gone would be on the next match's screen)
             ASSERT_FALSE(app.hud().is_quick_help_open());
-            ASSERT_FALSE(app.hud().is_options_open());
             ASSERT_EQ(app.local_player_id(), 0);                                              // the seat that was played is not the seat of the next game
             ASSERT_EQ(app.hud().local_player_id(), 0);
             ASSERT_TRUE(app.net_notice().empty());                                            // the reason went to the first panel (below) and is not kept

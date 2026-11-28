@@ -5,10 +5,12 @@
 
 #include <algorithm>
 #include <iostream>
+#include <memory>
 #include <string>
 
 #include "ants_app/application.hpp"
 #include "ants_app/game_menu.hpp"
+#include "ants_app/version.hpp"
 
 #if defined(__EMSCRIPTEN__)
   #include <emscripten.h>
@@ -28,6 +30,7 @@ void Application::load_game_menu_settings() {
     menu_settings_.load(config_store_);
     if (config_.hud_art_given) menu_settings_.hud_art_new = config_.hud_art_new;            // (--hud-art says it for this run; the settings file is not changed by it)
     if (config_.show_ping_given) menu_settings_.show_ping = config_.show_ping;              // (--show-ping likewise)
+    if (config_.show_fps_given) menu_settings_.show_fps = config_.show_fps;                 // (--show-fps likewise)
     hud_.set_ant_health(menu_settings_.ant_health);
     audio_mixer_.set_output_gain(menu_settings_.gain());
 }
@@ -67,8 +70,8 @@ void Application::sync_game_menu_settings() {
     if (now.style != before.style) menu_settings_.write(config_store_, game_menu::kHealthStyle);
 }
 
-// Esc found nothing to cancel (the HUD's rule): where there is a panel it opens: the page's in the browser (a page without one, or an embedded frame, leaves Esc what it was), the function that a skin
-// of the game itself sets (the tests'; the desktop's later). The desktop game has none yet: Esc stays what it was there.
+// Esc found nothing to cancel (the HUD's rule), or Ctrl+O, or the Options button: where there is a panel it opens: the page's in the browser (a page without one, or an embedded frame, leaves them what they were),
+// the function that a skin of the game itself sets (the tests'), else the desktop's own drawn panel (game_menu_panel.hpp).
 void Application::request_game_menu() {
     if (game_menu_where() < 0 || game_menu_needs_answer()) return;
     if (on_game_menu_) {
@@ -77,7 +80,124 @@ void Application::request_game_menu() {
     }
 #if defined(__EMSCRIPTEN__)
     ants_ask_game_menu();
+#else
+    open_game_menu_panel();
 #endif
+}
+
+// ---- the desktop's drawn panel ------------------------------------------------------------------------------------------------------------------------------
+
+namespace {
+
+/// What the drawn panel asks of the game: the Application's own functions that the page's panel uses through its exports
+class AppMenuHost final : public GameMenuHost {
+public:
+    explicit AppMenuHost(Application& app) : app_(app) {}
+    int get(int what) override { return app_.game_menu_get(what); }
+    bool set(int id, int value, bool save) override { return app_.game_menu_set(id, value, save); }
+    std::string text(int id) override { return app_.game_menu_text(id); }
+    void set_text(int id, const std::string& text) override { app_.game_menu_set_text(id, text); }
+    bool act(int action) override { return app_.game_menu_do(action); }
+    bool fullscreen() override { return app_.fullscreen_now(); }
+    std::string version() override { return std::string("v") + std::string(ants::VERSION_STRING); }
+
+private:
+    Application& app_;
+};
+
+}  // namespace
+
+void Application::make_game_menu_panel() {
+    menu_host_ = std::make_unique<AppMenuHost>(*this);
+    menu_panel_ = std::make_unique<GameMenuPanel>(*menu_host_);
+    menu_panel_->set_on_close([this]() {
+        game_menu_set_open(false);
+        hud_.set_menu_latched(false);
+    });
+}
+
+void Application::open_game_menu_panel() {
+    if (!menu_panel_ || menu_panel_->is_open()) return;
+    menu_panel_->open(replay_mode_);
+    game_menu_set_open(true);
+    hud_.set_menu_latched(true);
+}
+
+// Once a frame: the panel lies in the picture as the picture is now, and goes when there is no match on the screen or a dialog, a vote or a lost link needs its answer (the page's panel does the same)
+void Application::update_game_menu_panel() {
+    if (!menu_panel_ || !menu_panel_->is_open()) return;
+    if (game_menu_where() < 0 || game_menu_needs_answer()) {
+        menu_panel_->close();
+        return;
+    }
+    menu_panel_->set_picture(picture_.w, picture_.h, renderer_ ? renderer_->output_scale() : 1.0);
+}
+
+// The events of the window while the panel is up. The pointer is the picture's (the cursor is drawn there), and a press that the window loses ends without an act.
+bool Application::feed_game_menu_panel(const SDL_Event& event) {
+    if (!menu_panel_ || !menu_panel_->is_open()) return false;
+    menu_panel_->set_picture(picture_.w, picture_.h, renderer_ ? renderer_->output_scale() : 1.0);
+    switch (event.type) {
+        case SDL_KEYDOWN:
+            menu_panel_->on_key(event.key.keysym.sym, event.key.repeat != 0);
+            return true;
+        case SDL_TEXTINPUT:
+            menu_panel_->on_text(event.text.text);
+            return true;
+        case SDL_MOUSEMOTION:
+            mouse_screen_x_ = event.motion.x;
+            mouse_screen_y_ = event.motion.y;
+            mouse_has_moved_ = true;
+            pointer_outside_ = false;
+            menu_panel_->on_mouse_move(event.motion.x, event.motion.y);
+            return true;
+        case SDL_MOUSEBUTTONDOWN:
+            mouse_screen_x_ = event.button.x;
+            mouse_screen_y_ = event.button.y;
+            mouse_has_moved_ = true;
+            pointer_outside_ = false;
+            menu_panel_->on_mouse_down(event.button.x, event.button.y, event.button.button);
+            return true;
+        case SDL_MOUSEBUTTONUP:
+            mouse_screen_x_ = event.button.x;
+            mouse_screen_y_ = event.button.y;
+            menu_panel_->on_mouse_up(event.button.x, event.button.y, event.button.button);
+            return true;
+        case SDL_MOUSEWHEEL:
+            menu_panel_->on_wheel(event.wheel.y);
+            return true;
+        default:
+            return false;
+    }
+}
+
+void Application::render_game_menu_panel() {
+    if (!menu_panel_ || !menu_panel_->is_open() || !renderer_) return;
+    menu_panel_->set_picture(picture_.w, picture_.h, renderer_->output_scale());
+    menu_panel_->render(*renderer_, hud_art_.loaded() ? &hud_art_ : nullptr, SDL_GetTicks());
+}
+
+// The text of a Quick Chat row, the original's "Quick Chat F9" .. "Quick Chat F12": the HUD keeps it (F9 - F12 say it)
+std::string Application::game_menu_text(int id) const {
+    if (id < game_menu::kQuickChat1 || id > game_menu::kQuickChat4) return std::string();
+    return hud_.get_quick_chat_key(static_cast<size_t>(id - game_menu::kQuickChat1));
+}
+
+void Application::game_menu_set_text(int id, const std::string& text) {
+    if (id < game_menu::kQuickChat1 || id > game_menu::kQuickChat4) return;
+    hud_.set_quick_chat(static_cast<size_t>(id - game_menu::kQuickChat1), text);
+}
+
+bool Application::game_menu_text_edit(int id, int index, int code) {
+    if (id < game_menu::kQuickChat1 || id > game_menu::kQuickChat4) return false;
+    std::string& text = menu_text_[static_cast<size_t>(id - game_menu::kQuickChat1)];
+    if (index < 0) {                                                  // the edit is over: the text is kept and written once
+        game_menu_set_text(id, text);
+        return true;
+    }
+    if (index == 0) text.clear();
+    if (code >= 0x20 && code <= 0x7e && text.size() < static_cast<size_t>(game_menu::kQuickChatMax)) text += static_cast<char>(code);
+    return true;
 }
 
 // -1: no match screen (the loading, the room, the results); 0: a match; 1: a recording or a live match that is watched
@@ -153,6 +273,7 @@ int Application::game_menu_get(int what) {
         case gm::kHealthStyle:     return static_cast<int>(hud_.ant_health().style);
         case gm::kHealthChanges:   return menu_settings_.health_changes ? 1 : 0;
         case gm::kShowPing:        return menu_settings_.show_ping ? 1 : 0;
+        case gm::kShowFps:         return menu_settings_.show_fps ? 1 : 0;
         case gm::kHudArt:          return menu_settings_.hud_art_new ? 0 : 1;
         case gm::kScroll:          return hud_.get_scroll_speed();
         case gm::kChat:            return hud_.is_chat_enabled() ? 1 : 0;
@@ -161,7 +282,7 @@ int Application::game_menu_get(int what) {
     }
 }
 
-// A change from the panel: stored and applied as the original's options window does it (the same state, so that the two always agree). True when the row is the game's and the value was taken.
+// A change from the panel: stored and applied as the HUD's own option setter does it (one state, one write). True when the row is the game's and the value was taken.
 bool Application::game_menu_set(int id, int value, bool save) {
     namespace gm = game_menu;
     switch (id) {
@@ -190,6 +311,11 @@ bool Application::game_menu_set(int id, int value, bool save) {
                 connections_press_ = false;
             }
             return true;
+        case gm::kShowFps:
+            if (value != 0 && value != 1) return false;                                  // (neither On nor Off)
+            menu_settings_.show_fps = value != 0;
+            menu_settings_.write(config_store_, id);
+            return true;
         case gm::kHudArt:
             if (value != 0 && value != 1) return false;                                  // (a word that the row does not have)
             menu_settings_.hud_art_new = value == 0;
@@ -216,7 +342,7 @@ bool Application::game_menu_set(int id, int value, bool save) {
     }
 }
 
-// What the panel asks of the game: Leave game (the quit dialog's Yes), the original's quick help (F1) and options window (Ctrl+O). Only on a match screen that no dialog covers.
+// What the panel asks of the game: Leave game (the quit dialog's Yes), the original's quick help (F1) and, for the desktop's drawn panel, the window's fullscreen. Only on a match screen that no dialog covers.
 bool Application::game_menu_do(int action) {
     namespace gm = game_menu;
     if (game_menu_where() < 0) return false;
@@ -228,7 +354,13 @@ bool Application::game_menu_do(int action) {
     }
     if (game_menu_needs_answer() || replay_mode_) return false;
     if (action == gm::kActQuickHelp) hud_.open_quick_help();
-    else if (action == gm::kActOptionsWindow) hud_.open_options();
+    else if (action == gm::kActFullscreen) {
+#if defined(__EMSCRIPTEN__)
+        return false;                                                // (the page's own: its Fullscreen button and the browser's permission)
+#else
+        toggle_fullscreen();
+#endif
+    }
     else return false;
     return true;
 }
@@ -265,7 +397,18 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_menu_set(int id, int value, int save) {
     return g_web_app != nullptr && g_web_app->game_menu_set(id, value, save != 0) ? 1 : 0;
 }
 
-// ... an act (game_menu::Action): Leave game, the quick help, the options window; 1 when the game did it
+// ... a Quick Chat text (game_menu::kQuickChat1 .. kQuickChat4): the code of its character `index` (-1 past the end) and, one character at a time, a new text: index 0 starts it, -1 keeps it; 1 when taken
+extern "C" EMSCRIPTEN_KEEPALIVE int ants_menu_text(int id, int index) {
+    if (g_web_app == nullptr || index < 0) return -1;
+    const std::string text = g_web_app->game_menu_text(id);
+    return static_cast<size_t>(index) < text.size() ? static_cast<unsigned char>(text[static_cast<size_t>(index)]) : -1;
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE int ants_menu_text_set(int id, int index, int code) {
+    return g_web_app != nullptr && g_web_app->game_menu_text_edit(id, index, code) ? 1 : 0;
+}
+
+// ... an act (game_menu::Action): Leave game, the quick help; 1 when the game did it
 extern "C" EMSCRIPTEN_KEEPALIVE int ants_menu_do(int action) {
     return g_web_app != nullptr && g_web_app->game_menu_do(action) ? 1 : 0;
 }
