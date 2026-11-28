@@ -1294,6 +1294,7 @@ void run_latency_tests() {
             ASSERT_FALSE(app.last_latency_layout().has_value());                        // the match's corner: no ping, and no text that opens the list
             ASSERT_EQ(app.connections_hit().w, 0);
             ASSERT_TRUE(app.game_menu_set(game_menu::kShowPing, 1));
+            ASSERT_TRUE(app.game_menu_set(game_menu::kShowFps, 1));                     // (the frame rate's row: the ping stands above it on a line of its own)
             app.render_frame();
             ASSERT_TRUE(app.last_latency_layout().has_value());
             ASSERT_TRUE(app.connections_hit().w > 0);
@@ -1305,6 +1306,13 @@ void run_latency_tests() {
             ASSERT_TRUE(l.stacked);                                                     // a match's corner row has room for no row of text, in either picture
             ASSERT_TRUE(l.ping_x >= row_right);                                         // right of the last score box and its cover
             ASSERT_EQ(l.ping_y + app.renderer().get_text_height(FontSize::Px12) + 1, layout.height - (480 - FPS_OVERLAY_TOP));     // the line is a row above the plate
+            ASSERT_TRUE(app.game_menu_set(game_menu::kShowFps, 0));                     // Show FPS off (the default): the row has room, the ping takes the frame rate's place at the right edge
+            app.render_frame();
+            ASSERT_TRUE(app.last_latency_layout().has_value());
+            const LatencyCornerLayout alone = *app.last_latency_layout();
+            ASSERT_FALSE(alone.stacked);
+            ASSERT_EQ(alone.ping_x + app.renderer().get_text_width(ping_text(app.net()->ping_ms()), FontSize::Px12), CornerPlate::for_canvas(layout.width, layout.height).right_edge);
+            ASSERT_TRUE(app.connections_hit().w > 0);                                   // (the ping text still opens the list of everyone's pings)
             ASSERT_TRUE(app.game_menu_set(game_menu::kShowPing, 0));
             app.render_frame();
             ASSERT_FALSE(app.last_latency_layout().has_value());                        // off again: gone at the next frame
