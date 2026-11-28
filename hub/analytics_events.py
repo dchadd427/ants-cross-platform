@@ -125,6 +125,20 @@ def width_bucket(value):
     return sum(1 for edge in WIDTH_EDGES if value >= edge)
 
 
+BENIGN_MESSAGES = (
+    re.compile(r"ResizeObserver loop (?:completed with undelivered notifications|limit exceeded)\.?\Z", re.I),        # a layout observer that could not finish within one frame: the browser's own note, the page is fine
+)
+CLASS_FIRST = re.compile(r"[A-Za-z]{2,40}: ")
+
+
+def is_benign(message):
+    """Whether the message of an error (as kept: `Error: ResizeObserver loop limit exceeded.`, the class and the cleaned message, or the message alone) is one of the browser's harmless notes that are not the
+    site's errors (BENIGN_MESSAGES; the page's script, web/analytics.js, has the same list and sends none of them; docs/ANALYTICS.md, "What is not counted as an error"). The whole message must be one of them."""
+    found = CLASS_FIRST.match(message)
+    text = message[found.end():] if found else message
+    return any(p.match(text) for p in BENIGN_MESSAGES)
+
+
 def check(body, origin=""):
     """The kept form of an event (a copy of EMPTY with its fields filled), or None for a body that is not an event of a known type with the right fields. Nothing that is not listed here is kept."""
     if not isinstance(body, dict) or any(key not in KEYS for key in body):

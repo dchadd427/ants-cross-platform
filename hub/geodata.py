@@ -1,8 +1,9 @@
 """The country of an address, from a local file (docs/ANALYTICS.md, "The country list"). The data is DB-IP Lite, "IP to Country Lite", which db-ip.com publishes under CC BY 4.0 (the Legal page says so).
 
 THE FILE is what `build` makes of the published CSV (lines `first address,last address,country`): a small binary table that is read into memory once, with the month of the data in its head. Nothing is
-looked up on the network while the hub runs: the image gets the file when it is BUILT (Dockerfile.hub, `python -m hub.geodata build OUT [MONTH]`, which tries the month that is asked for, else this
-month, else the one before; a build that cannot reach the site goes on without a file, and the counter then counts every country as unknown and says so on the admin page).
+looked up on the network while the hub runs: the image gets the file when it is BUILT (Dockerfile.hub, `python -m hub.geodata build OUT [MONTH]`, which tries the month that is asked for (else this
+month) and then the one before it, and says in ONE line of the build log which list it made or that it made none; a build that cannot reach the site goes on without a file, and the counter then counts
+every country as unknown and says so on the admin page).
 
   header   8 bytes `ANTSGEO1`, 8 bytes of the month (`2026-11` and a zero), the number of IPv4 ranges and of IPv6 ranges (4 bytes each, little-endian)
   IPv4     starts (4 bytes each), ends (4 bytes each), countries (2 letters each), all little-endian and sorted
@@ -21,6 +22,7 @@ import re
 import struct
 import sys
 import tempfile
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
@@ -29,6 +31,7 @@ HEADER = struct.Struct("<8s8sII")
 CODE = re.compile(r"[A-Z]{2}\Z")
 MONTH = re.compile(r"[0-9]{4}-(?:0[1-9]|1[0-2])\Z")
 URL = "https://download.db-ip.com/free/dbip-country-lite-%s.csv.gz"
+USER_AGENT = "ants-geodata-build/1"             # (db-ip.com answers 403 to Python's own "Python-urllib/3.x": the build names itself, and names nothing else, no site and no person)
 READ_MAX = 96 * 1024 * 1024                     # what is read of the download (the published file is about 4 MB packed and 30 MB open)
 CONNECT_SECONDS = 30
 
@@ -152,25 +155,38 @@ class Geo:
 
 # ---- the build step of the image -------------------------------------------------------------------------------------------------------------
 
-def months(start=None):
-    """The month that is asked for (else this month, then the one before), as texts like 2026-11."""
-    if start:
-        return [start]
-    now = datetime.now(timezone.utc)
-    previous = (now.year - 1, 12) if now.month == 1 else (now.year, now.month - 1)
-    return ["%04d-%02d" % (now.year, now.month), "%04d-%02d" % previous]
+def previous_month(month):
+    """The month before `month` (`2026-01` is `2025-12`), or None for a text that is not a month."""
+    if not MONTH.match(month):
+        return None
+    year, number = int(month[:4]), int(month[5:])
+    return "%04d-%02d" % ((year - 1, 12) if number == 1 else (year, number - 1))
+
+
+def months(start=None, now=None):
+    """The months that the build tries, in this order: the one that is asked for (else this one) and the one before it. db-ip.com publishes a month's file on its first day, so early in a month, or for a month
+    that the operator named a little early, the month before is the list that exists. A text that is not a month is tried alone (it fails: a typo is never replaced by another month)."""
+    if not start:
+        now = now or datetime.now(timezone.utc)
+        start = "%04d-%02d" % (now.year, now.month)
+    before = previous_month(start)
+    return [start, before] if before else [start]
 
 
 def fetch(month, opener=urllib.request.urlopen):
-    """The unpacked CSV lines of a month from db-ip.com (at the build, never at run time), or a GeoError."""
+    """The unpacked CSV lines of a month from db-ip.com (at the build, never at run time), or a GeoError that says in a few words what went wrong (`HTTP 404`, `URLError`, `EOFError`...). The request names the
+    build (USER_AGENT): the site refuses the default name of Python's own client."""
     if not MONTH.match(month):
         raise GeoError("the month is not like 2026-11")
+    request = urllib.request.Request(URL % month, headers={"User-Agent": USER_AGENT})
     try:
-        with opener(URL % month, timeout=CONNECT_SECONDS) as answer:
+        with opener(request, timeout=CONNECT_SECONDS) as answer:
             packed = answer.read(READ_MAX + 1)
         if len(packed) > READ_MAX:
             raise GeoError("too big")
         data = gzip.decompress(packed)
+    except urllib.error.HTTPError as e:
+        raise GeoError("HTTP %d" % e.code)
     except (OSError, EOFError, ValueError) as e:
         raise GeoError(type(e).__name__)
     if len(data) > 8 * READ_MAX:
@@ -194,18 +210,21 @@ def write_atomically(path, data):
 
 
 def main(argv, opener=urllib.request.urlopen):
-    """`build OUT [MONTH]`: 0 when the file was written, 1 when no month could be fetched (no file is left)."""
+    """`build OUT [MONTH]`: 0 when the file was written, 1 when no month could be fetched (no file is left). The build log gets a line for every month that failed and ONE last line that says which list the
+    image has (`country list: 2026-11`) or that it has none (`country list: NONE`), so that nobody has to read between the lines to learn that every country of the counter will be unknown."""
     if len(argv) < 2 or argv[0] != "build" or len(argv) > 3:
         sys.stderr.write("usage: python -m hub.geodata build OUT [MONTH]\n")
         return 2
-    for month in months(argv[2] if len(argv) == 3 and argv[2] else None):
+    tried = months(argv[2] if len(argv) == 3 and argv[2] else None)
+    for month in tried:
         try:
             write_atomically(argv[1], build(fetch(month, opener), month))
-        except GeoError as e:
+        except (GeoError, OSError) as e:                            # (OSError: the file cannot be written; a month that cannot be fetched is a GeoError)
             sys.stderr.write("hub.geodata: %s: %s\n" % (month, e))
             continue
-        sys.stdout.write("hub.geodata: country list of %s written\n" % month)
+        sys.stdout.write("hub.geodata: country list: %s\n" % month)
         return 0
+    sys.stderr.write("hub.geodata: country list: NONE (tried %s): every country of the counter will be unknown\n" % ", ".join(tried))
     return 1
 
 

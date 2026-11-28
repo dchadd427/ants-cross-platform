@@ -3,6 +3,9 @@
 
   - the text: one exact location, the checks (method, query, the page's own request) before the allowance and before anything is passed on; the visitor's request goes on as the few headers that the hub
     needs (the browser's own User-Agent and the two headers that ask not to be tracked among them; never a cookie, a referrer or a language); the access log is off; the body is at most the hub's number;
+  - the visitor's address: behind the shipped list of reverse proxies (docker/trusted-proxies.conf) the hub is given the address of the VISITOR (the right-most address of X-Forwarded-For that is not a proxy), so
+    that visitors from other addresses are other visitors; a proxy that passes none leaves the hub the proxy's own address (which is internal: the hub then says so in its log), and a header of another name
+    (X-Real-IP) is no address; and the real hub behind the real block counts two visitors of one browser from two addresses as two, with their countries;
   - the real block in front of a stand-in hub that writes down what arrives: a beacon of the page goes through with exactly those headers and its body; every other method, path and query is refused and the
     hub is not asked; a request that is not of the site's own page is a 403; a body over the limit is a 413; a flood is a 429; a hub that is not there is the JSON 503; nothing is written to the access log.
 """
@@ -11,23 +14,29 @@ import os
 import re
 import shutil
 import sys
+import tempfile
+import time
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, REPO)
 sys.path.insert(0, HERE)
+import hub_client as hc  # noqa: E402
+import hub_rig  # noqa: E402
 import test_nginx_hub_admin_api as api  # noqa: E402
 import test_nginx_hub_login as hl  # noqa: E402
 import test_nginx_stats as stats  # noqa: E402
 import test_nginx_submissions as sub  # noqa: E402
-from hub import analyticsdoor, analytics_events, limits as limitmod  # noqa: E402
+from hub import analyticsdoor, analytics_events, geodata, limits as limitmod  # noqa: E402
 
 CONF = stats.strip_comments(stats.read("docker", "nginx.conf"))
 HEAD = CONF[:CONF.index("server {")]
 DOOR = stats.block_of(CONF, "location = /hub/a ")
 BEACON = {"Sec-Fetch-Site": "same-origin", "Origin": "https://site.example", "Content-Type": "text/plain;charset=UTF-8", "User-Agent": "Mozilla/5.0 (test)"}
 EVENT = b'{"t":"view","p":"/","w":1300,"l":"en-US"}'
+SHIPPED = stats.read("docker", "trusted-proxies.conf")
+UA_WINDOWS = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 
 class TheText(unittest.TestCase):
@@ -160,6 +169,90 @@ class TheBlockRuns(unittest.TestCase):
             text = f.read()[before:]
         self.assertNotIn("canary", text, "the door writes no line: not the path, not the query, not the browser (a path that is another location's, such as /hub/ab, is that location's own 404 line)")
         self.assertNotRegex(text, r'"POST /hub/a HTTP')
+
+
+@unittest.skipUnless(shutil.which("nginx"), "nginx is not installed: the visitor's address at the counter's door was NOT run (tests/scripts/test_nginx_hub_analytics.py)")
+class TheVisitorsAddress(unittest.TestCase):
+    """The shipped list of reverse proxies in front of the real block, a stand-in hub behind it: the address that the hub is told (X-Client-Address). The test's own connection comes from 127.0.0.1, which is in the list."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.stand, cls.server = api.start_stand()
+        cls.rig = sub.Rig(trusted=SHIPPED, hub_port=cls.server.server_address[1], relaxed=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.rig.stop()
+        cls.server.shutdown()
+        cls.server.server_close()
+
+    def told(self, extra=None):
+        """The address that the hub was given for a beacon that came with these headers."""
+        self.assertEqual(self.rig.ask("POST", "/hub/a", dict(BEACON, **(extra or {})), EVENT)[0], 200)
+        with self.stand.lock:
+            raw = self.stand.seen[-1][2]
+        return dict((k.lower(), v) for k, v in raw)["x-client-address"]
+
+    def test_visitors_behind_the_proxy_are_told_to_the_hub_by_their_own_addresses(self):
+        addresses = ["203.0.113.7", "198.51.100.4", "2001:db8::5", "8.8.8.8"]
+        self.assertEqual([self.told({"X-Forwarded-For": a}) for a in addresses], addresses)
+
+    def test_the_visitor_is_the_right_most_address_that_is_not_a_proxy_and_never_a_value_that_he_wrote(self):
+        self.assertEqual(self.told({"X-Forwarded-For": "6.6.6.6, 203.0.113.9"}), "203.0.113.9")
+        self.assertEqual(self.told({"X-Forwarded-For": "6.6.6.6, 203.0.113.9, 10.0.0.4"}), "203.0.113.9", "a second proxy in the chain is passed over")
+        self.assertEqual(self.told({"X-Forwarded-For": "203.0.113.9", "X-Client-Address": "9.9.9.9"}), "203.0.113.9")
+
+    def test_a_proxy_that_passes_no_address_leaves_the_hub_the_proxys_own_which_the_hub_knows_for_internal(self):
+        for extra in (None, {"X-Real-IP": "203.0.113.9"}, {"Forwarded": "for=203.0.113.9"}, {"CF-Connecting-IP": "203.0.113.9"}):
+            with self.subTest(extra):
+                found = self.told(extra)
+                self.assertEqual(found, "127.0.0.1", "a header of another name than X-Forwarded-For is no address (docs/SERVER.md, Behind a reverse proxy)")
+                self.assertTrue(limitmod.is_internal(found))
+
+
+@unittest.skipUnless(shutil.which("nginx"), "nginx is not installed: the counter behind the real block was NOT run (tests/scripts/test_nginx_hub_analytics.py)")
+class TheCounterBehindTheProxy(unittest.TestCase):
+    """The real hub (its counter and a country list) behind the real block and the shipped list: visitors that the proxy tells apart are counted as many."""
+
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        geo = os.path.join(self.folder.name, "country.bin")
+        with open(geo, "wb") as f:
+            f.write(geodata.build(["1.0.0.0,1.0.0.255,AU\n", "8.8.8.0,8.8.8.255,US\n", "2001:db8::,2001:db8:ffff:ffff::,DE\n"], "2026-11"))
+        hub = hub_rig.Rig(env={"ANTS_HUB_GEO_FILE": geo}, tick_seconds=0.05)
+        hub.__enter__()
+        self.addCleanup(hub.__exit__, None, None, None)
+        self.hub = hub
+        self.rig = sub.Rig(trusted=SHIPPED, hub_port=hub.port)
+        self.addCleanup(self.rig.stop)
+
+    def beacon(self, forwarded=None):
+        headers = dict(BEACON, Origin=hc.SITE, **{"User-Agent": UA_WINDOWS})
+        if forwarded:
+            headers["X-Forwarded-For"] = forwarded
+        self.assertEqual(self.rig.ask("POST", "/hub/a", headers, EVENT)[0], 204)
+
+    def report(self):
+        collector = self.hub.hub.analytics.collector
+        day = analytics_events.pacific_day(time.time())
+        return self.hub.call(lambda: collector.report(day, day))
+
+    def test_two_visitors_of_one_browser_from_two_addresses_are_two_visitors_with_their_countries(self):
+        for address in ("1.0.0.7", "8.8.8.8", "2001:db8::5", "1.0.0.7"):
+            self.beacon(address)
+        report = self.report()
+        self.assertEqual(report["days"][0]["visitors"], 3, "the same browser from three addresses (one of them twice)")
+        self.assertEqual(sorted(report["lists"]["countries"]), ["AU", "DE", "US"])
+        self.assertNotIn("analytics_events_arrive_from_an_internal_address", self.hub.log_text.getvalue())
+
+    def test_a_proxy_that_passes_no_address_is_one_visitor_for_a_browser_and_the_hub_says_so(self):
+        for _ in range(3):
+            self.beacon()
+        self.assertEqual(self.report()["days"][0]["visitors"], 1)
+        log = self.hub.log_text.getvalue()
+        self.assertEqual(log.count("analytics_events_arrive_from_an_internal_address"), 1)
+        self.assertNotIn("127.0.0.1", log)
 
 
 @unittest.skipUnless(shutil.which("nginx"), "nginx is not installed: the allowance of the counter's door was NOT run (tests/scripts/test_nginx_hub_analytics.py)")

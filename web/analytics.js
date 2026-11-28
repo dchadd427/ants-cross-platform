@@ -52,12 +52,14 @@
     w.addEventListener('pagehide', function () { send({ t: 'leave', p: path }); });
 
     // errors: the class, the message and the site's own file and line
-    var errors = 0, told = {};
+    // (the browser's ResizeObserver messages are not the site's errors and take no place of the five; hub/analytics_events.py has the same list: docs/ANALYTICS.md)
+    var errors = 0, told = {}, BENIGN = /^ResizeObserver loop (?:completed with undelivered notifications|limit exceeded)\.?$/i;
     function ownFile(file) {
         var prefix = loc.origin ? loc.origin + '/' : '';
         return prefix && String(file || '').indexOf(prefix) === 0 ? String(file).slice(prefix.length).split('?')[0].split('#')[0] : '';
     }
     function error(name, message, file, line) {
+        if (BENIGN.test(String(message || '').replace(/^\s+|\s+$/g, ''))) return;
         var src = ownFile(file), key = name + '|' + message + '|' + src + '|' + line;
         if (errors >= MAX_ERRORS || told[key]) return;
         errors++;

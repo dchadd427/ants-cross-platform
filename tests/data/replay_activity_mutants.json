@@ -10,7 +10,7 @@
    "test": "./build/tests/test_server/test_history_deaths && ./build/tests/test_server/test_history_service"
   },
   {
-   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js web/shell.html"
   }
  ],
  "mutants": [
@@ -125,7 +125,7 @@
    "old": "death: 14,",
    "new": "death: 9,",
    "build": [],
-   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js web/shell.html"
   },
   {
    "id": "weights_a_theft_weighs_more_than_a_bomb",
@@ -133,7 +133,7 @@
    "old": "theft: 6,",
    "new": "theft: 11,",
    "build": [],
-   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js web/shell.html"
   },
   {
    "id": "weights_a_hit_weighs_more_than_a_fire",
@@ -141,7 +141,7 @@
    "old": "hit: 2 }",
    "new": "hit: 7 }",
    "build": [],
-   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js web/shell.html"
   },
   {
    "id": "deaths_alone_are_not_drawn",
@@ -149,7 +149,7 @@
    "old": "if (!s) s = deathsOf(rec.deaths, total || 5);",
    "new": "",
    "build": [],
-   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js web/shell.html"
   },
   {
    "id": "deaths_alone_win_over_the_action",
@@ -157,7 +157,7 @@
    "old": "var s = actionOf(rec.action);\n        if (!s) s = deathsOf(rec.deaths, total || 5);",
    "new": "var s = deathsOf(rec.deaths, total || 5);\n        if (!s) s = actionOf(rec.action);",
    "build": [],
-   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js web/shell.html"
   },
   {
    "id": "deaths_alone_in_squares_are_drawn",
@@ -165,7 +165,7 @@
    "old": "d.v !== 1 || d.k !== 'x' || typeof d.d",
    "new": "d.v !== 1 || typeof d.d",
    "build": [],
-   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js web/shell.html"
   },
   {
    "id": "deaths_alone_bucket_of_five_seconds_doubles_too_late",
@@ -173,7 +173,7 @@
    "old": "while (Math.ceil(base / f) > MAX_BUCKETS) f *= 2;",
    "new": "while (Math.ceil(base / f) > MAX_BUCKETS + 1) f *= 2;",
    "build": [],
-   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js web/shell.html"
   },
   {
    "id": "hover_a_computer_shows_it_at_rest",
@@ -181,7 +181,7 @@
    "old": "else if (touching()) heat.classList.add('faint');",
    "new": "else heat.classList.add('faint');",
    "build": [],
-   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js web/shell.html"
   },
   {
    "id": "hover_a_touch_screen_shows_nothing_at_rest",
@@ -189,7 +189,7 @@
    "old": "else if (touching()) heat.classList.add('faint');",
    "new": "else if (false) heat.classList.add('faint');",
    "build": [],
-   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js web/shell.html"
   },
   {
    "id": "hover_the_pointer_shows_nothing",
@@ -197,7 +197,7 @@
    "old": "var live = pressed || inside;",
    "new": "var live = pressed;",
    "build": [],
-   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js web/shell.html"
   },
   {
    "id": "limits_any_number_of_buckets_is_read",
@@ -205,7 +205,7 @@
    "old": "!whole(a.n, 1, MAX_BUCKETS)",
    "new": "!whole(a.n, 1, 1e9)",
    "build": [],
-   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js web/shell.html"
   },
   {
    "id": "limits_a_letter_that_is_not_one_of_the_64_is_a_count",
@@ -213,7 +213,7 @@
    "old": "                if (v < 0) return null;\n                list.push(v);",
    "new": "                list.push(v);",
    "build": [],
-   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js web/shell.html"
   },
   {
    "id": "limits_a_bucket_of_deaths_is_not_capped",
@@ -221,7 +221,23 @@
    "old": "death[bucket] = Math.min(MAX_COUNT, death[bucket] + 1);",
    "new": "death[bucket] = death[bucket] + 1;",
    "build": [],
-   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js web/shell.html"
+  },
+  {
+   "id": "the_frame_of_a_match_page_has_no_curve",
+   "file": "web/shell.html",
+   "old": "if (ANTS_REPLAY_MODE && !ANTS_LIVE_MODE && ANTS_REPLAY_FILE && typeof fetch",
+   "new": "if (ANTS_REPLAY_MODE && !ANTS_LIVE_MODE && !ANTS_EMBED && ANTS_REPLAY_FILE && typeof fetch",
+   "build": [],
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js web/shell.html"
+  },
+  {
+   "id": "the_frame_of_a_match_page_has_the_stats_panel_as_well",
+   "file": "web/history_page.js",
+   "old": "if (!env.curveOnly) mount(rec);",
+   "new": "mount(rec);",
+   "build": [],
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js web/shell.html"
   }
  ]
 }

@@ -13,6 +13,7 @@
   TheHourNotTheSecond      no moment finer than the hour is kept, and the visits and their times are still told; an error keeps the day it was seen
   TheReferrers             a referrer is kept as its registered name; the sums name a site only when three visitors came from it
   TheRangeLimit            one address range may make only so many new visitors a day
+  TheVisitorsAddress       the visitors are told apart by the address that nginx passes; a proxy that passes none is no household, and the log says so
   TheSizeOfTheFile         the file's limit: the oldest raw days go, then new events are dropped; the memory of the counter at its caps
   TheClockAndTheLog        a clock that steps back is not a new day; a cut of the log file that a reader kept from happening is made later
   TheDoor                  the HTTP door: method, path, origin, type, size, body, limits, and a 204 that does not say whether an event was kept
@@ -24,8 +25,10 @@ import contextlib
 import gzip
 import http.server
 import io
+import ipaddress
 import json
 import os
+import re
 import sqlite3
 import sys
 import tempfile
@@ -43,7 +46,7 @@ import quick_http  # noqa: E402
 import test_hub_admin_door as base  # noqa: E402
 import fake_discord as fd  # noqa: E402
 from login_flow import Visitor  # noqa: E402
-from hub import analytics, analyticsdoor, analytics_events as events, analytics_sums as sums, analytics_store, config as configmod, geodata, useragent  # noqa: E402
+from hub import analytics, analyticsdoor, analytics_events as events, analytics_sums as sums, analytics_store, config as configmod, geodata, limits as limitmod, useragent  # noqa: E402
 
 ORIGIN = hc.SITE
 UA_WINDOWS = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
@@ -427,19 +430,21 @@ class TheCountry(CounterTest):
 
 
 class Site(http.server.BaseHTTPRequestHandler):
+    """A little db-ip.com: the files that `months` holds, and the filter of the real site, which answers 403 to the name of Python's own client (the cause of the first builds' empty list)."""
     months = {}
     asked = []
+    agents = []
 
     def do_GET(self):
+        agent = self.headers.get("User-Agent", "")
         Site.asked.append(self.path)
+        Site.agents.append(agent)
         body = Site.months.get(self.path)
-        if body is None:
-            self.send_response(404)
-            self.end_headers()
-            return
-        self.send_response(200)
+        status = 403 if agent.startswith("Python-urllib") else 404 if body is None else 200
+        self.send_response(status)
         self.end_headers()
-        self.wfile.write(body)
+        if status == 200:
+            self.wfile.write(body)
 
     def log_message(self, *args):
         pass
@@ -450,7 +455,7 @@ class TheBuildOfTheCountryList(unittest.TestCase):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
         self.out = os.path.join(self.folder.name, "geo", "country.bin")
-        Site.months, Site.asked = {}, []
+        Site.months, Site.asked, Site.agents = {}, [], []
         self.server = quick_http.QuickHTTPServer(("127.0.0.1", 0), Site)
         self.addCleanup(self.server.server_close)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
@@ -464,9 +469,14 @@ class TheBuildOfTheCountryList(unittest.TestCase):
         self.said = out.getvalue() + err.getvalue()
         return status
 
-    def opener(self, url, timeout):
+    def opener(self, request, timeout):
+        """urlopen for the request that the build made, sent to the little site of this test instead (the same headers, the same file name)."""
         import urllib.request
-        return urllib.request.urlopen("http://127.0.0.1:%d/%s" % (self.server.server_port, url.rsplit("/", 1)[-1]), timeout=timeout)
+        return urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:%d/%s" % (self.server.server_port, request.full_url.rsplit("/", 1)[-1]), headers=dict(request.header_items())), timeout=timeout)
+
+    def summary(self):
+        """The lines of the build log that say which list the image has: there must be exactly one."""
+        return [line for line in self.said.splitlines() if line.startswith("hub.geodata: country list:")]
 
     def test_it_writes_the_list_of_the_month_that_is_asked_for(self):
         Site.months["/dbip-country-lite-2026-10.csv.gz"] = self.packed
@@ -483,9 +493,71 @@ class TheBuildOfTheCountryList(unittest.TestCase):
         self.assertEqual(geodata.Geo.open(self.out).month, previous)
         self.assertEqual(Site.asked, ["/dbip-country-lite-%s.csv.gz" % this, "/dbip-country-lite-%s.csv.gz" % previous])
 
-    def test_no_download_is_no_file_and_a_failure(self):
+    def test_the_request_names_the_build_because_the_real_site_refuses_pythons_own_name(self):
+        """The first builds of the image got no list at all: db-ip.com answers 403 to `Python-urllib/3.x`, which is what urllib sends when it is not told a name, and the build went on without a list."""
+        Site.months["/dbip-country-lite-2026-10.csv.gz"] = self.packed
+        self.assertEqual(self.build_it(["build", self.out, "2026-10"]), 0)
+        self.assertEqual(Site.agents, [geodata.USER_AGENT])
+        self.assertFalse(geodata.USER_AGENT.startswith("Python-urllib"))
+        self.assertRegex(geodata.USER_AGENT, r"\A[A-Za-z0-9._/-]{3,40}\Z", "a name and a number: no site, no address, no person")
+        import urllib.request
+        with self.assertRaises(geodata.GeoError) as refused:                                  # (and the site's filter is really there in this test: a request with no name of its own is a 403)
+            geodata.fetch("2026-10", lambda request, timeout: self.opener(urllib.request.Request(request.full_url), timeout))
+        self.assertEqual(str(refused.exception), "HTTP 403")
+
+    def test_a_month_that_is_not_published_yet_falls_back_to_the_one_before_even_when_it_was_asked_for(self):
+        Site.months["/dbip-country-lite-2026-11.csv.gz"] = self.packed
+        self.assertEqual(self.build_it(["build", self.out, "2026-12"]), 0)
+        self.assertEqual(geodata.Geo.open(self.out).month, "2026-11")
+        self.assertEqual(Site.asked, ["/dbip-country-lite-2026-12.csv.gz", "/dbip-country-lite-2026-11.csv.gz"])
+        self.assertEqual(self.summary(), ["hub.geodata: country list: 2026-11"])
+        self.assertIn("hub.geodata: 2026-12: HTTP 404", self.said, "and the month that failed is told, with the answer of the site")
+
+    def test_the_month_that_is_asked_for_is_used_when_it_is_there_and_the_one_before_is_not_asked(self):
+        Site.months["/dbip-country-lite-2026-12.csv.gz"] = self.packed
+        Site.months["/dbip-country-lite-2026-11.csv.gz"] = gzip.compress(b"1.0.0.0,1.0.0.255,DE\n")
+        self.assertEqual(self.build_it(["build", self.out, "2026-12"]), 0)
+        self.assertEqual((geodata.Geo.open(self.out).month, geodata.Geo.open(self.out).country(IP_US)), ("2026-12", "US"))
+        self.assertEqual(Site.asked, ["/dbip-country-lite-2026-12.csv.gz"])
+
+    def test_the_months_that_are_tried(self):
+        from datetime import datetime, timezone
+        self.assertEqual(geodata.months(now=datetime(2026, 11, 28, tzinfo=timezone.utc)), ["2026-11", "2026-10"])
+        self.assertEqual(geodata.months(now=datetime(2027, 1, 1, tzinfo=timezone.utc)), ["2027-01", "2026-12"], "the year turns")
+        self.assertEqual(geodata.months("2027-01"), ["2027-01", "2026-12"])
+        self.assertEqual(geodata.months("2026-12"), ["2026-12", "2026-11"])
+        self.assertEqual(geodata.months("13/2026"), ["13/2026"], "a typo is tried alone: it fails, and no other month takes its place")
+        self.assertEqual(geodata.months("2026-13"), ["2026-13"])
+        self.assertEqual(len(geodata.months()), 2)
+
+    def test_the_build_log_has_one_line_that_says_which_list_was_made(self):
+        Site.months["/dbip-country-lite-2026-10.csv.gz"] = self.packed
+        self.build_it(["build", self.out, "2026-10"])
+        self.assertEqual(self.summary(), ["hub.geodata: country list: 2026-10"])
+
+    def test_no_download_is_no_file_a_failure_and_one_line_that_says_so(self):
         self.assertEqual(self.build_it(["build", self.out, "2026-10"]), 1)
         self.assertFalse(os.path.exists(self.out))
+        self.assertEqual(len(self.summary()), 1)
+        self.assertEqual(self.summary()[0], "hub.geodata: country list: NONE (tried 2026-10, 2026-09): every country of the counter will be unknown")
+        self.assertIn("hub.geodata: 2026-10: HTTP 404", self.said)
+        self.assertIn("hub.geodata: 2026-09: HTTP 404", self.said)
+
+    def test_a_site_that_cannot_be_reached_is_told_by_its_error_class(self):
+        def unreachable(request, timeout):
+            raise OSError("no route")
+        with contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
+            status = geodata.main(["build", self.out, "2026-10"], unreachable)
+        self.assertEqual(status, 1)
+        self.assertIn("hub.geodata: 2026-10: OSError", err.getvalue())
+        self.assertEqual(out.getvalue() + err.getvalue(), "hub.geodata: 2026-10: OSError\nhub.geodata: 2026-09: OSError\nhub.geodata: country list: NONE (tried 2026-10, 2026-09): every country of the counter will be unknown\n")
+
+    def test_a_file_that_cannot_be_written_is_no_list_and_not_a_traceback(self):
+        Site.months["/dbip-country-lite-2026-10.csv.gz"] = self.packed
+        with mock.patch.object(geodata, "write_atomically", side_effect=PermissionError("read only")):
+            self.assertEqual(self.build_it(["build", self.out, "2026-10"]), 1)
+        self.assertEqual(len(self.summary()), 1)
+        self.assertIn("NONE", self.summary()[0])
 
     def test_a_download_that_is_not_a_list_is_no_file(self):
         Site.months["/dbip-country-lite-2026-10.csv.gz"] = gzip.compress(b"nothing,here\n")
@@ -498,6 +570,7 @@ class TheBuildOfTheCountryList(unittest.TestCase):
         self.assertEqual(self.build_it([]), 2)
         self.assertEqual(self.build_it(["fetch", "x"]), 2)
         self.assertEqual(self.build_it(["build", self.out, "13/2026"]), 1)
+        self.assertEqual(Site.asked, [], "a month that is not a month is not asked for")
 
 
 class TheCrawlers(CounterTest):
@@ -582,6 +655,43 @@ class TheEvents(CounterTest):
             with self.subTest(name):
                 self.assertEqual(self.send({"t": "error", "k": "Page", "n": name, "m": "x"}), "shape")
         self.assertEqual(self.send({"t": "error", "k": "Other", "n": "Error", "m": "x"}), "shape")
+
+    def test_a_browsers_harmless_note_is_no_error_of_the_site(self):
+        """ResizeObserver's "loop completed with undelivered notifications" is raised by the browser's own layout and means nothing is wrong: it is not counted, and it is not a refusal either (the page that
+        sent it is told what it is told for every event). The page's own script drops them first (web/analytics.js; its check has the same messages): this is for a page that was open before the update."""
+        notes = ("ResizeObserver loop completed with undelivered notifications.", "ResizeObserver loop completed with undelivered notifications", "ResizeObserver loop limit exceeded",
+                 "resizeobserver loop limit exceeded.")
+        for note in notes:
+            for name in ("Error", "ErrorEvent"):
+                for kind in ("Page", "Game"):
+                    with self.subTest((note, name, kind)):
+                        self.assertEqual(self.send({"t": "error", "k": kind, "n": name, "m": note}), "benign")
+        self.assertEqual(self.rows(), [])
+        self.assertEqual(self.report()["errors"], [])
+        self.assertEqual((self.report()["counter"]["refused_today"], self.report()["counter"]["accepted_today"]), (0, 0), "not refused and not accepted: dropped on purpose")
+
+    def test_an_error_that_only_mentions_a_harmless_note_is_still_an_error(self):
+        for text in ("Cannot recover from ResizeObserver loop limit exceeded", "ResizeObserver loop limit exceeded while sizing the board", "ResizeObserver is not defined",
+                     "ResizeObserver loop limit exceeded\u0000x"):
+            with self.subTest(text):
+                self.assertEqual(self.send({"t": "error", "k": "Page", "n": "TypeError", "m": text}), "ok")
+        self.assertEqual(len(self.report()["errors"]), 4)
+
+    def test_a_note_that_was_counted_before_the_filter_is_not_in_the_report_and_the_kept_sums_stay_as_they_were(self):
+        note = dict(events.EMPTY, kind="error", name="Page", msg="Error: ResizeObserver loop completed with undelivered notifications.")
+        real = dict(events.EMPTY, kind="error", name="Page", msg="TypeError: x is null", src="front/a.js:3")
+        for vis in ("a" * 16, "b" * 16):
+            self.store.add_event(int(self.clock.now), self.day(), note, vis=vis)
+        self.store.add_event(int(self.clock.now), self.day(), real, vis="a" * 16)
+        today = self.report()
+        self.assertEqual([e["msg"] for e in today["errors"]], ["TypeError: x is null"])
+        self.assertEqual(today["days"][0]["errors"], 1)
+        self.clock.now += 86400                                 # (the day is over: its sums are made and kept)
+        self.c.on_tick()
+        yesterday = self.report(self.day(-1), self.day(-1))
+        self.assertEqual(([e["msg"] for e in yesterday["errors"]], yesterday["days"][0]["errors"]), (["TypeError: x is null"], 1))
+        kept = json.loads(self.store.db.execute("SELECT sums FROM days WHERE day = ?", (self.day(-1),)).fetchone()[0])
+        self.assertEqual(sorted(e[1] for e in kept["errors"]), ["Error: ResizeObserver loop completed with undelivered notifications.", "TypeError: x is null"], "what was kept is not rewritten")
 
     def test_the_paths_of_the_pages(self):
         for path, want in (("/", "/"), ("/play", "/play"), ("/play/", "/play"), ("/matches?page=2", "/matches"), ("/match#x", "/match"), ("/mapmaker", "/mapmaker"), ("/map-library", "/map-library"),
@@ -1071,6 +1181,92 @@ class TheRangeLimit(CounterTest):
             self.assertLessEqual(len(self.c.ranges), 20)
 
 
+class Lines:
+    """A log that keeps what it is told, for the tests of what the counter says."""
+
+    def __init__(self):
+        self.lines = []
+
+    def event(self, name, **fields):
+        self.lines.append((name, fields))
+
+
+class TheVisitorsAddress(CounterTest):
+    """The visitor's address is the one that nginx puts in X-Client-Address (the right-most address of the proxy's X-Forwarded-For that is not a proxy: docker/nginx.conf, docker/trusted-proxies.conf). When the
+    proxy in front of the site passes none, nginx has only the proxy's own address, which is an internal one, and every visitor comes from it: that is no household, so the limit of one (RANGE_NEW_MAX) must not
+    drop people, and the hub says so in its log (once an hour, never with the address)."""
+
+    def header(self, i):
+        return UA_WINDOWS.replace("124.0.0.0", "124.0.0.%d" % i)
+
+    def test_two_visitors_of_the_same_browser_from_other_addresses_are_two_visitors(self):
+        for ip in ("203.0.113.7", "198.51.100.4", "2001:db8:1::5", "2001:db8:2::5"):
+            self.assertEqual(self.send(view(), ip=ip), "ok")
+        self.assertEqual(self.send(view("/matches"), ip="203.0.113.7"), "ok")
+        self.assertEqual(self.report()["days"][0]["visitors"], 4)
+        self.assertEqual(len({r[0] for r in self.store.db.execute("SELECT vis FROM events")}), 4)
+
+    def test_a_proxy_that_passes_no_visitor_address_is_not_one_household_that_has_only_so_many_visitors(self):
+        n = analytics.RANGE_NEW_MAX
+        answers = [self.send(view(), ip="172.18.0.5", ua=self.header(i)) for i in range(n + 10)]
+        self.assertEqual(answers, ["ok"] * (n + 10), "the browsers of the whole site, from the one address of the proxy")
+        self.assertEqual(self.report()["days"][0]["visitors"], n + 10)
+        self.assertEqual(self.report()["counter"]["dropped_today"], 0)
+
+    def test_the_address_of_a_household_is_still_limited_and_so_is_the_proxy_at_its_own_higher_number(self):
+        n = analytics.RANGE_NEW_MAX
+        for i in range(n):
+            self.send(view(), ip="203.0.113.7", ua=self.header(i))
+        self.assertEqual(self.send(view(), ip="203.0.113.7", ua=self.header(n)), "limited")
+        with mock.patch.object(analytics, "SHARED_NEW_MAX", 20):
+            answers = [self.send(view(), ip="10.1.2.3", ua=self.header(i)) for i in range(30)]
+        self.assertEqual(answers, ["ok"] * 20 + ["limited"] * 10, "an internal address has a limit too: a flood must not take the room of the day")
+        self.assertEqual(self.send({"t": "visit"}, ip="192.168.1.1", ua=self.header(900), untracked=True), "ok", "a browser that asked not to be tracked counts for its range as before")
+
+    def test_every_kind_of_internal_address_is_one(self):
+        n = analytics.RANGE_NEW_MAX
+        for ip in ("127.0.0.1", "10.9.8.7", "172.16.0.1", "172.31.255.254", "192.168.50.50", "::1", "fd00::7", "::ffff:10.0.0.9"):
+            with self.subTest(ip):
+                self.c.ranges.clear()
+                self.assertEqual([self.send(view(), ip=ip, ua=self.header(1000 + i)) for i in range(n + 1)], ["ok"] * (n + 1))
+        for ip in ("172.32.0.1", "172.15.0.1", "8.8.8.8", "100.64.0.1", "192.169.0.1", "2001:db8::1", "fe80::1"):
+            with self.subTest(ip):
+                self.c.ranges.clear()
+                self.assertEqual([self.send(view(), ip=ip, ua=self.header(2000 + i)) for i in range(n + 1)][-1], "limited")
+
+    def test_the_log_says_once_an_hour_that_the_proxy_passes_no_address_and_names_none(self):
+        log = self.c.log = Lines()
+        self.send(view(), ip="172.18.0.5")
+        self.send(view(), ip="172.18.0.5", ua=UA_LINUX)
+        self.send({"t": "leave", "p": "/"}, ip="172.18.0.5")
+        self.assertEqual([name for name, _ in log.lines], ["warning"], "once")
+        self.assertEqual(list(log.lines[0][1]), ["what"])
+        self.assertNotIn("172", str(log.lines))
+        self.clock.now += 3599
+        self.send(view(), ip="172.18.0.5", ua=UA_IPHONE)
+        self.assertEqual(len(log.lines), 1, "not yet an hour")
+        self.clock.now += 2
+        self.send(view(), ip="172.18.0.5", ua=UA_EDGE)
+        self.assertEqual(len(log.lines), 2, "an hour later it is said again, as long as it goes on")
+
+    def test_a_visitor_from_a_public_address_makes_no_such_line(self):
+        log = self.c.log = Lines()
+        for ip in (IP_US, IP_AU, IP_DE, "203.0.113.7"):
+            self.send(view(), ip=ip)
+        self.send({"t": "visit"}, ip="198.51.100.9", untracked=True)
+        self.assertEqual(log.lines, [])
+
+    def test_the_internal_addresses_are_the_ranges_that_nginx_takes_for_a_proxy(self):
+        """One list: docker/trusted-proxies.conf names where a reverse proxy connects from, and an event that comes from there as the VISITOR's address is the proxy's own."""
+        with open(os.path.join(REPO, "docker", "trusted-proxies.conf"), encoding="utf-8") as f:
+            listed = sorted(str(ipaddress.ip_network(m)) for m in re.findall(r"(?m)^set_real_ip_from (\S+);", f.read()))
+        self.assertEqual(sorted(str(n) for n in limitmod.INTERNAL_NETWORKS), listed)
+        for text, want in (("127.0.0.1", True), ("10.0.0.1", True), ("172.20.1.1", True), ("192.168.0.9", True), ("::1", True), ("fc00::1", True), ("::ffff:192.168.1.1", True),
+                           ("8.8.8.8", False), ("172.32.0.1", False), ("2001:db8::1", False), ("", False), ("junk", False), (None, False)):
+            with self.subTest(text):
+                self.assertEqual(limitmod.is_internal(text), want)
+
+
 class TheSizeOfTheFile(CounterTest):
     """The file is held to DB_MAX_BYTES as hub.db is: the oldest raw days go from 90% (their sums are made first), and at the limit new events are dropped."""
 
@@ -1207,6 +1403,13 @@ class TheDoor(DoorTest):
         self.assertEqual((first.status, first.body, second.status, second.body), (204, b"", 204, b""))
         self.assertEqual(len(self.rows()), 1)
 
+    def test_a_browsers_harmless_note_is_answered_like_an_event_that_was_kept_and_is_not_kept(self):
+        note = {"t": "error", "k": "Page", "n": "Error", "m": "ResizeObserver loop completed with undelivered notifications."}
+        kept = self.post(view())
+        dropped = self.post(note)
+        self.assertEqual((kept.status, kept.body, dropped.status, dropped.body), (204, b"", 204, b""))
+        self.assertEqual([r[0] for r in self.rows()], ["view"])
+
     def test_the_header_of_a_browser_that_asked_not_to_be_tracked_makes_the_minimal_visit(self):
         for header in (("DNT", "1"), ("Sec-GPC", "1")):
             with self.subTest(header):
@@ -1285,6 +1488,25 @@ class TheDoor(DoorTest):
     def test_no_address_is_a_400(self):
         self.assertEqual(self.post(view(), address=False).status, 400)
         self.assertIn("analytics_asked_without_x_client_address", self.rig.log_text.getvalue())
+
+    def test_two_visitors_from_other_addresses_behind_the_proxy_are_two_visitors(self):
+        """The door counts by the address that nginx puts in X-Client-Address (the visitor's, taken from the proxy's X-Forwarded-For): the connection's own address is the proxy's for everybody, as it is here (127.0.0.1)."""
+        for ip in ("203.0.113.7", "198.51.100.4", "2001:db8::5"):
+            self.assertEqual(self.post(view(), ip=ip).status, 204)
+        self.assertEqual(self.post(view("/matches"), ip="203.0.113.7").status, 204)
+        rows = self.rows()
+        self.assertEqual(len({r[1] for r in rows}), 3)
+        self.assertEqual(rows[0][1], rows[3][1], "the same address and browser again is the same visitor")
+        day = events.pacific_day(self.clock.now)
+        self.assertEqual(self.rig.call(lambda: self.collector.report(day, day))["days"][0]["visitors"], 3)
+
+    def test_events_from_an_internal_address_are_counted_and_the_log_says_so_without_the_address(self):
+        for i in range(3):
+            self.assertEqual(self.post(view(), ip="172.18.0.5", ua=UA_WINDOWS.replace("124.0.0.0", "124.0.0.%d" % i)).status, 204)
+        self.assertEqual(len(self.rows()), 3)
+        log = self.rig.log_text.getvalue()
+        self.assertEqual(log.count("analytics_events_arrive_from_an_internal_address"), 1)
+        self.assertNotIn("172.18", log)
 
     def test_an_address_that_comes_too_often_is_refused_and_others_are_not(self):
         statuses = [self.post(view("/"), ip="8.8.4.4").status for _ in range(60)]

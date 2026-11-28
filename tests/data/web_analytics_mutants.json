@@ -288,6 +288,34 @@
    "old": "if (unknown) add(wrap, barRow(o.label(unknown[0]), o.valueOf(unknown), max, total, o.hatOf ? o.hatOf(unknown) : 0, 'dim'));",
    "new": "if (unknown) wrap.children.unshift(barRow(o.label(unknown[0]), o.valueOf(unknown), max, total, o.hatOf ? o.hatOf(unknown) : 0, 'dim'));",
    "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "a_resize_observer_message_is_counted_as_a_page_error",
+   "file": "web/analytics.js",
+   "old": "if (BENIGN.test(String(message || '').replace(/^\\s+|\\s+$/g, ''))) return;",
+   "new": ";",
+   "test": "node tests/scripts/web_analytics_check.js web/analytics.js"
+  },
+  {
+   "id": "the_older_wording_of_the_resize_observer_message_is_counted_as_a_page_error",
+   "file": "web/analytics.js",
+   "old": "ResizeObserver loop (?:completed with undelivered notifications|limit exceeded)",
+   "new": "ResizeObserver loop completed with undelivered notifications",
+   "test": "node tests/scripts/web_analytics_check.js web/analytics.js"
+  },
+  {
+   "id": "an_error_that_ends_with_the_resize_observer_words_is_dropped",
+   "file": "web/analytics.js",
+   "old": "BENIGN = /^ResizeObserver loop",
+   "new": "BENIGN = /ResizeObserver loop",
+   "test": "node tests/scripts/web_analytics_check.js web/analytics.js"
+  },
+  {
+   "id": "an_error_that_starts_with_the_resize_observer_words_is_dropped",
+   "file": "web/analytics.js",
+   "old": "limit exceeded)\\.?$/i;",
+   "new": "limit exceeded)/i;",
+   "test": "node tests/scripts/web_analytics_check.js web/analytics.js"
   }
  ]
 }
