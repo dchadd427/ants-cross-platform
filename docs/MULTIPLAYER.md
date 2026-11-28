@@ -107,6 +107,7 @@ The prediction is **on by default** in every match of the network. `--no-predict
 
 - How the prediction works, what it shows and plays, when it is off and the limit on its work are described in [`NETWORK_PORT.md`](NETWORK_PORT.md#prediction-of-ones-own-orders-predictionhpp-cue_routerhpp-netgame-applicationview_sim).
 - [`NETWORK_PORT.md`](NETWORK_PORT.md) "Prediction of one's own orders" has the design.
+- **The tick of an order (protocol 30).** The game tells the server which tick it applied your order at, and the server runs the order there, so your own ants are not corrected afterwards (the rubber band of one's own ants). It costs the lead: the order runs in the match up to a tick later than it could. [`NETWORK_PORT.md`](NETWORK_PORT.md#protocol-30-the-tick-of-an-order) has the rule, the cap (0.8 s) and the measurements.
 - **Hints (protocol 26).** The other players' orders, and a computer player's, can reach the prediction ahead of their sealed turns, so that the predicted engine, which your own ants are drawn from, has theirs where they will be: the browsers send each other their own orders through the operator's relay (a direct connection only when both players turned it on in the room), and the server sends a computer player's order the moment the bot gives it. The turns, the hashes and the record are not touched. [`P2P_HINTS.md`](P2P_HINTS.md) has the rules.
 
 ## Limits

@@ -640,7 +640,6 @@ std::optional<uint32_t> NetGame::command_delay_ms() const {
 
 void NetGame::update(uint32_t now_ms) {
     now_ = now_ms;
-    if (prediction_) prediction_->set_time_ms(now_ms);               // (before the sessions read the link: the turns that arrive in this update arrive now)
     if (role_ == Role::Host) {
         update_host();
         announce_room();

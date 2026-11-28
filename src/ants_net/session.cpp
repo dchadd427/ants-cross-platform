@@ -189,10 +189,11 @@ void HostSession::send_turns(Connection* conn, uint32_t from_turn, uint32_t to_t
     }
 }
 
-bool HostSession::submit_local(sim::Command command) {
+bool HostSession::submit_local(sim::Command command, uint32_t at_turn, uint32_t* open_turn) {
     if (!started_ || seatless()) return false;
     command.issuer = cfg_.host_player;
-    if (!sequencer_.submit(cfg_.host_player, command)) return false;                // (a refused command never reaches a turn: nothing to measure, nothing to predict)
+    if (open_turn != nullptr) *open_turn = sequencer_.next_turn();
+    if (!sequencer_.submit(cfg_.host_player, command, at_turn)) return false;       // (a refused command never reaches a turn: nothing to measure, nothing to predict)
     delay_.on_sent(command);
     return true;
 }
@@ -325,7 +326,9 @@ void HostSession::handle_message(uint8_t player, const std::vector<uint8_t>& msg
                                                      // clicks on would reach the limit of commands per turn, which no turn resets): discarded, no violation
             if (cfg_.start_delay_ms != 0 && sequencer_.next_turn() == 0) return;     // no turn is sealed yet in a match that waits for its start dialog (protocol 12): an honest client sends nothing (its dialog takes every
                                                      // click and key until its first turn has run), and a command now would run at the first tick, ahead of every person's: discarded, no violation
-            if (sequencer_.submit_checked(player, std::move(m.command)) == Submit::Refused) violation(player);      // (a command over the budget, or without an ant to order, is dropped: not an offence)
+            const uint32_t open_turn = sequencer_.next_turn();       // (protocol 30: the first turn that is still open as this order arrives: what its sender learns its lag from)
+            if (sequencer_.submit_checked(player, std::move(m.command), m.turn) == Submit::Refused) return violation(player);      // (a command over the budget, or without an ant to order, is dropped: not an offence)
+            if (m.seq != 0 && clients_[player].conn != nullptr && !clients_[player].conn->send(encode(OrderAckMsg{m.seq, open_turn}))) lose(player);      // (an order that is dropped is answered too: the lag is what the sender learns)
             return;
         }
         case MsgType::Vote: {

@@ -302,14 +302,24 @@ std::vector<uint8_t> encode(const CommandMsg& m) {
     std::vector<uint8_t> out;
     out.push_back(static_cast<uint8_t>(MsgType::Command));
     sim::encode(m.command, out);
+    ByteWriter w(out);
+    w.u32(m.turn);
+    w.u32(m.seq);
     return out;
 }
 bool decode(const uint8_t* data, size_t size, CommandMsg& out) {
-    if (data == nullptr || size < 1 + sim::kCommandHeaderBytes || size > kMaxMessageBytes || data[0] != static_cast<uint8_t>(MsgType::Command)) return false;
+    constexpr size_t kTail = 8;                      // the turn and the seq
+    if (data == nullptr || size < 1 + sim::kCommandHeaderBytes + kTail || size > kMaxMessageBytes || data[0] != static_cast<uint8_t>(MsgType::Command)) return false;
     sim::Command c;
     size_t used = 0;
-    if (sim::decode(data + 1, size - 1, c, &used) != sim::DecodeError::None || used != size - 1) return false;
-    out.command = std::move(c);
+    if (sim::decode(data + 1, size - 1 - kTail, c, &used) != sim::DecodeError::None || used != size - 1 - kTail) return false;
+    ByteReader r(data + 1 + used, kTail);
+    CommandMsg m;
+    m.turn = r.u32();
+    m.seq = r.u32();
+    if (!r.done()) return false;
+    m.command = std::move(c);
+    out = std::move(m);
     return true;
 }
 
@@ -1017,6 +1027,26 @@ bool decode(const uint8_t* data, size_t size, LagMsg& out) {
     m.seat = r->u8();
     m.behind_ms = r->u32();
     if (!r->done() || m.seat >= sim::MAX_PLAYERS) return false;
+    out = m;
+    return true;
+}
+
+std::vector<uint8_t> encode(const OrderAckMsg& m) {
+    std::vector<uint8_t> out;
+    ByteWriter w(out);
+    w.u8(static_cast<uint8_t>(MsgType::OrderAck));
+    w.u32(m.seq);
+    w.u32(m.open_turn);
+    return out;
+}
+bool decode(const uint8_t* data, size_t size, OrderAckMsg& out) {
+    ByteReader storage(nullptr, 0);
+    ByteReader* r = nullptr;
+    if (!open(data, size, MsgType::OrderAck, r, storage)) return false;
+    OrderAckMsg m;
+    m.seq = r->u32();
+    m.open_turn = r->u32();
+    if (!r->done() || m.seq == 0) return false;
     out = m;
     return true;
 }

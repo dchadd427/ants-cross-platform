@@ -197,8 +197,9 @@ public:
     /// it misses, and the first turn drops the old host and every seat of the roster that did not follow. Instead of start().
     void resume(uint32_t now_ms, uint32_t resume_turn, uint8_t old_host, const std::vector<PeerState>& survivors);
 
-    /// A command of the host's own player (a host without a seat has none: ignored). False when it was not queued (not started, no seat, or the sequencer refused it)
-    bool submit_local(sim::Command command);
+    /// A command of the host's own player (a host without a seat has none: ignored). False when it was not queued (not started, no seat, or the sequencer refused it).
+    /// `at_turn` is the turn that the order is wanted in (protocol 30, the same as a client's: Sequencer::submit_checked); `open_turn`, when given, is the first turn that was open when it was submitted
+    bool submit_local(sim::Command command, uint32_t at_turn = 0, uint32_t* open_turn = nullptr);
     /// Relays a chat text of the host's own player (a host without a seat has none: ignored). A team line goes to the players that may read it, see "Who hears a team line".
     void chat_local(const std::string& text, bool team);
     /// True when the host plays no seat (a dedicated server): it is the sequencer and the referee only, and it never waits for a player that falls behind
@@ -476,7 +477,8 @@ public:
 
     /// The player's command, sent to the host (which stamps the issuer). False when there is no host (an election is going on), when this machine is not following the match
     /// (it reconnects or catches up), and while the match is held (the last Presence names a seat that is missing, or a resume countdown that runs: nothing is sealed, the host would discard it).
-    bool submit(sim::Command command);
+    /// `at_turn` is the turn that the order is wanted in (protocol 30: CommandMsg::turn, 0: the first open one) and `seq` the number that the host answers with an OrderAck (0: no answer).
+    bool submit(sim::Command command, uint32_t at_turn = 0, uint32_t seq = 0);
     bool chat(const std::string& text, bool team);
     /// The player quits the match. A machine that is reconnecting or catching up has nothing to say to anybody: its session is over (Lost).
     void leave();
@@ -498,6 +500,8 @@ public:
     static constexpr uint32_t kAskGraceMs = 3000;
 
     void set_on_chat(std::function<void(const ChatMsg&)> fn) { on_chat_ = std::move(fn); }
+    /// Protocol 30: the host's answer to an order of this player that carried a `seq`: the first turn that was open when the order arrived (OrderAckMsg)
+    void set_on_order_ack(std::function<void(const OrderAckMsg&)> fn) { on_order_ack_ = std::move(fn); }
     /// Protocol 26: every Hint, IceConfig, P2pPeers and Signal that the host sends while this machine follows the match, whole (the caller decodes it: p2p.hpp). Never called for another message.
     void set_on_p2p(std::function<void(const std::vector<uint8_t>&)> fn) { on_p2p_ = std::move(fn); }
     /// Sends a P2pConfig or a Signal (an encoded message of p2p.hpp) to the host. False when there is no host to send it to (a new one is being chosen, the machine reconnects or catches up)
@@ -632,6 +636,7 @@ private:
     std::array<uint32_t, sim::MAX_PLAYERS> next_request_ok_ms_{};
     std::function<void(const ChatMsg&)> on_chat_;
     std::function<void(const std::vector<uint8_t>&)> on_p2p_;
+    std::function<void(const OrderAckMsg&)> on_order_ack_;
     bool started_{false};
     bool finished_{false};
     bool desynced_{false};

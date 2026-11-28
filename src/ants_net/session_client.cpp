@@ -44,11 +44,13 @@ void ClientSession::start(uint32_t now_ms) {
     if (cfg_.rejoin) mode_ = Mode::CatchingUp;       // this machine starts from nothing: the server gives it the match (CatchUp, TurnBatch) over the link that its lobby used
 }
 
-bool ClientSession::submit(sim::Command command) {
+bool ClientSession::submit(sim::Command command, uint32_t at_turn, uint32_t seq) {
     if (!started_ || mode_ != Mode::Normal || !connected() || paused()) return false;
     command.issuer = cfg_.player;
     CommandMsg m;
     m.command = std::move(command);
+    m.turn = at_turn;
+    m.seq = seq;
     if (!conn_->send(encode(m))) return false;
     delay_.on_sent(m.command);                       // measured from now to the tick that applies it (its send time is the clock of the frame that sends it)
     return true;
@@ -163,6 +165,11 @@ void ClientSession::poll_host(uint32_t now_ms) {
             case MsgType::Chat: {
                 ChatMsg c;
                 if (decode(msg, c) && on_chat_) on_chat_(c);
+                break;
+            }
+            case MsgType::OrderAck: {
+                OrderAckMsg a;
+                if (decode(msg, a) && on_order_ack_) on_order_ack_(a);
                 break;
             }
             case MsgType::Pong: {

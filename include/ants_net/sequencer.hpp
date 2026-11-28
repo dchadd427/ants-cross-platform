@@ -6,6 +6,10 @@
 // the same tick. The sequencer also compares the state hashes the peers report against the host's own, and stalls sealing while a peer lags too far
 // behind (flow control), so nobody is left behind by more than a few seconds.
 //
+// The tick of an order (protocol 30, docs/NETWORK_PORT.md "The tick of an order"): a client names the turn that it wants an order sealed into (the tick that its own screen applied the order at). The sequencer seals it there when
+// that turn is still open, in the first open turn when it is not (the order came late), and never more than Config::max_order_ahead_turns beyond the first open turn; a seat's orders keep the order that it sent them in. The
+// tick is a request about WHEN, never about WHAT: the turn that is sealed is what every machine runs, as ever.
+//
 // What a seat may have sealed is limited here and nowhere else (docs/NETWORK_PORT.md, "The order budget"): a turn takes 64 commands of a seat, a seat has a budget of orders (a store that fills at a
 // steady pace: the clock is the sealed turns, 20 a second), and an order that names no ant that the seat could order is not sealed. What is over is dropped, counted and marked, never made a
 // violation and never put into a turn, so every machine runs the same turns.
@@ -65,6 +69,10 @@ public:
         // that says them as fast as it can cannot fill the log (9 bytes each, 64 a turn were 11 KB a second). The first Quit of a seat is never charged: a seat that is over a budget can always leave.
         uint32_t control_burst = 512;
         uint32_t controls_per_second = 8;
+        // The tick of an order (protocol 30): how far beyond the first open turn an order may be held, 16 turns (800 ms). An honest client stamps the tick that its screen stands at, which is its lead beyond the turns that it has
+        // (at most Prediction::Config::max_lead_ticks = 12) and no further than the turns that the host sealed already: 12 turns beyond the first open one at the very most, so 16 never touches an honest order. A stamp
+        // beyond it is cut to it (counted, never an offence: a client that is a little off, after a host change for one, is not a cheat), so that no seat can park orders far in the future: each is held for 0.8 s at the most.
+        uint32_t max_order_ahead_turns = 16;
     };
 
     Sequencer() : Sequencer(Config{}) {}
@@ -85,14 +93,22 @@ public:
     /// seat has none left in the budget of its kind of command (Config::order_burst for the commands that carry ants, control_burst for the rest; a seat's first Quit has none to take). A command that does not fit into the turn
     /// goes into one of the next turns (the first that has room for it, behind the older commands of the same player: the order in which a player sent its commands is kept).
     /// The sequencer alone decides which turn carries a command, so every machine runs the same turns.
-    Submit submit_checked(uint8_t player, sim::Command command);
+    ///
+    /// `at_turn` (protocol 30) is the turn that the sender wants it sealed into: that turn when it is still open (next_turn() or later), else the first open turn (never an earlier turn: nobody schedules into the past), and at
+    /// most Config::max_order_ahead_turns beyond the first open turn (a stamp beyond that is cut to it and counted: order_ahead_clamped()). A command of a seat is never sealed before one that the seat sent earlier. 0 is "the first
+    /// open turn", which is what every command had before the tick of an order.
+    Submit submit_checked(uint8_t player, sim::Command command, uint32_t at_turn = 0);
     /// submit_checked() as a yes or no: true when the command was queued
-    bool submit(uint8_t player, sim::Command command) { return submit_checked(player, std::move(command)) == Submit::Queued; }
+    bool submit(uint8_t player, sim::Command command, uint32_t at_turn = 0) { return submit_checked(player, std::move(command), at_turn) == Submit::Queued; }
     /// Commands of `player` that were dropped because a budget was used up, and commands that were dropped because the vetter found no ant in them (for the whole match: they are never reset); the seats that
     /// have gone over their budget at least once (a bit for each seat): the "heavy order rate" mark of the status, the replay's head and the history
     uint32_t dropped_over_budget(uint8_t player) const noexcept { return player < sim::MAX_PLAYERS ? over_budget_[player] : 0u; }
     uint32_t dropped_no_ants(uint8_t player) const noexcept { return player < sim::MAX_PLAYERS ? no_ants_[player] : 0u; }
     uint8_t heavy_seats() const noexcept { return heavy_; }
+    /// Commands of `player` whose tick was beyond the first open turn by more than Config::max_order_ahead_turns (cut to it), for the whole match
+    uint32_t order_ahead_clamped(uint8_t player) const noexcept { return player < sim::MAX_PLAYERS ? ahead_clamped_[player] : 0u; }
+    /// Commands of `player` that wait for a turn that is not the next one (stamped beyond it)
+    size_t held_ahead(uint8_t player) const noexcept { return player < sim::MAX_PLAYERS ? ahead_count_[player] : 0u; }
     /// A command that the sequencer itself creates: the drop-out of a peer that left or fell silent (`command.issuer` is that peer). It goes into
     /// the next turn whatever the state of the peer, so that every machine drops the team at the same tick. Clients cannot send these (submit
     /// refuses every type that is not is_client_command).
@@ -146,6 +162,7 @@ public:
     size_t pending_reports() const noexcept { return reports_.size() + referee_.size(); }
 
 private:
+    void drop_ahead(uint8_t player);
     Config cfg_;
     std::array<bool, sim::MAX_PLAYERS> active_{};
     std::array<uint32_t, sim::MAX_PLAYERS> acked_{};          // highest executed turn + 1 (0 = nothing executed yet)
@@ -153,6 +170,10 @@ private:
     std::array<uint32_t, sim::MAX_PLAYERS> queued_by_{};
     std::vector<sim::Command> queue_;
     std::array<std::deque<sim::Command>, sim::MAX_PLAYERS> carry_;   // per player: the commands beyond max_commands_per_turn, in the order they came
+    std::map<uint32_t, std::vector<sim::Command>> ahead_;            // the commands that a client stamped with a turn beyond the next one, by that turn, each seat's in the order they came (protocol 30)
+    std::array<uint32_t, sim::MAX_PLAYERS> ahead_count_{};           // ... how many of them each seat has waiting (they count with the carried ones against max_carried_commands)
+    std::array<uint32_t, sim::MAX_PLAYERS> last_target_{};           // the turn that a seat's last command was put into: a later command is never sealed before it
+    std::array<uint32_t, sim::MAX_PLAYERS> ahead_clamped_{};
     Vetter vetter_;
     std::array<uint32_t, sim::MAX_PLAYERS> budget_milli_{};     // the orders that each seat has left, in thousandths: full at the start, one turn's earnings added at every seal
     std::array<uint32_t, sim::MAX_PLAYERS> control_milli_{};    // ... and the control commands

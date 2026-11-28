@@ -70,8 +70,8 @@
     {
       "id": "host_refusal_predicted",
       "file": "src/ants_net/netgame_match.cpp",
-      "old": "        if (!host_session_->submit_local(c)) return sim::CommandResult{};",
-      "new": "        host_session_->submit_local(c);",
+      "old": "        if (!host_session_->submit_local(c, at_turn, &open_turn)) return sim::CommandResult{};",
+      "new": "        host_session_->submit_local(c, at_turn, &open_turn);",
       "build": [
         "test_netgame"
       ],
@@ -275,28 +275,6 @@
       ],
       "test": "./build/tests/test_net/test_prediction",
       "expect": "RP2.5"
-    },
-    {
-      "id": "lead_is_the_longest_lag",
-      "file": "src/ants_net/prediction.cpp",
-      "old": "if (c <= lag.second + cfg_.lag_fresh_ticks && (lowest == 0 || lag.first < lowest)) lowest = lag.first;",
-      "new": "if (c <= lag.second + cfg_.lag_fresh_ticks && (lowest == 0 || lag.first > lowest)) lowest = lag.first;",
-      "build": [
-        "test_prediction"
-      ],
-      "test": "./build/tests/test_net/test_prediction",
-      "expect": "RP8.2"
-    },
-    {
-      "id": "lead_is_the_longest_lag_on_a_link",
-      "file": "src/ants_net/prediction.cpp",
-      "old": "if (c <= lag.second + cfg_.lag_fresh_ticks && (lowest == 0 || lag.first < lowest)) lowest = lag.first;",
-      "new": "if (c <= lag.second + cfg_.lag_fresh_ticks && (lowest == 0 || lag.first > lowest)) lowest = lag.first;",
-      "build": [
-        "test_prediction_link"
-      ],
-      "test": "./build/tests/test_app/test_prediction_link",
-      "expect": "LK2"
     },
     {
       "id": "missed_order_not_expected_in_the_next_turn",

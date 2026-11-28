@@ -1348,7 +1348,7 @@ void run_cue_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("RP8.1 The Lead Learns The Lag Of The Player's Own Orders: A Lead That Starts Too Low (One Tick Where The Orders Need Six) Costs The First Order A Chase And Then Is The Lag, With No Rebuild For The Orders That Follow; With A Bias Of One Every Order Costs One Rebuild That Moves The Ordered Ants On By A Tick, And Never Chases") {
+    TEST_CASE("RP8.1 The Lead Learns The Lag Of The Player's Own Orders: A Lead That Starts Too Low (One Tick Where The Orders Need Six) Costs The First Order A Chase And Then Is The Lag, With No Rebuild For The Orders That Follow; With A Bias Of One The Orders Are Stamped A Tick Beyond The Lag, The Host Seals Them There, And They Cost No Rebuild Either") {
         for (uint32_t bias : {0u, 1u}) {
             Scenario sc;
             sc.seed = 110 + bias;
@@ -1357,6 +1357,7 @@ void run_cue_tests() {
             sc.uplink = 2;                                                                       // the lag of an order is 3 + 1 + 2 = 6 ticks
             sc.lead_ms = 50;                                                                     // the estimate: one tick
             sc.prediction.learn_lead = true;
+            sc.honor_stamps = true;
             sc.prediction.lead_bias_ticks = bias;
             Rig rig(sc);
             Lcg rng(110 + bias);
@@ -1377,14 +1378,13 @@ void run_cue_tests() {
             }
             rig.run_quiet(30);
             const uint64_t later = p.stats().rebuilds - after_first;
-            if (bias == 0) ASSERT_EQ(later, 0u);                                                 // the lead is the lag: every order lands where it is run
-            else ASSERT_EQ(later, 10u);                                                          // one tick too late for each: a rebuild, and never more
+            ASSERT_EQ(later, 0u);                                                                // the lead is the lag (or beyond it with a bias): the host seals every order at its stamp, so every order lands where it is run
             ASSERT_EQ(rig.derived_mismatches, 0u);
             ASSERT_EQ(p.pending_orders(), 0u);
         }
     } TEST_END();
 
-    TEST_CASE("RP8.2 The Lag Is The Shortest Of The Last Five Orders: One Order That A Stall Held Up Does Not Move The Lead (Its Lag Is Bounded By The Longest Lead), A Lag That Has Grown For Good Does When All Five Say So (At Once, By Its Two Ticks), And One Order With A Shorter Lag Brings It Down At Once") {
+    TEST_CASE("RP8.2 The Lag Is The Longest Of The Last Twelve Orders, No More Than Two Ticks Above Their Middle: One Order That A Stall Held Up Raises The Lead By The Two Ticks, Not To Its Own Lag; A Lag That Has Grown For Good Raises It At Once (The Host's Answer Says That The Order Was Late); It Falls When The Longer Lags Leave The Twelve") {
         Scenario sc;
         sc.seed = 120;
         sc.buffer_turns = 1;
@@ -1392,29 +1392,44 @@ void run_cue_tests() {
         sc.uplink = 1;                                                                           // the lag is 1 + 1 + the uplink: 3
         sc.lead_ms = 150;
         sc.prediction.learn_lead = true;
+        sc.honor_stamps = true;
         sc.prediction.lead_bias_ticks = 0;
         sc.prediction.lag_fresh_ticks = 5000;
         Rig rig(sc);
         Lcg rng(120);
         Prediction& p = *rig.prediction();
         rig.run(16);
+        std::vector<uint32_t> lags;                                                              // (the lags that the orders had, as the rule sees them: at most the longest lead)
+        // the rule, written down again here: the longest of the last 12, no more than 2 above the middle (the one at index n / 2 of the sorted ones)
+        const auto rule = [&]() {
+            std::vector<uint32_t> last(lags.end() - static_cast<std::ptrdiff_t>(std::min<size_t>(12, lags.size())), lags.end());
+            std::sort(last.begin(), last.end());
+            return std::min(last.back(), last[last.size() / 2] + 2u);
+        };
         const auto order_with_uplink = [&](uint32_t uplink) {
             rig.set_uplink(uplink);
             rig.issue(random_order(rng, rig.ids, 0));
+            lags.push_back(std::min<uint32_t>(2u + uplink, 12u));
             rig.run(uplink + 25);                                                                // (sealed, back, run)
             return p.learned_lag_ticks();
         };
-        // lags 3 3 3, then a stall (32: held to 12), 3 3, then the link is slower for good: 5 5 5 5 5 5, then one order that is quick again: 3
-        const uint32_t uplinks[13] = {1, 1, 1, 30, 1, 1, 3, 3, 3, 3, 3, 3, 1};
-        const uint32_t expected[13] = {3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 5, 5, 3};                     // [3] [3 3] [3 3 3] [3 3 3 12] [.. 3] [3 3 12 3 3] [3 12 3 3 5] [12 3 3 5 5] [3 3 5 5 5] [3 5 5 5 5] [5 5 5 5 5] [..] [5 5 5 5 3]
-        for (int i = 0; i < 13; ++i) {
+        // lags 3 3 3, then a stall (32: held to 12), 3 3, then the link is slower for good: 5 5 5 5 5 5, then one order that is quick again: 3, and then quick ones until the slower lags leave the twelve
+        std::vector<uint32_t> uplinks = {1, 1, 1, 30, 1, 1, 3, 3, 3, 3, 3, 3, 1};
+        for (int i = 0; i < 12; ++i) uplinks.push_back(1);
+        for (size_t i = 0; i < uplinks.size(); ++i) {
             const uint32_t learned = order_with_uplink(uplinks[i]);
-            ASSERT_EQ(learned, expected[i]);
-            if (i == 3) ASSERT_EQ(p.lead_ticks(), 3u);                                           // the stall did not move the lead
-            if (i == 9) ASSERT_EQ(p.lead_ticks(), 3u);                                           // four orders of the slower link: one of the last five was still quick (an order that lands a tick late is the lesser mistake)
-            if (i == 10) ASSERT_EQ(p.lead_ticks(), 5u);                                          // all five: the change moved it, at once
-            if (i == 12) ASSERT_EQ(p.lead_ticks(), 3u);                                          // one quick order: down at once
+            ASSERT_EQ(learned, rule());
+            if (i == 2) ASSERT_EQ(p.lead_ticks(), 3u);
+            if (i == 3) {
+                ASSERT_EQ(learned, 5u);                                                          // the stall raised it by the two ticks that a single lag may stand above the middle, not to its own 12
+                ASSERT_EQ(p.lead_ticks(), 5u);                                                   // (at once: the order was late)
+            }
+            if (i == 6) ASSERT_EQ(p.lead_ticks(), 5u);                                           // the slower link: its lags of 5 are within the lead already
+            if (i == 11) ASSERT_TRUE(p.lead_ticks() >= 5u);                                      // the link of 5 is covered
         }
+        ASSERT_EQ(p.learned_lag_ticks(), 3u);                                                    // the slower lags and the stall have left the twelve: the lag of the link now
+        rig.run_quiet(20);
+        ASSERT_EQ(p.lead_ticks(), 3u);
     } TEST_END();
 
     TEST_CASE("RP8.3 A Lag That Is Not Fresh Is Forgotten (lag_fresh_ticks): The Lead Goes Back To The Owner's Estimate Once The Orders Are Old, And The Orders That Come After A Quiet Spell Teach It Again") {
@@ -1425,6 +1440,7 @@ void run_cue_tests() {
         sc.uplink = 3;                                                                           // the lag is 5
         sc.lead_ms = 100;                                                                        // the estimate: 2
         sc.prediction.learn_lead = true;
+        sc.honor_stamps = true;
         sc.prediction.lead_bias_ticks = 0;
         sc.prediction.lag_fresh_ticks = 60;
         Rig rig(sc);
@@ -1454,6 +1470,7 @@ void run_cue_tests() {
         sc.uplink = 3;                                                                           // the lag is 5
         sc.lead_ms = 100;                                                                        // the estimate: 2
         sc.prediction.learn_lead = true;
+        sc.honor_stamps = true;
         sc.prediction.lead_bias_ticks = 0;
         Rig rig(sc);
         Lcg rng(123);
@@ -1476,7 +1493,7 @@ void run_cue_tests() {
         ASSERT_EQ(p.lead_ticks(), 5u);
     } TEST_END();
 
-    TEST_CASE("RP8.5 The Lead's Edges: A Prediction Told Nothing Starts At Two Ticks Of Lag Plus The Bias (Never Outside Its Bounds); Two Orders That Disagree Give The Shorter One (A Lead Too Long Is The Worse Mistake: The Order Lands Before The Tick It Was Aimed At); An Order Held Up For Ever Is Counted As The Longest Lead; The Bias On A Long Lag Stops At The Longest Lead") {
+    TEST_CASE("RP8.5 The Lead's Edges: A Prediction Told Nothing Starts At Two Ticks Of Lag Plus The Bias (Never Outside Its Bounds); Two Orders That Disagree Give The Longer One (The Host Seals An Order At Its Stamp Only When The Stamp Is Still Open For It); An Order Held Up For Ever Is Counted As The Longest Lead; The Bias On A Long Lag Stops At The Longest Lead") {
         Rig rig(Scenario{});
         Prediction::Config c = Scenario::rig_config();
         {
@@ -1502,7 +1519,7 @@ void run_cue_tests() {
             Prediction fresh(rig.confirmed(), rig.runner(), c);
             ASSERT_EQ(fresh.lead_ticks(), 7u);                                                   // ... and 2 is below the shortest
         }
-        // two orders that disagree (lags 3 and 5): the shorter one
+        // two orders that disagree (lags 3 and 5): the longer one (the host seals an order at its stamp only when the stamp is open for it)
         {
             Scenario sc;
             sc.seed = 125;
@@ -1510,6 +1527,7 @@ void run_cue_tests() {
             sc.down_delay = 1;
             sc.lead_ms = 150;
             sc.prediction.learn_lead = true;
+            sc.honor_stamps = true;
             sc.prediction.lead_bias_ticks = 0;
             Rig two(sc);
             Lcg rng(125);
@@ -1521,8 +1539,8 @@ void run_cue_tests() {
             two.set_uplink(3);
             two.issue(random_order(rng, two.ids, 0));
             two.run(30);
-            ASSERT_EQ(two.prediction()->learned_lag_ticks(), 3u);
-            ASSERT_EQ(two.prediction()->lead_ticks(), 3u);
+            ASSERT_EQ(two.prediction()->learned_lag_ticks(), 5u);
+            ASSERT_EQ(two.prediction()->lead_ticks(), 5u);
         }
         // orders that a stall holds up for ever (an uplink of 30 steps) are lags of the longest lead, however long they really took
         {
@@ -1533,6 +1551,7 @@ void run_cue_tests() {
             sc.uplink = 30;
             sc.lead_ms = 150;
             sc.prediction.learn_lead = true;
+            sc.honor_stamps = true;
             sc.prediction.lead_bias_ticks = 0;
             Rig stalled(sc);
             Lcg rng(126);
@@ -1553,6 +1572,7 @@ void run_cue_tests() {
             sc.uplink = 9;
             sc.lead_ms = 150;
             sc.prediction.learn_lead = true;
+            sc.honor_stamps = true;
             sc.prediction.lead_bias_ticks = 3;
             Rig edge(sc);
             Lcg rng(127);
@@ -1564,12 +1584,13 @@ void run_cue_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("RP8.6 The Product's Defaults Are The Documented Numbers (docs/NETWORK_PORT.md, README): The Lead Learns From The Shortest Lag Of The Last Five Orders No Older Than 400 Ticks With No Bias (An Order Is Put Where The Host Runs It), Between 1 And 12 Ticks, Rises By One Tick After 40 Ticks; A Lost Order Is Dropped After 100; The Budget Is 12 ms, Four Strikes In 200 Ticks, A Cool-Down Of 200 Ticks That Doubles Up To 3200") {
+    TEST_CASE("RP8.6 The Product's Defaults Are The Documented Numbers (docs/NETWORK_PORT.md, README): The Lead Learns From The Longest Lag Of The Last Twelve Orders (No More Than Two Ticks Above Their Middle) No Older Than 400 Ticks With No Bias (An Order Is Put Where The Host Seals It), Between 1 And 12 Ticks, Rises By One Tick After 40 Ticks; A Lost Order Is Dropped After 100; The Budget Is 12 ms, Four Strikes In 200 Ticks, A Cool-Down Of 200 Ticks That Doubles Up To 3200") {
         const Prediction::Config c;
         ASSERT_TRUE(c.learn_lead);
-        ASSERT_EQ(c.lag_samples, 5u);
+        ASSERT_EQ(c.lag_samples, 12u);
+        ASSERT_EQ(c.lag_spike_cap_ticks, 2u);
         ASSERT_EQ(c.lag_fresh_ticks, 400u);
-        ASSERT_EQ(c.lead_bias_ticks, 0u);                                                        // (a project decision: a local game's feel and no hops; 1 shows an order 50 ms sooner at the price of a tile hop in one order of six)
+        ASSERT_EQ(c.lead_bias_ticks, 0u);                                                        // (a project decision: the lead is the lag; a bias of 1 stamps a tick beyond it)
         ASSERT_EQ(c.min_lead_ticks, 1u);
         ASSERT_EQ(c.max_lead_ticks, 12u);
         ASSERT_EQ(c.lead_rise_after_ticks, 40u);
@@ -1596,6 +1617,7 @@ void run_cue_tests() {
             sc.uplink = rng.below(4);
             sc.lead_ms = 50 * (1 + rng.below(5));
             sc.prediction.learn_lead = true;
+            sc.honor_stamps = true;
             sc.prediction.lead_bias_ticks = rng.below(3);
             Rig rig(sc);
             rig.check_derived(3);
@@ -1642,6 +1664,7 @@ void measure_line(const MeasureLine& line, uint32_t seed) {
     sc.uplink = 1;
     sc.oracle_hashes = false;
     sc.prediction.learn_lead = true;
+    sc.honor_stamps = true;
     sc.prediction.lead_bias_ticks = line.bias;
     sc.prediction.lag_fresh_ticks = 400;
     Rig rig(sc);

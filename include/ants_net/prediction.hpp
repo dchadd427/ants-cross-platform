@@ -27,6 +27,10 @@
 // tick (the sealed tick of an order is most often one off, as for one's own orders), and when that turn comes without it either, it is dropped; one that no turn has carried for pending_timeout_ticks is
 // dropped. A hint that comes after its sealed turn (the direct path is slower than the server's) is ignored. Only the kinds that predicts() names are hinted, and only by a seat that is not this one.
 //
+// THE TICK OF AN ORDER (protocol 30). An order is sent with the tick that this screen applies it at (plan_order(): the display tick, never behind a turn in hand), and the host seals it into exactly that turn when the turn is still
+// open, else into the first open one (the order came late: the correction below). The host answers every such order with the first turn that was open when it arrived (OrderAck, on_order_ack()), and the lead learns from those
+// answers how many ticks an order needs: the longest of the last ones. So an order is sealed where the screen put it unless the link did something that the lead has not seen yet; nothing is corrected then.
+//
 // HOW IT STAYS CORRECT. The predicted engine is derived state: it can always be rebuilt from the confirmed engine, the turns in hand and the orders that are still waiting. It is advanced ONE
 // tick for every tick that the confirmed engine executes, and it is rebuilt (copy + replay) only when something that it ran as an assumption turns out wrong: the prediction keeps, for every tick
 // from the confirmed one to the display tick, the list of commands that it applied there, and every live turn that arrives for a tick it has already started is compared with that list.
@@ -49,12 +53,12 @@
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <optional>
 #include <utility>
 #include <vector>
 
 #include "ants_net/lockstep.hpp"
 #include "ants_net/protocol.hpp"
-#include "ants_net/seal_phase.hpp"
 #include "ants_sim/command.hpp"
 #include "ants_sim/sim_engine.hpp"
 
@@ -92,15 +96,17 @@ public:
         // what the test says on every platform (tests/test_net/manual_clock.hpp).
         std::function<uint64_t()> wall_clock;
         std::function<uint64_t()> cpu_clock;
-        // The lead is the SHORTEST lag of the last `lag_samples` own orders, none older than `lag_fresh_ticks`, plus `lead_bias_ticks`. The lag of an order varies by a tick with the moment
-        // of the click (the phase of the host's seals) and with the link's jitter; with the shortest one an order is sealed at the tick that the player aimed at or a tick LATER, hardly ever
-        // earlier: an order that lands before its tick meets a state that the screen had already left (an ant that had not crossed its tile line yet, an ant that was still on the tile before).
-        // One stalled order does not move it. Off: the owner's estimate alone (the tests that hold a wrong lead to account).
+        // The lead is the LONGEST lag of the last `lag_samples` own orders, none older than `lag_fresh_ticks`, plus `lead_bias_ticks`. The lag of an order is the ticks from the confirmed tick at which it was given to the first
+        // turn that was open when it reached the host (the host's OrderAck). It varies by a tick with the moment of the click (the phase of the host's seals) and with the link's jitter, and the host seals an order into the
+        // tick that it is stamped with when that tick is still open: with the longest lag of the fresh orders the stamp is open for nearly every order, so it is sealed where this screen put it and nothing is corrected. The
+        // price is that an order runs in the confirmed engine a little later than it could (the lag's spread, a tick on average at most); the picture is not later, it shows the order at once.
+        // One order that a stall held up must not hold the lead high for as long as it is fresh: no lag counts for more than `lag_spike_cap_ticks` above the MEDIAN of the fresh ones (a link whose lags are spread over
+        // more than that is learned by its middle plus the cap, and the orders beyond it are late). Off: the owner's estimate alone (the tests that hold a wrong lead to account).
         bool learn_lead{true};
-        uint32_t lag_samples{5};
+        uint32_t lag_samples{12};
+        uint32_t lag_spike_cap_ticks{2};
         uint32_t lag_fresh_ticks{400};                     // 20 s
-        // Ticks that the display stands beyond the lag. 0: an order is put where the host runs it, so nothing is corrected while the lag holds. 1: the ants react 50 ms sooner, but about one
-        // order in six shows a whole-tile hop when its turn corrects it.
+        // Ticks that the display stands beyond the lag. 0: an order is put where the host runs it, so nothing is corrected while the lag holds. 1: a tick more room for a jitter that the lag has not seen yet.
         uint32_t lead_bias_ticks{0};
         // Hints (see above). A hint whose tick is more than this many ticks behind the next turn that is expected is older than any order that is not sealed yet: it is late. At most `max_hints` wait at a
         // time (a peer that floods hints cannot make the prediction rebuild without end: the budget and the cool-down count its work too).
@@ -140,9 +146,9 @@ public:
         uint64_t hints_confirmed_moved{0};        // matched by a sealed command at another tick than the one where the hint stood (one correction)
         uint64_t hints_dropped{0};                // not confirmed: the turn came without it twice, the server did not seal it before an older one of the seat, or it timed out
         uint64_t rebuilds_hint{0};                // rebuilds because of a hint (it arrived behind the display tick, or a turn did not confirm it)
-        // The hints of this seat's own orders (last_order_hint_tick()): the tick that each named, against the turn that sealed the order
-        uint64_t order_hints_phase{0};            // named by the phase of the server's seals (the others named the display tick)
-        uint64_t order_hints_exact{0};            // ... of those, sealed in the turn that the hint named (against sealed_exact: sealed at the tick that this screen applied the order at)
+        // The hints of this seat's own orders (last_order_tick()): they name the tick that the order is stamped with, which the host seals it into when it is still open
+        uint64_t order_acks{0};                   // the host's answers to the orders (OrderAck) that matched an order of this prediction
+        uint64_t order_acks_late{0};              // ... that said that the stamp was no longer open: the order is sealed in the first open turn, behind the tick that the screen put it at (one correction)
         // Corrections (measure_corrections only): what a rebuild changed in the picture, compared at the display tick before and after
         uint64_t corrections{0};                  // rebuilds that were measured
         uint64_t corrections_visible{0};          // ... in which at least one ant stood elsewhere afterwards
@@ -185,13 +191,12 @@ public:
     /// the next on_tick().
     void set_suspended(bool suspended);
     bool suspended() const noexcept { return suspended_; }
-    /// The lag of the player's orders as the owner knows it (the measured delay less the tick that it counts, or an estimate from the round trip and the jitter buffer), in ms: the lead is that
-    /// many ticks, rounded, plus Config::lead_bias_ticks, until the orders themselves have taught it their lag (Config::learn_lead). It falls
-    /// one tick at a time (the first at once, the next ones Config::lead_fall_every_ticks apart), rises at once by two ticks and more, and by one tick only after Config::lead_rise_after_ticks, so that
-    /// the picture does not jump back and forth with the phase of the server's seals and never stands still for more than a tick.
+    /// The lag of the player's orders as the owner estimates it (the round trip and the jitter buffer), in ms: the lead is that many ticks, rounded, plus Config::lead_bias_ticks, until the orders themselves
+    /// have taught it their lag (Config::learn_lead). It falls one tick at a time (the first at once, the next ones Config::lead_fall_every_ticks apart), rises at once when an order has needed more (a learned
+    /// lag) or by two ticks and more (an estimate), and by one tick on an estimate only after Config::lead_rise_after_ticks, so that the picture never stands still for more than a tick.
     void set_expected_delay_ms(uint32_t ms);
     uint32_t lead_ticks() const noexcept { return lead_; }
-    /// What the lead has learned from the player's own orders: the shortest lag of the fresh ones (see Config::learn_lead), 0 when there is none. The lead is this plus the bias, else the estimate
+    /// What the lead has learned from the player's own orders: the longest lag of the fresh ones (see Config::learn_lead), 0 when there is none. The lead is this plus the bias, else the estimate
     /// plus the bias
     uint32_t learned_lag_ticks() const noexcept;
     /// Compare the picture before and after every rebuild (Stats::corrections...): costs a copy of the ants' positions, off by default
@@ -203,11 +208,24 @@ public:
     /// The player's command, as the HUD gave it (the issuer is the seat). A predicted kind is applied to the predicted engine at once, at the tick it stands at, and `result` is what the
     /// engine said (Applied, the ant that acknowledges, the ants that needed the order): true. False (nothing happened, `result` untouched) when the prediction is off or the command is of a
     /// kind that waits for the confirmation: the caller answers as it did before the prediction existed.
+    /// The order is numbered (last_order_seq(): the `seq` that planned order carried, 1, 2, 3 ...) and waits for the host's answer (on_order_ack).
     bool submit(const sim::Command& command, sim::CommandResult& result);
+    /// Where an order given NOW is applied (protocol 30): `tick` is the turn that the host is asked to seal it into (CommandMsg::turn), `seq` the number that submit() gives it and the host answers with (CommandMsg::seq).
+    /// Nothing is applied: the engine is only brought to the state that submit() would apply it to (a stale one is rebuilt, one that stands behind the turns in hand runs up to them), so the plan is the tick
+    /// that submit() then uses, in the same call of the caller. Empty when submit() would refuse the order (the prediction is off, the order is another seat's or of a kind that waits): the order is sent without a tick.
+    struct OrderPlan {
+        uint64_t tick{0};
+        uint32_t seq{0};
+    };
+    std::optional<OrderPlan> plan_order(const sim::Command& command);
+    /// The host's answer to an order (OrderAck): `open_turn` was the first turn that was open when the order reached it. The lag of the order is that less the confirmed tick that it was given at; the lead
+    /// learns from it (Config::learn_lead). An answer that matches no order (the prediction began again since, or it was answered before) is ignored. An order whose stamp is behind `open_turn` is late: the host seals it
+    /// in `open_turn`, and the turn that carries it will correct the prediction.
+    void on_order_ack(uint32_t seq, uint64_t open_turn);
     /// What became of a hint
     enum class HintVerdict : uint8_t { Accepted, Refused, Duplicate, Late };
     /// Another seat's order, ahead of its turn: `command` (its issuer is the sender), the sender's own number for it (`seq`, 1, 2, 3 ... : a copy of a hint that was seen is a Duplicate) and the turn that the
-    /// sender expects the server to seal it in (`tick`: last_order_hint_tick() of the sender). Applied to the predicted engine at once when the display tick is not past it, else the engine is rebuilt with it; see HINTS at the top for the matching rule.
+    /// sender asked the server to seal it in (`tick`: last_order_tick() of the sender, the stamp of its order). Applied to the predicted engine at once when the display tick is not past it, else the engine is rebuilt with it; see HINTS at the top for the matching rule.
     HintVerdict hint(const sim::Command& command, uint32_t seq, uint64_t tick);
     /// The hints that no turn has confirmed or dropped yet
     size_t pending_hints() const noexcept { return hints_.size(); }
@@ -234,15 +252,8 @@ public:
     size_t pending_orders() const noexcept { return pending_.size(); }
     /// The tick at which the last order that submit() took was applied on this screen (0 before there is one)
     uint64_t last_order_tick() const noexcept { return last_order_tick_; }
-    /// The tick that a hint of the last order names: the turn that the server will most likely seal it in, from the phase of its seals (SealPhase); until that phase is known, the tick at which this screen
-    /// applied it (last_order_tick()). 0 before there is an order.
-    uint64_t last_order_hint_tick() const noexcept { return last_order_hint_tick_; }
-    /// The clock of the owner, in ms (any origin, one value for all the calls of a frame): the time of the orders and of the turns that arrive. Without it the hints name the display tick.
-    void set_time_ms(uint32_t ms) noexcept {
-        now_ms_ = ms;
-        time_known_ = true;
-    }
-    const SealPhase& seal_phase() const noexcept { return phase_; }
+    /// The number that the last order that submit() took carries (0 before there is one)
+    uint32_t last_order_seq() const noexcept { return last_order_seq_; }
     const Stats& stats() const noexcept { return stats_; }
     /// The cues and news that the predicted ticks made since the last call (each tick that the engine ran, once per run: see PredictedAudio::generation). Nothing is kept while off.
     std::vector<PredictedAudio> take_audio();
@@ -263,16 +274,19 @@ public:
     const std::vector<sim::Command>& applied_at_display() const noexcept;
 
 private:
+    bool ready_for(const sim::Command& command);
     struct Pending {
         sim::Command command;
         uint64_t tick{0};                         // the tick at which the prediction applied it (or will apply it, after a correction)
         uint64_t born{0};                         // the confirmed tick when the player gave it: a lost order is told by the time that has passed since THEN (a correction moves `tick`)
         uint64_t first_tick{0};                   // the tick at which it was applied when it was given: what the player aimed at (the statistics)
         uint32_t misses{0};                       // the turns of its tick that arrived without it
-        uint32_t given_ms{0};                     // the owner's clock when the player gave it (time_known only)
-        bool timed{false};
-        bool phased{false};                       // its hint was named by the phase of the server's seals ...
-        uint64_t hint_tick{0};                    // ... at this tick
+    };
+    // An order that was sent with a number and has not been answered yet (OrderAck)
+    struct Sent {
+        uint32_t seq{0};
+        uint64_t born{0};                         // the confirmed tick when it was given
+        uint64_t stamp{0};                        // the tick that it was stamped with
     };
 
     struct Foreign {
@@ -340,10 +354,9 @@ private:
     std::array<SeqWindow, sim::MAX_PLAYERS> seen_;
     bool stale_hint_{false};                       // a hint is why it went stale (the statistics)
     uint64_t last_order_tick_{0};
-    uint64_t last_order_hint_tick_{0};
-    SealPhase phase_;
-    uint32_t now_ms_{0};
-    bool time_known_{false};
+    uint32_t last_order_seq_{0};
+    uint32_t next_seq_{1};                        // the number of the next order (never reset: an answer to an order of a prediction that was off since matches no order of the next one)
+    std::deque<Sent> sent_;
     uint32_t lead_{3};
     uint32_t target_lead_{3};
     uint32_t estimate_lag_{2};                    // the owner's estimate of the lag of an order (set_expected_delay_ms), in ticks

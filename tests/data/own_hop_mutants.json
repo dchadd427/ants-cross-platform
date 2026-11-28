@@ -40,8 +40,8 @@
     {
       "id": "every_move_is_a_hop",
       "file": "src/ants_app/view_glide.cpp",
-      "old": "> walk_px) {",
-      "new": "> 0 * walk_px) {",
+      "old": "> (snapped_back ? int64_t{0} : walk_px)) {",
+      "new": "> 0 * (snapped_back ? int64_t{0} : walk_px)) {",
       "build": ["test_view_glide"],
       "test": "ANTS_TEST_FILTER=VG1 ./build/tests/test_app/test_view_glide",
       "expect": "VG1"

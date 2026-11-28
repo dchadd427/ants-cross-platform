@@ -45,6 +45,9 @@ void NetGame::install_hooks() {
     if (client_session_) {
         client_session_->set_on_chat(chat);
         client_session_->set_on_p2p([this](const std::vector<uint8_t>& message) { on_p2p_message(message); });
+        client_session_->set_on_order_ack([this](const OrderAckMsg& ack) {
+            if (prediction_) prediction_->on_order_ack(ack.seq, ack.open_turn);       // (protocol 30: the lead learns the lag of the player's orders from the host's answers)
+        });
     }
 }
 
@@ -130,24 +133,15 @@ void NetGame::make_prediction() {
     pc.wall_clock = prediction_wall_clock_;
     pc.cpu_clock = prediction_cpu_clock_;
     prediction_ = std::make_unique<Prediction>(sim_, *r, pc);
-    prediction_->set_time_ms(now_);
 }
 
-// What an order of this player takes to reach the engine, in ms. The measured delay of the last orders when there is one (it includes everything: the way to the host, the wait for the
-// seal, the way back and the jitter buffer); before the first order, an estimate of the same things.
+// What an order of this player takes from the confirmed tick that it is given at to the first turn that is still open at the host, in ms: the way to the host, the wait for the seal, the way back and the jitter
+// buffer, from the round trip and the buffer. It is only what the prediction takes until the host's answers to its orders have taught it the lag (Prediction::Config::learn_lead): the measured delay of the commands
+// is not used (it counts up to the tick that RUNS an order, and that is the tick that the order is stamped with, so it would only measure the lead itself).
 uint32_t NetGame::expected_command_delay_ms() const {
-    uint32_t delay = 0;
-    if (const std::optional<uint32_t> measured = command_delay_ms()) {
-        delay = *measured;
-    } else {
-        const LockstepRunner* r = runner();
-        const uint32_t buffer = r != nullptr ? r->buffer_turns() : 1u;
-        delay = ping_ms().value_or(0u) + kTurnMs / 2u + buffer * kTurnMs;
-    }
-    // The LAG of an order is the number of ticks from the confirmed tick that it is given at to the tick that runs it, one tick fewer than the delay counts (the delay is measured up to the
-    // moment that the tick which applies the order runs, the lag stops at its start), as real orders show: a round trip of 0 ms has a delay of 83 ms and a lag of 1 tick, 60 ms 133 ms
-    // and 2, 200 ms 283 ms and 5. The prediction learns the lags themselves once there are orders (Prediction::Config::learn_lead); this is what it takes until then.
-    return delay > kTurnMs ? delay - kTurnMs : 0u;
+    const LockstepRunner* r = runner();
+    const uint32_t buffer = r != nullptr ? r->buffer_turns() : 1u;
+    return ping_ms().value_or(0u) + kTurnMs / 2u + buffer * kTurnMs;
 }
 
 void NetGame::drop_prediction() {
@@ -319,16 +313,23 @@ sim::CommandResult NetGame::submit(const sim::Command& command) {
     if (phase_ != Phase::Playing || !sim::is_client_command(command.type)) return result;      // status Ignored
     sim::Command c = command;
     c.issuer = seat_;
+    // Protocol 30: an order that the prediction will apply goes to the host with the tick that it is applied at, and the host seals it into exactly that turn when it is still open. The tick is read before the order is
+    // sent (it is the state that the screen stands at now), and the order is applied to the predicted engine after it, in this call.
+    const std::optional<Prediction::OrderPlan> plan = prediction_ ? prediction_->plan_order(c) : std::nullopt;
+    const uint32_t at_turn = plan ? static_cast<uint32_t>(std::min<uint64_t>(plan->tick, kMaxHintTick)) : 0u;
+    const uint32_t seq = plan ? plan->seq : 0u;
+    uint32_t open_turn = 0;
     if (host_session_) {
-        if (!host_session_->submit_local(c)) return sim::CommandResult{};                       // refused at once (the sequencer's flood limits): Ignored, and nothing is predicted
-    } else if (!client_session_ || !client_session_->submit(c)) {
+        if (!host_session_->submit_local(c, at_turn, &open_turn)) return sim::CommandResult{};  // refused at once (the sequencer's flood limits): Ignored, and nothing is predicted
+    } else if (!client_session_ || !client_session_->submit(c, at_turn, seq)) {
         return sim::CommandResult{};                                                            // no host to send it to (a new one is being chosen): Ignored
     }
     // The order is on its way. With the prediction on, the predicted engine applies it NOW and says what the engine says (the ant that answers, the ants that needed the order); without it,
     // the immediate feedback of the click is predict_order_ack's guess, as it was before the prediction existed.
     if (prediction_ && prediction_->submit(c, result)) {
+        if (host_session_ && plan) prediction_->on_order_ack(prediction_->last_order_seq(), open_turn);   // (this machine is the host: its answer is the sequencer's own, at once)
         if (p2p_ != nullptr && p2p_config_sent_) {                                              // the other players learn the order from this machine ahead of its turn (the server's turn is what counts)
-            p2p_->send_hint(encode(HintMsg{++hint_seq_, static_cast<uint32_t>(std::min<uint64_t>(prediction_->last_order_hint_tick(), kMaxHintTick)), c}));
+            p2p_->send_hint(encode(HintMsg{++hint_seq_, static_cast<uint32_t>(std::min<uint64_t>(prediction_->last_order_tick(), kMaxHintTick)), c}));
             ++hint_counts_.sent;
         }
         return result;

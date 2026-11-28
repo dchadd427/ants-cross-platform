@@ -17,7 +17,6 @@ add_library(ants_net STATIC
     netgame.cpp
     netgame_match.cpp
     p2p.cpp
-    seal_phase.cpp
     address.cpp
 )
 

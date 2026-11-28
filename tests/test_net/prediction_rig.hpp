@@ -181,7 +181,12 @@ struct Scenario {
     uint32_t extra_workers{0};     // workers added to every player beyond the six ants (the tests of a selection of more than 32 ants)
     bool fog{false};               // Fog of War: the views are also compared with the oracle's explored ground (it is no part of the state hash)
     uint8_t seat{0};               // the player whose orders are predicted (every test but the hints' order of a turn: seat 0)
-    bool clock{false};             // the prediction is given a clock: a step is 50 ms of it, and the turns and the orders are timed by the step that they happen in (the tests of the tick that a hint names)
+    // Protocol 30, the host's way with the tick of an order. Off (the default): the host seals every order of the player `uplink` steps after it was given, whatever tick it was stamped with, and answers nothing (the tests
+    // that hold a given sealing to account: an order sealed early, late, never). On: the host is the sequencer's: it seals the order into the tick that it was stamped with when that turn is still open when the order
+    // arrives (`uplink` steps after it was given: the first open turn), else into the first open turn, and answers it with an OrderAck, which reaches the prediction `down_delay` steps after the open turn is sealed, as the
+    // turn itself does.
+    bool honor_stamps{false};
+    uint32_t max_ahead{16};        // honor_stamps: the sequencer's Config::max_order_ahead_turns
     Prediction::Config prediction{rig_config()};
     // The rig's prediction has the lead that the scenario names and keeps it (the tests hold a wrong lead to account, and the exact one to exactness): it does not learn its lead and has no bias
     // (the tests of the learning and of the bias switch them on), and no budget (the tests run on busy machines: a stall of the test process is not the prediction's cost; the tests of the
@@ -233,9 +238,18 @@ public:
     // The player (seat 0) gives an order now: the prediction applies it at once and the server seals it `uplink` steps from now
     sim::CommandResult issue(const Command& c) {
         sim::CommandResult r;
-        if (pred_ && sc_.clock) pred_->set_time_ms(static_cast<uint32_t>(clock_ms() + order_skew_ms));
+        std::optional<Prediction::OrderPlan> plan;
+        if (pred_ && sc_.honor_stamps) plan = pred_->plan_order(c);
         if (pred_) pred_->submit(c, r);
-        inbox_[step_ + sc_.uplink].push_back(c);
+        const uint32_t open = step_ + sc_.uplink;                  // the first turn that is still open when the order reaches the host
+        uint32_t at = open;
+        if (plan) {                                                // the tick that the screen applied it at, honored when the turn is open (never past the cap)
+            at = static_cast<uint32_t>(std::min<uint64_t>(std::max<uint64_t>(plan->tick, open), uint64_t{open} + sc_.max_ahead));
+            if (at < last_stamped_) at = last_stamped_;            // (the sequencer never seals an order of a seat before one that it sent earlier)
+            last_stamped_ = at;
+            acks_[open + sc_.down_delay].push_back({plan->seq, open});
+        }
+        inbox_[at].push_back(c);
         ++own_orders;
         return r;
     }
@@ -256,7 +270,6 @@ public:
     void set_uplink(uint32_t steps) { sc_.uplink = steps; }
 
     void step(bool frame = true) {
-        if (pred_ && sc_.clock) pred_->set_time_ms(static_cast<uint32_t>(clock_ms()));
         // 1. the server seals the turn of this step; the oracle runs it at once
         TurnMsg t;
         t.turn = step_;
@@ -275,6 +288,13 @@ public:
         last_arrival_ = at;
         flight_.push_back({at, step_});
         deliver_hints(false);
+        if (pred_) {                                                           // (the answers to the orders that reach the client in this step)
+            const auto answers = acks_.find(step_);
+            if (answers != acks_.end()) {
+                for (const auto& a : answers->second) pred_->on_order_ack(a.first, a.second);
+                acks_.erase(answers);
+            }
+        }
         while (!flight_.empty() && flight_.front().first <= step_) {
             runner_.on_turn(sealed[flight_.front().second]);
             flight_.pop_front();
@@ -357,7 +377,6 @@ public:
     std::vector<uint64_t> post;     // ... and after them (before the tick runs)
     std::vector<View> views;
     uint32_t own_orders{0};
-    int64_t order_skew_ms{0};                                 // the clock that an order is timed by is this far from the step's (a wrong clock: the tests of the limits of the phase)
     std::vector<Prediction::HintVerdict> hint_verdicts;       // what became of each hint that was delivered, in order
     uint32_t derived_checks{0};
     uint32_t derived_mismatches{0};
@@ -378,7 +397,6 @@ private:
         }
     }
     uint64_t v_last_hash() const { return views.back().hash; }
-    int64_t clock_ms() const { return 10000 + static_cast<int64_t>(step_) * sim::TICK_MS; }
 
     Scenario sc_;
     sim::SimulationEngine confirmed_;
@@ -387,6 +405,8 @@ private:
     std::unique_ptr<Prediction> pred_;
     std::map<uint32_t, std::vector<Command>> inbox_;
     std::map<uint32_t, std::vector<HintSpec>> hint_inbox_;
+    std::map<uint32_t, std::vector<std::pair<uint32_t, uint32_t>>> acks_;      // honor_stamps: (seq, open turn) of the answers, by the step in which they reach the client
+    uint32_t last_stamped_{0};
     std::deque<std::pair<uint32_t, uint32_t>> flight_;     // (arrival step, turn)
     uint32_t step_{0};
     uint32_t last_arrival_{0};

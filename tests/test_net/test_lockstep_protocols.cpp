@@ -943,7 +943,7 @@ void run_protocol13_tests() {
 
     TEST_CASE("N2.101 Protocol 14 And 15, The Message: SeatMove Is The Type 31, Two Different Seats 0 .. 3 And The Guard (A 32-Bit Number That Is Never 0, Little Endian), Seven Bytes And Nothing Else; Every Other Pair Of Seats, A Guard Of 0, Every Truncation, Every Extra Byte And Every Other Type Is Refused, A Refused Message Leaves Its Target Alone, The Layout Of Protocol 14 Is Refused, And No Other Message Is Taken For It; The Guard Is The Seating Hash: The State And The Name Of Each Seat, Nothing Else Of The Room Message") {
         ASSERT_EQ(kProtocolVersion, ants_test::kPinnedProtocol);
-        ASSERT_TRUE(static_cast<int>(MsgType::SeatMove) == 31 && static_cast<int>(MsgType::Last) == 41);
+        ASSERT_TRUE(static_cast<int>(MsgType::SeatMove) == 31 && static_cast<int>(MsgType::Last) == 42);
         // the layout, byte by byte: the type, the seat of the player that moves, the seat that it takes, the guard
         ASSERT_TRUE(encode(SeatMoveMsg{0, 1, 0x04030201u}) == (std::vector<uint8_t>{31, 0, 1, 1, 2, 3, 4}));
         ASSERT_TRUE(encode(SeatMoveMsg{3, 2, 0xFFFFFFFFu}) == (std::vector<uint8_t>{31, 3, 2, 255, 255, 255, 255}));
@@ -1839,7 +1839,7 @@ void run_protocol16_tests() {
     } TEST_END();
 
     TEST_CASE("N2.108 Protocol 16, The Name: NameMsg Is The Type 33, A Length Byte And A Name Of 1 .. 32 Printable Characters (0x20 .. 0x7E) That Neither Starts Nor Ends With A Space; Every Other Name, Every Truncation, Every Extra Byte And Every Other Type Is Refused And Leaves Its Target Alone; The Encoder Cuts A Longer Name To 32 Characters And Drops The Characters That Do Not Travel") {
-        ASSERT_TRUE(static_cast<int>(MsgType::Name) == 33 && static_cast<int>(MsgType::Last) == static_cast<int>(MsgType::Ready) && kMaxNameChars == 32);
+        ASSERT_TRUE(static_cast<int>(MsgType::Name) == 33 && static_cast<int>(MsgType::Last) == static_cast<int>(MsgType::OrderAck) && kMaxNameChars == 32);
         // the layout, byte by byte
         const std::vector<uint8_t> want = {33, 3, 'A', 'n', 'n', 0};                                   // (protocol 29: the length of the pass, none, comes last)
         {
@@ -1958,7 +1958,7 @@ void run_protocol16_tests() {
     } TEST_END();
 
     TEST_CASE("N2.110 Protocol 16, The Removal: RemoveMsg Is The Type 34, A Seat 0 .. 3 And The Guard (A 32-Bit Number That Is Never 0, Little Endian), Six Bytes And Nothing Else; Every Other Seat, A Guard Of 0, Every Truncation, Every Extra Byte And Every Other Type Is Refused And Leaves Its Target Alone") {
-        ASSERT_TRUE(static_cast<int>(MsgType::Remove) == 34 && static_cast<int>(MsgType::Last) == static_cast<int>(MsgType::Ready) && static_cast<int>(MsgType::Name) == 33);
+        ASSERT_TRUE(static_cast<int>(MsgType::Remove) == 34 && static_cast<int>(MsgType::Last) == static_cast<int>(MsgType::OrderAck) && static_cast<int>(MsgType::Name) == 33);
         // the layout, byte by byte: the type, the seat of the person who goes, the guard (little endian)
         ASSERT_TRUE(encode(RemoveMsg{2, 0x04030201u}) == (std::vector<uint8_t>{34, 2, 1, 2, 3, 4}));
         ASSERT_TRUE(encode(RemoveMsg{0, 0xFFFFFFFFu}) == (std::vector<uint8_t>{34, 0, 255, 255, 255, 255}));
@@ -2246,12 +2246,12 @@ void run_protocol16_tests() {
 
     TEST_CASE("N2.113 Protocol 22, The Visibility: VisibilityMsg Is The Type 35 And One Byte, 0 (Private) Or 1 (Public), Two Bytes And Nothing Else; Every Other Value, Every Truncation, Every Extra Byte And Every Other Type Byte Is Refused; MsgType::Last Is 35; The Room's Flag kRoomPublic (8) Is A Lobby Room's: The Decoder Refuses It In Any Other Room And Every Flag Byte Outside The Four Rule Bits; The Protocol Number Is 22") {
         ASSERT_EQ(kProtocolVersion, ants_test::kPinnedProtocol);
-        ASSERT_TRUE(static_cast<int>(MsgType::Visibility) == 35 && static_cast<int>(MsgType::Last) == 41 && static_cast<int>(MsgType::Remove) == 34 && kRoomPublic == 8);
+        ASSERT_TRUE(static_cast<int>(MsgType::Visibility) == 35 && static_cast<int>(MsgType::Last) == 42 && static_cast<int>(MsgType::Remove) == 34 && kRoomPublic == 8);
         // the layout, byte by byte: the type and the choice
         ASSERT_TRUE(encode(VisibilityMsg{true}) == (std::vector<uint8_t>{35, 1}));
         ASSERT_TRUE(encode(VisibilityMsg{false}) == (std::vector<uint8_t>{35, 0}));
         ASSERT_EQ(peek_type(encode(VisibilityMsg{true})), MsgType::Visibility);
-        ASSERT_EQ(peek_type(std::vector<uint8_t>{42, 0}), MsgType::None);                                         // (nothing above the last type is a message)
+        ASSERT_EQ(peek_type(std::vector<uint8_t>{43, 0}), MsgType::None);                                         // (nothing above the last type is a message)
         for (const bool choice : {false, true}) {
             VisibilityMsg got;
             got.is_public = !choice;
@@ -2327,7 +2327,7 @@ void run_protocol16_tests() {
     } TEST_END();
     TEST_CASE("N2.114 Protocol 27, Ready Up: ReadyMsg Is The Type 41 And One Byte, 0 Or 1, Two Bytes And Nothing Else (Every Other Value, Truncation, Extra Byte And Type Byte Is Refused); The Room Message Ends With The Ready Mask, A Byte That The Decoder Takes Only For A Lobby Room's Person Who Is A Page And Does Not Lead; The Seating Guard Does Not See It") {
         ASSERT_EQ(kProtocolVersion, ants_test::kPinnedProtocol);
-        ASSERT_TRUE(static_cast<int>(MsgType::Ready) == 41 && static_cast<int>(MsgType::Last) == 41 && static_cast<int>(MsgType::Signal) == 40);
+        ASSERT_TRUE(static_cast<int>(MsgType::Ready) == 41 && static_cast<int>(MsgType::Last) == 42 && static_cast<int>(MsgType::Signal) == 40);
         ASSERT_TRUE(encode(ReadyMsg{true}) == (std::vector<uint8_t>{41, 1}));
         ASSERT_TRUE(encode(ReadyMsg{false}) == (std::vector<uint8_t>{41, 0}));
         ASSERT_EQ(peek_type(encode(ReadyMsg{true})), MsgType::Ready);
@@ -2480,5 +2480,59 @@ void run_protocol16_tests() {
                 ASSERT_TRUE(decode(encode(seated), got) && !got.fog && got.slots[seat].state == SlotState::Bot);
             }
         }
+    } TEST_END();
+
+    TEST_CASE("N2.116 Protocol 30, The Tick Of An Order: A Command Message Is The Type 4, The Command (8 + 4 n Bytes), The Turn That It Asks For (u32) And The Sender's Number For It (u32), Nothing Else; The Layout Of Protocol 29 (No Tail) And Every Truncation, Extra Byte And Wrong Type Is No Command Message; OrderAck Is The Type 42, The Number (Never 0) And The First Open Turn, Nine Bytes And Nothing Else; MsgType::Last Is 42") {
+        ASSERT_EQ(kProtocolVersion, ants_test::kPinnedProtocol);
+        ASSERT_TRUE(static_cast<int>(MsgType::OrderAck) == 42 && static_cast<int>(MsgType::Last) == 42 && static_cast<int>(MsgType::Command) == 4);
+        CommandMsg m;
+        m.command = cmd(CommandType::GroupMove, 2, 255, 0x0102, 0x0304, {0x11223344u});
+        m.turn = 0xA1B2C3D4u;
+        m.seq = 7;
+        const std::vector<uint8_t> bytes = encode(m);
+        const std::vector<uint8_t> expected = {4,                                               // the type
+                                                1, 2, 255, 0x02, 0x01, 0x04, 0x03, 1,                   // the command: type, issuer, other player, tile x, tile y, one ant
+                                                0x44, 0x33, 0x22, 0x11,                                 // the ant
+                                                0xD4, 0xC3, 0xB2, 0xA1,                                 // the turn that the order asks for
+                                                7, 0, 0, 0};                                            // the sender's number
+        ASSERT_TRUE(bytes == expected);
+        CommandMsg got;
+        ASSERT_TRUE(decode(bytes, got) && got.command == m.command && got.turn == m.turn && got.seq == 7u);
+        // a command with no stamp and no number (a computer player's, an order that was not predicted): zeros
+        CommandMsg plain;
+        plain.command = cmd(CommandType::Hatch, 1);
+        ASSERT_TRUE(decode(encode(plain), got) && got.turn == 0u && got.seq == 0u && got.command == plain.command);
+        ASSERT_EQ(encode(plain).size(), size_t{1 + 8 + 8});
+        // the layout of protocol 29 (the command alone) is no command message, nor is a command message that is cut or longer
+        std::vector<uint8_t> old_layout = {4};
+        sim::encode(m.command, old_layout);
+        ASSERT_FALSE(decode(old_layout, got));
+        for (size_t cut = 0; cut < bytes.size(); ++cut) ASSERT_FALSE(decode(std::vector<uint8_t>(bytes.begin(), bytes.begin() + static_cast<std::ptrdiff_t>(cut)), got));
+        std::vector<uint8_t> longer = bytes;
+        longer.push_back(0);
+        ASSERT_FALSE(decode(longer, got));
+        std::vector<uint8_t> wrong_type = bytes;
+        wrong_type[0] = static_cast<uint8_t>(MsgType::Turn);
+        ASSERT_FALSE(decode(wrong_type, got));
+        // a command whose own fields are wrong is still wrong with a tail (a group order with no ants)
+        CommandMsg empty;
+        empty.command = cmd(CommandType::GroupMove, 1);
+        ASSERT_FALSE(decode(encode(empty), got));
+        // OrderAck
+        const OrderAckMsg ack{9, 0x01020304u};
+        const std::vector<uint8_t> ack_bytes = encode(ack);
+        ASSERT_TRUE(ack_bytes == (std::vector<uint8_t>{42, 9, 0, 0, 0, 4, 3, 2, 1}));
+        OrderAckMsg ack_got;
+        ASSERT_TRUE(decode(ack_bytes, ack_got) && ack_got.seq == 9u && ack_got.open_turn == 0x01020304u);
+        ASSERT_EQ(peek_type(ack_bytes), MsgType::OrderAck);
+        ASSERT_FALSE(decode(encode(OrderAckMsg{0, 5}), ack_got));                                           // (a number is never 0: no answer is asked for with it)
+        for (size_t cut = 0; cut < ack_bytes.size(); ++cut) ASSERT_FALSE(decode(std::vector<uint8_t>(ack_bytes.begin(), ack_bytes.begin() + static_cast<std::ptrdiff_t>(cut)), ack_got));
+        std::vector<uint8_t> ack_longer = ack_bytes;
+        ack_longer.push_back(0);
+        ASSERT_FALSE(decode(ack_longer, ack_got));
+        std::vector<uint8_t> ack_wrong = ack_bytes;
+        ack_wrong[0] = static_cast<uint8_t>(MsgType::Lag);
+        ASSERT_FALSE(decode(ack_wrong, ack_got));
+        ASSERT_EQ(peek_type(std::vector<uint8_t>{43, 0}), MsgType::None);                                   // (nothing above the last type is a message)
     } TEST_END();
 }
