@@ -418,6 +418,22 @@ def raw_address(value, peer):
     return ""
 
 
+INTERNAL_NETWORKS = tuple(ipaddress.ip_network(n) for n in ("127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "::1/128", "fc00::/7"))     # (the ranges of docker/trusted-proxies.conf: where a reverse proxy connects from)
+
+
+def is_internal(text):
+    """Whether the address is one of this machine's or of a private network (INTERNAL_NETWORKS, the ranges that the site's nginx takes for a reverse proxy; an IPv4-in-IPv6 as the IPv4). A request that comes
+    from such an address as the VISITOR's means that nginx was told no visitor's address (the proxy in front of it passed none: docs/SERVER.md "Behind a reverse proxy"): the visitors of the site would all be
+    one. False for a text that is no address."""
+    try:
+        ip = ipaddress.ip_address((text or "").strip())
+    except ValueError:
+        return False
+    if ip.version == 6 and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    return any(ip in network for network in INTERNAL_NETWORKS if network.version == ip.version)
+
+
 def address_range(text):
     """The range that an address belongs to, as a text: its /24 for an IPv4 address, its /48 for an IPv6 one (an IPv4-in-IPv6 as the IPv4); "" for a text that is no address. Who holds a whole range is one
     household, one office or one provider's customer, whatever address of it a request comes from: it is what the counter limits new visitors by, in memory and only for a day (hub/analytics.py)."""

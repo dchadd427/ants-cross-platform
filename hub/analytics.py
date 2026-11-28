@@ -16,7 +16,8 @@ joined to a line of that log, and the code of a visitor would then name an addre
 long it ran) is worked out here, in memory, as the event is taken, and kept as two small marks on the event: `vs` (this page view starts a visit) and `lb` (the bin of seconds that the visit had run).
 
 LIMITS, all in memory or in the one file: a day keeps DAY_MAX events; one address range (a /24 of IPv4, a /48 of IPv6) may make RANGE_NEW_MAX new visitors a day, so that one address that changes its header
-for every request cannot fill the day's room; the file is held to DB_MAX_BYTES as hub.db is (the oldest raw days go from 90%, new events are dropped at the limit). docs/ANALYTICS.md, "Sizes", has the
+for every request cannot fill the day's room (an INTERNAL address, which is the proxy in front of the site and no household, may make SHARED_NEW_MAX, and the hub says in its log, once an hour, that it was given no
+visitor's address); the file is held to DB_MAX_BYTES as hub.db is (the oldest raw days go from 90%, new events are dropped at the limit). docs/ANALYTICS.md, "Sizes", has the
 numbers and what they take of the hub's memory.
 
 The counter never stops the hub: a database that refuses, or a bug, drops the event and costs one line in the log a minute (the class of the error, nothing else).
@@ -36,6 +37,8 @@ WEEK_MAX = 100000                      # the codes of the last 7 days that are r
 RETURN_DAYS = 6                        # a visitor is returning when seen on one of the 6 days before
 DAY_MAX = 30000                        # events kept in a day, for all visitors together: a flood that gets past the allowances cannot fill the disk or the memory (a site with a hundred visitors a day sends under a thousand, so this is thirty times that); the rest are dropped and counted
 RANGE_NEW_MAX = 50                     # new visitors (and visits of browsers that asked not to be tracked) that one address range may make in a day: a household, an office or a small school is a handful, and 50 are far more than any one range of this site's size has; 600 ranges are needed to fill DAY_MAX
+SHARED_NEW_MAX = 3000                  # the same for an INTERNAL address (hub/limits.py is_internal): that is no household but the proxy in front of the site, which passed no visitor's address, so that the whole site comes from it; the visitors can then be told apart by their browsers alone, and the limit of a household would drop real people (a tenth of DAY_MAX still keeps a flood from taking the day's room)
+SHARED_LOG_SECONDS = 3600.0            # the warning that events come from an internal address is written once an hour at the most
 BACK_DAYS = 2                          # a clock that is found up to this many days before the day that the counter already kept is a clock that stepped back: it is not a new day (further back is a real correction)
 DB_MAX_BYTES = 67108864                # the counter's file and its log file together, as hub.db's limit (limits.db_max_bytes): from 90% the oldest raw days go (their sums are kept first), at the limit new events are dropped
 MAINTAIN_SECONDS = 3600.0
@@ -61,7 +64,7 @@ class Collector:
         self.nt_seen = {}                                          # the short code of an untracked visit -> when it may be counted again (memory only)
         self.pending = collections.Counter()
         self.bucket = limitmod.TokenBucket(global_burst, global_refill, 0.0)         # (all events together: a flood is dropped before it reaches the file)
-        self.next_flush = self.next_maintain = self.next_trouble = self.next_room = 0.0
+        self.next_flush = self.next_maintain = self.next_trouble = self.next_room = self.next_shared = 0.0
         self.full = False                                          # the file holds DB_MAX_BYTES: new events are dropped until the oldest raw days have gone
         self.last_at = int(store.meta("last_at") or 0)
         self.kept_today = 0                                        # the events kept today (the file's own count when a day begins)
@@ -111,7 +114,7 @@ class Collector:
         """Whether the address's range may make one more new visitor today (RANGE_NEW_MAX), and if it may, that it did. The range is kept as a keyed hash that exists in memory only, for the day."""
         mark = hmac.new(self.key, limitmod.address_range(ip).encode("ascii"), hashlib.sha256).digest()[:8]
         made = self.ranges.get(mark, 0)
-        if made >= RANGE_NEW_MAX:
+        if made >= (SHARED_NEW_MAX if limitmod.is_internal(ip) else RANGE_NEW_MAX):
             return False
         self.ranges[mark] = made + 1
         return True
@@ -126,8 +129,8 @@ class Collector:
         return self.bucket.take(self.clock())
 
     def accept(self, ip, ua, untracked, body):
-        """One event of a page: "ok" (kept), "again" (a visit of an untracked browser that was counted a moment ago), "crawler" (not counted), "full" (the day's limit is reached), "shape" (not an event: refused)
-        or "busy" (the file refused it). `ip` and `ua` are texts that this call forgets."""
+        """One event of a page: "ok" (kept), "again" (a visit of an untracked browser that was counted a moment ago), "crawler" (not counted), "benign" (an error that is a browser's harmless note: not counted), "full" (the day's
+        limit is reached), "limited" (the address range's limit), "shape" (not an event: refused) or "busy" (the file refused it). `ip` and `ua` are texts that this call forgets."""
         try:
             return self.take(ip, ua, untracked, body)
         except (sqlite3.Error, OSError) as e:
@@ -145,10 +148,14 @@ class Collector:
         if event is None:
             self.refuse()
             return "shape"
+        if event["kind"] == "error" and events.is_benign(event["msg"]):
+            return "benign"                                       # (a browser's harmless note, such as ResizeObserver's: not an error of the site, not counted, answered like the rest)
         if self.full or self.kept_today >= DAY_MAX:
             self.pending["dropped"] += 1
             return "full"
         country = self.geo.country(ip)
+        if limitmod.is_internal(ip):
+            self.note_shared(now)
         second = int(now)
         if untracked or event["kind"] == "visit":
             mark = self.short(ip, ua)
@@ -182,6 +189,13 @@ class Collector:
         self.kept_today += 1
         self.last_at = second
         return "ok"
+
+    def note_shared(self, now):
+        """An event came from an INTERNAL address: the site's nginx was told no visitor's address, so the proxy in front of it is every visitor (docs/SERVER.md "Behind a reverse proxy"). One line in the log an hour at
+        the most, with no address in it, so that the operator can see it; the visitors are then told apart by their browsers alone."""
+        if self.log is not None and now >= self.next_shared:
+            self.next_shared = now + SHARED_LOG_SECONDS
+            self.log.event("warning", what="analytics_events_arrive_from_an_internal_address")
 
     def signup(self):
         """A person logged in who had no account here before (the Discord login's hook): one more for today. A count, nothing else."""
@@ -266,8 +280,8 @@ class Collector:
         if n > RANGE_MAX_DAYS:
             return None
         days = [events.add_days(first, i) for i in range(n)]
-        sums = [self.store.sums_of(day, today) for day in days]
-        before = [self.store.sums_of(events.add_days(first, -n + i), today) for i in range(n)]
+        sums = [sumsmod.without_benign(self.store.sums_of(day, today)) for day in days]
+        before = [sumsmod.without_benign(self.store.sums_of(events.add_days(first, -n + i), today)) for i in range(n)]
         per_day = [{"day": day, "visitors": s.get("visitors", 0), "visits": s.get("visits", 0), "nt": s.get("nt", 0), "signups": s.get("signups", 0),
                     "errors": sum(e[3] for e in s.get("errors", ())) + s.get("errors_other", 0), "perf": s.get("perf", {}), "vers": s.get("vers", {})} for day, s in zip(days, sums)]
         lists = sumsmod.merged(sums)

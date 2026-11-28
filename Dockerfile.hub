@@ -18,13 +18,14 @@
 FROM python:3.12-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df AS geo
 
 # The country list of the visit counter (docs/ANALYTICS.md): DB-IP Lite "IP to Country Lite" (CC BY 4.0), fetched while the image is BUILT, never while the hub runs, and turned into a small file by hub/geodata.py
-# (only that file and its package marker are copied in, so a change elsewhere in hub/ does not fetch it again). GEO_MONTH names the month (`2026-12`); empty is this month, else the one before. The layer is kept until
-# the month or hub/geodata.py changes: the stack passes the month (ANTS_GEO_MONTH, docker-compose.stack.yml), and a new month is a new list. A build that cannot reach db-ip.com goes on without a list (every country is
-# then unknown, and the admin page says so): the image is never held back for it.
+# (only that file and its package marker are copied in, so a change elsewhere in hub/ does not fetch it again). GEO_MONTH names the month (`2026-12`); empty is this month. The build tries that month and then the one
+# before it, and its last line says which list the image has ("hub.geodata: country list: 2026-11") or that it has none ("country list: NONE ..."). The layer is kept until the month or hub/geodata.py changes
+# (Docker's cache keeps a build that made NO list too: to try again, pass another month): the stack passes the month (ANTS_GEO_MONTH, docker-compose.stack.yml), and a new month is a new list. A build that cannot reach
+# db-ip.com goes on without a list (every country is then unknown, and the admin page says so): the image is never held back for it.
 ARG GEO_MONTH=
 WORKDIR /build
 COPY hub/__init__.py hub/geodata.py /build/hub/
-RUN mkdir -p /geo && (python -m hub.geodata build /geo/country.bin ${GEO_MONTH} || echo "no country list in this image: every country will be unknown")
+RUN mkdir -p /geo && (python -m hub.geodata build /geo/country.bin ${GEO_MONTH} || { [ $? -eq 1 ] || echo "hub.geodata: country list: NONE (the build step did not run): every country of the counter will be unknown"; })
 
 FROM python:3.12-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df
 

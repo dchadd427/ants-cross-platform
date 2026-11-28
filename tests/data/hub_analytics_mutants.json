@@ -476,7 +476,7 @@
   {
    "id": "an_address_range_has_no_limit",
    "file": "hub/analytics.py",
-   "old": "if made >= RANGE_NEW_MAX:",
+   "old": "if made >= (SHARED_NEW_MAX if limitmod.is_internal(ip) else RANGE_NEW_MAX):",
    "new": "if False:",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
   },
@@ -563,6 +563,48 @@
    "old": "events.day_number(known) - events.day_number(day) <= BACK_DAYS:",
    "new": "events.day_number(known) - events.day_number(day) <= 10 ** 9:",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics"
+  },
+  {
+   "id": "a_browsers_harmless_note_is_counted_as_an_error",
+   "file": "hub/analytics.py",
+   "old": "if event[\"kind\"] == \"error\" and events.is_benign(event[\"msg\"]):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics.TheEvents"
+  },
+  {
+   "id": "an_error_that_only_starts_like_a_harmless_note_is_dropped",
+   "file": "hub/analytics_events.py",
+   "old": "limit exceeded)\\.?\\Z\", re.I),",
+   "new": "limit exceeded)\\.?\", re.I),",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics.TheEvents"
+  },
+  {
+   "id": "a_proxy_that_passes_no_visitor_address_is_one_household_with_a_handful_of_visitors",
+   "file": "hub/analytics.py",
+   "old": "if made >= (SHARED_NEW_MAX if limitmod.is_internal(ip) else RANGE_NEW_MAX):",
+   "new": "if made >= RANGE_NEW_MAX:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics.TheVisitorsAddress"
+  },
+  {
+   "id": "an_internal_address_may_make_any_number_of_visitors",
+   "file": "hub/analytics.py",
+   "old": "if made >= (SHARED_NEW_MAX if limitmod.is_internal(ip) else RANGE_NEW_MAX):",
+   "new": "if made >= (10 ** 9 if limitmod.is_internal(ip) else RANGE_NEW_MAX):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics.TheVisitorsAddress"
+  },
+  {
+   "id": "the_log_says_at_every_event_that_the_proxy_passes_no_visitor_address",
+   "file": "hub/analytics.py",
+   "old": "if self.log is not None and now >= self.next_shared:",
+   "new": "if self.log is not None:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics.TheVisitorsAddress"
+  },
+  {
+   "id": "a_note_that_was_counted_before_the_filter_is_still_in_the_report",
+   "file": "hub/analytics.py",
+   "old": "sums = [sumsmod.without_benign(self.store.sums_of(day, today)) for day in days]",
+   "new": "sums = [self.store.sums_of(day, today) for day in days]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_analytics.TheEvents"
   }
  ]
 }

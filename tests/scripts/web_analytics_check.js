@@ -147,6 +147,23 @@ check('a stamp that is no version is empty', (() => { const p = page({ version: 
     for (let line = 1; line <= 9; line++) p.fire('error', { message: 'message ' + line, error: { name: 'Error' }, filename: '', lineno: line });
     same('at most five errors for a page', p.kinds().filter((k) => k === 'error').length, 5);
 }
+{
+    // the browser's own harmless messages are no errors of the site: none is sent, in either wording and whatever the file and line say, and none takes one of the five places
+    const p = page({});
+    for (const message of ['ResizeObserver loop completed with undelivered notifications.', 'ResizeObserver loop limit exceeded', 'Uncaught ResizeObserver loop limit exceeded', '  resizeobserver loop limit exceeded ']) {
+        p.fire('error', { message, filename: 'https://beta.example.org/front/lobby_net.js', lineno: 3 });
+        p.fire('error', { message, error: { name: 'Error' }, filename: '', lineno: 1 });
+        p.fire('unhandledrejection', { reason: new Error(message.replace(/^Uncaught /, '')) });
+    }
+    same('the browser\'s harmless messages are not sent', p.kinds(), ['view']);
+    for (let line = 1; line <= 7; line++) p.fire('error', { message: 'message ' + line, error: { name: 'Error' }, filename: '', lineno: line });
+    same('and they took no place of the five errors', p.kinds().filter((k) => k === 'error').length, 5);
+    const q = page({});
+    q.fire('error', { message: 'Cannot recover from ResizeObserver loop limit exceeded', error: { name: 'TypeError' }, filename: 'https://beta.example.org/a.js', lineno: 1 });
+    q.fire('error', { message: 'ResizeObserver loop limit exceeded while sizing the board', error: { name: 'TypeError' }, filename: 'https://beta.example.org/a.js', lineno: 3 });
+    q.fire('error', { message: 'ResizeObserver is not defined', error: { name: 'ReferenceError' }, filename: 'https://beta.example.org/a.js', lineno: 2 });
+    same('a message that only mentions the observer is an error', q.kinds(), ['view', 'error', 'error', 'error']);
+}
 check('a long message is cut', (() => { const p = page({}); p.fire('error', { message: 'x'.repeat(1000), error: { name: 'Error' }, filename: 'https://beta.example.org/a.js', lineno: 1 }); return p.sent[1].event.m.length === 300; })());
 
 // ---- the game's start --------------------------------------------------------------------------------------------------

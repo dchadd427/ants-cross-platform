@@ -18,6 +18,8 @@ A DAY (`sums_of_day`) is a dictionary of plain numbers and short lists that hold
 import collections
 import itertools
 
+from . import analytics_events as events
+
 GAP = 1800                                         # seconds: a visitor's pages that are further apart than this are two visits
 DURATION_EDGES = (5, 10, 20, 30, 45, 60, 90, 120, 180, 300, 600, 900, 1800, 3600)       # seconds: the bins of a visit's time on the site (the page groups them in six)
 ERRORS_MAX = 200
@@ -145,6 +147,14 @@ def sums_of_day(day, rows, signups=0):
             "countries": {country: counts for country, counts in sorted(countries.items())},
             "refs": top(refs), "entry": top(entry), "exit": top(exit_), "browsers": dict(browsers), "systems": dict(systems), "devices": dict(devices), "widths": widths, "langs": top(langs),
             "dur": bins, "dur_sum": seconds, "perf": perf_sums, "errors": grouped[:ERRORS_MAX], "errors_other": sum(e[3] for e in grouped[ERRORS_MAX:]) + errors_over, "vers": dict(versions), "signups": signups}
+
+
+def without_benign(day):
+    """The sums of a day without the errors that are a browser's harmless notes (events.is_benign: ResizeObserver's loop messages). The sums of a day that was kept before the counter
+    dropped such events still hold them, and a report must not show them or count them; the kept sums are not changed. (`errors_other` is a count with no message: it stays as it is.)"""
+    errors = day.get("errors") or ()
+    kept = [e for e in errors if not events.is_benign(e[1])]
+    return day if len(kept) == len(errors) else dict(day, errors=kept)
 
 
 # ---- a range of days ---------------------------------------------------------------------------------------------------------------------------

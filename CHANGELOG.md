@@ -34,6 +34,11 @@ Work that is not released yet is written in the same template under a heading th
 **Fixes:**
 - The activity curve above the timeline now shows in the replay on a match page too, as on the replay's own page.
 
+**For operators:**
+- Analytics: the image's build got no country list (db-ip.com answers 403 to Python's own client name); it now names itself, tries this month and the one before, and logs which list it has ([how](docs/ANALYTICS.md#the-country-list)).
+- Analytics: the browser's `ResizeObserver loop` notes are no longer counted as page errors ([list](docs/ANALYTICS.md#what-is-not-counted-as-an-error)).
+- Analytics: a proxy that passes no `X-Forwarded-For` makes every visitor the proxy's own address; the hub now logs it and lets that address make more than a household's 50 new visitors a day ([how](docs/ANALYTICS.md#the-door)).
+
 ## v0.22.3 - 2026-11-27 - Tags any time, nicknames once a day, web logs kept 14 days
 
 **For players:**
