@@ -79,7 +79,7 @@
    "old": "    hud_.set_game_mode(sim_.game_mode());\n    hud_.init(local_player_id_, !rejoin);",
    "new": "    hud_.init(local_player_id_, !rejoin);",
    "build": "test_network_app",
-   "test": "timeout 900 env ANTS_TEST_FILTER=AI6.11f ./build/tests/test_app/test_network_app"
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI6.11f ./build/tests/test_app_server/test_network_app"
   },
   {
    "id": "results_page_not_told_the_mode",

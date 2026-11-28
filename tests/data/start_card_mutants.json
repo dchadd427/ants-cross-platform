@@ -209,7 +209,7 @@
    "old": "n < 0 || n > 60) {\n                if (cfg.startup_error.empty()) cfg.startup_error = \"--start-card-seconds",
    "new": "n < 0 || n > 61) {\n                if (cfg.startup_error.empty()) cfg.startup_error = \"--start-card-seconds",
    "build": "test_network_app",
-   "test": "ANTS_TEST_FILTER=N5.101 timeout 900 ./build/tests/test_app/test_network_app"
+   "test": "ANTS_TEST_FILTER=N5.101 timeout 900 ./build/tests/test_app_server/test_network_app"
    },
   {
    "id": "local_card_marks_no_bot",

@@ -115,7 +115,7 @@
       "old": "    view_glide_.follow(world, hud_team_id_,",
       "new": "    if (false) view_glide_.follow(world, hud_team_id_,",
       "build": ["test_prediction_link"],
-      "test": "ANTS_TEST_FILTER=LK17 ./build/tests/test_app/test_prediction_link",
+      "test": "ANTS_TEST_FILTER=LK17 ./build/tests/test_app_server/test_prediction_link",
       "expect": "LK17"
     },
     {
@@ -124,7 +124,7 @@
       "old": "    if (prediction == nullptr) return;                    // (a game that has no prediction has no shifts to slide: the slide of a hop is the frame's own, view_glide.hpp)",
       "new": "    if (prediction == nullptr) {\n        renderer_->view_glide().clear();\n        return;\n    }",
       "build": ["test_prediction_link"],
-      "test": "ANTS_TEST_FILTER=LK17 ./build/tests/test_app/test_prediction_link",
+      "test": "ANTS_TEST_FILTER=LK17 ./build/tests/test_app_server/test_prediction_link",
       "expect": "LK17"
     }
   ]

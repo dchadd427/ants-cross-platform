@@ -1786,7 +1786,7 @@
       "build": [
         "test_network_app"
       ],
-      "test": "timeout 900 env ANTS_TEST_FILTER=N5.103 ./build/tests/test_app/test_network_app"
+      "test": "timeout 900 env ANTS_TEST_FILTER=N5.103 ./build/tests/test_app_server/test_network_app"
     },
     {
       "id": "ping_drawn_when_off",
@@ -1796,7 +1796,7 @@
       "build": [
         "test_network_app"
       ],
-      "test": "timeout 900 env ANTS_TEST_FILTER=N5.29b ./build/tests/test_app/test_network_app"
+      "test": "timeout 900 env ANTS_TEST_FILTER=N5.29b ./build/tests/test_app_server/test_network_app"
     },
     {
       "id": "delay_text_back",

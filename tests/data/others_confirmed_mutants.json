@@ -229,7 +229,7 @@
       "build": [
         "test_prediction_link"
       ],
-      "test": "ANTS_TEST_FILTER=LK12 ./build/tests/test_app/test_prediction_link",
+      "test": "ANTS_TEST_FILTER=LK12 ./build/tests/test_app_server/test_prediction_link",
       "expect": "LK12"
     },
     {
@@ -240,7 +240,7 @@
       "build": [
         "test_prediction_link"
       ],
-      "test": "ANTS_TEST_FILTER=LK12 ./build/tests/test_app/test_prediction_link",
+      "test": "ANTS_TEST_FILTER=LK12 ./build/tests/test_app_server/test_prediction_link",
       "expect": "LK12"
     },
     {

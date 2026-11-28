@@ -31,7 +31,7 @@
       "build": [
         "test_prediction_link"
       ],
-      "test": "./build/tests/test_app/test_prediction_link",
+      "test": "./build/tests/test_app_server/test_prediction_link",
       "expect": "LK"
     },
     {
@@ -42,7 +42,7 @@
       "build": [
         "test_prediction_link"
       ],
-      "test": "./build/tests/test_app/test_prediction_link",
+      "test": "./build/tests/test_app_server/test_prediction_link",
       "expect": "LK3"
     },
     {
@@ -53,7 +53,7 @@
       "build": [
         "test_prediction_link"
       ],
-      "test": "./build/tests/test_app/test_prediction_link",
+      "test": "./build/tests/test_app_server/test_prediction_link",
       "expect": "LK"
     },
     {
@@ -86,7 +86,7 @@
       "build": [
         "test_prediction_link"
       ],
-      "test": "./build/tests/test_app/test_prediction_link",
+      "test": "./build/tests/test_app_server/test_prediction_link",
       "expect": "LK6"
     },
     {
@@ -97,7 +97,7 @@
       "build": [
         "test_prediction_link"
       ],
-      "test": "./build/tests/test_app/test_prediction_link",
+      "test": "./build/tests/test_app_server/test_prediction_link",
       "expect": "LK7"
     },
     {
@@ -108,7 +108,7 @@
       "build": [
         "test_prediction_link"
       ],
-      "test": "./build/tests/test_app/test_prediction_link",
+      "test": "./build/tests/test_app_server/test_prediction_link",
       "expect": "LK7"
     },
     {
@@ -207,7 +207,7 @@
       "build": [
         "test_prediction_link"
       ],
-      "test": "./build/tests/test_app/test_prediction_link",
+      "test": "./build/tests/test_app_server/test_prediction_link",
       "expect": "LK11"
     },
     {
@@ -218,7 +218,7 @@
       "build": [
         "test_prediction_link"
       ],
-      "test": "./build/tests/test_app/test_prediction_link",
+      "test": "./build/tests/test_app_server/test_prediction_link",
       "expect": "LK11"
     },
     {
@@ -251,7 +251,7 @@
       "build": [
         "test_prediction_link"
       ],
-      "test": "./build/tests/test_app/test_prediction_link",
+      "test": "./build/tests/test_app_server/test_prediction_link",
       "expect": "LK8"
     },
     {
@@ -295,7 +295,7 @@
       "build": [
         "test_prediction_link"
       ],
-      "test": "./build/tests/test_app/test_prediction_link",
+      "test": "./build/tests/test_app_server/test_prediction_link",
       "expect": "LK2"
     },
     {
@@ -427,7 +427,7 @@
       "build": [
         "test_prediction_link"
       ],
-      "test": "./build/tests/test_app/test_prediction_link",
+      "test": "./build/tests/test_app_server/test_prediction_link",
       "expect": "LK10"
     },
     {
