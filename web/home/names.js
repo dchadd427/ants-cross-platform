@@ -268,7 +268,7 @@
                 if (m && m.offline) out = { text: m.rate ? WHY.nick.rate : TEXT.offline, tone: 'bad' };
                 f.msg.hidden = out.text === ''; f.msg.textContent = out.text; f.msg.className = 'nm-msg ' + out.tone;
                 f.help.hidden = !f.help.textContent || out.text !== '';
-                f.wrap.className = 'nm-in' + (out.tone === 'bad' ? ' err' : out.tone === 'ok' ? ' ok' : out.tone === 'lock' ? ' off' : '');
+                f.wrap.className = 'nm-in' + (out.tone === 'bad' ? ' err' : out.tone === 'ok' ? ' ok' : '');
             }
             if (!m) { [s.nick, s.tag].forEach(function (f) { if (f) { f.msg.hidden = true; f.help.hidden = !f.help.textContent; f.wrap.className = 'nm-in'; } }); s.save.disabled = true; return; }
             var asked = s.typed.nick.replace(/^ +| +$/g, ''), parts = m.ok === true && typeof m.shown === 'string' && letters && letters.split ? letters.split(m.shown) : null;

@@ -24,7 +24,6 @@
 .nm-in input:focus { outline: none; border-color: var(--gold); }
 .nm-in.err input { border-color: var(--bad-edge); }
 .nm-in.ok input { border-color: #4fbf8a; }
-.nm-in.off input { color: #7e988e; background: #0a1013; border-color: #1b3b32; }
 .nm-cnt { position: absolute; right: 12px; font-size: 13px; color: var(--muted); pointer-events: none; }
 .nm-in.err .nm-cnt { color: #ffb4a8; }
 .nm-h { margin: 0; font-size: 13px; line-height: 17px; color: var(--muted); }

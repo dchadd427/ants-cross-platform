@@ -378,8 +378,8 @@
   {
    "id": "a_wait_takes_the_box_from_the_person",
    "file": "web/home/names.js",
-   "old": "out.tone === 'lock' ? ' off' : '');",
-   "new": "out.tone === 'lock' ? ' off' : ''); f.input.readOnly = out.tone === 'lock';",
+   "old": "out.tone === 'ok' ? ' ok' : '');",
+   "new": "out.tone === 'ok' ? ' ok' : ''); f.input.readOnly = out.tone === 'lock';",
    "test": "node tests/scripts/web_home_names_check.js web/lobby.html"
   },
   {
