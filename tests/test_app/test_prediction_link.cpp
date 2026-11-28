@@ -6,11 +6,13 @@
 // chosen round trip and jitter on a virtual clock (tests/test_app/shaped_link_fixtures.hpp), and a person at it clicks with SDL mouse events, deciding from what the screen shows (view_sim), with
 // the prediction on and off:
 //   - humping on mud: the pixels that the re-orders add to a walk of 9 s (the confirmed engine, the one that decides), against the same walk with one order;
-//   - the attack click on an enemy ant that walks: the share of the clicks that are still an attack when the order lands.
+//   - the attack click on an enemy ant that walks: the share of the clicks that are still an attack when the order lands;
+//   - the hop of a re-order: the engine puts a walking ant on the middle of its tile when it is given a new order, and the picture draws no jump of it, in a game of one machine and over a link.
 // The numbers are printed (ANTS_LINK_TABLE=1 plays the whole grid); the assertions hold what the prediction promises.
 #include <SDL.h>
 
 #include "shaped_link_fixtures.hpp"
+#include "slide_cause.hpp"
 #include "ants_app/health_changes.hpp"
 #include "ants_replay/player.hpp"
 #include "ants_replay/replay.hpp"
@@ -680,7 +682,8 @@ DrawnMotion drawn_motion(int rtt, int how, uint32_t seed, uint32_t ms) {
 
 struct Seen {
     double minutes{0.0};
-    int slid_others{0};             // slides of 8 px or more that began on an ant of another player (the plain picture's corrections of the other players' ants, drawn)
+    int slid_others{0};             // slides of 8 px or more that began on an ant of another player (the plain picture's corrections of the other players' ants, drawn, and the hops of the engine's own snaps in both)
+    int corrected_others{0};        // ... of them those that no move of the engine's own ant explains: in the picture of others = confirmed there are none (the plain picture's corrections ARE moves of the engine that it draws, the predicted one)
     int slid_own{0};                // ... on an ant of the player's own
     int hops8_others{0};            // frames in which an ant of another player is drawn 8 px or more from where the last frame drew it
     int backwards_others{0};        // ... against the way it was walking
@@ -719,6 +722,7 @@ Seen seen_over_link(int scene, int rtt, int jitter, bool others, uint32_t seed, 
         double slid{0.0};
     };
     std::map<uint32_t, Last> last;
+    SlideCause cause;
     s.on_frame_end = [&]() {
         const sim::WorldState& world = s.app().shown_world();
         ++out.frames;
@@ -730,9 +734,14 @@ Seen seen_over_link(int scene, int rtt, int jitter, bool others, uint32_t seed, 
             s.app().renderer().view_glide().offset_of(engine_ant.id, gx, gy);
             const double mag = std::hypot(static_cast<double>(gx), static_cast<double>(gy));
             Last& l = last[engine_ant.id];
+            bool began = false;
+            const bool unexplained = engine_ant.player_id != 0 && cause.unexplained(engine_ant, gx, gy, mag >= 8.0, began);
             if (mag >= 8.0 && (l.slid == 0.0 || mag > l.slid + 1.5)) {
                 if (engine_ant.player_id == 0) ++out.slid_own;
-                else ++out.slid_others;
+                else {
+                    ++out.slid_others;
+                    if (unexplained && began) ++out.corrected_others;
+                }
             }
             l.slid = mag >= 8.0 ? mag : 0.0;
             if (engine_ant.player_id == 0) continue;
@@ -762,6 +771,139 @@ Seen seen_over_link(int scene, int rtt, int jitter, bool others, uint32_t seed, 
     }
     s.on_frame_end = nullptr;
     out.minutes = static_cast<double>(ms) / 60000.0;
+    return out;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// The hop of a re-order: the engine puts an ant that walks and is given a new order on the middle of its tile (the original's GoTo does, FUN_0101fc50), up to 16 px from where the picture had it
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+struct HopRun {
+    int engine_snap{0};             // the largest move of the engine's ant between two frames after the order (px, the larger of the two axes): the snap
+    int walk_max{0};                // the largest move of the DRAWN ant between two frames before the order (a walk)
+    int after_max{0};               // ... and after it, over the next 700 ms (the order's hop and the walk that follows)
+    int pick_tried{0};              // a click that picks the ant where the frame draws it, made while it slides (a slide of 8 px or more)
+    int pick_ok{0};                 // ... that picked it
+    int pick_foil_ok{0};            // a click on the engine's side of it, outside the drawn ant's box: picked nothing
+    bool ended_clean{false};        // a second after the order nothing slides
+    bool ok{false};
+};
+
+// The ant (seat `seat`) walks east along row 3 of the lane, and is given another goal when `phase` ms of its walk have passed: with the mouse for the player's own ant (a click on it, a right click on
+// the goal), through the other person's machine for another seat's. The drawn place is followed frame by frame (Renderer::drawn_point). `kind`: 0 a goal further on, 1 a goal behind it, 2 a goal one row up
+HopRun hop_once(Session& s, uint8_t seat, uint32_t ant, uint32_t phase, int kind, uint32_t& flip) {
+    HopRun out;
+    if (!s.bring(seat, ant, seat == 0 ? 6 : 12, kLaneRow, 30000)) return out;                 // (to the start of the lane: another seat's ant has its own, away from the hills)
+    s.order(seat, sim::CommandType::GroupMove, {ant}, 24, kLaneRow);
+    s.run_ms(900 + phase);
+    struct Point {
+        int32_t x{0};
+        int32_t y{0};
+    };
+    std::vector<Point> path;
+    std::vector<Point> engine;
+    const auto glide_of = [&](int32_t& gx, int32_t& gy) { return s.app().renderer().view_glide().offset_of(ant, gx, gy); };
+    bool tried = false;
+    s.on_frame_end = [&]() {
+        const sim::WorldState& world = s.app().shown_world();
+        const sim::AntSnapshot* a = Session::ant_in(world, ant);
+        if (a == nullptr) return;
+        Point pt;
+        if (s.app().renderer().drawn_point(world, *a, pt.x, pt.y)) path.push_back(pt);
+        engine.push_back(Point{a->px, a->py});
+        int32_t gx = 0;
+        int32_t gy = 0;
+        if (seat != 0 || tried || engine.size() < 2 || !glide_of(gx, gy) || std::max(std::abs(gx), std::abs(gy)) < 8 || gy != 0) return;
+        tried = true;                                                                         // the click of the pointer: where the frame draws the ant, and where the engine has it
+        const sim::AntSnapshot shown = *a;
+        const int32_t toward = gx > 0 ? 1 : -1;
+        int32_t sx = 0;
+        int32_t sy = 0;
+        s.camera_on(shown.tile_x, shown.tile_y);
+        s.app().hud().clear_selection();
+        ++out.pick_tried;
+        if (s.screen_of_world(shown.px + gx + toward * 18, shown.py - 8, sx, sy)) s.click(SDL_BUTTON_LEFT, sx, sy);
+        if (s.app().hud().get_selected_ant_id() == ant) ++out.pick_ok;
+        s.app().hud().clear_selection();
+        if (s.screen_of_world(shown.px - toward * 18, shown.py - 8, sx, sy)) s.click(SDL_BUTTON_LEFT, sx, sy);
+        if (s.app().hud().get_selected_ant_id() != ant) ++out.pick_foil_ok;
+        s.app().hud().clear_selection();
+    };
+    s.run_ms(100);
+    const size_t before = path.size();
+    const sim::AntSnapshot* walking = s.shown_ant(ant);
+    if (walking == nullptr || walking->action != 1) {
+        s.on_frame_end = nullptr;
+        return out;
+    }
+    const sim::AntSnapshot there = *walking;
+    flip ^= 1u;
+    const int32_t goal_x = std::clamp(kind == 1 ? there.tile_x - 3 - static_cast<int32_t>(flip) : there.tile_x + 8 + static_cast<int32_t>(flip), 2, 28);
+    const int32_t goal_y = kind == 2 ? kLaneRow - 1 : kLaneRow;
+    if (seat == 0) {
+        int32_t sx = 0;
+        int32_t sy = 0;
+        s.camera_on(there.tile_x, there.tile_y);
+        if (!s.screen_of_world(there.px, there.py, sx, sy)) return out;
+        s.click(SDL_BUTTON_LEFT, sx, sy);                                                     // (the ant is picked ...)
+        if (s.app().hud().get_selected_ant_id() != ant) return out;
+        if (!s.screen_of_tile(goal_x, goal_y, sx, sy)) return out;
+        s.click(SDL_BUTTON_RIGHT, sx, sy);                                                    // (... and sent to a goal that is on the screen)
+    } else {
+        s.order(seat, sim::CommandType::GroupMove, {ant}, goal_x, goal_y);
+    }
+    const size_t engine_before = engine.size();
+    s.run_ms(700);
+    s.run_ms(300);
+    s.on_frame_end = nullptr;
+    for (size_t i = std::max<size_t>(engine_before, 1); i < engine.size(); ++i) {
+        out.engine_snap = std::max(out.engine_snap, std::max(std::abs(engine[i].x - engine[i - 1].x), std::abs(engine[i].y - engine[i - 1].y)));
+    }
+    for (size_t i = 1; i < path.size(); ++i) {
+        const int jump = std::max(std::abs(path[i].x - path[i - 1].x), std::abs(path[i].y - path[i - 1].y));
+        if (i < before) out.walk_max = std::max(out.walk_max, jump);
+        else if (i < before + 45) out.after_max = std::max(out.after_max, jump);                // (the 700 ms after the order: about 42 frames)
+    }
+    int32_t gx = 0;
+    int32_t gy = 0;
+    out.ended_clean = !glide_of(gx, gy);
+    out.ok = true;
+    return out;
+}
+
+struct HopSweep {
+    int runs{0};
+    int hops{0};                    // runs in which the engine moved the ant by 8 px or more in one frame (its snap)
+    int snap_worst{0};
+    int walk_worst{0};
+    int after_worst{0};
+    int pick_tried{0};
+    int pick_ok{0};
+    int pick_foil_ok{0};
+    int unclean{0};
+};
+
+// The phase of the order is swept over a walk of 1.3 tiles (the ant crosses a tile line once) in steps of 34 ms
+HopSweep hop_sweep(const Params& p, uint8_t seat, int kind) {
+    HopSweep out;
+    Session s(p);
+    if (!s.begin()) return out;
+    const std::vector<uint32_t> mine = Session::ants_of(s.app().view_sim(), seat);
+    if (mine.empty()) return out;
+    uint32_t flip = 0;
+    for (uint32_t phase = 0; phase < 520; phase += 34) {
+        const HopRun r = hop_once(s, seat, mine[0], phase, kind, flip);
+        if (!r.ok) continue;
+        ++out.runs;
+        if (r.engine_snap >= 8) ++out.hops;
+        out.snap_worst = std::max(out.snap_worst, r.engine_snap);
+        out.walk_worst = std::max(out.walk_worst, r.walk_max);
+        out.after_worst = std::max(out.after_worst, r.after_max);
+        out.pick_tried += r.pick_tried;
+        out.pick_ok += r.pick_ok;
+        out.pick_foil_ok += r.pick_foil_ok;
+        if (!r.ended_clean) ++out.unclean;
+    }
     return out;
 }
 }  // namespace
@@ -970,11 +1112,11 @@ int main(int argc, char* argv[]) {
                 const Seen now = seen_over_link(scene, link.rtt, link.jitter, true, 9, minutes * 60000u);
                 ASSERT_TRUE(plain.frames > 1000 && now.frames > 1000);
                 const auto rate = [](int n, const Seen& m) { return n / m.minutes; };
-                std::printf("\n    %-30s mean rtt %3d ms: corrections of the other players' ants drawn as slides (8 px or more a minute) %5.1f -> %.1f; frames of one drawn 8 px or more from the last frame's place %5.1f -> %.1f, against its walk %5.1f -> %.1f;"
+                std::printf("\n    %-30s mean rtt %3d ms: slides of the other players' ants (8 px or more a minute: the plain picture's corrections, the hops of the engine's own snaps in both) %5.1f -> %.1f, of the default's those that no move of the engine's own ant explains %.1f; frames of one drawn 8 px or more from the last frame's place %5.1f -> %.1f, against its walk %5.1f -> %.1f;"
                             " their own ants' slides %4.1f -> %4.1f; the other players' ants are drawn %3.0f ms (mean) behind the player's own, the plain picture 0",
-                            names[scene], link.rtt + link.jitter, rate(plain.slid_others, plain), rate(now.slid_others, now), rate(plain.hops8_others, plain), rate(now.hops8_others, now), rate(plain.backwards_others, plain),
+                            names[scene], link.rtt + link.jitter, rate(plain.slid_others, plain), rate(now.slid_others, now), rate(now.corrected_others, now), rate(plain.hops8_others, plain), rate(now.hops8_others, now), rate(plain.backwards_others, plain),
                             rate(now.backwards_others, now), rate(plain.slid_own, plain), rate(now.slid_own, now), now.lag_ms_sum / std::max(1, now.frames));
-                ASSERT_EQ(now.slid_others, 0);                                                  // not one correction of another player's ant is drawn
+                ASSERT_EQ(now.corrected_others, 0);                                             // not one correction of another player's ant is drawn (the hop of its own snap slides, and that is no correction)
                 ASSERT_TRUE(now.backwards_others <= plain.backwards_others);                    // ... and none goes back that the plain picture did not
                 ASSERT_TRUE(now.lag_ms_sum / now.frames >= 40.0 && plain.lag_ms_sum / plain.frames >= 40.0);            // (the lead: the two engines stand apart, so the check is not empty; the picture of the others is that far behind)
             }
@@ -988,7 +1130,9 @@ int main(int argc, char* argv[]) {
         int frames{0};
         int others_drawn{0};                // frames of an ant of another player (a person or a computer player, a friend or an enemy)
         int others_off{0};                  // ... that were not the confirmed engine's ant exactly
-        int others_slid{0};                 // ... that the glide moved from the confirmed engine's place (a correction drawn: there must be none)
+        int others_slid{0};                 // ... that the glide moved from the confirmed engine's place by a slide that no move of the engine's own ant explains (a correction drawn: there must be none; the hop of a snap is not one)
+        int others_hop_slid{0};             // ... that the glide moved by the slide of such a hop (view_glide.hpp, follow)
+        SlideCause cause;
         int others_ahead{0};                // ... whose ant stood elsewhere in the predicted engine (what the plain picture would have drawn: the check is not empty)
         int own_drawn{0};
         int own_off{0};                     // frames of an own ant that was not the predicted engine's ant exactly
@@ -1026,7 +1170,10 @@ int main(int argc, char* argv[]) {
                 ++others_drawn;
                 const sim::AntSnapshot* from = Session::ant_in(confirmed, a.id);
                 if (from == nullptr || !same(a, *from)) ++others_off;
-                others_slid += slid ? 1 : 0;
+                bool began = false;
+                const bool unexplained = cause.unexplained(a, gx, gy, slid, began);
+                others_slid += unexplained ? 1 : 0;
+                others_hop_slid += slid && !unexplained ? 1 : 0;
                 const sim::AntSnapshot* ahead = Session::ant_in(predicted, a.id);
                 if (ahead != nullptr && !same(a, *ahead)) ++others_ahead;
                 if (a.player_id >= foe_from && ants::app::health::ant_drawn(drawn, me, a)) {
@@ -1072,7 +1219,7 @@ int main(int argc, char* argv[]) {
             ASSERT_TRUE(st.rebuilds_foreign > 10u);                                         // (the other person's orders were corrections of the predicted engine: the plain picture slides them)
             ASSERT_TRUE(f.others_ahead > 500);                                              // (and the check is not empty: the predicted engine had the other's ants elsewhere in many frames)
             ASSERT_EQ(f.others_off, 0);                                                     // the other player's ant: the confirmed engine's, whole, in every frame ...
-            ASSERT_EQ(f.others_slid, 0);                                                    // ... and never slid
+            ASSERT_EQ(f.others_slid, 0);                                                    // ... and never corrected (the only slide that it has is the hop of its own snap: SlideCause)
             ASSERT_EQ(f.own_off, 0);                                                        // the player's own ant: the predicted engine's, whole, in every frame
             ASSERT_EQ(f.missing, 0);                                                        // (no ant is missing from the picture, and none is in it that an engine of its owner does not have)
             std::printf(", %d frames of a foe drawn, %d of them on ground that the confirmed engine had not explored", f.foes_visible, f.peeks_into_fog);
@@ -1573,6 +1720,51 @@ int main(int argc, char* argv[]) {
                     static_cast<double>(worst_rebuild_ns) / 1.0e6, static_cast<unsigned long long>(soak_sealed[0]), static_cast<unsigned long long>(soak_sealed[1]), static_cast<unsigned long long>(soak_sealed[2]),
                     static_cast<unsigned long long>(soak_lead_changes));
         ASSERT_TRUE(soak_sealed[1] * 10u <= soak_sealed[0] + soak_sealed[1] + soak_sealed[2]);            // (over every kind of link: under a tenth of the orders land before the tick that they were aimed at)
+    } TEST_END();
+
+    TEST_CASE("LK17 The Hop Of A Re-Order Is Drawn As A Slide, Not A Jump: A Walking Ant That Is Given A New Order (A Goal Further On, Behind, One Row Up) Is Put On The Middle Of Its Tile By The Engine, Up To Half A Tile At Once, As The Original Does, And The Picture Never Moves It By More Than A Step Of Its Walk Between Two Frames, At Every Phase Of The Walk, In A Game Of One Machine And Over A Link At 2 And 20 ms, For The Player's Own Ant (Clicked) And For Another Player's; The Pointer Picks The Sliding Ant Where It Is Drawn") {
+        struct Scene {
+            const char* name;
+            bool local;
+            uint32_t rtt;
+            uint8_t seat;
+        };
+        const char* kinds[3] = {"a goal further on", "a goal behind", "a goal one row up"};
+        const std::vector<Scene> scenes = table_wanted() ? std::vector<Scene>{{"a game of one machine", true, 0, 0}, {"a link of 2 ms", false, 2, 0}, {"a link of 20 ms", false, 20, 0}, {"another player's ant over 20 ms", false, 20, 1}}
+                                                          : std::vector<Scene>{{"a game of one machine", true, 0, 0}, {"a link of 20 ms", false, 20, 0}, {"another player's ant over 20 ms", false, 20, 1}};
+        struct Played {
+            Scene scene;
+            int kind;
+            HopSweep r;
+        };
+        std::vector<Played> played;
+        for (const Scene& scene : scenes) {
+            for (int kind = 0; kind < 3; ++kind) {
+                Params p;
+                p.map = "GRASS.LVL";
+                p.render = true;
+                p.local = scene.local;
+                p.use_peer = !scene.local;
+                p.link.rtt_ms = scene.rtt;
+                p.peer_link.rtt_ms = 20;
+                played.push_back(Played{scene, kind, hop_sweep(p, scene.seat, kind)});
+                const HopSweep& r = played.back().r;
+                std::printf("\n    %s, %s: %d runs; the engine snapped the ant by 8 px or more in %d (by %d px at most); a frame moves the drawn ant by %d px at most in its walk, by %d px after the order; the pointer picked the sliding ant %d of %d times (and missed it on the engine's side %d of %d times)",
+                            scene.name, kinds[kind], r.runs, r.hops, r.snap_worst, r.walk_worst, r.after_worst, r.pick_ok, r.pick_tried, r.pick_foil_ok, r.pick_tried);
+            }
+        }
+        for (const Played& m : played) {
+            const HopSweep& r = m.r;
+            ASSERT_TRUE(r.runs >= 14);
+            ASSERT_TRUE(r.hops >= 3 && r.snap_worst >= 12);                                    // (the engine does snap the ant: the half tile is there, the check is not empty)
+            ASSERT_TRUE(r.walk_worst <= 4);                                                    // (a walk: a step of 4 px a frame at most)
+            ASSERT_TRUE(r.after_worst <= r.walk_worst + 1);                                    // the order's hop is not drawn: no frame moves the ant by more than its walk (and a pixel for the slide's rounding)
+            ASSERT_EQ(r.unclean, 0);                                                           // (and a second later nothing of it is left)
+            ASSERT_EQ(r.pick_ok, r.pick_tried);                                                // the pointer picks the ant where the frame draws it ...
+            ASSERT_EQ(r.pick_foil_ok, r.pick_tried);                                           // ... and not where the engine has it
+            if (m.scene.seat == 0) ASSERT_TRUE(r.pick_tried >= 3);                             // (the click of the player's own ant: slides of 8 px and more were met)
+        }
+        std::printf("\n");
     } TEST_END();
 
     std::cout << "\n=======================================================\n"

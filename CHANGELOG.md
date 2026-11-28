@@ -30,6 +30,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - Other players' ants no longer rubber-band in network matches: those of other people and of computer players are drawn from the confirmed game, a moment behind your own and never corrected. Your own ants still answer a click at once. `?others=predicted` on the game page's address brings the old picture back, to compare, until v0.22.3 at the latest.
+- An ant that walks and is given a new order no longer hops by up to half a tile in the picture: the game puts it on the middle of its tile at once, as the original does, and the picture now carries it there in a moment instead of jumping, for your own ants and everybody else's, in a game on one computer and online.
 
 ## v0.22.1 - 2026-11-27 - Smoother ants online, fewer freezes, Show ping
 

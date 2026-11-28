@@ -249,7 +249,21 @@ void Renderer::draw_anthill_selection_brackets(int32_t cx, int32_t cy, uint32_t 
     SDL_RenderDrawLine(renderer_, x + w - 2, y + h - 2, x + w - 3, y + h - 1);
 }
 
+bool Renderer::drawn_point(const ants::sim::WorldState& world, const ants::sim::AntSnapshot& engine_ant, int32_t& x, int32_t& y) const {
+    const ants::sim::AntSnapshot a = glided_ant(view_glide_, world, hud_team_id_, engine_ant);
+    if (!health::ant_drawn(world, hud_team_id_, a)) return false;
+    const AntClipPrediction pred = predict_ant_clip(a, ant_loco_sequence(a));
+    x = a.px + pred.dx;
+    y = a.py + pred.dy;
+    return true;
+}
+
 void Renderer::collect_ant_units(const ants::sim::WorldState& world) {
+    view_glide_.follow(world, hud_team_id_, [this](const ants::sim::AntSnapshot& ant, int32_t& dx, int32_t& dy) {      // (the hop of a re-order slides: view_glide.hpp)
+        const AntClipPrediction pred = predict_ant_clip(ant, ant_loco_sequence(ant));
+        dx = pred.dx;
+        dy = pred.dy;
+    });
     for (const auto& engine_ant : world.ants) {
         const ants::sim::AntSnapshot a = glided_ant(view_glide_, world, hud_team_id_, engine_ant);      // (drawn where the picture had it a moment ago while a rebuild's correction slides: view_glide.hpp)
         // The original shows the local player's and the allies' ants always (0x101aa0d); every other ant only on explored ground
