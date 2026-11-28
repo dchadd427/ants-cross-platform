@@ -88,7 +88,7 @@ class TheDockerfileIsRead(unittest.TestCase):
     def test_the_repositorys_dockerfile_is_read_to_the_end_and_no_step_is_lost(self):
         for op in ("FROM", "COPY", "RUN"):
             self.assertEqual(len([s for s in self.steps if s.op == op]), len(re.findall(r"^%s " % op, self.text, re.M)), op)
-        self.assertEqual([s.stage for s in self.steps if s.op == "FROM"], [0, 1, 2, 3, 4])
+        self.assertEqual([s.stage for s in self.steps if s.op == "FROM"], [0, 1, 2])
         self.assertTrue(all(s.text.strip() for s in self.steps))
 
     def test_the_emscripten_version_is_the_one_of_the_from_line(self):
@@ -346,12 +346,10 @@ class TheRealDockerfileReplayed(Scratch):
     def test_the_files_that_the_image_has_are_there(self):
         for name in ("index.html", "play.html", "lobby.html", "index.js", "index.wasm", "index.data", "lvl_core.js", "lvl_core.wasm", "lvl_core_api.js", "changelog.html", "favicon.png", os.path.join("front", "logo.png"),
                      os.path.join("front", "LibreFranklin-Medium.ttf"), os.path.join("front", "classic.css"), "manifest.webmanifest", os.path.join("app", "icon-192.png"), os.path.join("app", "icon-512.png"),
-                     os.path.join("app", "icon-maskable-512.png"), os.path.join("app", "apple-touch-icon.png"),
-                     os.path.join("test_3d", "compare.html"), os.path.join("test_3d", "viewer.html"),
-                     os.path.join("test_3d", "models", "manifest.json"), os.path.join("test_3d", "models", "orig_sprites.json"),
-                     os.path.join("test_3d", "models", "worker.glb"), os.path.join("test_3d", "models", "worker.glb.gz")):
+                     os.path.join("app", "icon-maskable-512.png"), os.path.join("app", "apple-touch-icon.png")):
             self.assertTrue(os.path.isfile(self.html("plain", name)), name)
         self.assertTrue(os.path.isdir(self.html("plain", "asset_catalog")))
+        self.assertFalse(os.path.exists(self.html("plain", "test_3d")), "the 3D test page is no longer in the image")
         with open(self.html("plain", "index.html"), "rb") as a, open(self.html("plain", "play.html"), "rb") as b:
             self.assertEqual(a.read(), b.read(), "play.html is a copy of index.html")
         for name in ("index.data", "index.wasm", "index.js"):                                    # (the image build compresses the three big files once; nginx's gzip_static sends the copy: tests/scripts/test_nginx_headers.py)

@@ -1,7 +1,7 @@
 """Canonical PBR materials, texture family bindings, and team palettes for Ants 3D models.
 
-Material names are part of the shared contract with viewer.js so team shells
-(chitin_team and chitin_dark) can be swapped live at render time.
+Material names are a shared contract so team shells (chitin_team and chitin_dark)
+can be swapped live at render time.
 All material colors are authored in sRGB and converted to linear light via the
 IEC 61966-2-1 EOTF when serialized to glTF 2.0 baseColorFactor (alpha linear).
 """

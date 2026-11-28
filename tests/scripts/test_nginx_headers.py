@@ -100,7 +100,7 @@ class TheText(unittest.TestCase):
             self.assertNotIn(word, CONF)
 
     def test_the_two_page_blocks_take_the_headers_of_a_page_from_the_maps_and_the_map_maker_and_the_admin_page_keep_their_own(self):
-        for words in ("^~ /asset_catalog/", "^~ /test_3d/", "~* \\.(html|css|js)$"):
+        for words in ("^~ /asset_catalog/", "~* \\.(html|css|js)$"):
             block = dict(locations())[words]
             for header, variable in (("Content-Security-Policy", "$ants_csp"), ("X-Frame-Options", "$ants_frame_options"), ("Referrer-Policy", "$ants_referrer_policy"), ("Permissions-Policy", "$ants_permissions_policy")):
                 self.assertIn("add_header %s %s always;" % (header, variable), block, words)
@@ -340,10 +340,6 @@ def expected(kind, host=SITE):
     no_page = {name: None for name in PAGE_HEADERS}
     if kind == "page":
         return dict(cross, **{"content-security-policy": csp_is(page_policy(host)), "x-frame-options": "DENY", "referrer-policy": "same-origin", "permissions-policy": PERMISSIONS, "cache-control": "no-cache, must-revalidate"})
-    if kind == "test_3d_page":
-        return dict(expected("page", host), **{"x-robots-tag": "noindex"})
-    if kind == "test_3d_plain":
-        return dict(expected("plain", host), **{"x-robots-tag": "noindex", "cache-control": "no-cache, must-revalidate"})
     if kind == "lobby":
         return dict(expected("page", host), **{"permissions-policy": LOBBY_PERMISSIONS})
     if kind == "game":
@@ -424,13 +420,11 @@ LIVE_ROWS = [
     ("the asset catalog", "GET", "/asset_catalog/", (), 200, "page"),
     ("the asset catalog's file", "GET", "/asset_catalog/index.html", (), 301, "plain"),
     ("the asset catalog's data script", "GET", "/asset_catalog/catalog_data.js", (), 200, "plain"),
-    ("the 3D viewer redirect", "GET", "/test_3d", (), 301, "plain"),
-    ("the 3D viewer's index file", "GET", "/test_3d/compare.html", (), 301, "plain"),
-    ("the 3D viewer", "GET", "/test_3d/", (), 200, "test_3d_page"),
-    ("the 3D viewer studio page", "GET", "/test_3d/viewer.html", (), 200, "test_3d_page"),
-    ("the 3D viewer script", "GET", "/test_3d/compare.js", (), 200, "test_3d_plain"),
-    ("the 3D viewer manifest", "GET", "/test_3d/models/manifest.json", (), 200, "test_3d_plain"),
-    ("a missing file under the 3D viewer", "GET", "/test_3d/nothing.png", (), 404, "page"),
+    ("the removed 3D test page", "GET", "/test_3d", (), 404, "page"),
+    ("the removed 3D test page with a slash", "GET", "/test_3d/", (), 404, "page"),
+    ("the removed 3D test page's file", "GET", "/test_3d/compare.html", (), 404, "page"),
+    ("the removed 3D test page's script", "GET", "/test_3d/compare.js", (), 404, "page"),
+    ("the removed 3D test page's models", "GET", "/test_3d/models/manifest.json", (), 404, "page"),
     ("the map maker", "GET", "/mapmaker", (), 200, "mapmaker"),
     ("the map maker, old address", "GET", "/mapmaker.html", (), 301, "plain"),
     ("the admin page", "GET", "/admin", (), 200, "admin"),
@@ -536,10 +530,10 @@ WHATS_NEW = '{"version":"1.2.0","releases":[{"version":"1.2.0","date":"2026-01-0
 def docroot_files():
     page = "<!doctype html><html><head><title>%s</title></head><body>" + "<p>a stand-in page of the site, long enough to be compressed on its way</p>" * 40 + "</body></html>\n"
     big = (b"ANTS " + bytes(range(32, 120))) * 4000
-    files = {name: page % name for name in ("lobby.html", "index.html", "play.html", "matches.html", "match.html", "legal.html", "changelog.html", "mapmaker.html", "admin.html", "asset_catalog/index.html", "test_3d/compare.html", "test_3d/viewer.html")}
+    files = {name: page % name for name in ("lobby.html", "index.html", "play.html", "matches.html", "match.html", "legal.html", "changelog.html", "mapmaker.html", "admin.html", "asset_catalog/index.html")}
     files.update({"404.html": stats.read("web", "404.html"), "50x.html": stats.read("web", "50x.html")})                  # (the real error pages)
     files.update({"robots.txt": seo_files.robots_txt(SITE_ORIGIN), "sitemap.xml": seo_files.sitemap_xml(SITE_ORIGIN), "sitemap-library.xml": seo_files.sitemap_xml(SITE_ORIGIN, ["/map-library", "/map/treasure"])})   # (the real files' text, as the build makes them)
-    files.update({"front/classic.css": "body { color: #222; }\n" * 80, "front/big.css": ".a { color: red; }\n" * 400, "shapes.js": "var shapes = 1;\n" * 80, "home/home.js": "var home = 1;\n" * 80, "asset_catalog/catalog_data.js": "var data = 1;\n" * 80, "test_3d/compare.js": "var cmp = 1;\n" * 80, "test_3d/models/manifest.json": '{"version":"v-test"}',
+    files.update({"front/classic.css": "body { color: #222; }\n" * 80, "front/big.css": ".a { color: red; }\n" * 400, "shapes.js": "var shapes = 1;\n" * 80, "home/home.js": "var home = 1;\n" * 80, "asset_catalog/catalog_data.js": "var data = 1;\n" * 80,
                   "front/logo.png": "\x89PNG stand-in", "front/LibreFranklin-OFL.txt": "a stand-in for a font's licence text\n", "manifest.webmanifest": stats.read("web", "manifest.webmanifest"), "whats_new.json": WHATS_NEW, "app/icon-192.png": "\x89PNG stand-in", "app/apple-touch-icon.png": "\x89PNG stand-in", "favicon.png": "\x89PNG stand-in", "favicon.ico": "ico stand-in", "front/click.wav": "RIFF stand-in", "mapmaker_atlas/atlas.json": '{"v":1}', "mapmaker_atlas/ground.png": "\x89PNG stand-in",
                   "asset_catalog/sprites/s1.png": "\x89PNG stand-in", "asset_catalog/sounds/a.wav": "RIFF stand-in", "lvl_core.wasm": "\0asm stand-in", "index.js": big[:50000], "index.wasm": big[:120000], "index.data": big})
     return files
@@ -716,7 +710,7 @@ class TheFileRuns(unittest.TestCase):
 
     def test_an_address_that_is_nothing_is_the_page_of_a_404_never_the_game_and_under_the_name_of_a_door_it_is_a_plain_404(self):
         page = stats.read("web", "404.html").encode("utf-8")
-        for path in ("/no/such/page", "/nothing?room=k7m2xq", "/playx", "/front/", "/robots.txt.x", "/sitemap.xml.x", "/nothing.html", "/front/nothing.css", "/nothing.js", "/test_3d/nothing.png"):
+        for path in ("/no/such/page", "/nothing?room=k7m2xq", "/playx", "/front/", "/robots.txt.x", "/sitemap.xml.x", "/nothing.html", "/front/nothing.css", "/nothing.js", "/test_3d", "/test_3d/", "/test_3d/compare.html"):
             answer = fetch(self.live.port, path)
             self.assertEqual(answer.status, 404, path)
             self.assertEqual(answer.body, page, path)                                              # (the page of the site as it is in web/: its status is the error's, its body the file's)
