@@ -397,6 +397,7 @@ define_suites() {
     # 5. repository checks (python3; no build)
     suite "5.1"    tools  1 "-"                          "Version / Changelog / README Consistency"                  "VERSION CONSISTENCY (the file VERSION against CHANGELOG.md and README.md)" 'python3 tools/check_version_consistency.py'
     suite "5.2"    tools  1 "-"                          "Tool and Script Tests (python: tests/scripts/test_*.py)"   "TOOL AND SCRIPT TESTS (changelog pages, version tools, the generated header, this script, the release, mutation and deploy tools)" 'python3 tests/scripts/run_python_tests.py' "cost=25 weight=2"
+    suite "5.3"    tools  1 "-"                          "Export Lists (every file on one list)"                     "EXPORT LISTS (every tracked file on exactly one of the two lists of export/, then the report-only scan of the words that must not read in the public tree: export/README.md)" 'python3 export/classify.py && python3 export/check_export.py'
 }
 
 # The suites come from define_suites, unless a test of this script gives its own table (tests/scripts/test_run_tests.py: ANTS_RUN_TESTS_TABLE=<file> that calls `suite`

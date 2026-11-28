@@ -204,8 +204,8 @@ jobs:
           bash tests/scripts/test_ants_server.sh --list-parts | xargs -P 5 -I{} bash tests/scripts/test_ants_server.sh --part {} || status=1
           exit $status
 
-      # Every slice runs the version check (a second), so that each leg of the python tests ends with the same repository checks as before.
-      - name: Repository checks (version and changelog consistency, python tests of the tools and the tiers)
+      # Every slice runs the version check and the export lists (a second each), so that each leg of the python tests ends with the same repository checks as before.
+      - name: Repository checks (version and changelog consistency, the export lists, python tests of the tools and the tiers)
         if: ${{ !cancelled() && matrix.part == 'python' }}
         env:
           SLICE: ${{ matrix.slice }}
@@ -213,6 +213,8 @@ jobs:
         run: |
           status=0
           python3 tools/check_version_consistency.py || status=1
+          python3 export/classify.py || status=1
+          python3 export/check_export.py || status=1
           python3 tests/scripts/run_python_tests.py --shard "$SLICE" || status=1
           exit $status
 
