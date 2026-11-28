@@ -1797,7 +1797,13 @@ random walks; the models and the remake agree on every path tile and on every po
   hill stops (StopSync, no path). Then: idle, **snap to the centre of the tile under the ant**, cancel ANTPAUSE,
   clear path and order, classify (`FUN_01020655`), resolve the goal (`FUN_010202e7`), queue the path request.
   The snap is the authentic "mud humping" exploit: re-ordering just after an ant crossed into a new tile jumps it
-  up to 16 px forward.
+  up to 16 px forward. Read again in the decompilation for the report of a hop at every re-order (`FUN_0101fc50`:
+  `FUN_0100ccc0` gives the tile `position / 0x20`, `FUN_0100cd00` makes `tile * 0x20 + 0x10` of it, and the position setter
+  of the vtable (+0x18) is called with that, right after `FUN_0101ace3(0)`): the original puts the ant on the middle of its
+  tile at once, up to 12 px back or 16 px forward on open ground (its walk goes in 4 px steps from the middle of a tile), and
+  shows it as a jump (no sprite moves but by a clip frame). The remake's engine does the same and keeps it. **Only the
+  picture differs**: it draws the hop as a short slide (`ViewGlide::follow`, NETWORK_PORT.md, "The hop of a re-order is slid
+  too"), the one place where the picture is smoother than the 1998 program, at the owner's request.
 
 - Classification: hill -> home (2) / raid (0xB); ant on the tile -> move (1), or attack (3) for a player click on
   an enemy; food -> harvest (5); power-up (player only) -> 4; bomb -> 0xA; else 1.

@@ -36,20 +36,18 @@ void Application::note_orders() {
 }
 
 // The ants that the prediction has moved in the picture since the last frame are drawn gliding to where the shown engine has them (view_glide.hpp): what a rebuild moved, and every ant when the
-// prediction begins or stops (the screen changes engine: a pause, a hidden page, a link that was away, a cool-down). A game that has no prediction slides nothing.
+// prediction begins or stops (the screen changes engine: a pause, a hidden page, a link that was away, a cool-down). A game that has no prediction has no such shifts (the hop of a snap, which the
+// engine makes in every game, is slid by the frame that draws it: ViewGlide::follow).
 void Application::feed_view_glide() {
     net::Prediction* prediction = net_ != nullptr ? net_->prediction() : nullptr;
     if (feed_own_view_glide()) return;                    // (the picture of others = confirmed slides the player's own ants only: others_view.hpp)
-    if (prediction == nullptr) {
-        renderer_->view_glide().clear();
-        return;
-    }
+    if (prediction == nullptr) return;                    // (a game that has no prediction has no shifts to slide: the slide of a hop is the frame's own, view_glide.hpp)
     for (const net::Prediction::Shift& shift : prediction->take_shifts()) renderer_->view_glide().add(shift.ant, shift.dx, shift.dy);
 }
 
 // With others_confirmed the ants of every other player are drawn from the confirmed engine, where they always were never corrected: only the player's own ants are the predicted engine's, and only they
 // slide when it moves them (a rebuild, the prediction beginning or stopping). The shifts of the others would put them where the predicted engine has them, which is not where they are drawn.
-// A game that has no prediction slides nothing, as before. False: the mode is not asked for, the ordinary rule feeds the glide.
+// A game that has no prediction has no such shifts, as before. False: the mode is not asked for, the ordinary rule feeds the glide.
 bool Application::feed_own_view_glide() {
     net::Prediction* prediction = net_ != nullptr ? net_->prediction() : nullptr;
     if (!config_.others_confirmed || prediction == nullptr) return false;           // (a prediction that is cooling down or suspended still has the shifts of its stop to give)
