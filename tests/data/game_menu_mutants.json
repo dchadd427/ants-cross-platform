@@ -1923,7 +1923,7 @@
       "id": "panel_release_elsewhere_acts",
       "file": "src/ants_app/game_menu_panel.cpp",
       "old": "if (at >= 0 && list[static_cast<size_t>(at)].part == item.part && list[static_cast<size_t>(at)].row == item.row && list[static_cast<size_t>(at)].word == item.word) fire(item);",
-      "new": "fire(item);",
+      "new": "static_cast<void>(at);\n    fire(item);",
       "build": [
         "test_game_menu"
       ],
