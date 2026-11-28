@@ -9,6 +9,7 @@
 (() => {
   const { mat4FromTRS, mat4Identity } = window.__antGltf;
   const { TEAMS } = window.__antRender;
+  const { buildBombExplosionModels, createBombExplosionRig, updateBombExplosion } = window.__demoExplosion;
 
   const ACTION_ANT_CLASSES = ["worker", "combat", "bomber", "swimmer", "fire"];
   const DROPPER_FD_IDS = ["FD_BOMB", "FD_FIRE", "FD_SWIM", "FD_COMB", "FD_THIEF"];
@@ -214,137 +215,6 @@
     return best;
   }
 
-  // Authentic 1998 `133:bombex` (680 ms) 3D Bomb Explosion Models:
-  // 1. `flash`: blazing white-gold / crimson jagged 3D starburst core (`bombex[0..2]`)
-  // 2. `ring`: fiery glowing orange-yellow hollow blast shockwave torus (`bombex[3..5]`)
-  // 3. `smoke`: chunky warm cream-grey billowing 3D cloud puff arranged in an expanding hollow ring (`bombex[2..9]`)
-  function buildBombExplosionModels(gl) {
-    const idMat = mat4Identity();
-    function makeModel(pos, nrm, uv, col, idx, mat, rad) {
-      const vao = gl.createVertexArray();
-      gl.bindVertexArray(vao);
-      const bufs = [];
-      const up = (target, data, loc, sz) => {
-        const b = gl.createBuffer(); gl.bindBuffer(target, b); gl.bufferData(target, data, gl.STATIC_DRAW);
-        if (loc !== undefined) { gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, sz, gl.FLOAT, false, 0, 0); }
-        bufs.push(b);
-      };
-      up(gl.ARRAY_BUFFER, new Float32Array(pos), 0, 3);
-      up(gl.ARRAY_BUFFER, new Float32Array(nrm), 1, 3);
-      up(gl.ARRAY_BUFFER, new Float32Array(uv), 2, 2);
-      up(gl.ARRAY_BUFFER, new Float32Array(col), 3, 3);
-      up(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx));
-      gl.bindVertexArray(null);
-      return {
-        animations: [], idleAnims: [], blinkInfo: { hasBlink: false },
-        baseWorldMats: [idMat],
-        bounds: { min: [-rad, -rad, -rad], max: [rad, rad, rad] },
-        size: [rad * 2, rad * 2, rad * 2],
-        drawCalls: [{
-          nodeIndex: 0, worldMat: idMat,
-          prim: {
-            vao, indexed: true, mode: gl.TRIANGLES, drawCount: idx.length, indexType: gl.UNSIGNED_SHORT,
-            hasUv: false, localMin: [-rad, -rad, -rad], localMax: [rad, rad, rad], material: mat,
-          },
-        }],
-        dispose() { gl.deleteVertexArray(vao); bufs.forEach((b) => gl.deleteBuffer(b)); },
-      };
-    }
-
-    // 1. Spiky fiery 3D starburst core (`bombex[0..2]`)
-    function buildStarburst() {
-      const pos = [], nrm = [], uv = [], col = [], idx = [];
-      const uS = 18, vS = 10;
-      for (let v = 0; v <= vS; v++) {
-        const phi = (v / vS) * Math.PI, sp = Math.sin(phi), cp = Math.cos(phi);
-        for (let u = 0; u <= uS; u++) {
-          const th = (u / uS) * Math.PI * 2;
-          const spike = 0.56 + 0.44 * Math.pow(Math.abs(Math.sin(th * 3.0 + phi * 2.0) * Math.cos(phi * 2.5 - th * 2.0)), 0.7);
-          const nx = sp * Math.cos(th), ny = cp, nz = sp * Math.sin(th);
-          pos.push(nx * spike, ny * spike * 0.85, nz * spike);
-          nrm.push(nx, ny, nz); uv.push(u / uS, v / vS);
-          const hot = clamp01(1.15 - spike * 0.65);
-          col.push(1.0, lerp(0.28, 0.96, hot), lerp(0.06, 0.75, hot));
-        }
-      }
-      const st = uS + 1;
-      for (let v = 0; v < vS; v++) for (let u = 0; u < uS; u++) {
-        const a = v * st + u, b = a + 1, c = a + st, d = c + 1;
-        idx.push(a, b, c, b, d, c);
-      }
-      return makeModel(pos, nrm, uv, col, idx, {
-        name: "bombex_flash", baseColor: [1, 1, 1, 1], metallic: 0.0, roughness: 0.25,
-        normalScale: 0.0, normalTex: null, baseTex: null, mrTex: null,
-        emissive: [2.6, 1.85, 0.55], alphaMode: "OPAQUE", doubleSided: true,
-      }, 1.0);
-    }
-
-    // 2. Jagged fiery hollow shockwave torus (`bombex[3..5]`)
-    function buildRing() {
-      const pos = [], nrm = [], uv = [], col = [], idx = [];
-      const maj = 24, minS = 10, R = 0.78, rTube = 0.22;
-      for (let i = 0; i <= maj; i++) {
-        const a = (i / maj) * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
-        const jag = 1.0 + 0.22 * Math.sin(a * 7.0) + 0.14 * Math.cos(a * 5.0);
-        for (let j = 0; j <= minS; j++) {
-          const b = (j / minS) * Math.PI * 2, cb = Math.cos(b), sb = Math.sin(b);
-          const rr = R * jag + cb * rTube * (0.8 + 0.35 * Math.sin(a * 6.0));
-          pos.push(ca * rr, sb * rTube * 0.85, sa * rr);
-          nrm.push(ca * cb, sb, sa * cb); uv.push(i / maj, j / minS);
-          const top = 0.5 + 0.5 * sb;
-          col.push(1.0, lerp(0.32, 0.92, top), lerp(0.05, 0.30, top));
-        }
-      }
-      const st = minS + 1;
-      for (let i = 0; i < maj; i++) for (let j = 0; j < minS; j++) {
-        const a = i * st + j, b = a + 1, c = a + st, d = c + 1;
-        idx.push(a, c, b, b, c, d);
-      }
-      return makeModel(pos, nrm, uv, col, idx, {
-        name: "bombex_ring", baseColor: [1, 1, 1, 1], metallic: 0.0, roughness: 0.30,
-        normalScale: 0.0, normalTex: null, baseTex: null, mrTex: null,
-        emissive: [2.4, 1.10, 0.16], alphaMode: "OPAQUE", doubleSided: true,
-      }, 1.2);
-    }
-
-    // 3. Chunky billowing warm cream-grey smoke puff (`bombex[2..9]` sprites 308..315!)
-    function buildSmokePuff(topRgb, botRgb, name) {
-      const pos = [], nrm = [], uv = [], col = [], idx = [];
-      const uS = 14, vS = 9;
-      for (let v = 0; v <= vS; v++) {
-        const phi = (v / vS) * Math.PI, sp = Math.sin(phi), cp = Math.cos(phi);
-        for (let u = 0; u <= uS; u++) {
-          const th = (u / uS) * Math.PI * 2;
-          const billow = 0.82 + 0.22 * Math.sin(th * 3.0 + phi * 2.0) * Math.cos(phi * 3.0) + 0.10 * Math.cos(th * 5.0);
-          const nx = sp * Math.cos(th), ny = cp, nz = sp * Math.sin(th);
-          pos.push(nx * billow, ny * billow * 0.86, nz * billow);
-          nrm.push(nx, ny, nz); uv.push(u / uS, v / vS);
-          const up = 0.5 + 0.5 * ny;
-          col.push(lerp(botRgb[0], topRgb[0], up), lerp(botRgb[1], topRgb[1], up), lerp(botRgb[2], topRgb[2], up));
-        }
-      }
-      const st = uS + 1;
-      for (let v = 0; v < vS; v++) for (let u = 0; u < uS; u++) {
-        const a = v * st + u, b = a + 1, c = a + st, d = c + 1;
-        idx.push(a, b, c, b, d, c);
-      }
-      return makeModel(pos, nrm, uv, col, idx, {
-        name, baseColor: [1, 1, 1, 1], metallic: 0.0, roughness: 0.94,
-        normalScale: 0.0, normalTex: null, baseTex: null, mrTex: null,
-        emissive: [0.06, 0.05, 0.04], alphaMode: "OPAQUE", doubleSided: false,
-      }, 1.0);
-    }
-
-    const flash = buildStarburst();
-    const ring = buildRing();
-    const smoke = buildSmokePuff([0.62, 0.56, 0.50], [0.24, 0.21, 0.19], "bombex_smoke");
-    const dudSmoke = buildSmokePuff([0.34, 0.31, 0.29], [0.10, 0.09, 0.09], "bombex_dud_smoke");
-    return {
-      flash, ring, smoke, dudSmoke,
-      dispose() { flash.dispose(); ring.dispose(); smoke.dispose(); dudSmoke.dispose(); },
-    };
-  }
-
   function buildActionVignettes(gl, mapData, models, waterTile, antScale, itemEntries) {
     const bridgeStages = [1, 2, 3, 4].map((st) => buildMudBridgeStage(gl, st));
     const blastModels = buildBombExplosionModels(gl);
@@ -443,10 +313,7 @@
         bomber: makeAntInst("bomber", "red", models.bomber, 0.3),
         victim: makeAntInst("worker", "blue", models.worker, 0.7),
         bomb: makePropInst("redbomb", models.redbomb),
-        flash: makePropInst("bombex_flash", blastModels.flash),
-        ring: makePropInst("bombex_ring", blastModels.ring),
-        puffs: Array.from({ length: 10 }, (_, k) => makePropInst(`bombex_puff_${k}`, blastModels.smoke)),
-        dudPuffs: Array.from({ length: 5 }, (_, k) => makePropInst(`bombex_dud_${k}`, blastModels.dudSmoke)),
+        explosion: createBombExplosionRig(blastModels),
       });
     }
 
@@ -817,7 +684,8 @@
       const plantX = m.x - 0.348 * m.antScale; // EXACT 1:1 coordinate so `bomber_held_bomb` touches down squarely on `(m.x, 0, m.z)`!
       let bx = plantX, by = 0, byaw = Math.PI * 0.5;
       let vx = m.x + 2.8, vy = 0, vz = m.z, vyaw = -Math.PI * 0.5;
-      let showBomb = false, bombScale = BOMB_SCALE, blastT = -1;
+      let showBomb = false, bombScale = BOMB_SCALE;
+      const blastT = lt >= 4.90 ? (lt - 4.90) : -1;
 
       if (lt < 1.30) {
         const u = smooth(lt / 1.30);
@@ -854,7 +722,6 @@
         m.victim.clipName = "Walk"; m.victim.animTime = lt * 1.5;
       } else if (!isDud && m.drownEast && lt < 5.88) {
         // ROUND 1 (Treasure East Pond): Live `bombex` explosion blasts Blue Worker straight into East Pond (`x=44.4`)!
-        blastT = lt - 4.90;
         const u = clamp01((lt - 4.90) / 0.98);
         vx = lerp(m.x + 0.12, m.x + 5.75, Math.pow(u, 0.78));
         vy = Math.sin(u * Math.PI) * 0.72;
@@ -873,15 +740,13 @@
         // Brief pause after sinking before resetting cleanly for next round
         showVictim = false;
       } else if (!isDud && lt < 5.95) {
-        // ROUND 1 — LIVE BOMB: 1998 `bombex` explosion (680 ms) + single clean ballistic `BlownBack` arc!
-        blastT = lt - 4.90;
+        // ROUND 1 — LIVE BOMB: 1998 `bombex` explosion + single clean ballistic `BlownBack` arc!
         const u = clamp01((lt - 4.90) / 1.05);
         vx = lerp(m.x + 0.12, m.x + 3.85, Math.pow(clamp01(u / 0.68), 0.72));
         vy = u < 0.46 ? (Math.sin((u / 0.46) * Math.PI) * 0.42) : 0.0;
         m.victim.clipName = "BlownBack"; m.victim.animTime = Math.min(0.89, u * 0.89);
       } else if (isDud && lt < 6.08) {
         // ROUND 2 — DUD BOMB: Smoky dud fizzle + single vertical `BlownUp` pop toward camera!
-        blastT = lt - 4.90;
         const u = clamp01((lt - 4.90) / 1.15);
         vx = m.x + 0.12;
         vz = m.z + (u < 0.60 ? Math.sin((u / 0.60) * Math.PI) * 0.62 : 0.0);
@@ -904,58 +769,9 @@
         visible.push(m.bomb);
       }
 
-      // Authentic 1998 3D `bombex` Explosion (or compact Dud fizzle smoke) — ZERO `wallup04` fire!
-      if (blastT >= 0 && !isDud && blastT < 0.76) {
-        const eu = blastT / 0.76;
-        // 1. Blazing white-gold starburst core (`bombex[0..2]`: 0.00..0.28 s)
-        if (eu < 0.42) {
-          const fu = eu / 0.42;
-          const fs = fu < 0.32 ? lerp(0.35, 1.35, fu / 0.32) : lerp(1.35, 0.05, (fu - 0.32) / 0.68);
-          m.flash.offsetMat = mat4FromTRS([m.x, 0.32 + fu * 0.28, m.z], quatY(blastT * 4.5), [fs, fs, fs]);
-          visible.push(m.flash);
-        }
-        // 2. Expanding hollow fiery orange-yellow shockwave ring (`bombex[3..5]`: 0.10..0.52 s)
-        if (eu > 0.12 && eu < 0.68) {
-          const ru = (eu - 0.12) / 0.56;
-          const rRad = lerp(0.55, 2.05, Math.pow(ru, 0.65));
-          const rH = lerp(0.95, 0.10, ru * ru);
-          m.ring.offsetMat = mat4FromTRS([m.x, 0.24 + ru * 0.22, m.z], quatY(-blastT * 2.2), [rRad, rH, rRad]);
-          visible.push(m.ring);
-        }
-        // 3. Expanding hollow ring of 10 chunky billowing warm cream-grey smoke clouds (`bombex[2..9]`: 0.06..0.76 s)
-        if (eu > 0.06) {
-          const su = (eu - 0.06) / 0.94;
-          const ringR = lerp(0.28, 2.15, Math.pow(su, 0.62));
-          const puffSc = su < 0.38 ? lerp(0.24, 0.64, su / 0.38) : lerp(0.64, 0.04, (su - 0.38) / 0.62);
-          for (let k = 0; k < m.puffs.length; k++) {
-            const ang = (k / m.puffs.length) * Math.PI * 2 + 0.3 * Math.sin(k * 2.1);
-            const rJ = ringR * (0.86 + 0.26 * Math.sin(k * 3.7));
-            const px = m.x + Math.cos(ang) * rJ;
-            const pz = m.z + Math.sin(ang) * rJ;
-            const py = 0.20 + su * 0.68 + 0.14 * Math.sin(k * 4.3);
-            const sc = puffSc * (0.82 + 0.32 * Math.cos(k * 2.9));
-            m.puffs[k].offsetMat = mat4FromTRS([px, py, pz], quatY(ang + su * 1.4), [sc, sc * 0.88, sc]);
-            visible.push(m.puffs[k]);
-          }
-        }
-        dynGlows.push([m.x, m.z, 5.4, (1.0 - eu) * 3.2, 2.3, 1.15, 0.30]);
-      } else if (blastT >= 0 && isDud && blastT < 0.72) {
-        // Compact Dud Bomb smoky fizzle puff (`sputter`)!
-        const du = blastT / 0.72;
-        if (du < 0.24) {
-          const fs = lerp(0.22, 0.52, Math.sin((du / 0.24) * Math.PI));
-          m.flash.offsetMat = mat4FromTRS([m.x, 0.22, m.z], quatY(blastT * 6.0), [fs, fs * 0.7, fs]);
-          visible.push(m.flash);
-        }
-        for (let k = 0; k < m.dudPuffs.length; k++) {
-          const ang = (k / m.dudPuffs.length) * Math.PI * 2 + 0.4;
-          const rJ = lerp(0.10, 0.68, Math.pow(du, 0.65));
-          const py = 0.18 + du * 1.15 + k * 0.08;
-          const sc = du < 0.35 ? lerp(0.14, 0.38, du / 0.35) : lerp(0.38, 0.03, (du - 0.35) / 0.65);
-          m.dudPuffs[k].offsetMat = mat4FromTRS([m.x + Math.cos(ang) * rJ, py, m.z + Math.sin(ang) * rJ], quatY(ang), [sc, sc, sc]);
-          visible.push(m.dudPuffs[k]);
-        }
-        dynGlows.push([m.x, m.z, 2.6, (1.0 - du) * 1.2, 1.8, 0.85, 0.25]);
+      // Multi-stage 3D `bombex` Explosion (fireball core, serrated shockwave, sparks/debris, layered smoke & scorch)
+      if (blastT >= 0) {
+        updateBombExplosion(m.explosion, m.x, m.z, blastT, isDud, visible, dynGlows);
       }
 
       m.bomber.offsetMat = buildAntMat(m.bomber.model, bx, by, m.z, m.antScale, byaw);
