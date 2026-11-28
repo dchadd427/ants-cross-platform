@@ -26,10 +26,12 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.22.4 - 2026-11-27 - Ants glide to their tile on a new order
 
 **For players:**
 - An ant that walks and is given a new order no longer hops by up to half a tile in the picture: the game puts it on the middle of its tile at once, as the original does, and the picture now carries it there in a moment instead of jumping, for your own ants and everybody else's, in a game on one computer and online.
+
+**Details:** [commits](https://github.com/dchadd427/ants-server/compare/2104634d...5740547b)
 
 ## v0.22.3 - 2026-11-27 - Tags any time, nicknames once a day, web logs kept 14 days
 
