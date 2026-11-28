@@ -39,8 +39,8 @@ asset_catalog/**
 # assets: HUD art
 assets/**
 
-# cmake: build helpers
-cmake/**
+# cmake: build helpers (not cmake/private.cmake: the private part that CMakeLists.txt includes when it is there; a negation here would not reach the path regexes of the first export)
+cmake/ants_*
 
 # docker: only the build-id resolver (build_web.sh needs it); the rest of docker/ is private
 docker/resolve_build_id.sh

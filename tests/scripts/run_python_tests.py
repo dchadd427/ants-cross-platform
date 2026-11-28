@@ -31,33 +31,18 @@ import time
 # order of the run starts the longest first, so that the last one to start is a short one and a runner with three cores does not begin a class of two minutes when the others are nearly done
 # (the output stays in the order of the files); --shard shares the groups between its slices by the same numbers. A name that is not a class here is refused by test_run_python_tests.
 COSTS = {
-    "test_web_home_games.TheChecksAreNotVacuous": 490, "test_web_home_chat.TheChecksAreNotVacuous": 355, "test_web_mapmaker.TheGroundAndTheSprites": 194, "test_web_mapmaker.TheCodeRuns": 89,
-    "test_web_map_files.ThePagesOwnCode": 84, "test_web_home_players.TheChecksAreNotVacuous": 68, "test_nginx_history.TheBlocksRun": 60, "test_web_mapmaker_play.ThePlayChecks": 57,
-    "test_web_home_screen.TheChecksAreNotVacuous": 44, "test_web_replay_open.TheChecksAreNotVacuous": 43, "test_bot_names.TheMutants": 35, "test_web_death_map.TheCards": 35,
-    "test_web_admin.ThePagesOwnCode": 30, "test_nginx_stats.TheCacheRuns": 29, "test_web_lobby_chat.TheChecksAreNotVacuous": 27, "test_web_mapmaker.ThePage": 22,
-    "test_nginx_live.TheBlocksRun": 20, "test_web_home_talk.TheChecksAreNotVacuous": 19, "test_web_home_mod.TheChecksAreNotVacuous": 18, "test_e2e_deadlines.Waits": 18, "test_hub_login.TheCallbackWhenDiscordGoesWrong": 18,
-    "test_run_tests.ParallelResources": 16, "test_web_lobby_net.TheBudgetChecksAreNotVacuous": 15, "test_web_lobby_rules.TheCheckIsNotVacuous": 15, "test_e2e_deadlines.Watchdog": 14,
-    "test_web_game_menu.TheMutants": 14, "test_web_home_chat.TheCodeRuns": 14, "test_web_player_name.TheChecksAreNotVacuous": 14, "test_web_rematch.TheChecksAreNotVacuous": 14,
-    "test_map_atlas.TheAtlas": 11, "test_nginx_lobbies.TheCacheRuns": 11, "test_nginx_replays.TheBlocksRun": 11,
-    "test_web_shapes.TheMutantsOfTheTable": 11, "test_changelog_to_html.TheScriptRunByNode": 10, "test_e2e_deadlines.TheScriptCounts": 10,
-    "test_hub_login.TheCallback": 10, "test_hub_login.TheSocket": 10, "test_measure_tick_rate.Program": 10, "test_nginx_lobbies.TheServerHangsRuns": 10, "test_hub_ws.TheFuzz": 9,
-    "test_web_lobby.TheCheckIsNotVacuous": 9, "test_hub_login.TheDisplayName": 8, "test_hub_login.TheForget": 8, "test_hygiene.RealRepository": 8, "test_nginx_hub_login.TheBlocksRun": 8,
-    "test_nginx_maps.TheBlocksRun": 8, "test_web_lobby_net.ThePublicRoomChecksAreNotVacuous": 8, "test_web_map_picker.ThePickersOwnCode": 8, "test_hub_login.TheDiscordClient": 7,
-    "test_hub_login.TheProcess": 7, "test_hub_server.TheProcess": 7, "test_hub_server.TheTimers": 7, "test_mutate_tool.WithABuildStep": 7, "test_nginx_lobbies.TheServerFailsRuns": 7,
-    "test_nginx_stats.TheRealServerBehindTheFile": 7, "test_web_without_docker.TheRealDockerfileReplayed": 7, "test_ci_light.Decision": 6, "test_community_maps.TheList": 6,
-    "test_mutate_tool.Project": 6, "test_nginx_stats.TheBlocksRun": 6, "test_run_tests.ParallelRunner": 6, "test_web_map_maker_link.TheChecksAreNotVacuous": 6,
-    "test_web_shapes.TheMutantsOfThePicker": 6, "test_cmake_version.CcacheSupport": 5,
-    "test_hub_roles.TheLiveRoles": 30, "test_hub_roles.TheLookup": 6, "test_hub_roles.TheSecrets": 5,
-    "test_web_home_cmds.TheChecksAreNotVacuous": 6, "test_hub_powers.TheLiveHub": 45, "test_hub_powers.TheRealProcess": 31, "test_hub_powers.TheFreshCheck": 6, "test_hub_powers.TheIdIsLikeAPassword": 5,
-    "test_web_mapmaker_ai.TheChecksAreNotVacuous": 40,
-    "test_web_plays.TheChecksAreNotVacuous": 6, "test_web_likes.TheChecksAreNotVacuous": 7,
+    "test_web_mapmaker.TheGroundAndTheSprites": 194, "test_web_mapmaker.TheCodeRuns": 89, "test_web_map_files.ThePagesOwnCode": 84, "test_web_mapmaker_play.ThePlayChecks": 57,
+    "test_web_replay_open.TheChecksAreNotVacuous": 43, "test_bot_names.TheMutants": 35, "test_web_mapmaker.ThePage": 22, "test_run_tests.ParallelResources": 16,
+    "test_web_game_menu.TheMutants": 14, "test_web_player_name.TheChecksAreNotVacuous": 14, "test_map_atlas.TheAtlas": 11, "test_web_shapes.TheMutantsOfTheTable": 11,
+    "test_hygiene.RealRepository": 8, "test_mutate_tool.WithABuildStep": 7, "test_ci_light.Decision": 6, "test_community_maps.TheList": 6, "test_mutate_tool.Project": 6,
+    "test_run_tests.ParallelRunner": 6, "test_web_shapes.TheMutantsOfThePicker": 6, "test_cmake_version.CcacheSupport": 5,
 }
 
 # The mutation classes that run as several units (the groups of this table, `NAME[K/N]`, K from 1): each unit gets the environment variable SHARD_ENV, "K/N", and the class (through
 # tests/scripts/mutant_shard.py) tries every N-th mutant of its list from the K-th on, in the same order as the whole list, so that the units together try exactly the mutants of the list, each
 # once, and a plain `python3 -m unittest` of the class (no variable) tries all of them. The cost of a unit is its class's cost in COSTS divided by N (rounded up). A unit is a class of the
 # page tests that LINUX_ONLY names, as the class is (the names there and in COSTS are the class's, without the brackets).
-SHARDS = {"test_web_home_games.TheChecksAreNotVacuous": 4, "test_web_home_chat.TheChecksAreNotVacuous": 4}
+SHARDS = {}
 SHARD_ENV = "ANTS_MUTANT_SHARD"
 
 # The groups that the macOS job leaves to Linux (--skip-linux-only): page tests only. They run the JavaScript of the site's pages with node against the files of the checkout (or build the map
@@ -67,13 +52,22 @@ SHARD_ENV = "ANTS_MUTANT_SHARD"
 # timers, the watchdog of a node that does not end in test_web_mapmaker_play, the long output of a node through a pipe in test_web_mapmaker.TheCodeRuns, file names and paths, bash 3.2, compilers).
 # test_run_python_tests allows page tests only in this list, and a group that is new runs on macOS until it is named here.
 LINUX_ONLY = {
-    "test_web_home_games.TheChecksAreNotVacuous", "test_web_home_chat.TheChecksAreNotVacuous", "test_web_home_screen.TheChecksAreNotVacuous", "test_web_home_screen.TheMapCardChecksAreNotVacuous", "test_web_lobby.TheCheckIsNotVacuous",
-    "test_web_lobby_chat.TheChecksAreNotVacuous", "test_web_lobby_net.TheBudgetChecksAreNotVacuous", "test_web_lobby_net.ThePublicRoomChecksAreNotVacuous",
-    "test_web_lobby_rules.TheCheckIsNotVacuous", "test_web_rematch.TheChecksAreNotVacuous", "test_web_map_maker_link.TheChecksAreNotVacuous", "test_web_game_menu.TheMutants",
-    "test_web_shapes.TheMutantsOfTheTable", "test_web_shapes.TheMutantsOfThePicker", "test_bot_names.TheMutants", "test_web_mapmaker.TheGroundAndTheSprites", "test_web_mapmaker.ThePage",
-    "test_web_map_files.ThePagesOwnCode", "test_web_admin.ThePagesOwnCode", "test_web_death_map.TheCards",
-    "test_web_player_name.TheChecksAreNotVacuous", "test_web_mapmaker_ai.TheChecksAreNotVacuous",
+    "test_bot_names.TheMutants", "test_web_game_menu.TheMutants", "test_web_map_files.ThePagesOwnCode", "test_web_mapmaker.TheGroundAndTheSprites", "test_web_mapmaker.ThePage",
+    "test_web_player_name.TheChecksAreNotVacuous", "test_web_shapes.TheMutantsOfThePicker", "test_web_shapes.TheMutantsOfTheTable",
 }
+
+
+# The groups of the tests that only the whole tree has (the game server, the hub, the site's pages, the stack) are in tests/scripts/costs_private.py (COSTS, SHARDS and LINUX_ONLY, the
+# same tables): it adds its entries here when it is there, and a tree without those tests has no such file.
+try:
+    import costs_private
+except ModuleNotFoundError as missing:
+    if missing.name != "costs_private":
+        raise
+else:
+    COSTS.update(costs_private.COSTS)
+    SHARDS.update(costs_private.SHARDS)
+    LINUX_ONLY.update(costs_private.LINUX_ONLY)
 
 
 def base_of(label):

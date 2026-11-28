@@ -121,6 +121,9 @@ class SameSuitesAsTheRunner(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.runner = read(os.path.join(REPO, "run_tests.sh"))
+        server_suites = os.path.join(REPO, "tests", "suites_server.sh")                     # (the suites of the game server are in a file of their own, when the tree has it)
+        if os.path.exists(server_suites):
+            cls.runner += "\n" + read(server_suites)
         cls.registered = set()
         for path in glob.glob(os.path.join(REPO, "tests", "*", "CMakeLists.txt")):
             if os.path.basename(os.path.dirname(path)) != "e2e":                           # (the E2E runner is a project of its own: its own build and step)

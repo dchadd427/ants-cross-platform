@@ -366,33 +366,36 @@ class TheRealTests(unittest.TestCase):
         slices = [{label for label, _ in rpt.shard_of(work, k, 2)} for k in (1, 2)]
         self.assertNotEqual(biggest[0] in slices[0], biggest[1] in slices[0])
 
-    def test_the_two_long_mutation_classes_are_units_that_together_try_every_mutant_once(self):
-        """The checks stay as strong as they were: the units of a sharded class run the same class, and the mutants of the units are the whole list, each once, whatever the number of units."""
-        self.assertEqual(sorted(rpt.SHARDS), ["test_web_home_chat.TheChecksAreNotVacuous", "test_web_home_games.TheChecksAreNotVacuous"])
+    def test_the_sharded_classes_are_units_that_together_try_every_mutant_once(self):
+        """The checks stay as strong as they were: the units of a sharded class run the same class, and the mutants of the units are the whole list, each once, whatever the number of units.
+        (The sharded classes of the whole tree are in costs_private.py, and test_runners_private.py names them.)"""
         work = rpt.units(HERE, "tests.scripts")
         for label, n in rpt.SHARDS.items():
             self.assertGreaterEqual(n, 2)
             self.assertEqual([w for w in work if rpt.base_of(w[0]) == label], [("%s[%d/%d]" % (label, k, n), "tests.scripts." + label) for k in range(1, n + 1)])
             self.assertIn(label, rpt.COSTS)
             self.assertIn(label, rpt.LINUX_ONLY)
-        for spec in ("home_games", "home_chat"):
-            with open(os.path.join(HERE, "..", "data", spec + "_mutants.json"), encoding="utf-8") as f:
+            module = label.split(".")[0]
+            with open(os.path.join(HERE, "..", "data", module[len("test_web_"):] + "_mutants.json"), encoding="utf-8") as f:
                 ids = [m["id"] for m in json.load(f)["mutants"]]
             self.assertGreater(len(ids), 300)
-            for n in range(1, 13):
-                parts = [mutant_shard.pick(ids, (k, n)) for k in range(1, n + 1)]
-                self.assertEqual(sorted(sum(parts, [])), sorted(ids), "%s in %d units" % (spec, n))      # the union is the list, no mutant twice
-                self.assertEqual(len(set(sum(parts, []))), len(ids))
-                for part in parts:
-                    self.assertTrue(part)
-                    self.assertEqual(part, [i for i in ids if i in set(part)], "the order of the list")
-                self.assertLessEqual(max(map(len, parts)) - min(map(len, parts)), 1, "the units are of the same size")
-        for name in ("test_web_home_games.py", "test_web_home_chat.py"):
-            with open(os.path.join(HERE, name), encoding="utf-8") as f:
+            self.partition_is_the_list(ids, label)
+            with open(os.path.join(HERE, module + ".py"), encoding="utf-8") as f:
                 text = f.read()
-            self.assertIn('cls.mutants = mutant_shard.from_environment(cls.spec["mutants"])', text, name)
-            self.assertIn("for m in self.mutants:", text, name)
-            self.assertNotIn('\n        for m in self.spec["mutants"]', text, name + ": a loop over the whole list would run it in every unit")
+            self.assertIn('cls.mutants = mutant_shard.from_environment(cls.spec["mutants"])', text, module)
+            self.assertIn("for m in self.mutants:", text, module)
+            self.assertNotIn('\n        for m in self.spec["mutants"]', text, module + ": a loop over the whole list would run it in every unit")
+        self.partition_is_the_list(["m%d" % i for i in range(1, 401)], "a made-up list")
+
+    def partition_is_the_list(self, ids, what):
+        for n in range(1, 13):
+            parts = [mutant_shard.pick(ids, (k, n)) for k in range(1, n + 1)]
+            self.assertEqual(sorted(sum(parts, [])), sorted(ids), "%s in %d units" % (what, n))      # the union is the list, no mutant twice
+            self.assertEqual(len(set(sum(parts, []))), len(ids))
+            for part in parts:
+                self.assertTrue(part)
+                self.assertEqual(part, [i for i in ids if i in set(part)], "the order of the list")
+            self.assertLessEqual(max(map(len, parts)) - min(map(len, parts)), 1, "the units are of the same size")
 
     def test_the_variable_of_a_unit_is_read_strictly(self):
         self.assertEqual(mutant_shard.parse(None), (1, 1))
@@ -412,15 +415,14 @@ class TheRealTests(unittest.TestCase):
         for label in rpt.LINUX_ONLY:
             self.assertIn(".", label, "a class, not a whole file: " + label)
             self.assertTrue(label.startswith(("test_web_", "test_bot_names.")), "only page tests may stay off the macOS job: " + label)
-        self.assertGreaterEqual(len(rpt.LINUX_ONLY), 10)
+        self.assertGreaterEqual(len(rpt.LINUX_ONLY), 5)
 
     def test_the_macos_job_keeps_what_the_macos_runners_taught_the_tests(self):
         left = {rpt.base_of(label) for label, _ in rpt.units(HERE, "tests.scripts")} - rpt.LINUX_ONLY
-        for prefix in ("test_hub_", "test_e2e_deadlines.", "test_measure_tick_rate.", "test_quick_http.", "test_run_tests.", "test_run_python_tests.",
+        for prefix in ("test_quick_http.", "test_run_tests.", "test_run_python_tests.",
                        "test_library_guard.", "test_community_maps.", "test_repair_maps.", "test_cmake_", "test_mutate_tool.", "test_release_tool.", "test_version_tools.", "test_source_portability.",
-                       "test_hygiene.", "test_ci_workflow.", "test_nginx_", "test_web_without_docker.",
-                       "test_web_mapmaker.TheCodeRuns", "test_web_mapmaker.TheTimeAndTheBail", "test_web_mapmaker_play.ThePlayChecks", "test_web_home_chat.TheCodeRuns",
-                       "test_web_lobby_net.TheChecksThatNodeRuns", "test_web_lobby_chat.TheChecksThatNodeRuns", "test_web_rematch.TheChecksThatNodeRuns"):
+                       "test_hygiene.", "test_ci_workflow.",
+                       "test_web_mapmaker.TheCodeRuns", "test_web_mapmaker.TheTimeAndTheBail", "test_web_mapmaker_play.ThePlayChecks"):
             self.assertTrue([label for label in left if label.startswith(prefix)], "the macOS job would run nothing of " + prefix)
             self.assertFalse([label for label in rpt.LINUX_ONLY if label.startswith(prefix)], prefix + " is a lesson of the macOS runners: it stays on both")
 
