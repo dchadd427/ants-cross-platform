@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the picture of others = confirmed (docs/NETWORK_PORT.md, 'Drawing the other players' ants from the confirmed engine'), for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the product rules that the view-glide, prediction-in-the-application and shaped-link tests hold: the other players' ants are the confirmed engine's and the player's own the predicted one's (an ant that only one engine has counts for the engine of its owner), the ground and the effects are the predicted engine's and what is explored the confirmed one's, the world is made again whenever an engine changes, the pointer and the cursor pick from the world that is drawn, an attack on a drawn ant is aimed at the tile of the predicted engine (and never into ground that the fog hides) and an attack on an ally's drawn ant asks first even when the predicted engine has lost the ant, every handler of the HUD (the rubber band, the pedestals, the keys, the step of every tick) reads the world that the picture shows and not the engine that it orders, only the player's own ants slide, the picture is on by default and only while the prediction runs, and a match's start and end let go of the world that the match before made.",
+  "note": "Mutants of the picture of others = confirmed (docs/NETWORK_PORT.md, 'Drawing the other players' ants from the confirmed engine'), for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the product rules that the view-glide and prediction-in-the-application tests hold: the other players' ants are the confirmed engine's and the player's own the predicted one's (an ant that only one engine has counts for the engine of its owner), the ground and the effects are the predicted engine's and what is explored the confirmed one's, the world is made again whenever an engine changes, the pointer and the cursor pick from the world that is drawn, an attack on a drawn ant is aimed at the tile of the predicted engine (and never into ground that the fog hides) and an attack on an ally's drawn ant asks first even when the predicted engine has lost the ant, every handler of the HUD (the rubber band, the pedestals, the keys, the step of every tick) reads the world that the picture shows and not the engine that it orders, only the player's own ants slide, the picture is on by default and only while the prediction runs, and a match's start and end let go of the world that the match before made.",
   "mutants": [
     {
       "id": "others_drawn_from_predicted",
@@ -220,28 +220,6 @@
       ],
       "test": "ANTS_TEST_FILTER=PA1 ./build/tests/test_app/test_prediction_app",
       "expect": "PA1"
-    },
-    {
-      "id": "click_not_aimed_in_the_application",
-      "file": "src/ants_app/application_sim.cpp",
-      "old": "    if (!others_view_active() || !others_aim_) return false;",
-      "new": "    return false;",
-      "build": [
-        "test_prediction_link"
-      ],
-      "test": "ANTS_TEST_FILTER=LK12 ./build/tests/test_app/test_prediction_link",
-      "expect": "LK12"
-    },
-    {
-      "id": "click_aimed_at_the_confirmed_tile",
-      "file": "src/ants_app/application_sim.cpp",
-      "old": "return aim_at_predicted_ant(view_sim().get_world_state(), local_player_id_, picked, tile);",
-      "new": "return aim_at_predicted_ant(sim_.get_world_state(), local_player_id_, picked, tile);",
-      "build": [
-        "test_prediction_link"
-      ],
-      "test": "ANTS_TEST_FILTER=LK12 ./build/tests/test_app/test_prediction_link",
-      "expect": "LK12"
     },
     {
       "id": "ally_check_ignores_the_drawn_world",

@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the settings menu for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the page's script web/game_menu.js against tests/scripts/web_game_menu_check.js (node, on a strict fake of the DOM), and the game's side (src/ants_app/game_menu.cpp, application_game_menu.cpp, the HUD's Esc, the event loop's gate, the mixer's gain) against tests/test_app/test_game_menu.cpp and the mixer's case 4.5b of test_app_integration, the desktop's drawn panel (game_menu_panel.cpp) against test_game_menu, the Quick Chat texts (options_state.cpp) against test_options, Ctrl+O and the Options button (hud_keys.cpp, hud_pointer.cpp) against test_pointer_model, and the corner (Show FPS and Show ping: fps_overlay.hpp, application_net.cpp, latency_corner.cpp) and the score labels' sizes (hud.cpp) against N5.29b and N5.103 of test_network_app and test_hud_layout. Run from the checkout: tools/mutate.py tests/data/game_menu_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_game_menu.py runs the script's mutants, the scrolling's and the style's on a copy of the files.",
+  "note": "Mutants of the settings menu for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the page's script web/game_menu.js against tests/scripts/web_game_menu_check.js (node, on a strict fake of the DOM), and the game's side (src/ants_app/game_menu.cpp, application_game_menu.cpp, the HUD's Esc, the event loop's gate, the mixer's gain) against tests/test_app/test_game_menu.cpp and the mixer's case 4.5b of test_app_integration, the desktop's drawn panel (game_menu_panel.cpp) against test_game_menu, the Quick Chat texts (options_state.cpp) against test_options, Ctrl+O and the Options button (hud_keys.cpp, hud_pointer.cpp) against test_pointer_model, and the corner (Show FPS and Show ping: fps_overlay.hpp, latency_corner.cpp) and the score labels' sizes (hud.cpp) against test_hud_layout. Run from the checkout: tools/mutate.py tests/data/game_menu_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_game_menu.py runs the script's mutants, the scrolling's and the style's on a copy of the files.",
   "mutants": [
     {
       "id": "held_esc_closes",
@@ -1777,26 +1777,6 @@
         "test_game_menu"
       ],
       "test": "./build/tests/test_app/test_game_menu"
-    },
-    {
-      "id": "ping_list_stays_when_off",
-      "file": "src/ants_app/application_game_menu.cpp",
-      "old": "                connections_open_ = false;\n                connections_press_ = false;\n",
-      "new": "",
-      "build": [
-        "test_network_app"
-      ],
-      "test": "timeout 900 env ANTS_TEST_FILTER=N5.103 ./build/tests/test_app/test_network_app"
-    },
-    {
-      "id": "ping_drawn_when_off",
-      "file": "src/ants_app/application_net.cpp",
-      "old": "if (!network_active() || !menu_settings_.show_ping) return std::nullopt;",
-      "new": "if (!network_active()) return std::nullopt;",
-      "build": [
-        "test_network_app"
-      ],
-      "test": "timeout 900 env ANTS_TEST_FILTER=N5.29b ./build/tests/test_app/test_network_app"
     },
     {
       "id": "delay_text_back",

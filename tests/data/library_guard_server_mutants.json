@@ -1,0 +1,21 @@
+{
+ "note": "The private half of tests/data/library_guard_mutants.json (tools/mutate.py runs it together with the public half): the mutants of files that are not in the public repository, and the ones that only a test that is not there catches. Mutants of the owner's rule for the tools (tools/library_guard.hpp and .py, docs/WORKFLOW.md 'Tools never touch the map library'): each lets one tool write into the map library, over its own input, or through a spelling of the library's name (case, links, a second name, a folder known by what it is). For tools/mutate.py: python3 tools/mutate.py tests/data/library_guard_mutants.json --keep-going --jobs 1 --timeout 900, from a checkout with a configured build folder that has lvl_tool, map_sweep and bot_arena. Every mutant must be caught by lvl_tool --selftest, map_sweep --selftest or tests/scripts/test_library_guard.py (all of them run on a temporary copy of the layout, never on the real library).",
+ "mutants": [
+  {
+   "id": "make_art_writes_into_the_library",
+   "file": "tools/front_page_art/make_art.py",
+   "old": "        library_guard.require_writable(args.out)\n",
+   "new": "        pass\n",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  },
+  {
+   "id": "make_art_exits_with_one",
+   "file": "tools/front_page_art/make_art.py",
+   "old": "        sys.exit(2)",
+   "new": "        sys.exit(1)",
+   "build": [],
+   "test": "python3 -m unittest tests.scripts.test_library_guard.TheGuard tests.scripts.test_library_guard.ThePythonTools"
+  }
+ ]
+}

@@ -8,6 +8,7 @@ Which files go to the public repository, and the checks that keep every file on 
 | `private.txt` | the paths that stay here and are never exported (the game server and its libraries, the history service, the hub, the site pages, the Docker stack and deploy files, the tests that need those, and this folder) |
 | `classify.py` | the check: every tracked file is on exactly one of the two lists. It also prints the two path lists (`--list public`, `--list private`) and the allow-list as `git filter-repo` path regexes (`--filter-repo-paths`) |
 | `check_export.py` | the scan of words: which public text files still name something private. **Report only** for now |
+| `split_mutants.py` | the split of a list of mutants into a public half and a private half (below); with no argument it checks every list and changes nothing |
 | `overlay/` | public versions of files that must read differently in the public repository (`AGENTS.md`, `README.md`, `SECURITY.md`, the CI workflow): `overlay/<path>` is exported as `<path>`. It is empty today; `overlay/.gitkeep` only keeps the folder and is never exported |
 
 `export/` itself is private (`private.txt`): the public repository does not describe this one. The lists are the one place that says what is public; no other file repeats them.
@@ -30,8 +31,19 @@ A new file that is on neither list fails the check, and nobody guesses: put it o
 - **Public** when it is part of the game: the simulation, the network protocol and the client's side of it, the bots, replays, assets, the application, the game page and the Map Maker page and their scripts, the original's data, the players' maps, and a test or document of those that runs and reads without anything private.
 - **Private** when it belongs to the running service (the game server, the history service, the database, the control door, the hub, the site pages, the Docker stack, the deploy files), is a test or a document of those, or needs one of them to run (a test that starts a real server or links its library).
 - A file that must read differently in the public repository is two files: the private one where it is, and the public one under `overlay/`.
-- A file of mutants (`tests/data/*_mutants.json`) is public when no mutant of it changes a private file (a private test may still be the one that catches some of them: the file's note and the command lines of those mutants are reworded later); it is private when any mutant changes a private file.
+- A list of mutants (`tests/data/NAME_mutants.json`) holds only mutants that a tree without the private files can run: see "Lists of mutants" below.
 - A script or a test that only names a private file in a comment is still public: the scan of words lists it, and the change that cuts the mention is made on its own.
+
+## Lists of mutants
+
+A mutant is public when everything it touches is public: the file it changes, every path in its `test` command (a program, a script, a page or a data file that the command is given) and every CMake target in its `build`. A list that has public and private mutants is split by `python3 export/split_mutants.py --write NAME` (the table says what it will do; `--why` says why each mutant is private; `--public-note NAME=TEXT` or `--notes FILE` gives the public half its own note, which must not name anything private):
+
+| File | Holds | List |
+|---|---|---|
+| `tests/data/NAME_mutants.json` | the public mutants, the note, and the `defaults` and `baseline` that they need | public: its line goes on `allowlist.txt` (and comes off `private.txt`, or gets a `!` line there when a pattern of that list matches it) |
+| `tests/data/NAME_server_mutants.json` | the private mutants, byte for byte as they were, and the whole of the old note | private, by the one pattern `tests/data/*_server_mutants.json` |
+
+A list with no public mutant stays whole, as `NAME_mutants.json`, on `private.txt`. `tools/mutate.py` reads `NAME_mutants.json` together with `NAME_server_mutants.json` when it is there (so does `tests/scripts/mutant_specs.py` for the tests that run some mutants themselves), and a tree that has only the first half runs that. `tests/scripts/test_mutant_specs.py` checks that every mutant of both halves applies; `tests/scripts/test_export_split_mutants.py` fails when a list is mixed or on the wrong list, which is how a new list with a private mutant in it is found.
 
 ## The hooks: private files that the public files read when they are there
 
@@ -39,7 +51,7 @@ The exported tree has no server, so the build and the test runners of the public
 
 | Private file | Read by | What it holds |
 |---|---|---|
-| `cmake/private.cmake` | `CMakeLists.txt` (`include(cmake/private.cmake OPTIONAL)`, at its end) | the game server's libraries, programs and tests: SQLite, the database layer, the control interface, the server, the history service, the picture maker, `tests/test_db`, `test_ctl`, `test_server` |
+| `cmake/private.cmake` | `CMakeLists.txt` (`include(cmake/private.cmake OPTIONAL)`, at its end) | the game server's libraries, programs and tests: SQLite, the database layer, the control interface, the server, the history service, the picture maker, `tests/test_db`, `test_ctl`, `test_server`, and `test_app_server` (the application tests that run a real room manager) |
 | `tests/suites_server.sh` | `run_tests.sh` (`define_suites`, before the E2E suite) | the `suite` lines of the server's tests and scripts; `--fast` and the tier options select them like any other |
 | `tests/scripts/costs_private.py` | `tests/scripts/run_python_tests.py` (at import) | the `COSTS`, `SHARDS` and `LINUX_ONLY` entries of the python tests that the exported tree does not have |
 

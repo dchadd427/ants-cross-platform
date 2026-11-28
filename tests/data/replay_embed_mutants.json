@@ -1,6 +1,5 @@
 {
- "note": "Mutants of the map that a replay carries (the optional chunk tmap: ants_replay/replay, recorder and player, net::hash_bytes, the door's file flag for a replay of up to 17 MiB, the store's caps, the viewer and replay_tool) for tools/mutate.py: python3 tools/mutate.py tests/data/replay_embed_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught: test_replay (RP1.9, RP9.x), replay_tool --selftest, test_replay_store (RS10.x), tests/scripts/test_nginx_big_replays.py (the real server) and test_replay_app (RA7.9). The page's reader (web/map_files.js embeddedMapOfReplay) has its mutants in tests/scripts/test_web_map_files.py. The mutant that would make replay_tool map write into the map library is left out on purpose (a mutant that works would write a file there): the guard has library_guard_mutants.json.",
- "defaults": {},
+ "note": "Mutants of the map that a replay carries (the optional chunk tmap: ants_replay/replay, recorder and player, net::hash_bytes, the viewer and replay_tool) for tools/mutate.py: python3 tools/mutate.py tests/data/replay_embed_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught: test_replay (RP1.9, RP9.x), replay_tool --selftest and test_replay_app (RA7.9). The page's reader (web/map_files.js embeddedMapOfReplay) has its mutants in tests/scripts/test_web_map_files.py. The mutant that would make replay_tool map write into the map library is left out on purpose (a mutant that works would write a file there): the guard has library_guard_mutants.json.",
  "mutants": [
   {
    "id": "a_file_past_two_mib_is_read_on",
@@ -265,30 +264,6 @@
    "new": "static_cast<uint64_t>(size) > kMaxFileBytes",
    "build": "replay_tool",
    "test": "timeout 300 ./build/replay_tool --selftest"
-  },
-  {
-   "id": "a_replay_over_1_mib_is_a_500",
-   "file": "src/ants_server/control.cpp",
-   "old": "    r.file = true;                                       // a replay is up to about 17 MiB",
-   "new": "    // a replay is up to about 17 MiB",
-   "build": "ants_server",
-   "test": "timeout 300 python3 -m unittest tests.scripts.test_nginx_big_replays"
-  },
-  {
-   "id": "the_store_reads_no_file_over_1_mib",
-   "file": "src/ants_server/replay_store.cpp",
-   "old": "if (expected > replay::kMaxFileBytesWithMap) return false;",
-   "new": "if (expected > replay::kMaxFileBytes) return false;",
-   "build": "test_replay_store",
-   "test": "timeout 300 ./build/tests/test_server/test_replay_store"
-  },
-  {
-   "id": "the_store_keeps_no_file_over_1_mib",
-   "file": "src/ants_server/replay_store.cpp",
-   "old": "bytes.empty() || bytes.size() > replay::kMaxFileBytesWithMap || !summarize",
-   "new": "bytes.empty() || bytes.size() > replay::kMaxFileBytes || !summarize",
-   "build": "test_replay_store",
-   "test": "timeout 300 ./build/tests/test_server/test_replay_store"
   },
   {
    "id": "the_viewer_reads_no_file_over_1_mib",

@@ -1,5 +1,5 @@
 {
- "note": "Mutants of ready up (network protocol 27, docs/READY_UP.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the rules of the lobby (the START that waits for Ready, the host who does not ready, a computer player and a game that are never asked, the marks that stay when the leader changes the plan and the ones that go with a link, a seat taken over and a new leader, the budget and the use of the room, who may send it), the codec of the message and of the Room's last byte in C++ and in the page's lobby_net.js, the page's pace, and the cards and the line under START (lobby_rules.js, lobby.html). Every mutant must be caught. Run from the checkout: python3 tools/mutate.py tests/data/ready_up_mutants.json --keep-going --jobs 1 --timeout 1800. tests/scripts/test_web_lobby_net.py runs the page's mutants (the ones that name a file of web/) in the quick tier on a copy of the files; the C++ ones need a build.",
+ "note": "Mutants of ready up (network protocol 27, docs/READY_UP.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the rules of the lobby (the START that waits for Ready, the host who does not ready, a computer player and a game that are never asked, the marks that stay when the leader changes the plan and the ones that go with a link, a seat taken over and a new leader, the budget and the use of the room, who may send it) and the codec of the message and of the Room's last byte. Every mutant must be caught. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/ready_up_mutants.json --keep-going --jobs 1 --timeout 1800.",
  "mutants": [
   {
    "id": "start_ignores_ready",
@@ -212,111 +212,6 @@
     "test_lockstep"
    ],
    "test": "ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep"
-  },
-  {
-   "id": "page_host_must_ready",
-   "file": "web/front/lobby_net.js",
-   "old": "room.slots[seat].state === SLOT.Client && seat !== room.leader && ((room.inGame >> seat) & 1) === 0; }",
-   "new": "room.slots[seat].state === SLOT.Client && ((room.inGame >> seat) & 1) === 0; }",
-   "test": "node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
-  },
-  {
-   "id": "page_a_game_must_ready",
-   "file": "web/front/lobby_net.js",
-   "old": "seat !== room.leader && ((room.inGame >> seat) & 1) === 0; }",
-   "new": "seat !== room.leader; }",
-   "test": "node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
-  },
-  {
-   "id": "page_start_ignores_ready",
-   "file": "web/front/lobby_net.js",
-   "old": "r.starting || waitingFor(r).length > 0) return false;",
-   "new": "r.starting) return false;",
-   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
-  },
-  {
-   "id": "page_the_leader_may_ready",
-   "file": "web/front/lobby_net.js",
-   "old": "r.you === 255 || !mustReady(r, r.you)) return false;",
-   "new": "r.you === 255) return false;",
-   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
-  },
-  {
-   "id": "page_ready_while_starting",
-   "file": "web/front/lobby_net.js",
-   "old": "if (!this.canAct() || r.starting || typeof ready !== 'boolean'",
-   "new": "if (!this.canAct() || typeof ready !== 'boolean'",
-   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
-  },
-  {
-   "id": "page_codec_mark_for_the_leader",
-   "file": "web/front/lobby_net.js",
-   "old": "q === m.leader || ((m.inGame >> q) & 1) !== 0)) return null;",
-   "new": "((m.inGame >> q) & 1) !== 0)) return null;",
-   "test": "node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
-  },
-  {
-   "id": "page_codec_mark_for_a_game",
-   "file": "web/front/lobby_net.js",
-   "old": "q === m.leader || ((m.inGame >> q) & 1) !== 0)) return null;",
-   "new": "q === m.leader)) return null;",
-   "test": "node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
-  },
-  {
-   "id": "page_no_ready_event",
-   "file": "web/front/lobby_net.js",
-   "old": "        if (prev.ready !== next.ready) events.push({ type: 'ready', mask: next.ready });\n",
-   "new": "",
-   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
-  },
-  {
-   "id": "rules_start_ignores_ready",
-   "file": "web/front/lobby_rules.js",
-   "old": "startDisabled: g ? !asks : busy || !!away || waiting.names.length > 0 || waiting.you,",
-   "new": "startDisabled: g ? !asks : busy || !!away,",
-   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
-  },
-  {
-   "id": "rules_host_shows_no_ready",
-   "file": "web/front/lobby_rules.js",
-   "old": "                    if (s.leader) card.ready = { kind: 'chip', on: true, title: READY.hostReady };\n",
-   "new": "                    if (s.leader) { /* nothing */ }\n",
-   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
-  },
-  {
-   "id": "rules_a_bot_shows_no_ready",
-   "file": "web/front/lobby_rules.js",
-   "old": "if (s.kind === 'bot' && !busy) card.ready = { kind: 'chip', on: true, bot: true, title: READY.botReady };",
-   "new": "",
-   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
-  },
-  {
-   "id": "rules_the_host_has_a_switch",
-   "file": "web/front/lobby_rules.js",
-   "old": "                    if (s.leader) card.ready = { kind: 'chip', on: true, title: READY.hostReady };\n",
-   "new": "                    if (s.leader) card.ready = { kind: s.me ? 'button' : 'chip', on: true, title: READY.hostReady };\n",
-   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
-  },
-  {
-   "id": "rules_a_game_is_asked",
-   "file": "web/front/lobby_rules.js",
-   "old": "asked: s !== leader && !raw,",
-   "new": "asked: s !== leader,",
-   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
-  },
-  {
-   "id": "rules_marks_while_start_waits",
-   "file": "web/front/lobby_rules.js",
-   "old": "                if (!busy) {                                                                                                                              // (protocol 27",
-   "new": "                if (true) {                                                                                                                              // (protocol 27",
-   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
-  },
-  {
-   "id": "page_press_ready_sends_nothing",
-   "file": "web/lobby.html",
-   "old": "if (!client.setReady(!me.ready)) say('One moment, then press Ready again.');",
-   "new": "if (false) say('One moment, then press Ready again.');",
-   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
   }
  ]
 }

@@ -25,6 +25,7 @@ import tempfile
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 ROOT = os.environ.get("ANTS_SHAPES_ROOT") or REPO          # (the mutants run this file on a copy of the files that it reads: tests/data/shape_table_mutants.json)
 SHAPES_JS = os.path.join(ROOT, "web", "shapes.js")
 SHELL = os.path.join(ROOT, "web", "shell.html")
@@ -267,8 +268,8 @@ READS = [os.path.join("include", "ants_app", "canvas_layout.hpp"), "Dockerfile",
 class TheMutantsOfTheTable(unittest.TestCase):
     def test_the_page_side_mutants_are_all_noticed_by_this_check(self):
         """tests/data/shape_table_mutants.json (tools/mutate.py runs all of it, the game's side too): each broken copy of a page file must fail this check; run here on a copy of the files that it reads."""
-        with open(os.path.join(REPO, "tests", "data", "shape_table_mutants.json"), encoding="utf-8") as f:
-            spec = json.load(f)
+        import mutant_specs  # noqa: E402  (here and not at the top: the copies in which the mutants run have this file but not that one)
+        spec = mutant_specs.load(os.path.join(REPO, "tests", "data", "shape_table_mutants.json"))
         ids = [m["id"] for m in spec["mutants"]]
         self.assertEqual(len(ids), len(set(ids)), "an id twice")
         mine = [m for m in spec["mutants"] if m["test"].startswith("python3 tests/scripts/test_web_shapes.py")]

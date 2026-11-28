@@ -1,0 +1,44 @@
+{
+ "note": "The private half of tests/data/original_maps_mutants.json (tools/mutate.py runs it together with the public half): the mutants of files that are not in the public repository, and the ones that only a test that is not there catches. Mutants of the six original maps that the site serves for the Map Maker's 'Start from a game map' and of the words that the editor says when a map does not come, for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a built ants_server: python3 tools/mutate.py tests/data/original_maps_mutants.json --keep-going --jobs 1. Every mutant must be caught: each breaks one rule of docs/SERVER.md ('The site's nginx') or docs/MAP_EDITOR.md (mapmaker_store.js, fetchMap, and the note of mapmaker_dialog.js). No mutant changes a map of the library: the files they change are the Dockerfile, docker/nginx.conf and the editor's scripts.",
+ "defaults": {
+  "test": "python3 tests/scripts/test_nginx_original_maps.py"
+ },
+ "mutants": [
+  {
+   "id": "originals_not_copied",
+   "file": "Dockerfile",
+   "old": "COPY Original-Ants/Maps/*.LVL /srv/community-maps/files/\n",
+   "new": ""
+  },
+  {
+   "id": "only_one_original_copied",
+   "file": "Dockerfile",
+   "old": "COPY Original-Ants/Maps/*.LVL /srv/community-maps/files/",
+   "new": "COPY Original-Ants/Maps/TINY.LVL /srv/community-maps/files/"
+  },
+  {
+   "id": "originals_copied_to_another_folder",
+   "file": "Dockerfile",
+   "old": "COPY Original-Ants/Maps/*.LVL /srv/community-maps/files/",
+   "new": "COPY Original-Ants/Maps/*.LVL /srv/original-maps/"
+  },
+  {
+   "id": "nginx_refuses_upper_case_ending",
+   "file": "docker/nginx.conf",
+   "old": "if ($uri !~ \"^/maps/files/[ -.0-\\[\\]-~]{1,80}\\.(lvl|LVL)\\z\") { return 404; }",
+   "new": "if ($uri !~ \"^/maps/files/[ -.0-\\[\\]-~]{1,80}\\.(lvl)\\z\") { return 404; }"
+  },
+  {
+   "id": "player_map_clash_by_file_destination_copy",
+   "file": "Dockerfile",
+   "old": "COPY Original-Ants/Maps/*.LVL /srv/community-maps/files/\n",
+   "new": "COPY Original-Ants/Maps/*.LVL /srv/community-maps/files/\nCOPY Community-Maps/Treasure\\ 2.lvl /srv/community-maps/files/tiny.lvl\n"
+  },
+  {
+   "id": "player_map_clash_by_run_cp",
+   "file": "Dockerfile",
+   "old": "COPY Original-Ants/Maps/*.LVL /srv/community-maps/files/\n",
+   "new": "COPY Original-Ants/Maps/*.LVL /srv/community-maps/files/\nRUN cp /srv/community-maps/files/TREASURE.LVL /srv/community-maps/files/Tiny.Lvl\n"
+  }
+ ]
+}

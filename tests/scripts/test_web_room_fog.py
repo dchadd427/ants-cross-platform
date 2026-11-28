@@ -9,15 +9,16 @@ The leader of a lobby room switches Fog of War on and off in the Rules sheet; th
   - tests/data/room_fog_mutants.json changes one thing at a time in a COPY of the files: the node checks must then fail (the last class of this file runs the page's mutants, those that need only node;
     tools/mutate.py runs the whole list, with the C++ ones: `python3 tools/mutate.py tests/data/room_fog_mutants.json --keep-going --jobs 1`).
 """
-import json
 import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 CHECK = os.path.join(REPO, "tests", "scripts", "web_room_fog_check.js")
 NODE = shutil.which("node")
 
@@ -55,8 +56,8 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     must pass"""
     @classmethod
     def setUpClass(cls):
-        with open(os.path.join(REPO, "tests", "data", "room_fog_mutants.json"), encoding="utf-8") as f:
-            spec = json.load(f)
+        import mutant_specs  # noqa: E402  (here and not at the top: the copies in which the mutants run have this file but not that one)
+        spec = mutant_specs.load(os.path.join(REPO, "tests", "data", "room_fog_mutants.json"))
         # the page's mutants whose check is a node command that needs no map of the library (the rules check reads Original-Ants: tools/mutate.py runs those, from the repository)
         cls.mutants = [m for m in spec["mutants"] if "build" not in m and "web_lobby_rules_check" not in m["test"]]
         cls.folder = tempfile.mkdtemp(prefix="ants_room_fog_mutants.")

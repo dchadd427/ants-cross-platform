@@ -13,15 +13,16 @@ of the match who played in a browser (docs/SERVER.md "Lobby rooms"); the game pa
     check fail; the C++ ones are run by tools/mutate.py (the deep tier).
 The node check needs node; without it these tests are skipped and say so.
 """
-import json
 import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 SCRIPTS = os.path.join(REPO, "tests", "scripts")
 FRONT = os.path.join(REPO, "web", "front")
 CHECK = os.path.join(SCRIPTS, "web_rematch_check.js")
@@ -174,8 +175,8 @@ class TheChecksAreNotVacuous(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        with open(os.path.join(REPO, "tests", "data", "rematch_mutants.json"), encoding="utf-8") as f:
-            cls.spec = json.load(f)
+        import mutant_specs  # noqa: E402  (here and not at the top: the copies in which the mutants run have this file but not that one)
+        cls.spec = mutant_specs.load(os.path.join(REPO, "tests", "data", "rematch_mutants.json"))
         cls.pages = [m for m in cls.spec["mutants"] if "build" not in m]
         cls.folder = tempfile.mkdtemp(prefix="ants_rematch_mutants.")
         for name in cls.FILES:

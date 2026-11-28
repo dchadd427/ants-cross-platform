@@ -1,0 +1,45 @@
+{
+ "note": "The private half of tests/data/p2p_core_mutants.json (tools/mutate.py runs it together with the public half): the mutants of files that are not in the public repository, and the ones that only a test that is not there catches. Mutants of protocol 26 (docs/P2P_HINTS.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the prediction's matching rule for a hint (where it goes, doubled and late hints, the order of a turn, confirmed, moved once, dropped, the limits), the server's session (the credential and its expiry, who is given one: the people of a match of two or more, at most twice each, for no longer than the match can last, and the room's limit that sets it, who is ready, the rule of the address and the violation, the sender's seat stamped by the connection, the limits, who is told, a computer player's hint at the tick of its turn), the wire (what each decoder refuses), the rule of the address in the text of a candidate, the relay's credential (RFC 2104, the expiry), the tick that a hint names (the phase of the server's seals: when it is known, what it learns from the orders that came back, where it is not trusted), and the game's side (a channel's seat, the server's hint, a relay with no address, the tick of a hint, the clock that the game gives the prediction, the mark), and the relay's one port (ants_net/turn.hpp make_turn_settings).",
+ "mutants": [
+  {
+   "id": "rooms_credential_has_no_limit",
+   "file": "src/ants_server/room.cpp",
+   "old": "hc.relay_ttl_s = spec_.run_ms / 1000u + (spec_.reconnect ? spec_.max_pause_ms / 1000u : 0u) + kRelayMarginS;",
+   "new": "hc.relay_ttl_s = 0u * kRelayMarginS;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.305 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "rooms_credential_forgets_the_pauses",
+   "file": "src/ants_server/room.cpp",
+   "old": "hc.relay_ttl_s = spec_.run_ms / 1000u + (spec_.reconnect ? spec_.max_pause_ms / 1000u : 0u) + kRelayMarginS;",
+   "new": "hc.relay_ttl_s = spec_.run_ms / 1000u + kRelayMarginS;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.305 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "rooms_credential_counts_pauses_it_does_not_have",
+   "file": "src/ants_server/room.cpp",
+   "old": "hc.relay_ttl_s = spec_.run_ms / 1000u + (spec_.reconnect ? spec_.max_pause_ms / 1000u : 0u) + kRelayMarginS;",
+   "new": "hc.relay_ttl_s = spec_.run_ms / 1000u + spec_.max_pause_ms / 1000u + kRelayMarginS;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.305 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "rooms_credential_ends_before_the_limit_of_play",
+   "file": "src/ants_server/room.cpp",
+   "old": "hc.relay_ttl_s = spec_.run_ms / 1000u + (spec_.reconnect ? spec_.max_pause_ms / 1000u : 0u) + kRelayMarginS;",
+   "new": "hc.relay_ttl_s = (spec_.reconnect ? spec_.max_pause_ms / 1000u : 0u) + kRelayMarginS;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.305 timeout 900 ./build/tests/test_server/test_server"
+  }
+ ]
+}

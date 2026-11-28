@@ -34,7 +34,7 @@ KINDS = collections.OrderedDict([
     ('nginx/stack', re.compile(r'\bnginx\b|portainer|docker compose|docker-compose', re.I)),
     ('server::', re.compile(r'\bserver::|ants::server\b')),
     ('private-test', re.compile(r'\b(?:test_server|test_db|test_ctl|test_history_service|test_wss_match|test_rejoin\b|test_network_app|test_start_menu_app|test_rejoin_app|test_prediction_link)\b')),
-    ('private-path', re.compile(r'tests/(?:test_server|test_db|test_ctl)|tests/scripts/(?:test_hub|test_nginx|web_home|web_lobby|test_web_home|test_web_lobby)|third_party/sqlite|imgconv/|ai_skills/')),
+    ('private-path', re.compile(r'tests/(?:test_server|test_db|test_ctl|test_app_server)|tests/scripts/(?:test_hub|test_nginx|web_home|web_lobby|test_web_home|test_web_lobby)|third_party/sqlite|imgconv/|ai_skills/')),
 ])
 
 

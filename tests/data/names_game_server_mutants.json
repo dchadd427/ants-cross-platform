@@ -1,0 +1,21 @@
+{
+ "note": "The private half of tests/data/names_game_mutants.json (tools/mutate.py runs it together with the public half): the mutants of files that are not in the public repository, and the ones that only a test that is not there catches. Mutants of what the game does with long names and with letters of two and three bytes (src/ants_app/scorecard_new.cpp, text_layout.cpp, map_select.cpp, renderer_dialog_text.cpp; docs/HUB_NICKNAMES.md 'In the game') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/test_app/test_scorecard_new_look.cpp (an alliance of long names is two lines in the winners' well and in a row of the others, a short one stays one; the bar and the little numbers follow) and tests/test_app/test_hud_layout_screens.cpp (a name or a label is cut at a whole letter, ends in dots without a blank before them, and the room's seat label cuts a long name that way) and tests/test_app/test_hud_art_look.cpp (a sentence with a name in Cyrillic, which the windows' face lacks, is measured and drawn in the game's face). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/names_game_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "a_notice_cuts_a_name_in_the_middle_of_a_letter",
+   "file": "src/ants_server/room.cpp",
+   "old": "name = net::clip_wire_name(name, net::kMaxChatChars - fixed);",
+   "new": "name.resize(net::kMaxChatChars - fixed);",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.215 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "a_notice_of_the_room_loses_the_letters_of_a_name",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    const std::string line = clip_wire_name(text, kMaxChatChars, kMaxNoticeBytes);",
+   "new": "    const std::string line = printable(text, kMaxChatChars);",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.215 ./build/tests/test_server/test_server"
+  }
+ ]
+}

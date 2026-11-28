@@ -8,7 +8,6 @@
   - every mutant of tests/data/game_bar_mutants.json (tools/mutate.py runs them too) is noticed by that check.
 """
 import gzip
-import json
 import os
 import shutil
 import subprocess
@@ -17,6 +16,7 @@ import tempfile
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "tools"))
 import size_limits  # noqa: E402
 
@@ -67,7 +67,8 @@ class TheBarInABrowser(unittest.TestCase):
 class TheMutants(unittest.TestCase):
     def test_the_check_fails_on_every_broken_copy(self):
         """tests/data/game_bar_mutants.json: each mutant on a copy of its file, noticed by the browser check"""
-        spec = json.loads(read(MUTANTS))
+        import mutant_specs  # noqa: E402  (here and not at the top: the copies in which the mutants run have this file but not that one)
+        spec = mutant_specs.load(MUTANTS)
         self.assertGreaterEqual(len(spec["mutants"]), 40)
         with tempfile.TemporaryDirectory() as tmp:
             for m in spec["mutants"]:

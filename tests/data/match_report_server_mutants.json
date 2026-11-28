@@ -1,0 +1,113 @@
+{
+ "note": "The private half of tests/data/match_report_mutants.json (tools/mutate.py runs it together with the public half): the mutants of files that are not in the public repository, and the ones that only a test that is not there catches. Mutants of the numbers of the results screen: the honors and the Play of the game (src/ants_app/match_report.cpp: its points, bonuses, moments and ties), the live count and its fall back to a report that is not ok when a tick or a turn was missed (src/ants_app/live_match_stats.cpp), the places that the application feeds it from (application_sim.cpp, application_menu.cpp, application_replay.cpp, application_match.cpp) and what the stats pass adds for it (the bombs that went off and their planter, the tile of a raid, the hills, and what each lost ant says of the Thief and the ants near it: src/ants_replay/match_stats.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: python3 tools/mutate.py tests/data/match_report_mutants.json --keep-going --jobs 2; every mutant must be caught by test_match_report (the ones for the pass by HD1.8 of test_history_details).",
+ "mutants": [
+  {
+   "id": "a_hill_is_on_the_wrong_tile",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "stats_.hill_x[s] = hill->x;",
+   "new": "stats_.hill_x[s] = hill->y;",
+   "expect": "HD1.8",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD1.8 ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "a_seat_without_a_hill_has_the_tile_of_none",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "if (hill == nullptr) continue;",
+   "new": "if (hill == nullptr) { stats_.hill_x[s] = 0; continue; }",
+   "expect": "HD1.8",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD1.8 ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "a_raiding_thief_is_not_raiding",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "if (ant.target_team < kSeats) kill.raid_on = ant.target_team;",
+   "new": "(void)0;",
+   "expect": "HD1.8",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD1.8 ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "a_thief_raids_its_own_hill",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "kill.raid_on = ant.target_team;",
+   "new": "kill.raid_on = ant.player;",
+   "expect": "HD1.8",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD1.8 ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "a_thief_with_loot_has_none",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "kill.carried_loot = ant.loot >= 0;",
+   "new": "kill.carried_loot = false;",
+   "expect": "HD1.8",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD1.8 ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "a_thief_without_loot_has_some",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "kill.carried_loot = ant.loot >= 0;",
+   "new": "kill.carried_loot = true;",
+   "expect": "HD1.8",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD1.8 ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "a_thief_is_not_known_by_what_it_is",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "            ant.target_team = snap.target_team_id;\n            ant.thief = snap.type == sim::AntType::Thief;",
+   "new": "            ant.target_team = snap.target_team_id;\n            ant.thief = false;",
+   "expect": "HD1.8",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD1.8 ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "the_ants_left_near_are_not_counted",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "kill.mates_near = static_cast<uint8_t>(std::min<uint32_t>(mates, 255u));",
+   "new": "kill.mates_near = static_cast<uint8_t>(std::min<uint32_t>(mates, 255u) * 0u);",
+   "expect": "HD1.8",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD1.8 ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "the_ants_left_near_are_of_any_seat",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "if (snap.player_id == kill.victim && std::max(",
+   "new": "if (std::max(",
+   "expect": "HD1.8",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD1.8 ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "the_ants_left_near_are_within_3_tiles",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "std::abs(snap.tile_y - kill.tile_y)) <= MatchStats::kMatesTiles) ++mates;",
+   "new": "std::abs(snap.tile_y - kill.tile_y)) < MatchStats::kMatesTiles) ++mates;",
+   "expect": "HD1.8",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD1.8 ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "the_ants_left_near_are_within_5_tiles",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "std::abs(snap.tile_y - kill.tile_y)) <= MatchStats::kMatesTiles) ++mates;",
+   "new": "std::abs(snap.tile_y - kill.tile_y)) <= MatchStats::kMatesTiles + 1) ++mates;",
+   "expect": "HD1.8",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD1.8 ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "the_ants_left_near_are_one_tile_apart",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "std::max(std::abs(snap.tile_x - kill.tile_x), std::abs(snap.tile_y - kill.tile_y))",
+   "new": "std::abs(snap.tile_x - kill.tile_x)",
+   "expect": "HD1.8",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD1.8 ./build/tests/test_server/test_history_details"
+  }
+ ]
+}

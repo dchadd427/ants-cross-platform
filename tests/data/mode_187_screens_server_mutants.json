@@ -1,0 +1,13 @@
+{
+ "note": "The private half of tests/data/mode_187_screens_mutants.json (tools/mutate.py runs it together with the public half): the mutants of files that are not in the public repository, and the ones that only a test that is not there catches. Mutants of the on-screen part of the game mode 187 for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the line \"<Name> (<Color>) is out of ants!\" against test_out_of_ants (2.9.7), the start line (and, for the room made after the application began, test_network_app AI6.11f), the page's words and numbers and the headline's fit against test_results_187 (3.16.2). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/mode_187_screens_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "start_line_hud_not_told_the_mode",
+   "file": "src/ants_app/application_match.cpp",
+   "old": "    hud_.set_game_mode(sim_.game_mode());\n    hud_.init(local_player_id_, !rejoin);",
+   "new": "    hud_.init(local_player_id_, !rejoin);",
+   "build": "test_network_app",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI6.11f ./build/tests/test_app_server/test_network_app"
+  }
+ ]
+}

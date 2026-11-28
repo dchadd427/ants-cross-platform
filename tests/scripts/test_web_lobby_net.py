@@ -25,10 +25,12 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 SCRIPTS = os.path.join(REPO, "tests", "scripts")
 MODULE = os.path.join(REPO, "web", "front", "lobby_net.js")
 SHELL = os.path.join(REPO, "web", "shell.html")
@@ -164,8 +166,8 @@ class ThePublicRoomChecksAreNotVacuous(TheBudgetChecksAreNotVacuous):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        with open(os.path.join(REPO, "tests", "data", "public_rooms_mutants.json"), encoding="utf-8") as f:
-            cls.spec = {"mutants": [m for m in json.load(f)["mutants"] if m["file"] == "web/front/lobby_net.js"]}
+        import mutant_specs  # noqa: E402  (here and not at the top: the copies in which the mutants run have this file but not that one)
+        cls.spec = {"mutants": [m for m in mutant_specs.load(os.path.join(REPO, "tests", "data", "public_rooms_mutants.json"))["mutants"] if m["file"] == "web/front/lobby_net.js"]}
 
     def test_the_list_is_whole(self):
         ids = [m["id"] for m in self.spec["mutants"]]
@@ -184,8 +186,8 @@ class TheReadyChecksAreNotVacuous(TheBudgetChecksAreNotVacuous):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        with open(os.path.join(REPO, "tests", "data", "ready_up_mutants.json"), encoding="utf-8") as f:
-            cls.spec = {"mutants": [m for m in json.load(f)["mutants"] if m["file"].startswith("web/") and "web_lobby_rules_check" not in m["test"]]}      # (the rules' own are run in test_web_lobby_rules.py)
+        import mutant_specs  # noqa: E402  (here and not at the top: the copies in which the mutants run have this file but not that one)
+        cls.spec = {"mutants": [m for m in mutant_specs.load(os.path.join(REPO, "tests", "data", "ready_up_mutants.json"))["mutants"] if m["file"].startswith("web/") and "web_lobby_rules_check" not in m["test"]]}      # (the rules' own are run in test_web_lobby_rules.py)
 
     def test_the_list_is_whole(self):
         ids = [m["id"] for m in self.spec["mutants"]]

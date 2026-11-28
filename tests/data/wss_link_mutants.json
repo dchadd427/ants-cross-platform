@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the desktop game's encrypted link for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the rules that the suites test_wss (the certificate checks as the library reports them, the upgrade's accept key and extensions, the client's masking and time limit, the wss address and which addresses may still use plain TCP) and test_wss_match (a whole match over wss, the way back, a plain link to an address of the Internet refused) and test_start_menu (which servers of the start menu are wss and which are plain TCP) and test_rejoin_app (which key a join through wss or plain TCP finds: each server by its own written name) hold. The library's own VERIFY_REQUIRED and the recorded-result check after the handshake guard each other (either alone still refuses a certificate that fails, so a mutant of one survives by design): the mutant certificate_not_verified_at_all takes both away together, and the tests must see that.",
+ "note": "Mutants of the desktop game's encrypted link for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the rules that the suites test_wss (the certificate checks as the library reports them, the upgrade's accept key and extensions, the client's masking and time limit, the wss address and which addresses may still use plain TCP) and test_start_menu (which servers of the start menu are wss and which are plain TCP) hold. The library's own VERIFY_REQUIRED and the recorded-result check after the handshake guard each other (either alone still refuses a certificate that fails, so a mutant of one survives by design): the mutant certificate_not_verified_at_all takes both away together, and the tests must see that.",
  "mutants": [
   {
    "id": "tls_name_not_given_to_library",
@@ -189,39 +189,6 @@
    "expect": "WSS1.3"
   },
   {
-   "id": "join_public_address_allowed",
-   "file": "src/ants_net/netgame.cpp",
-   "old": "if (!room.empty() && !is_local_address(numeric)) {",
-   "new": "if (false && !room.empty() && !is_local_address(numeric)) {",
-   "build": [
-    "test_wss_match"
-   ],
-   "test": "./build/tests/test_server/test_wss_match",
-   "expect": "WM3.1"
-  },
-  {
-   "id": "join_url_written_as_given",
-   "file": "src/ants_net/netgame.cpp",
-   "old": "JoinTarget{std::string(), numeric, 0, wss_url_text(parsed), name,",
-   "new": "JoinTarget{std::string(), numeric, 0, url, name,",
-   "build": [
-    "test_wss_match"
-   ],
-   "test": "./build/tests/test_server/test_wss_match",
-   "expect": "WM2.2"
-  },
-  {
-   "id": "way_back_without_wss",
-   "file": "src/ants_net/netgame.cpp",
-   "old": "    if (!target_.url.empty()) {                                           // a server's encrypted door",
-   "new": "    if (false) {                                           // a server's encrypted door",
-   "build": [
-    "test_wss_match"
-   ],
-   "test": "./build/tests/test_server/test_wss_match",
-   "expect": "WM1.2"
-  },
-  {
    "id": "menu_every_host_plain_tcp",
    "file": "src/ants_app/start_menu.cpp",
    "old": "const bool tcp = explicit_tcp || local_host(host);",
@@ -242,28 +209,6 @@
    ],
    "test": "./build/tests/test_app/test_start_menu",
    "expect": "M5.1"
-  },
-  {
-   "id": "key_lookup_url_as_typed",
-   "file": "src/ants_app/application.cpp",
-   "old": "config_.net_url = net::wss_url_text(written);",
-   "new": "(void)written;",
-   "build": [
-    "test_rejoin_app"
-   ],
-   "test": "./build/tests/test_app/test_rejoin_app",
-   "expect": "RA4.2"
-  },
-  {
-   "id": "key_server_text_ignores_url",
-   "file": "src/ants_app/rejoin_store.cpp",
-   "old": "if (!url.empty()) return url;",
-   "new": "if (url.empty() && false) return url;",
-   "build": [
-    "test_rejoin_app"
-   ],
-   "test": "./build/tests/test_app/test_rejoin_app",
-   "expect": "RA4.2"
   },
   {
    "id": "certificate_not_verified_at_all",

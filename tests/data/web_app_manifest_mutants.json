@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the installable web app (docs/INSTALL_AS_APP.md): the manifest's fields, the icons and their digits, the budgets, the two that would register a service worker, and the one exact nginx location of the manifest (its type, caching, headers and fallback; the pages' policy unchanged), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout: python3 tools/mutate.py tests/data/web_app_manifest_mutants.json --keep-going --jobs 1. The nginx mutants need the program nginx installed (tests/scripts/test_nginx_headers.py runs the real file and catches them by a real answer); the others are caught by tests/scripts/test_web_app_manifest.py.",
+ "note": "Mutants of the installable web app (docs/INSTALL_AS_APP.md): the manifest's fields, the icons and their digits, and the budgets, for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout: python3 tools/mutate.py tests/data/web_app_manifest_mutants.json --keep-going --jobs 1. Every mutant is caught by tests/scripts/test_web_app_manifest.py.",
  "mutants": [
   {
    "id": "name_changed",
@@ -135,13 +135,6 @@
    "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
   },
   {
-   "id": "service_worker_registered",
-   "file": "web/lobby.html",
-   "old": "<link rel=\"manifest\" href=\"/manifest.webmanifest\">\n",
-   "new": "<link rel=\"manifest\" href=\"/manifest.webmanifest\">\n    <script>navigator.serviceWorker.register(\"/sw.js\");</script>\n",
-   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
-  },
-  {
    "id": "icons_budget_too_small",
    "file": "tools/size_limits.py",
    "old": "APP_ICONS_BUDGET = 6_500",
@@ -153,104 +146,6 @@
    "file": "tools/size_limits.py",
    "old": "APP_MANIFEST_BUDGET = 1_300",
    "new": "APP_MANIFEST_BUDGET = 900",
-   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
-  },
-  {
-   "id": "manifest_location_missing",
-   "file": "docker/nginx.conf",
-   "old": "    location = /manifest.webmanifest {\n        root /usr/share/nginx/html;\n        default_type application/manifest+json;\n",
-   "new": "    location = /manifest.webmanifest.gone {\n        root /usr/share/nginx/html;\n        default_type application/manifest+json;\n",
-   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
-  },
-  {
-   "id": "manifest_location_prefix_not_exact",
-   "file": "docker/nginx.conf",
-   "old": "    location = /manifest.webmanifest {",
-   "new": "    location ^~ /manifest.webmanifest {",
-   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
-  },
-  {
-   "id": "manifest_type_missing",
-   "file": "docker/nginx.conf",
-   "old": "        default_type application/manifest+json;\n",
-   "new": "",
-   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
-  },
-  {
-   "id": "manifest_type_json",
-   "file": "docker/nginx.conf",
-   "old": "default_type application/manifest+json;",
-   "new": "default_type application/json;",
-   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
-  },
-  {
-   "id": "manifest_cached_a_week",
-   "file": "docker/nginx.conf",
-   "old": "    location = /manifest.webmanifest {\n        root /usr/share/nginx/html;\n        default_type application/manifest+json;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n",
-   "new": "    location = /manifest.webmanifest {\n        root /usr/share/nginx/html;\n        default_type application/manifest+json;\n        add_header Cache-Control \"public, max-age=604800\" always;\n",
-   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
-  },
-  {
-   "id": "manifest_cache_header_missing",
-   "file": "docker/nginx.conf",
-   "old": "    location = /manifest.webmanifest {\n        root /usr/share/nginx/html;\n        default_type application/manifest+json;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n",
-   "new": "    location = /manifest.webmanifest {\n        root /usr/share/nginx/html;\n        default_type application/manifest+json;\n",
-   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
-  },
-  {
-   "id": "manifest_falls_back_to_the_game_page",
-   "file": "docker/nginx.conf",
-   "old": "    location = /manifest.webmanifest {\n        root /usr/share/nginx/html;\n        default_type application/manifest+json;\n",
-   "new": "    location = /manifest.webmanifest {\n        root /usr/share/nginx/html;\n        default_type application/manifest+json;\n        try_files /manifest.webmanifest /index.html;\n",
-   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
-  },
-  {
-   "id": "manifest_without_nosniff",
-   "file": "docker/nginx.conf",
-   "old": "        default_type application/manifest+json;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n",
-   "new": "        default_type application/manifest+json;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n",
-   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
-  },
-  {
-   "id": "manifest_without_cross_origin_opener",
-   "file": "docker/nginx.conf",
-   "old": "        default_type application/manifest+json;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n",
-   "new": "        default_type application/manifest+json;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n",
-   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
-  },
-  {
-   "id": "manifest_without_hsts",
-   "file": "docker/nginx.conf",
-   "old": "        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n\n    # The front page.",
-   "new": "        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n\n    # The front page.",
-   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
-  },
-  {
-   "id": "policy_gets_manifest_src",
-   "file": "docker/nginx.conf",
-   "old": "a:; connect-src 'self' $ants_ws_sources;",
-   "new": "a:; connect-src 'self' $ants_ws_sources; manifest-src 'self';",
-   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
-  },
-  {
-   "id": "icon_rule_one_minute",
-   "file": "docker/nginx.conf",
-   "old": "    location ~* \\.(png|jpg|jpeg|gif|ico|bmp)$ {\n        add_header Cache-Control \"public, max-age=604800, no-transform\";",
-   "new": "    location ~* \\.(png|jpg|jpeg|gif|ico|bmp)$ {\n        add_header Cache-Control \"public, max-age=60, no-transform\";",
-   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
-  },
-  {
-   "id": "favicon_digits_stale",
-   "file": "web/lobby.html",
-   "old": "/favicon.png?v=9ea2152a",
-   "new": "/favicon.png?v=f34bea04",
-   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
-  },
-  {
-   "id": "favicon_link_without_digits",
-   "file": "web/match.html",
-   "old": "/favicon.ico?v=67dc022d",
-   "new": "/favicon.ico",
    "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
   },
   {

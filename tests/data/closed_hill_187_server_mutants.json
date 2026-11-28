@@ -1,0 +1,14 @@
+{
+ "note": "The private half of tests/data/closed_hill_187_mutants.json (tools/mutate.py runs it together with the public half): the mutants of files that are not in the public repository, and the ones that only a test that is not there catches. Mutants of the closed hill of game mode 187 for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the engine (the refusal, the 1 hp retreat, the waiting ring, the home order, the prediction, the thief, the state hash, the original's game) against test_closed_hill_187 (2.9.9), the two rules numbers of a replay (the player, the head check, the number a match is recorded under) against test_rules_187 (2.29.1), the history's count of old recordings against test_history_store, and the bots (the brawl, the controller's filter, the view) against test_ai AI30.11. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/closed_hill_187_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "history_counts_rules_7_only",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "replay::plays_mode_rules(entry.mode, entry.sim_rules)",
+   "new": "entry.sim_rules == replay::sim_rules_for_mode(entry.mode)",
+   "build": "test_history_store",
+   "test": "timeout 900 ./build/tests/test_server/test_history_store",
+   "expect": "HS5.3b"
+  }
+ ]
+}

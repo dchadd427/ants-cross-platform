@@ -101,6 +101,28 @@ class Project(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(self.calc_text(), self.original)
 
+    def test_a_list_with_a_second_half_runs_both_halves_and_a_tree_without_the_second_runs_the_first(self):
+        first = {"id": "plus-to-minus", "file": "calc.py", "old": "return a + b", "new": "return a - b", "test": "python3 check.py"}
+        second = {"id": "scale-ignored", "file": "calc.py", "old": "return x * 2", "new": "return x * 3", "test": "python3 check.py"}
+        first_path = os.path.join(self.root, "calc_mutants.json")
+        second_path = os.path.join(self.root, "calc_server_mutants.json")
+        write(first_path, json.dumps({"mutants": [first], "baseline": self.TRUE}))
+        write(second_path, json.dumps({"mutants": [second]}))
+        result = self.run_tool(first_path)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)                  # the survivor is the second half's
+        report = json.loads(read(os.path.join(self.root, "calc_mutants.report.json")))
+        self.assertEqual([r["id"] for r in report["results"]], ["plus-to-minus", "scale-ignored"])
+        self.assertEqual([r["status"] for r in report["results"]], ["caught", "survived"])
+        result = self.run_tool(first_path, "--only", "scale-ignored")                          # an id of the second half is found among the ids of the list
+        self.assertEqual([r["id"] for r in json.loads(read(os.path.join(self.root, "calc_mutants.report.json")))["results"]], ["scale-ignored"])
+        result = self.run_tool(second_path)                                                    # the second half named by itself is that half alone
+        self.assertEqual([r["id"] for r in json.loads(read(os.path.join(self.root, "calc_server_mutants.report.json")))["results"]], ["scale-ignored"])
+        os.remove(second_path)
+        result = self.run_tool(first_path)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual([r["id"] for r in json.loads(read(os.path.join(self.root, "calc_mutants.report.json")))["results"]], ["plus-to-minus"])
+        self.assertEqual(self.calc_text(), self.original)
+
     def test_the_detail_is_the_assertion_not_a_test_title_with_the_word_error_in_it(self):
         noisy = "echo 'RUNNING: W1.6 Every protocol error is answered ... PASS'; echo 'RUNNING: S3.81 The count ... FAILED!'; echo '    Assertion failed: busy().matches == 1 at test.cpp:42'; exit 1"
         spec = self.spec([{"id": "m", "file": "calc.py", "old": "a + b", "new": "a - b", "test": noisy}], baseline=self.TRUE)

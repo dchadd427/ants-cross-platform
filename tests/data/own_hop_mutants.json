@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the hop of a re-order, for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the product rule that the glide and shaped-link tests hold. The engine puts an ant that walks and is given a new order (or a stop) on the middle of its tile at once, up to half a tile, as the original does; the picture draws that as the slide of ViewGlide::follow, never as a jump: only for an ant that was walking and now is not, that stands on the middle of a tile, and that moved by more than a walk of the time between two frames covers; from where the last frame drew it, with the clip's frames counted; for the ants of every player, in a game of one machine as much as in a network match; forgotten at clear(), and never across the fog.",
+  "note": "Mutants of the hop of a re-order, for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the product rule that the glide tests hold. The engine puts an ant that walks and is given a new order (or a stop) on the middle of its tile at once, up to half a tile, as the original does; the picture draws that as the slide of ViewGlide::follow, never as a jump: only for an ant that was walking and now is not, that stands on the middle of a tile, and that moved by more than a walk of the time between two frames covers; from where the last frame drew it, with the clip's frames counted; for the ants of every player, in a game of one machine as much as in a network match; forgotten at clear(), and never across the fog.",
   "mutants": [
     {
       "id": "hop_of_an_ant_that_was_not_walking",
@@ -108,24 +108,6 @@
       "build": ["test_view_glide"],
       "test": "ANTS_TEST_FILTER=VG13 ./build/tests/test_app/test_view_glide",
       "expect": "VG13"
-    },
-    {
-      "id": "hop_not_slid_in_the_frame",
-      "file": "src/ants_app/renderer_units.cpp",
-      "old": "    view_glide_.follow(world, hud_team_id_,",
-      "new": "    if (false) view_glide_.follow(world, hud_team_id_,",
-      "build": ["test_prediction_link"],
-      "test": "ANTS_TEST_FILTER=LK17 ./build/tests/test_app/test_prediction_link",
-      "expect": "LK17"
-    },
-    {
-      "id": "glide_cleared_in_a_game_of_one_machine",
-      "file": "src/ants_app/application_sim.cpp",
-      "old": "    if (prediction == nullptr) return;                    // (a game that has no prediction has no shifts to slide: the slide of a hop is the frame's own, view_glide.hpp)",
-      "new": "    if (prediction == nullptr) {\n        renderer_->view_glide().clear();\n        return;\n    }",
-      "build": ["test_prediction_link"],
-      "test": "ANTS_TEST_FILTER=LK17 ./build/tests/test_app/test_prediction_link",
-      "expect": "LK17"
     }
   ]
 }

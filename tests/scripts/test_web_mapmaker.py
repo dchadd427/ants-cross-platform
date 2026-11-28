@@ -32,6 +32,7 @@ import tempfile
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 FRONT = os.path.join(REPO, "web", "front")
 CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_check.js")
 DIALOG_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_dialog_check.js")
@@ -1028,8 +1029,8 @@ class ThePage(unittest.TestCase):
 
     def test_the_submit_check_can_fail_on_the_broken_copies_of_the_words_the_call_the_dialog_the_list_and_the_tabs(self):
         """tests/data/mapmaker_submit_mutants.json (tools/mutate.py runs it too, with `--keep-going --jobs 1`)"""
-        with open(os.path.join(REPO, "tests", "data", "mapmaker_submit_mutants.json"), encoding="utf-8") as f:
-            spec = json.load(f)
+        import mutant_specs  # noqa: E402  (here and not at the top: the copies in which the mutants run have this file but not that one)
+        spec = mutant_specs.load(os.path.join(REPO, "tests", "data", "mapmaker_submit_mutants.json"))
         self.assertGreaterEqual(len(spec["mutants"]), 40)
         ids = [m["id"] for m in spec["mutants"]]
         self.assertEqual(len(ids), len(set(ids)), "an id twice")
@@ -1053,8 +1054,8 @@ class ThePage(unittest.TestCase):
     def test_the_checks_can_fail_on_the_broken_copies_of_the_typing_in_the_boxes(self):
         """tests/data/mapmaker_focus_mutants.json (tools/mutate.py runs it too, with `--keep-going --jobs 1`): a box that a re-render takes out of the page (or moves: a browser counts that as taken out) loses the focus
         and the composition of an input method with it, a caret that is not put back, a focus that goes to another control: each broken copy must fail the check of its dialog"""
-        with open(os.path.join(REPO, "tests", "data", "mapmaker_focus_mutants.json"), encoding="utf-8") as f:
-            spec = json.load(f)
+        import mutant_specs  # noqa: E402  (here and not at the top: the copies in which the mutants run have this file but not that one)
+        spec = mutant_specs.load(os.path.join(REPO, "tests", "data", "mapmaker_focus_mutants.json"))
         self.assertGreaterEqual(len(spec["mutants"]), 20)
         ids = [m["id"] for m in spec["mutants"]]
         self.assertEqual(len(ids), len(set(ids)), "an id twice")

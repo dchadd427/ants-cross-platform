@@ -3,7 +3,7 @@
 // What a person feels in a room at a round trip of 30, 100, 180 or 300 ms is not what the engine can say about an order: the order of a click lands `lag` ticks after the screen that the click was aimed
 // at, and two plays of the original game depend on that: "humping" (a re-order of a walking ant a moment after it crosses a tile line, which pays on mud inside a window of about 150 ms) and the
 // attack click on a walking ant (the order names the ant's tile, and an ant that has left it is no longer the target). Here a headless Application plays a room of a real RoomManager over links of a
-// chosen round trip and jitter on a virtual clock (tests/test_app/shaped_link_fixtures.hpp), and a person at it clicks with SDL mouse events, deciding from what the screen shows (view_sim), with
+// chosen round trip and jitter on a virtual clock (tests/test_app_server/shaped_link_fixtures.hpp), and a person at it clicks with SDL mouse events, deciding from what the screen shows (view_sim), with
 // the prediction on and off:
 //   - humping on mud: the pixels that the re-orders add to a walk of 9 s (the confirmed engine, the one that decides), against the same walk with one order;
 //   - the attack click on an enemy ant that walks: the share of the clicks that are still an attack when the order lands;
@@ -12,7 +12,7 @@
 #include <SDL.h>
 
 #include "shaped_link_fixtures.hpp"
-#include "slide_cause.hpp"
+#include "../test_app/slide_cause.hpp"
 #include "ants_app/health_changes.hpp"
 #include "ants_replay/player.hpp"
 #include "ants_replay/replay.hpp"

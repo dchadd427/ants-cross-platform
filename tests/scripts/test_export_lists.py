@@ -174,7 +174,7 @@ class TheRealLists(unittest.TestCase):
     def test_nothing_of_the_server_or_the_site_is_public(self):
         public = set(self.pub)
         for prefix in ("hub/", "imgconv/", "ai_skills/", "src/ants_server/", "include/ants_server/", "src/ants_db/", "include/ants_db/", "src/ants_ctl/", "include/ants_ctl/",
-                       "src/ants_history/", "include/ants_history/", "src/ants_thumb/", "third_party/sqlite/", "tests/test_server/", "tests/test_db/", "tests/test_ctl/", "web/home/", "export/",
+                       "src/ants_history/", "include/ants_history/", "src/ants_thumb/", "third_party/sqlite/", "tests/test_server/", "tests/test_app_server/", "tests/test_db/", "tests/test_ctl/", "web/home/", "export/",
                        "Dockerfile", "docker-compose", ".github/workflows/"):
             self.assertEqual([f for f in public if f.startswith(prefix)], [], prefix)
         for name in ("docker/nginx.conf", "web/lobby.html", "web/matches.html", "web/admin.html", "web/legal.html", "web/site_nav.js", "AGENTS.md", "README.md", "SECURITY.md"):

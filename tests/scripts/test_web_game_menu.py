@@ -24,6 +24,7 @@ import tempfile
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 SHELL = os.path.join(REPO, "web", "shell.html")
 SCRIPT = os.path.join(REPO, "web", "game_menu.js")
 STYLE = os.path.join(REPO, "web", "game_menu.css")
@@ -378,7 +379,8 @@ class TheScrollingMutants(unittest.TestCase):
     @unittest.skipUnless(shutil.which("node"), "node is not installed: the mutants of the scrolling were NOT run")
     def test_the_checks_fail_on_every_broken_copy(self):
         """the mutants of tests/data/game_menu_mutants.json that break the scrolling (tools/mutate.py runs the same ones against `TheScrolling`)"""
-        spec = json.loads(read(os.path.join(DATA, "game_menu_mutants.json")))
+        import mutant_specs  # noqa: E402  (here and not at the top: the copies in which the mutants run have this file but not that one)
+        spec = mutant_specs.load(os.path.join(DATA, "game_menu_mutants.json"))
         mine = mutants_of(spec, "TheScrolling", ("web/shell.html", "web/game_menu.css"))
         self.assertGreaterEqual(len(mine), 6)
         for m in mine:
@@ -394,7 +396,8 @@ class TheScrollingMutants(unittest.TestCase):
 class TheStyleMutants(unittest.TestCase):
     def test_the_check_fails_on_every_broken_copy_of_the_style(self):
         """the mutants that put a button of the menu over the picture (tools/mutate.py runs the same ones against `TheStyle`)"""
-        spec = json.loads(read(os.path.join(DATA, "game_menu_mutants.json")))
+        import mutant_specs  # noqa: E402  (here and not at the top: the copies in which the mutants run have this file but not that one)
+        spec = mutant_specs.load(os.path.join(DATA, "game_menu_mutants.json"))
         mine = mutants_of(spec, "TheStyle", ("web/game_menu.css",))
         self.assertGreaterEqual(len(mine), 4)
         text = read(STYLE)
@@ -443,7 +446,8 @@ class ThePagesOwnCode(unittest.TestCase):
 class TheMutants(unittest.TestCase):
     def test_the_check_can_fail_on_every_broken_copy_of_the_script(self):
         """tests/data/game_menu_mutants.json (tools/mutate.py runs it too, with `--keep-going --jobs 1`, the game's side as well): each broken copy of the script must fail the page's check"""
-        spec = json.loads(read(os.path.join(DATA, "game_menu_mutants.json")))
+        import mutant_specs  # noqa: E402  (here and not at the top: the copies in which the mutants run have this file but not that one)
+        spec = mutant_specs.load(os.path.join(DATA, "game_menu_mutants.json"))
         ids = [m["id"] for m in spec["mutants"]]
         self.assertEqual(len(ids), len(set(ids)), "an id twice")
         mine = [m for m in spec["mutants"] if m["file"] == "web/game_menu.js"]
