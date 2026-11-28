@@ -335,3 +335,4 @@ THIRD_PARTY_NOTICES_SERVER.md
 CHANGELOG_SERVER.md
 tests/data/*_server_mutants.json
 tests/scripts/costs_private.py
+tests/scripts/test_runners_private.py

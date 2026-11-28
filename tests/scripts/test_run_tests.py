@@ -10,6 +10,7 @@ builds nothing), so these tests run the real script on made-up suites and check 
   - the tier options select as before (--sim, --app, --assets, --e2e) and --fast filters them
   - --asan gives the suites the time scale of a sanitized build (ANTS_E2E_TIME_SCALE=4, a value that is set stays); a run without it sets none
   - the real table: what --fast contains (and does not), listed without running anything
+  - the file tests/suites_server.sh: the suites of a tree that has it are read into the table, a tree without it has the rest (a copy of the script on a made-up folder)
   - the parallel run (the default; --jobs N, --serial): suites that are independent run at the same time and only then, each suite's output stays together and is printed
     in the order of the table, the result of every suite is the same as in a serial run and is never read before it is written, exclusive / lock / weight in the table are
     kept, every suite has a temporary folder of its own, the longest suites start first (the cost of the table, then the time that the last run measured), and a signal
@@ -17,6 +18,7 @@ builds nothing), so these tests run the real script on made-up suites and check 
 """
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -204,7 +206,7 @@ class RunnerTiers(StubRunner):
 
 
 class SanitizedRun(StubRunner):
-    """--asan runs the same suites, with the time scale that a sanitized build needs (the restore section of tests/scripts/test_ants_server.sh reads it)."""
+    """--asan runs the same suites, with the time scale that a sanitized build needs (a suite that waits for a clock reads it)."""
 
     def scale_seen_by_the_suite(self, args, **extra):
         mark = os.path.join(self.marks, "scale.log")
@@ -478,25 +480,64 @@ class RealTable(unittest.TestCase):
     def test_fast_leaves_out_what_the_tier_promises_to_leave_out(self):
         fast_ids = {row[0] for row in self.fast}
         self.assertNotIn("4", fast_ids)                                    # no E2E
-        self.assertNotIn("3.8", fast_ids)                                  # no script suites (they start the game and the server)
-        self.assertNotIn("3.9", fast_ids)
-        for slow in ("2.11", "2.19", "2.22", "3.6"):                       # the soak, the server, the worker bot, the network application
+        self.assertNotIn("3.8", fast_ids)                                  # no script suites (they start the game)
+        for slow in ("2.11", "2.22"):                                      # the soak, the worker bot
             self.assertNotIn(slow, fast_ids)
         self.assertEqual({row[1] for row in self.fast}, {"assets", "sim", "app", "tools"})
 
-    def test_the_table_runs_every_part_of_the_server_script_and_nothing_else_of_it(self):
-        with open(SCRIPT, encoding="utf-8") as f:
-            used = re.findall(r'test_ants_server\.sh" --part (\w+)', f.read())
-        listed = subprocess.run(["bash", os.path.join(REPO, "tests", "scripts", "test_ants_server.sh"), "--list-parts"], capture_output=True, text=True).stdout.split()
-        self.assertEqual(sorted(used), sorted(listed), "run_tests.sh and tests/scripts/test_ants_server.sh --list-parts name different parts")
-        self.assertEqual(len(used), len(set(used)))
-        for suite_id in ("3.9", "3.9.1", "3.9.2", "3.9.3", "3.9.4", "3.9.5"):
-            self.assertIn(suite_id, {row[0] for row in self.full})
-
     def test_every_suite_that_the_ci_script_steps_run_is_in_the_full_run(self):
         full_ids = {row[0] for row in self.full}
-        for suite_id in ("2.18", "2.21", "3.8", "3.9", "4"):                # map_sweep / bot_arena self-tests, the two script suites, the E2E runner
+        for suite_id in ("2.18", "2.21", "3.8", "4"):                       # map_sweep / bot_arena self-tests, the start script, the E2E runner
             self.assertIn(suite_id, full_ids)
+
+
+class ServerSuitesFile(unittest.TestCase):
+    """tests/suites_server.sh holds the suites of the game server and is read into the table when it is there. A copy of the script runs on a made-up folder (its CMakeLists.txt is all the script
+    asks of a project root): with the file the suites of the file are in the table, in their tiers and in --fast where they say so, and every other suite is where it was; without it they are not."""
+
+    FILE = 'suite "X1" sim 1 "-" "Quick suite of the file" "QUICK" \'true\'\nsuite "X2" app 0 "-" "Slow suite of the file" "SLOW" \'true\'\n'
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = self.tmp.name
+        with open(os.path.join(self.root, "CMakeLists.txt"), "w", encoding="utf-8") as f:
+            f.write("project(x)\n")
+        shutil.copy(SCRIPT, os.path.join(self.root, "run_tests.sh"))
+        os.makedirs(os.path.join(self.root, "tests"))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def put_the_file(self):
+        with open(os.path.join(self.root, "tests", "suites_server.sh"), "w", encoding="utf-8", newline="\n") as f:
+            f.write(self.FILE)
+
+    def listing(self, *args):
+        env = dict(os.environ)
+        env.pop("ANTS_RUN_TESTS_TABLE", None)
+        out = subprocess.run(["bash", os.path.join(self.root, "run_tests.sh"), *args, "--list"], capture_output=True, text=True, env=env, cwd=self.root)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        return [line.split("\t") for line in out.stdout.splitlines()]
+
+    def test_without_the_file_the_table_is_the_rest(self):
+        ids = [row[0] for row in self.listing()]
+        self.assertGreater(len(ids), 100)
+        self.assertNotIn("X1", ids)
+        self.assertNotIn("X2", ids)
+
+    def test_with_the_file_its_suites_are_in_the_table_and_the_others_are_where_they_were(self):
+        without = self.listing()
+        self.put_the_file()
+        with_file = self.listing()
+        self.assertEqual([row for row in with_file if row[0] not in ("X1", "X2")], without)
+        self.assertEqual([row[:3] for row in with_file if row[0] in ("X1", "X2")], [["X1", "sim", "quick"], ["X2", "app", "full"]])
+
+    def test_the_tier_options_and_fast_select_the_suites_of_the_file_like_any_other(self):
+        self.put_the_file()
+        self.assertEqual({row[0] for row in self.listing("--fast")} & {"X1", "X2"}, {"X1"})
+        self.assertEqual({row[0] for row in self.listing("--sim")} & {"X1", "X2"}, {"X1"})
+        self.assertEqual({row[0] for row in self.listing("--app")} & {"X1", "X2"}, {"X2"})
+        self.assertEqual({row[0] for row in self.listing("--assets")} & {"X1", "X2"}, set())
 
 
 if __name__ == "__main__":

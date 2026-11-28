@@ -33,6 +33,18 @@ A new file that is on neither list fails the check, and nobody guesses: put it o
 - A file of mutants (`tests/data/*_mutants.json`) is public when no mutant of it changes a private file (a private test may still be the one that catches some of them: the file's note and the command lines of those mutants are reworded later); it is private when any mutant changes a private file.
 - A script or a test that only names a private file in a comment is still public: the scan of words lists it, and the change that cuts the mention is made on its own.
 
+## The hooks: private files that the public files read when they are there
+
+The exported tree has no server, so the build and the test runners of the public files never name one: each reads a private file if it exists, and a tree without the file is the game, its libraries, tools and tests.
+
+| Private file | Read by | What it holds |
+|---|---|---|
+| `cmake/private.cmake` | `CMakeLists.txt` (`include(cmake/private.cmake OPTIONAL)`, at its end) | the game server's libraries, programs and tests: SQLite, the database layer, the control interface, the server, the history service, the picture maker, `tests/test_db`, `test_ctl`, `test_server` |
+| `tests/suites_server.sh` | `run_tests.sh` (`define_suites`, before the E2E suite) | the `suite` lines of the server's tests and scripts; `--fast` and the tier options select them like any other |
+| `tests/scripts/costs_private.py` | `tests/scripts/run_python_tests.py` (at import) | the `COSTS`, `SHARDS` and `LINUX_ONLY` entries of the python tests that the exported tree does not have |
+
+`tests/scripts/test_runners_private.py` holds the checks of these two runners that name private suites or tests; `test_run_tests.py` and `test_run_python_tests.py` check the rest and the hooks themselves.
+
 ## The scan of words
 
 `check_export.py` counts, in every public text file, the mentions of private headers and targets, private paths and documents, private web files and tools, the program `ants_server`, the web server and the stack, and private test targets (the list `KINDS` in the script; add a name when a new private name appears). It prints the number of files and hits, by kind and by area. It does not fail until the mentions have been cut from the public files; then `--strict` makes it the gate of the export.

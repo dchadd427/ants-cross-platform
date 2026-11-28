@@ -175,7 +175,8 @@ class GeneratedVersionHeader(unittest.TestCase):
                                       "configuration %s: target %s (%s) includes ants_app/version.hpp but the generated folder %s is not on its include path:\n  %s"
                                       % (configuration["name"], target["name"], source, self.generated, "\n  ".join(include_paths)))
         names = {target for _, target, _ in checked}
-        for expected in ("ants_app", "ants_server", "test_app_integration"):
+        has_server = os.path.exists(os.path.join(REPO, "cmake", "private.cmake"))      # (the tree that has the game server builds its program too)
+        for expected in ("ants_app", "test_app_integration") + (("ants_server",) if has_server else ()):
             self.assertIn(expected, names, "the target %s includes ants_app/version.hpp and was not found by the check (found: %s)" % (expected, sorted(names)))
         configuration_names = {c for c, _, _ in checked}
         self.assertEqual(configuration_names, {c["name"] for c in configurations})

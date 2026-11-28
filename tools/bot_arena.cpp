@@ -71,9 +71,9 @@
 #include "ants_net/netgame.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_replay/recorder.hpp"
-#include "ants_server/replay_store.hpp"
 #include "bench_aggressor.hpp"
 #include "bot_arena_internal.hpp"
+#include "bot_arena_replay_file.hpp"
 #include "bot_arena_tune.hpp"
 #include "library_guard.hpp"
 #include "ants_sim/sim_engine.hpp"
@@ -91,7 +91,6 @@ namespace sim = ants::sim;
 namespace assets = ants::assets;
 namespace net = ants::net;
 namespace replay = ants::replay;
-namespace server = ants::server;
 
 namespace ants::arena {
 
@@ -669,21 +668,23 @@ ai::ArenaSpec spec_of(const Options& o, const LoadedMap& m, const Job& j, bool r
     return s;
 }
 
-// --save-replays: the matches that were played are kept as replay files through the game server's own store (ants_server::ReplayStore: the names, the age and size limits, the way a file is written
-// whole), so that a folder that a server reads shows them in its list like the matches of its rooms. The store is single threaded: one lock. A file is the match played again into a fresh engine
+// --save-replays: the matches that were played are kept as replay files, named as the game server names the matches of its rooms (ants-TREASURE-20261008-143209Z.antsrep: the map, the UTC time
+// when the match ended, a "-2", "-3" ... when that name is taken), so that a folder that a server reads shows them in its list like the matches of its rooms. A file is written whole under a
+// temporary name and renamed, and nothing is replaced or deleted: the folder may be a server's, whose own limits are its own to apply. A file is the match played again into a fresh engine
 // with a recorder (the bots' commands as the arena applied them, at the step they were applied), which is also the proof that the match is nothing but its commands.
 struct ReplaySink {
-    std::mutex lock;
-    std::unique_ptr<server::ReplayStore> store;
+    std::mutex lock;                               // (it also holds gmtime, which is not thread safe)
+    fs::path dir;
     std::vector<std::string> saved;
     std::vector<std::string> notes;
-    size_t too_short{0};                           // matches that ran under server::kReplayMinTurns (the server keeps none of those either: the site's list is of matches of 30 seconds or more)
+    size_t too_short{0};                           // matches that ran under kMinReplayTurns (a server keeps none of those either: the site's list is of matches of 30 seconds or more)
 };
+constexpr uint64_t kMinReplayTurns = 600;          // 30 seconds
 ReplaySink* g_replay_sink = nullptr;
 
 void save_replay(const LoadedMap& m, const Job& job, const ai::ArenaSpec& spec, const ai::ArenaResult& played) {
     if (g_replay_sink == nullptr || !played.error.empty() || m.file_name.empty() || !net::valid_map_name(m.file_name)) return;
-    if (played.steps < server::kReplayMinTurns) {
+    if (played.steps < kMinReplayTurns) {
         std::lock_guard<std::mutex> guard(g_replay_sink->lock);
         ++g_replay_sink->too_short;
         return;
@@ -732,9 +733,10 @@ void save_replay(const LoadedMap& m, const Job& job, const ai::ArenaSpec& spec, 
         g_replay_sink->notes.push_back("not saved: " + (error.empty() ? std::string("nothing to write") : error));
         return;
     }
-    const server::ReplaySave result = g_replay_sink->store->save(bytes);
-    if (result.kept) g_replay_sink->saved.push_back(result.file);
-    else g_replay_sink->notes.push_back("not saved: " + result.note);
+    std::string why;
+    const std::string name = write_replay_file(g_replay_sink->dir, m.file_name, bytes, why);
+    if (!name.empty()) g_replay_sink->saved.push_back(name);
+    else g_replay_sink->notes.push_back("not saved: " + why);
 }
 
 // --swimmer-trace: what the seats' Swimmers did, and where their ants stood (read from the engine every 10th tick; nothing is sent and the match is the same). A Swimmer counts while it lives.
@@ -1254,20 +1256,13 @@ int run_tool(const Options& o, const std::function<std::unique_ptr<ai::Bot>(cons
     }
     ReplaySink sink;
     if (!o.save_replays.empty()) {                    // (opened before the first match, like the report file: a folder that cannot be used is found in a moment)
-        server::ReplayConfig rc;
-        rc.dir = o.save_replays;
-        rc.keep_days = 3650;                          // (the arena's store never deletes: the folder may be the server's, whose own limits are its own to apply)
-        rc.max_bytes = 4096ull * 1024ull * 1024ull;
-        rc.max_saves_per_hour = 1000000;              // (a run of many matches is one person's doing, not a flood of the server's rooms)
-        rc.game_version = std::string(ants::VERSION_STRING);
-        rc.build_id = std::string(ants::BUILD_ID).substr(0, replay::kMaxTextBytes);
-        sink.store = std::make_unique<server::ReplayStore>(rc);
-        std::string reason;
-        if (!sink.store->prepare(reason)) {
-            std::fprintf(g_err, "bot_arena: --save-replays: %s\n", reason.c_str());
+        std::error_code made;
+        fs::create_directories(o.save_replays, made);
+        if (!fs::is_directory(o.save_replays, made)) {
+            std::fprintf(g_err, "bot_arena: --save-replays: the folder '%s' cannot be made or is not a folder\n", o.save_replays.c_str());
             return 2;
         }
-        for (const std::string& note : sink.store->take_notes()) std::fprintf(g_out, "bot_arena: %s\n", note.c_str());      // (what the folder held)
+        sink.dir = o.save_replays;
         g_replay_sink = &sink;
     }
     struct SinkOff { ~SinkOff() { g_replay_sink = nullptr; } } sink_off;
@@ -1295,9 +1290,8 @@ int run_tool(const Options& o, const std::function<std::unique_ptr<ai::Bot>(cons
         if (!o.quiet) {
             for (const std::string& file : sink.saved) std::fprintf(g_out, "  %s\n", file.c_str());
         }
-        if (sink.too_short > 0) std::fprintf(g_out, "bot_arena: %zu match(es) not saved: they ran under 30 seconds (%u turns), which the server's list does not show either\n", sink.too_short, static_cast<unsigned>(server::kReplayMinTurns));
+        if (sink.too_short > 0) std::fprintf(g_out, "bot_arena: %zu match(es) not saved: they ran under 30 seconds (%u turns), which the server's list does not show either\n", sink.too_short, static_cast<unsigned>(kMinReplayTurns));
         for (const std::string& note : sink.notes) std::fprintf(g_out, "bot_arena: %s\n", note.c_str());
-        for (const std::string& note : sink.store->take_notes()) std::fprintf(g_out, "bot_arena: %s\n", note.c_str());
     }
     {
         // what the seats' ants said "Can't go there." (docs/BOT_PLAY.md, "The can't-go loop"): all reactions, the first of each, the orders given and the orders that were refused

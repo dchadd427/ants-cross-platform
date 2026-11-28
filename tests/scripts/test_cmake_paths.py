@@ -77,7 +77,8 @@ class CompileCommandsAreFolderIndependent(unittest.TestCase):
         self.assertEqual(self.configure.returncode, 0)
         targets = self.targets()
         self.assertIn("ants_test_paths", targets)
-        for expected in ("test_sim_rules", "test_app_integration", "test_ai", "test_assets", "test_server", "map_sweep", "bot_arena"):
+        has_server = os.path.exists(os.path.join(REPO, "cmake", "private.cmake"))      # (the tree that has the game server builds its tests too)
+        for expected in ("test_sim_rules", "test_app_integration", "test_ai", "test_assets", "map_sweep", "bot_arena") + (("test_server",) if has_server else ()):
             self.assertIn(expected, targets)
             linked = [d["id"] for d in targets[expected].get("dependencies", [])]
             self.assertTrue(any(i.startswith("ants_test_paths::") for i in linked), "%s does not link ants_test_paths (dependencies: %s)" % (expected, linked))

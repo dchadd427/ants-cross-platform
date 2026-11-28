@@ -43,7 +43,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang|GNU")
         -Wconversion
         -Wsign-conversion
         -Wshadow
-        $<$<COMPILE_LANGUAGE:CXX>:-Wnon-virtual-dtor>      # (C++ only: the vendored SQLite is a C file, third_party/sqlite)
+        $<$<COMPILE_LANGUAGE:CXX>:-Wnon-virtual-dtor>      # (C++ only: a vendored library is C)
     )
     # (GCC 13 and later: -Wdangling-reference has one known false positive in this project, in tests/test_ai/test_ai_worker.cpp: it is switched off for that one source file in
     # tests/test_ai/CMakeLists.txt, so that the product code and every other file keep the warning. -Wsign-conversion is off in GCC's sanitizer build only: see ENABLE_ASAN below.)
@@ -122,7 +122,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # The version: ONE source, the single line of the file VERSION (MAJOR.MINOR.PATCH). The header ants_app/version.hpp does not exist in the repository: it is
 # generated into <build folder>/generated from include/ants_app/version.hpp.in at configure time, and the library ants_version (below) puts that folder on
-# the include path of every target that links it (ants_app, ants_server and, through them, the tests). The include path is a target property, never a
+# the include path of every target that links it (ants_app, the game server and, through them, the tests). The include path is a target property, never a
 # global one, so every generator (Makefiles, Ninja, Xcode, the Visual Studio ones) finds the header the same way. The build id (which commit) is a second,
 # tiny generated source that is stamped at every build; -DANTS_BUILD_ID=<text> sets it by hand (the Docker images do); see docs/WORKFLOW.md.
 set(ANTS_VERSION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/VERSION")
@@ -176,20 +176,10 @@ endif()
 add_subdirectory(src/ants_net)
 add_subdirectory(src/ants_ai)         # the computer players (virtual clients, docs/BOTS.md): no SDL, no sockets, no threads, so it builds for the web too
 add_subdirectory(src/ants_replay)     # the replay file, its recorder and player (docs/REPLAYS.md): no SDL, no sockets, no threads, so it builds for the web too
-if(NOT EMSCRIPTEN)
-    add_subdirectory(third_party/sqlite)  # SQLite (the amalgamation, public domain): the static library ants_sqlite
-    add_subdirectory(src/ants_db)         # the database layer of the game server (SQLite behind a thin wrapper, schema migrations): no SDL, no sockets, no threads
-    add_subdirectory(src/ants_ctl)    # control interface of the game server (strict JSON, authenticated HTTP on the loopback address): sockets, native only
-    add_subdirectory(src/ants_server) # the dedicated game server (rooms, a referee per room): native only
-    add_subdirectory(src/ants_history) # the history service (the match history of the recordings, counted on a thread of its own, and its public pages): native only
-endif()
-# The game program needs SDL2 (window, audio, fonts); a build of the dedicated server alone (the server's Docker image) does not: -DANTS_BUILD_APP=OFF
+# The game program needs SDL2 (window, audio, fonts); a build of the libraries and tools alone does not: -DANTS_BUILD_APP=OFF
 option(ANTS_BUILD_APP "Build the game program (needs SDL2)" ON)
 if(ANTS_BUILD_APP)
     add_subdirectory(src/ants_app)
-    if(NOT EMSCRIPTEN)
-        add_subdirectory(src/ants_thumb)  # the picture maker of the game server (a map file as the setup screen draws it, no window): ants_app's renderer on SDL's dummy driver
-    endif()
 endif()
 
 # Where this checkout is, for the tests and tools that read Original-Ants/, tests/data or web/ (tests/common/ants_test_paths.hpp): the folders are written into ONE tiny
@@ -208,7 +198,7 @@ if(NOT EMSCRIPTEN)
 endif()
 
 # The programs of tools/ (below: not part of the normal build, but CMake needs their source files at configure time). -DANTS_BUILD_TOOLS=OFF leaves them out, so that a build that does not
-# make them (the game server's Docker image) does not need the folder tools/ at all and its first, long layer does not change when a file there does. It needs BUILD_TESTS=OFF: the tests run the tools.
+# make them does not need the folder tools/ at all (and the first, long layer of a container build does not change when a file there does). It needs BUILD_TESTS=OFF: the tests run the tools.
 option(ANTS_BUILD_TOOLS "Define the programs of tools/ (gen_food_footprints, map_sweep, bot_arena, bot_watch, replay_tool, lvl_tool)" ON)
 # Table generator (not part of the normal build): writes src/ants_sim/food_footprints_data.inc from Original-Ants/ants.chd
 #   cmake --build build --target gen_food_footprints && ./build/gen_food_footprints > src/ants_sim/food_footprints_data.inc
@@ -226,7 +216,7 @@ if(NOT EMSCRIPTEN AND ANTS_BUILD_TOOLS)
     #   cmake --build build --target bot_arena && ./build/bot_arena --map TINY --seeds 1..8 --seat 0=worker:hard --seat 1=worker:easy --rotate --out report.json
     #   (./build/bot_arena --selftest checks the tool itself)
     add_executable(bot_arena EXCLUDE_FROM_ALL tools/bot_arena.cpp tools/bot_arena_selftest.cpp tools/bot_arena_tune.cpp)
-    target_link_libraries(bot_arena PRIVATE ants_ai ants_server_core ants_replay ants_net ants_sim ants_assets ants_version ants_test_paths Threads::Threads)     # ants_server_core: the store that --save-replays keeps its files with
+    target_link_libraries(bot_arena PRIVATE ants_ai ants_replay ants_net ants_sim ants_assets ants_version ants_test_paths Threads::Threads)
 
     # Bot watcher (not part of the normal build): plays matches like bot_arena and counts what the bots do badly, per seat and minute (docs/BOT_FIGHT.md)
     #   cmake --build build --target bot_watch && ./build/bot_watch --map TREASURE --seeds 1..4 --seat 0=standard:hard --seat 1=standard:medium --out watch.json
@@ -321,12 +311,11 @@ if(BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     add_subdirectory(tests/test_net)
     add_subdirectory(tests/test_ai)
     add_subdirectory(tests/test_replay)
-    if(NOT EMSCRIPTEN)
-        add_subdirectory(tests/test_db)
-        add_subdirectory(tests/test_ctl)
-        add_subdirectory(tests/test_server)
-    endif()
     if(ANTS_BUILD_APP)
         add_subdirectory(tests/test_app)
     endif()
 endif()
+
+# What a copy of this tree may not have: the game server, its database, its control interface, its history service and the picture maker, and their tests (cmake/private.cmake adds them).
+# Without the file, the game, its libraries, the tools and their tests are all that is built.
+include(cmake/private.cmake OPTIONAL)
