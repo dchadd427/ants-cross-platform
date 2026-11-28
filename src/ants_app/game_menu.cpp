@@ -44,7 +44,7 @@ constexpr std::array<Row, 23> kRows = {{
     {kHealthStyle, "ant_health_style", Section::Video, Kind::Choice, 0, 1, static_cast<int>(health::Style::Bar), kBoth | kShowWatch | kShowNew, "Show health as", "A small bar over the ant, or a number at its lower right", "Bar|Number"},
     {kHealthChanges, "health_changes", Section::Video, Kind::Switch, 0, 1, 1, kBoth | kShowWatch | kShowNew, "Damage & heal numbers", "A small -N over an ant that loses hit points and +N over one that is healed at its hill", "On|Off"},
     {kShowFps, "show_fps", Section::Video, Kind::Switch, 0, 1, 0, kBoth | kShowWatch | kShowNew, "Show FPS", "The frame rate and its graph, in the corner", "On|Off"},
-    {kShowPing, "show_ping", Section::Video, Kind::Switch, 0, 1, 0, kBoth | kShowNew, "Show ping", "Your ping to the server, beside the frame rate, in network games. Click or tap it to see everyone's.", "On|Off"},
+    {kShowPing, "show_ping", Section::Video, Kind::Switch, 0, 1, 0, kBoth | kShowNew, "Show ping", "Your ping to the server, in network games. Click or tap it to see everyone's.", "On|Off"},
     {kHudArt, "hud_art", Section::Video, Kind::Choice, 0, 1, 0, kBoth | kShowWatch | kShowNew, "HUD art", "The look of the frame, buttons and panel around the map: the new pictures, or the original's own", "New|Classic"},
     {kScroll, "scroll", Section::Video, Kind::Slider, 0, 99, 50, kBoth | kShowWatch, "Map scroll speed", "Edge scrolling; the original's \"Scroll Speed\"", ""},
     {kChat, "chat", Section::Game, Kind::Switch, 0, 1, 1, kBoth, "Participate in chat", "The original's option", "On|Off"},
