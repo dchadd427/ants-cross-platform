@@ -381,9 +381,14 @@ COPY web/admin_page.js /usr/share/nginx/html/admin_page.js
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker/trusted-proxies.conf /etc/nginx/ants-trusted-proxies/proxies.conf
 
+# The web server's logs (the access log and the error log of the requests: both name the visitor's address) are one file that nginx writes itself, in /var/log/ants/, and are kept for 14 days and then deleted: the server
+# runs through this script, which makes the folder (so that `nginx -t` in the image is `sh /etc/nginx/ants-web-log.sh nginx -t`), cuts and deletes the files and then becomes the server (docs/BUILD_AND_RUN.md
+# "The web server's logs"). The image's own entry point still starts nginx, so that what it does before nginx (nothing, for this image) is done as before.
+COPY docker/web-log.sh /etc/nginx/ants-web-log.sh
+
 EXPOSE 80
 
 HEALTHCHECK --interval=10s --timeout=3s --start-period=3s --retries=3 \
     CMD wget -q -O /dev/null http://127.0.0.1/ || exit 1
 
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["sh", "/etc/nginx/ants-web-log.sh", "/docker-entrypoint.sh", "nginx", "-g", "daemon off;"]

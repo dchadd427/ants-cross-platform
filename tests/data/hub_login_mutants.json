@@ -1211,14 +1211,14 @@
   {
    "id": "nginx_callback_error_log_whole",
    "file": "docker/nginx.conf",
-   "old": "        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_callback",
+   "old": "        error_log /var/log/ants/web.log crit;\n        limit_req zone=ants_hub_callback",
    "new": "        limit_req zone=ants_hub_callback",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
   },
   {
    "id": "nginx_login_error_log_whole",
    "file": "docker/nginx.conf",
-   "old": "        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_login",
+   "old": "        error_log /var/log/ants/web.log crit;\n        limit_req zone=ants_hub_login",
    "new": "        limit_req zone=ants_hub_login",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
   },

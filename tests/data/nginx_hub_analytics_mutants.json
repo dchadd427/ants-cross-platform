@@ -8,38 +8,38 @@
   {
    "id": "the_log_is_on",
    "file": "docker/nginx.conf",
-   "old": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n",
-   "new": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n"
+   "old": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /var/log/ants/web.log crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n",
+   "new": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        error_log /var/log/ants/web.log crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n"
   },
   {
    "id": "the_error_log_names_the_visitor",
    "file": "docker/nginx.conf",
-   "old": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n",
+   "old": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /var/log/ants/web.log crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n",
    "new": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n"
   },
   {
    "id": "any_method_goes_through",
    "file": "docker/nginx.conf",
-   "old": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n",
-   "new": "location = /hub/a {\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n"
+   "old": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /var/log/ants/web.log crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n",
+   "new": "location = /hub/a {\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /var/log/ants/web.log crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n"
   },
   {
    "id": "a_query_goes_through",
    "file": "docker/nginx.conf",
-   "old": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n",
-   "new": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n"
+   "old": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /var/log/ants/web.log crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n",
+   "new": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /var/log/ants/web.log crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n"
   },
   {
    "id": "a_page_of_another_site_goes_through",
    "file": "docker/nginx.conf",
-   "old": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n",
-   "new": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n"
+   "old": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /var/log/ants/web.log crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n",
+   "new": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        error_log /var/log/ants/web.log crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n"
   },
   {
    "id": "there_is_no_allowance",
    "file": "docker/nginx.conf",
-   "old": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /dev/stderr crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n",
-   "new": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /dev/stderr crit;\n"
+   "old": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /var/log/ants/web.log crit;\n        limit_req zone=ants_hub_a burst=60 nodelay;\n",
+   "new": "location = /hub/a {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        error_log /var/log/ants/web.log crit;\n"
   },
   {
    "id": "the_body_may_be_a_megabyte",

@@ -920,7 +920,7 @@
   {
    "id": "submissions_logged_with_the_query",
    "file": "docker/nginx.conf",
-   "old": "    location = /submissions {\n        access_log /dev/stdout ants_noquery;       # (the address holds the name, the maker and the note)\n",
+   "old": "    location = /submissions {\n        access_log /var/log/ants/web.log ants_noquery;       # (the address holds the name, the maker and the note)\n",
    "new": "    location = /submissions {\n",
    "test": "python3 -I tests/scripts/test_nginx_submissions.py",
    "build": []
@@ -928,7 +928,7 @@
   {
    "id": "submission_status_logged_with_the_query",
    "file": "docker/nginx.conf",
-   "old": "    location ^~ /submissions/ {\n        access_log /dev/stdout ants_noquery;\n",
+   "old": "    location ^~ /submissions/ {\n        access_log /var/log/ants/web.log ants_noquery;\n",
    "new": "    location ^~ /submissions/ {\n",
    "test": "python3 -I tests/scripts/test_nginx_submissions.py",
    "build": []
@@ -936,7 +936,7 @@
   {
    "id": "owner_api_logged_with_the_query",
    "file": "docker/nginx.conf",
-   "old": "        access_log /dev/stdout ants_noquery;       # (a decline reason or a name can be in the address)\n",
+   "old": "        access_log /var/log/ants/web.log ants_noquery;       # (a decline reason or a name can be in the address)\n",
    "new": "",
    "test": "python3 -I tests/scripts/test_nginx_submissions.py",
    "build": []

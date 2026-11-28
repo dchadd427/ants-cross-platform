@@ -616,7 +616,9 @@ def site_config(conf, fs, cache, port, maps_file=None):
     html, stats = os.path.join(fs, "usr", "share", "nginx", "html"), os.path.join(cache, "ants_stats")
     maps = os.path.join(fs, "srv", "community-maps")                                       # (the players' maps and pictures, served by /maps/previews/ and /maps/files/: outside the web root)
     text = conf.replace("/srv/community-maps", maps).replace("/etc/nginx/ants-map-pages", os.path.join(fs, "etc", "nginx", "ants-map-pages")).replace("/usr/share/nginx/html", html).replace("/var/cache/nginx/ants_stats", stats).replace("/var/cache/nginx/ants_history", os.path.join(cache, "ants_history")).replace("/var/cache/nginx/ants_hub_pics", os.path.join(cache, "ants_hub_pics"))
-    text = re.sub(r"access_log[ \t]+/dev/stdout[ \t]+\w+;", "access_log off;", text)                  # (the image logs the submission paths to its output; here nobody reads it)
+    text = re.sub(r"access_log[ \t]+/var/log/ants/web\.log[ \t]+\w+;", "access_log off;", text)             # (the image logs the requests to a file of its own folder; here nobody reads it)
+    text = re.sub(r"^[ \t]*error_log[ \t]+/var/log/ants/web\.log[ \t]+notice;[ \t]*\n", "", text, flags=re.M)         # (the error log of the requests: the main file's own serves here)
+    text = text.replace("error_log /var/log/ants/web.log crit;", "error_log /dev/stderr crit;")           # (the serious errors of some doors go to the terminal, as they did before the image had a folder of logs)
     text = re.sub(r"^([ \t]*resolver[ \t]+127\.0\.0\.11[^;]*;)", r"\1 resolver_timeout 1s;", text, flags=re.M)           # (Docker's own resolver is not here: the name of the game server fails in a second, as it does at once in the image, not after 30)
     if maps_file:
         block = location_block(text, "location = /maps/all {")
@@ -628,7 +630,7 @@ def site_config(conf, fs, cache, port, maps_file=None):
     text = re.sub(r"^[ \t]*listen[ \t]+\[::\]:80;[ \t]*\n", "", text, flags=re.M)
     if moved != 1:
         raise ToolError("docker/nginx.conf has not exactly one `listen 80;` line: the tool cannot move it to the port")
-    left = re.search(r"/(?:usr/share/nginx|var/cache/nginx|var/log/nginx|var/run)\S*", re.sub(r"#.*", "", text).replace(html, "").replace(stats, ""))
+    left = re.search(r"/(?:usr/share/nginx|var/cache/nginx|var/log/nginx|var/log/ants|var/run)\S*", re.sub(r"#.*", "", text).replace(html, "").replace(stats, ""))
     if left:
         raise ToolError("docker/nginx.conf uses %s, which this tool does not move: add it to site_config()" % left.group(0))
     return text

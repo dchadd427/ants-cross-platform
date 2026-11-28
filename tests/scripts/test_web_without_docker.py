@@ -728,7 +728,7 @@ class TheSiteConfiguration(Scratch):
         self.assertNotIn("/usr/share/nginx", text.replace("/w/fs/usr/share/nginx/html", ""))
         self.assertNotIn("/var/cache/nginx", text)
         self.assertIn("location = /busy", text, "the rest of the file is as it was")
-        self.assertNotIn("/dev/stdout", text, "the image's log lines (the submission paths log to its output) go nowhere here")
+        self.assertNotIn("/var/log/ants", re.sub(r"(?m)#.*$", "", text), "the image's folder of logs is not here: the requests are not logged, and the serious errors of a door go to the terminal")
         self.assertIn("log_format ants_noquery ", text, "but the log format stays, a location that is left would not know it")
         self.assertGreater(text.count("resolver 127.0.0.11"), 10)
         self.assertEqual(text.count("resolver_timeout 1s;"), text.count("resolver 127.0.0.11"), "a game server that is not there is not waited for for 30 seconds where Docker's resolver is not")

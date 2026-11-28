@@ -233,7 +233,7 @@ class TheWebImage(unittest.TestCase):
         text = self.docker.text[re.search(r"(?m)^FROM nginx:alpine(@\S+)? AS runner", self.docker.text).start():]
         self.assertEqual(len(re.findall(r"(?m)^USER ", text)), 0)
         self.assertEqual(re.findall(r"(?m)^EXPOSE .*$", text), ["EXPOSE 80"])
-        self.assertEqual(re.findall(r"(?m)^CMD .*$", text), ['CMD ["nginx", "-g", "daemon off;"]'])
+        self.assertEqual(re.findall(r"(?m)^CMD .*$", text), ['CMD ["sh", "/etc/nginx/ants-web-log.sh", "/docker-entrypoint.sh", "nginx", "-g", "daemon off;"]'], "the web server runs through the script that keeps its logs for 14 days (tests/scripts/test_web_log.py)")
         self.assertIn("CMD wget -q -O /dev/null http://127.0.0.1/ || exit 1", text)
         self.assertEqual(len(re.findall(r"(?m)^ENTRYPOINT ", text)), 0)
         self.assertEqual([s.op for s in self.runner if s.op in ("ARG", "ENV")], [], "the runner takes no build argument")

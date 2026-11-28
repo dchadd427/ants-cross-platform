@@ -64,7 +64,7 @@ class TheText(unittest.TestCase):
         self.assertEqual(re.findall(r"proxy_set_header\s+(\S+)", block), ["Connection", "Host", "Content-Type", "Sec-Fetch-Site", "X-Client-Address"])
         self.assertIn("proxy_set_header X-Client-Address $remote_addr;", block)
         self.assertIn("error_page 502 504 = @test_maps_off;", block)
-        self.assertIn("access_log /dev/stdout ants_noquery;", block)
+        self.assertIn("access_log /var/log/ants/web.log ants_noquery;", block)
         off = block_of(CONF, "location @test_maps_off ")
         self.assertIn('return 503 \'{"error":"test_maps_off"', off)
         self.assertIn('add_header Cache-Control "no-store" always;', off)

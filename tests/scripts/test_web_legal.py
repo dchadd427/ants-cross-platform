@@ -248,8 +248,8 @@ class TheLegalPage(unittest.TestCase):
         for words in ("no cookie", "keeps nothing in your browser", "to nobody else", "which page you opened", "the name of the site that sent you (never the page, and only its main name, such as example.com)", "the width of your window", "your browser's language",
                       "how long the page took to load and how long the game took to start", "the class, the file and the line of an error", "cleaned of addresses and names", "search engines and monitors, are not counted",
                       "The counter never writes down your IP address or your browser's identification", "drops them", "only the country is kept", "only those names are kept",
-                      "keeps its own technical log of requests", "the time, your IP address, the address of the page that was asked for", "your browser's identification", "the counter never reads it",
-                      "this site sets no time after which that log is deleted", "kept until the person who runs the server deletes it", "hold only the hour in which an event came and nothing finer", "cannot be matched to the lines of that log by the second",
+                      "keeps its own technical log of requests", "the time, your IP address, the address of the page that was asked for", "your browser's identification", "Its log of errors can show the same IP address and the whole address that was asked for",
+                      "the counter never reads them", "hold only the hour in which an event came and nothing finer", "cannot be matched to the lines of those logs by the second",
                       "made fresh every day", "midnight to midnight, Pacific time", "destroyed when the day is over", "a code of one day cannot be matched with a code of another",
                       "in its memory only", "never written to a disk", "a restart of the server forgets it",
                       "Do Not Track or Global Privacy Control", "one visit and its country", "and nothing else", "no code, no page, no device, no timing and no error",
@@ -267,12 +267,14 @@ class TheLegalPage(unittest.TestCase):
         self.assertIn("once in %d minutes" % (analytics.NT_SECONDS // 60), panel)
         self.assertIn("for those %d minutes" % (analytics.NT_SECONDS // 60), panel)
 
-    def test_the_panel_says_the_site_sets_no_end_for_the_web_servers_log_and_the_stack_file_sets_none(self):
-        """The panel says what the repository's own settings do: nothing in the stack file cuts short the log of the web service (it has no `logging` limit of its own, as the hub's and the converter's services have),
-        and nginx writes the address in it (the panel's words, in the test of the counter's panel, say both). When a limit is set, the panel has to name it, and this test fails until it does."""
-        compose = read("docker-compose.stack.yml")
-        web = compose[compose.index("\n  ants-beta:\n"):compose.index("\n  ants-server:\n")]
-        self.assertNotIn("logging:", web, "the web service now has a log limit of its own: the Legal page must say how long its log is kept")
+    def test_the_panel_says_the_web_servers_logs_are_deleted_after_the_days_that_the_image_keeps_them_and_names_no_other_end(self):
+        """The panel's days are the script's own (docker/web-log.sh, run by the image: tests/scripts/test_web_log.py runs it); nginx writes the address in the log (the panel's words, in the test of the counter's panel, say so)."""
+        start = self.main.index('<section class="panel" id="counting">')
+        panel = plain(self.main[start:self.main.index("</section>", start)])
+        days = re.findall(r"(?m)^KEEP_DAYS=(\d+)$", read("docker", "web-log.sh"))
+        self.assertEqual(len(days), 1)
+        self.assertIn("the site deletes both after %s days" % days[0], panel)
+        self.assertNotIn("kept until the person who runs the server deletes it", panel)
         self.assertRegex(read("docker", "nginx.conf"), r"log_format ants_noquery '\$remote_addr \[\$time_local\]")      # (the address and the time are in the log: what the panel says)
 
     def test_it_links_the_licence_the_third_party_notices_and_the_issues_page_of_the_repository(self):
