@@ -221,7 +221,7 @@ def play(devtools, web, ctl, secret, mode, orders, check, label):
             cooling += (a.probe(9) == 2) + (b.probe(9) == 2)          # (a cool-down: the prediction gave itself up for a while, see "The budget" in docs/NETWORK_PORT.md)
         reading = {
             "state": a.probe(9), "predicted": a.probe(10), "rebuilds": a.probe(11), "other_predicted": b.probe(10), "cooling": cooling,
-            "frame_us": a.probe(12), "frame_max_us": a.probe(13), "frames": a.probe(14),
+            "frame_us": a.probe(12), "frame_max_us": a.probe(13), "frames": a.probe(14), "others": a.probe(87), "worlds": a.probe(88),
             "corner": [v for v in corner if v >= 0], "network": [v for v in network if v >= 0],
         }
         # the room is still running with both players, and the two games agree on every state hash they both reported
@@ -335,12 +335,14 @@ def main():
         check(felt_on is not None and felt_on <= 60, "the default: the delay of an order is what the click feels, under 60 ms (median %s ms of %s)" % (felt_on, on["corner"]))
         check(net_on is not None and net_on >= 40, "the default: the network's delay is still measured and is larger (median %s ms of %s)" % (net_on, on["network"]))
         check(felt_on is not None and net_on is not None and felt_on + 20 <= net_on, "the default: the click is felt sooner than the confirmed engine applies it (%s ms against %s ms)" % (felt_on, net_on))
+        check(on["others"] == 1 and on["worlds"] > 0, "the default: the other players' ants are drawn from the confirmed engine (picture %d, %d worlds of both engines made)" % (on["others"], on["worlds"]))
         check(0 < on["frame_us"] <= 8000, "the default: the game's frame function costs %d us on average (%d frames, the longest %d us)" % (on["frame_us"], on["frames"], on["frame_max_us"]))
         corner_off, net_off = median(off["corner"]), median(off["network"])
         check(off["state"] == 0, "?prediction=off: the game says its prediction is off (%d)" % off["state"])
         check(off["predicted"] == 0, "?prediction=off: nothing was predicted (%d)" % off["predicted"])
         check(corner_off is not None and net_off is not None and abs(corner_off - net_off) <= 20 and net_off >= 40,
               "?prediction=off: the delay of an order is the network's (%s ms against %s ms)" % (corner_off, net_off))
+        check(off["others"] == 2 and off["worlds"] == 0, "?prediction=off: the picture of the other players' ants is asked for and has nothing to work on (picture %d, %d worlds made)" % (off["others"], off["worlds"]))
         check(0 < off["frame_us"] <= 8000, "?prediction=off: the game's frame function costs %d us on average (%d frames, the longest %d us)" % (off["frame_us"], off["frames"], off["frame_max_us"]))
         print("[web prediction] %d checks, %d failed" % (checks[0], len(failures)))
         return 1 if failures else 0

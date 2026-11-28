@@ -173,6 +173,7 @@ void Application::enter_match(bool rejoin) {
     back_name_.clear();
     vote_press_ = 0;
     cue_router_.reset();                                                    // (no cue of an earlier match is waited for)
+    others_view_.forget();                                                  // (nor the world of both engines that an earlier match last showed: a new match never starts from it, whatever its stamp)
     felt_delay_ = net::FeltDelayMeter();
     orders_seen_ = 0;                                                       // (the match's own prediction counts its orders from none)
     prediction_cooldowns_reported_ = 0;
