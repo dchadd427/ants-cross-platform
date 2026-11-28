@@ -1,6 +1,6 @@
 # Hints and direct channels between players (protocol 26)
 
-The server stays what it is: the sealer of the turns, the referee and the recorder of every match. What this page adds is a way for a player's machine to learn another player's order EARLIER than its sealed turn, so that the other player's ants are corrected less on the screen. Two kinds of sender, one kind of message:
+The server stays what it is: the sealer of the turns, the referee and the recorder of every match. What this page adds is a way for a player's machine to learn another player's order EARLIER than its sealed turn, so that the predicted engine, which the player's own ants are drawn from, has the other player's ants where they will be (the other players' ants are drawn from the confirmed engine, which no hint touches: [`NETWORK_PORT.md`](NETWORK_PORT.md#prediction-of-ones-own-orders-predictionhpp-cue_routerhpp-netgame-applicationview_sim)). Two kinds of sender, one kind of message:
 
 - **A player's browser** sends each order it gives to the other players' browsers over a WebRTC data channel, at once, before the server has sealed it.
 - **The server** sends a computer player's order to every player the moment the bot gives it, over the connection that every player already has, before the turn that will carry it is sealed.

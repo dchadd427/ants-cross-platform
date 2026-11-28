@@ -1,0 +1,293 @@
+{
+ "note": "Mutants of the counter's script and of the Analytics tab (web/analytics.js, web/admin_analytics.js; docs/ANALYTICS.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_analytics_check.js (the script on a fake page: what it sends and when, a browser that asked not to be tracked, a frame, the admin page, what it never touches) and tests/scripts/web_admin_analytics_check.js (the tab on a fake page and a fake hub: the range, the numbers, the charts, the files of the export, text from a visitor's browser put in as text and marked): a browser with Global Privacy Control or one that asked not to be tracked that is counted in full, the admin page, a frame, a page from the browser's memory, a second start of the game, more than five errors or the same one twice, the script of another site or a message of any length, this site as its own referrer, a RuntimeError that is a page error; days that are not Pacific days, a text that starts like a formula, a quote that is not doubled, a zip with a wrong checksum or directory, a change against nothing, a Sunday that is a working day, a range of 400 days that is too long or today that cannot be shown, a day with a few timings that has a point, a message or a site that is not marked as data, a hatched cap that is not above its bar, weekends that are not shaded, more errors as good news, the numbers of a hub that has counted nothing, a file that does not say its range, an old error that is new, a menu that Escape does not close or that is left open when another section comes, a late answer that is drawn, seven days that are eight, visits that leave out the not tracked, an unknown country that is not last; every one must be caught (python3 tools/mutate.py tests/data/web_analytics_mutants.json --keep-going --jobs 1).",
+ "baseline": [
+  {
+   "test": "node tests/scripts/web_analytics_check.js web/analytics.js"
+  },
+  {
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  }
+ ],
+ "mutants": [
+  {
+   "id": "a_browser_with_global_privacy_control_is_counted_like_any_other",
+   "file": "web/analytics.js",
+   "old": "|| n.globalPrivacyControl === true;",
+   "new": ";",
+   "test": "node tests/scripts/web_analytics_check.js web/analytics.js"
+  },
+  {
+   "id": "a_browser_that_asked_not_to_be_tracked_goes_on_to_send_the_rest",
+   "file": "web/analytics.js",
+   "old": "if (untracked()) { send({ t: 'visit' }); return; }",
+   "new": "if (untracked()) { send({ t: 'visit' }); }",
+   "test": "node tests/scripts/web_analytics_check.js web/analytics.js"
+  },
+  {
+   "id": "the_admin_page_and_the_hub_are_counted",
+   "file": "web/analytics.js",
+   "old": "if (/^\\/(?:admin|hub)(?:\\/|$)/.test(path)) return;",
+   "new": "if (false) return;",
+   "test": "node tests/scripts/web_analytics_check.js web/analytics.js"
+  },
+  {
+   "id": "a_frame_is_counted",
+   "file": "web/analytics.js",
+   "old": "try { if (w.top !== w.self) return; } catch (e) { return; }",
+   "new": "try { } catch (e) { return; }",
+   "test": "node tests/scripts/web_analytics_check.js web/analytics.js"
+  },
+  {
+   "id": "a_page_tells_more_than_five_errors",
+   "file": "web/analytics.js",
+   "old": "MAX_ERRORS = 5,",
+   "new": "MAX_ERRORS = 50,",
+   "test": "node tests/scripts/web_analytics_check.js web/analytics.js"
+  },
+  {
+   "id": "the_same_error_is_told_again_and_again",
+   "file": "web/analytics.js",
+   "old": "if (errors >= MAX_ERRORS || told[key]) return;",
+   "new": "if (errors >= MAX_ERRORS) return;",
+   "test": "node tests/scripts/web_analytics_check.js web/analytics.js"
+  },
+  {
+   "id": "the_script_of_another_site_is_named",
+   "file": "web/analytics.js",
+   "old": ".split('?')[0].split('#')[0] : '';",
+   "new": ".split('?')[0].split('#')[0] : String(file || '');",
+   "test": "node tests/scripts/web_analytics_check.js web/analytics.js"
+  },
+  {
+   "id": "this_site_is_its_own_referrer",
+   "file": "web/analytics.js",
+   "old": "m[1].toLowerCase() !== String(loc.hostname).toLowerCase() ? m[1].toLowerCase() : ''",
+   "new": "m[1].toLowerCase() ? m[1].toLowerCase() : ''",
+   "test": "node tests/scripts/web_analytics_check.js web/analytics.js"
+  },
+  {
+   "id": "a_page_from_the_browsers_memory_is_timed",
+   "file": "web/analytics.js",
+   "old": "if (e && e.type === 'back_forward') return;",
+   "new": "if (false) return;",
+   "test": "node tests/scripts/web_analytics_check.js web/analytics.js"
+  },
+  {
+   "id": "a_page_that_is_shown_says_it_was_left",
+   "file": "web/analytics.js",
+   "old": "if (d.visibilityState !== 'visible') send(",
+   "new": "if (true) send(",
+   "test": "node tests/scripts/web_analytics_check.js web/analytics.js"
+  },
+  {
+   "id": "the_start_of_the_game_is_told_every_time",
+   "file": "web/analytics.js",
+   "old": "if (!toldGame) { toldGame = true;",
+   "new": "if (true) { toldGame = true;",
+   "test": "node tests/scripts/web_analytics_check.js web/analytics.js"
+  },
+  {
+   "id": "an_error_of_the_game_is_a_page_error",
+   "file": "web/analytics.js",
+   "old": "name === 'RuntimeError' ||",
+   "new": "false ||",
+   "test": "node tests/scripts/web_analytics_check.js web/analytics.js"
+  },
+  {
+   "id": "a_timing_out_of_range_is_sent",
+   "file": "web/analytics.js",
+   "old": "if (ms >= 1 && ms <= MAX_PERF_MS)",
+   "new": "if (true)",
+   "test": "node tests/scripts/web_analytics_check.js web/analytics.js"
+  },
+  {
+   "id": "script_error_of_another_site_is_told",
+   "file": "web/analytics.js",
+   "old": "if (!e || (!e.filename && !e.lineno && !e.error)) return;",
+   "new": "if (!e) return;",
+   "test": "node tests/scripts/web_analytics_check.js web/analytics.js"
+  },
+  {
+   "id": "a_message_of_any_length_is_sent",
+   "file": "web/analytics.js",
+   "old": ".slice(0, 300)",
+   "new": ".slice(0, 30000)",
+   "test": "node tests/scripts/web_analytics_check.js web/analytics.js"
+  },
+  {
+   "id": "days_are_utc_days",
+   "file": "web/admin_analytics.js",
+   "old": "var TIME_ZONE = 'America/Los_Angeles';",
+   "new": "var TIME_ZONE = 'UTC';",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "a_text_that_starts_like_a_formula_is_not_guarded",
+   "file": "web/admin_analytics.js",
+   "old": "if (/^[=+\\-@\\t\\r]/.test(t) && !/^-?\\d+(?:\\.\\d+)?$/.test(t)) t = \"'\" + t;",
+   "new": "",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "a_quote_in_a_csv_cell_is_not_doubled",
+   "file": "web/admin_analytics.js",
+   "old": "'\"' + t.replace(/\"/g, '\"\"') + '\"'",
+   "new": "'\"' + t + '\"'",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "the_checksum_of_a_zip_is_not_the_standard_one",
+   "file": "web/admin_analytics.js",
+   "old": "0xedb88320 ^ (c >>> 1)",
+   "new": "0xedb88321 ^ (c >>> 1)",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "a_zip_that_says_a_wrong_size_of_its_directory",
+   "file": "web/admin_analytics.js",
+   "old": "le(out.length, 4), le(0, 2));",
+   "new": "le(out.length + 1, 4), le(0, 2));",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "a_change_against_nothing_is_told",
+   "file": "web/admin_analytics.js",
+   "old": "if (!(before > 0)) return null;",
+   "new": "if (before < 0) return null;",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "a_share_under_ten_percent_has_no_decimal",
+   "file": "web/admin_analytics.js",
+   "old": "p < 10 && p > 0 ? p.toFixed(1)",
+   "new": "p < 1 && p > 0 ? p.toFixed(1)",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "a_sunday_is_a_working_day",
+   "file": "web/admin_analytics.js",
+   "old": "return w === 'Sat' || w === 'Sun';",
+   "new": "return w === 'Sat';",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "a_range_of_400_days_is_too_long",
+   "file": "web/admin_analytics.js",
+   "old": "if (daysIn(from, to) > MAX_DAYS)",
+   "new": "if (daysIn(from, to) >= MAX_DAYS)",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "today_is_not_a_day_that_can_be_shown",
+   "file": "web/admin_analytics.js",
+   "old": "if (ordinal(to) > ordinal(today))",
+   "new": "if (ordinal(to) >= ordinal(today))",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "a_day_with_a_few_timings_has_a_point",
+   "file": "web/admin_analytics.js",
+   "old": "PERF_MIN = 20;",
+   "new": "PERF_MIN = 2;",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "the_message_of_an_error_is_not_marked_as_data",
+   "file": "web/admin_analytics.js",
+   "old": "h.typed('span', 'etext', e.msg)",
+   "new": "el('span', 'etext', e.msg)",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "a_site_that_sent_a_visitor_is_not_marked_as_data",
+   "file": "web/admin_analytics.js",
+   "old": "mark: function (t) { return h.typed('span', 'bl', t); },",
+   "new": "mark: function (t) { return el('span', 'bl', t); },",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "the_hatched_cap_is_not_above_the_bar",
+   "file": "web/admin_analytics.js",
+   "old": "y: PAD.t + inner - hv - hn, width: bw",
+   "new": "y: PAD.t + inner - hn, width: bw",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "the_weekends_are_not_shaded",
+   "file": "web/admin_analytics.js",
+   "old": "if (isWeekend(d.day)) nodes.push(",
+   "new": "if (false) nodes.push(",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "more_errors_are_good_news",
+   "file": "web/admin_analytics.js",
+   "old": "deltaNode(change(errs, b.errors, n), true)",
+   "new": "deltaNode(change(errs, b.errors, n), false)",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "a_hub_that_has_counted_nothing_shows_the_numbers",
+   "file": "web/admin_analytics.js",
+   "old": "return !d.counter.first_day && !d.counter.last_at;",
+   "new": "return false;",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "a_file_does_not_say_its_range",
+   "file": "web/admin_analytics.js",
+   "old": "download(made[key][0].replace('.csv', '_' + stamp + '.csv'),",
+   "new": "download(made[key][0],",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "an_old_error_is_new",
+   "file": "web/admin_analytics.js",
+   "old": "msg = el('div', 'emsg'), fresh = ordinal(e.first) >= ordinal(today) - 1",
+   "new": "msg = el('div', 'emsg'), fresh = ordinal(e.first) >= ordinal(today) - 40",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "escape_does_not_close_the_menu",
+   "file": "web/admin_analytics.js",
+   "old": "function onKey(e) { if (e.key === 'Escape') { closeMenu(); drawBar(); } }",
+   "new": "function onKey(e) { if (false) { closeMenu(); drawBar(); } }",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "a_section_that_is_left_keeps_listening",
+   "file": "web/admin_analytics.js",
+   "old": "h.setCleanup(function () { st.dead = true; closeMenu(); });",
+   "new": "h.setCleanup(function () { st.dead = true; });",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "a_late_answer_of_an_earlier_question_is_drawn",
+   "file": "web/admin_analytics.js",
+   "old": "if (st.dead || seq !== st.seq) return null;",
+   "new": "if (st.dead) return null;",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "seven_days_are_eight",
+   "file": "web/admin_analytics.js",
+   "old": "PRESETS = [['7', '7 days', 7]",
+   "new": "PRESETS = [['7', '7 days', 8]",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "the_visits_leave_out_the_not_tracked",
+   "file": "web/admin_analytics.js",
+   "old": "visits = sumOf(days, 'visits') + nt,",
+   "new": "visits = sumOf(days, 'visits'),",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  },
+  {
+   "id": "a_hidden_unknown_country_is_not_last",
+   "file": "web/admin_analytics.js",
+   "old": "if (unknown) add(wrap, barRow(o.label(unknown[0]), o.valueOf(unknown), max, total, o.hatOf ? o.hatOf(unknown) : 0, 'dim'));",
+   "new": "if (unknown) wrap.children.unshift(barRow(o.label(unknown[0]), o.valueOf(unknown), max, total, o.hatOf ? o.hatOf(unknown) : 0, 'dim'));",
+   "test": "node tests/scripts/web_admin_analytics_check.js web/admin_analytics.js"
+  }
+ ]
+}

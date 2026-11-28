@@ -331,6 +331,13 @@ public:
     /// engine has it. Empty (a game of one machine, the tests of the original's hit boxes): every ant is drawn where the engine has it.
     using DrawOffset = std::function<bool(const sim::WorldState& world, uint8_t viewer_team, const sim::AntSnapshot& ant, int32_t& dx, int32_t& dy)>;
     void set_draw_offset(DrawOffset fn) { draw_offset_ = std::move(fn); }
+    /// The world that the picture shows, when it is not the engine's own (ants_app/others_view.hpp: the other players' ants are the confirmed engine's): what the pointer, the cursor, the selection
+    /// and the keys look at, as the picture does. Null (the default, and whenever the picture is the shown engine's): the engine's own world. An order is always run against the engine's own world: it
+    /// is the engine that the command meets. The application sets it before every call that takes the engine; it never outlives the world it points to (it is set again or cleared at every one)
+    void set_shown_world(const sim::WorldState* world) noexcept { shown_world_ = world; }
+    /// Where an attack order on a picked ant aims: the picked ant (as drawn) and the tile that the order names; false leaves the tile where the ant is drawn. Empty: the picked ant's own tile
+    using AimTile = std::function<bool(const sim::AntSnapshot& picked, sim::TileCoord& tile)>;
+    void set_aim_tile(AimTile fn) { aim_tile_ = std::move(fn); }
     /// Where the HUD sends the player's commands (group orders, Stop, hatch, alliance offers): a single-player game applies them at once (null =
     /// the engine itself), a network match hands them to the turn manager, which applies them at the agreed turn.
     void set_command_sink(sim::CommandSink* sink) noexcept { command_sink_ = sink; }
@@ -621,6 +628,10 @@ private:
     uint32_t chat_scroll_due_ms_{0};
     const sim::SimulationEngine* sim_query_{nullptr};
     DrawOffset draw_offset_;
+    const sim::WorldState* shown_world_{nullptr};
+    AimTile aim_tile_;
+    const sim::WorldState& world_of(const sim::SimulationEngine& sim) const { return shown_world_ != nullptr ? *shown_world_ : sim.get_world_state(); }        // (what the picture shows: the pointer picks from it)
+    sim::TileCoord attack_tile(const sim::AntSnapshot& picked) const;       // (the tile that an attack order on the picked ant names)
     sim::CommandSink* command_sink_{nullptr};
     sim::CommandResult submit_command(sim::SimulationEngine& sim, const sim::Command& command) {
         return command_sink_ != nullptr ? command_sink_->submit(command) : sim.apply_command(command);

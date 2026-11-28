@@ -121,7 +121,7 @@ class TheText(unittest.TestCase):
     def test_the_admin_page_may_ask_the_hub_for_the_list_and_for_the_two_changes_and_for_nothing_new_else(self):
         self.assertIn("imagesoff", HEAD)
         self.assertRegex(HEAD, r"\^GET /hub/admin/api/\(\?:me\|bans\|mutes\|hidden\|imagesoff\|modlog\|status\)")
-        self.assertRegex(HEAD, r"\^POST /hub/admin/api/\(\?:ban\|unban\|mute\|unmute\|nopic\|pic\|noimages\|images\|del\)")
+        self.assertRegex(HEAD, r"\^POST /hub/admin/api/\(\?:ban\|unban\|mute\|unmute\|nopic\|pic\|noimages\|images\|del\|analytics\)")
 
     def test_the_page_policy_still_lets_a_same_origin_image_in_and_names_no_other_host_for_it(self):
         self.assertIn("img-src 'self' data: blob: https://cdn.buymeacoffee.com;", HEAD)

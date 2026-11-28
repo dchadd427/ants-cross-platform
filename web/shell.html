@@ -1163,7 +1163,7 @@
 
     <div class="toast" id="toast" role="status" hidden></div>
 
-    <script src="site_nav.js"></script><script src="game_bar.js"></script><script src="update_notice.js" data-window="no"></script><script src="rejoin_key.js"></script><script src="hub_here.js"></script><script src="shapes.js"></script><script src="shape_picker.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="replay_activity.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="alert_core.js"></script><script src="hud_fullscreen.js"></script><script src="wake_lock.js"></script><script src="p2p.js"></script><script src="touch_keys.js"></script><script src="front/name_letters.js"></script><script src="front/lobby_net.js"></script><script src="front/player_name.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
+    <script src="site_nav.js"></script><script src="game_bar.js"></script><script src="update_notice.js" data-window="no"></script><script src="analytics.js"></script><script src="rejoin_key.js"></script><script src="hub_here.js"></script><script src="shapes.js"></script><script src="shape_picker.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="replay_activity.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="alert_core.js"></script><script src="hud_fullscreen.js"></script><script src="wake_lock.js"></script><script src="p2p.js"></script><script src="touch_keys.js"></script><script src="front/name_letters.js"></script><script src="front/lobby_net.js"></script><script src="front/player_name.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
     <script>
         var ANTS_BUILD_VER = '@@BUILD_TIMESTAMP@@';
         if (!ANTS_BUILD_VER || ANTS_BUILD_VER.indexOf('@') !== -1) {
@@ -1820,11 +1820,17 @@
         })();
 
         // ?prediction=off in the address switches off the prediction of the player's own orders in a match of the network (the game's --no-prediction; net::Prediction is on by default), to find out whether a
-        // trouble is the prediction's. Nothing else of the address reaches the game through it.
+        // trouble is the prediction's. ?others=predicted gives the earlier picture, in which the other players' ants are the predicted engine's too (the game's --others predicted; expires with v0.22.3 at the latest, AGENTS.md rule 9; by default they are the confirmed
+        // engine's, never corrected: docs/NETWORK_PORT.md, "Drawing the other players' ants from the confirmed engine"). Nothing else of the address reaches the game through it.
         (function () {
-            var wanted = null;
-            try { wanted = new URLSearchParams(window.location.search).get('prediction'); } catch (e) { /* no address to read */ }
+            var wanted = null, others = null;
+            try {
+                var query = new URLSearchParams(window.location.search);
+                wanted = query.get('prediction');
+                others = query.get('others');
+            } catch (e) { /* no address to read */ }
             if (wanted === 'off') ANTS_ARGS.push('--no-prediction');
+            if (others === 'predicted') ANTS_ARGS.push('--others', 'predicted');
         })();
 
         // ANTS_REPORT_BEGIN (tests/scripts/web_report_check.js runs this function with a fake fetch and a table of failures)
@@ -1851,6 +1857,7 @@
                 clearTimeout(window.antsStartWatchdog);
                 progressContainer.style.display = 'none';
                 hideLoadingScreen();
+                if (window.AntsAnalytics && window.performance && performance.now) window.AntsAnalytics.game(performance.now());          // (the counter, docs/ANALYTICS.md: how long the page took to download the game and start it)
             }],
             getPreloadedPackage: function(name, size) {
                 // The data package that the page downloaded itself (see "The game's data" below): the file packager of index.js asks for it, synchronously, when it starts. It gets

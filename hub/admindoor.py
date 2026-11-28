@@ -54,6 +54,7 @@ MODLOG_SHOWN = 500
 STAFF_MAX = 1000                                 # (accounts that the door remembers as having held a role: a handful in practice)
 READS = frozenset(("me", "bans", "mutes", "hidden", "imagesoff", "modlog", "status"))
 WRITES = frozenset(("ban", "unban", "mute", "unmute", "nopic", "pic", "noimages", "images", "del"))
+QUERIES = frozenset(("analytics",))              # POST with a JSON body and the page's token, like a change, but it changes nothing: the Analytics tab asks for the numbers of a range of days (docs/ANALYTICS.md)
 TABLE_WORD = {"nopic": "ban", "pic": "unban", "noimages": "ban", "images": "unban"}      # (the table of the chat's powers has the commands of the chat: a picture's block, taking posting of images away and their lifts need what a ban and its lift need)
 ACCOUNT_ARGUMENT = re.compile(r"[!-~]{1,40}\Z")
 DIGITS = re.compile(r"[0-9]{1,18}\Z")
@@ -240,7 +241,7 @@ class Door:
         request is known to be well formed and the address is within its limit."""
         try:
             path = request.split()[0]
-            if path != GATE_PATH and not (path.startswith(API_PREFIX) and path[len(API_PREFIX):] in READS | WRITES):
+            if path != GATE_PATH and not (path.startswith(API_PREFIX) and path[len(API_PREFIX):] in READS | WRITES | QUERIES):
                 return self.fail(404, "not_found")
             if "?" in request.path:                                  # (no query at all: not even an empty one)
                 return self.fail(404, "not_found")
@@ -252,7 +253,7 @@ class Door:
             if path == GATE_PATH:
                 return await self.gate(request)
             name = path[len(API_PREFIX):]
-            post = name in WRITES
+            post = name in WRITES or name in QUERIES
             if request.method != ("POST" if post else "GET"):
                 return self.fail(405, "method", {"Allow": "POST" if post else "GET"})
             length = self.framing(request, post)
@@ -319,7 +320,7 @@ class Door:
 
     async def api(self, request, name, reader, length):
         """The cheap checks first (the site, the type, the login, the token), and the body of a POST is read only then, so that nobody who is not let in can make the hub wait for one."""
-        post = name in WRITES
+        post = name in WRITES or name in QUERIES
         h = request.headers
         if not self.same_origin(request, post):
             return self.fail(403, "origin")
@@ -336,8 +337,30 @@ class Door:
             return self.fail(403, "csrf")
         if post:
             body = await asyncio.wait_for(reader.readexactly(length), self.hub.limits.handshake_seconds)
+            if name in QUERIES:
+                return self.ask(body)
             return await self.act(who, role, name, body)
         return self.read(who, role, name)
+
+    def ask(self, body):
+        """The Analytics tab's question (docs/ANALYTICS.md): `{"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}`, the days counted. The answer holds numbers and short lists; the sites that sent visitors and the messages of errors
+        came from visitors' browsers, so they are told as untrusted text."""
+        collector = self.hub.analytics.collector
+        if collector is None:
+            return self.fail(503, "analytics_off")
+        try:
+            hook = no_duplicates                                     # (a key twice is a body that the hub does not read)
+            data = json.loads(body.decode("utf-8"), parse_constant=chatmod.Chat.refuse_constant, object_pairs_hook=hook)
+        except (ValueError, UnicodeDecodeError, RecursionError):
+            return self.fail(400, "bad")
+        if not isinstance(data, dict) or set(data) != {"from", "to"}:
+            return self.fail(400, "bad")
+        report = collector.report(data["from"], data["to"])
+        if report is None:
+            return self.fail(400, "range")
+        report["untrusted"] = True
+        report["untrusted_fields"] = ["lists.refs", "errors"]
+        return http.response(200, report)
 
     def read(self, who, role, name):
         store, chat = self.hub.store, self.hub.chat

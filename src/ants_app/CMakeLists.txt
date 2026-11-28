@@ -96,6 +96,7 @@ add_library(ants_app STATIC
     application_replay.cpp
     auto_camera.cpp
     view_glide.cpp
+    others_view.cpp
     application_maps.cpp
     map_fetch.cpp
     application_touch.cpp

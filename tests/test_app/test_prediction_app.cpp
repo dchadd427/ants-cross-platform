@@ -15,6 +15,7 @@
 #include "ants_app/application.hpp"
 #include "ants_app/health_changes.hpp"
 #include "ants_app/hud.hpp"
+#include "ants_app/others_view.hpp"
 #include "ants_app/view_glide.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_net/netgame.hpp"
@@ -34,6 +35,7 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <random>
 #include <string>
 #include <thread>
 #include <utility>
@@ -268,8 +270,8 @@ bool food_order(Application& app, sim::Command& go) {
 }
 
 // The match is up and the application predicts: the dialog is over, the first turns have run
-bool predicting_match(Application& app, Peer& bob, Duo& duo) {
-    if (!begin_match(app, bob, duo)) return false;
+bool predicting_match(Application& app, Peer& bob, Duo& duo, const ApplicationConfig& config = host_config()) {
+    if (!begin_match(app, bob, duo, config)) return false;
     if (!duo.until([&]() { return app.net()->predicting() && app.sim().current_tick() > 40; }, 20000)) return false;
     duo.step(500);
     return app.net()->predicting();
@@ -307,6 +309,47 @@ uint32_t walk_one_ant_ahead(Application& app, Peer& bob, Duo& duo, int32_t gap) 
         return std::max(std::abs(p->px - c->px), std::abs(p->py - c->py)) >= gap;
     };
     return duo.until(separated, 3000) ? ant : 0u;
+}
+
+
+// The ants of two pictures are the same ant: every field that the picture, the pointer and the panel read
+bool same_ant(const sim::AntSnapshot& a, const sim::AntSnapshot& b) {
+    return a.id == b.id && a.player_id == b.player_id && a.type == b.type && a.raw_type == b.raw_type && a.px == b.px && a.py == b.py && a.tile_x == b.tile_x && a.tile_y == b.tile_y && a.facing == b.facing &&
+           a.hp == b.hp && a.max_hp == b.max_hp && a.anim_state == b.anim_state && a.anim_frame == b.anim_frame && a.is_holding == b.is_holding && a.carried_points == b.carried_points &&
+           a.is_stunned == b.is_stunned && a.is_swimming == b.is_swimming && a.is_drowning == b.is_drowning && a.is_on_mud == b.is_on_mud && a.burn_elapsed_ms == b.burn_elapsed_ms && a.frozen == b.frozen &&
+           a.state == b.state && a.action == b.action && a.target_team_id == b.target_team_id && a.loco_clip == b.loco_clip && a.loco_frame == b.loco_frame && a.loco_mirrored == b.loco_mirrored &&
+           a.loco_left_ms == b.loco_left_ms;
+}
+
+const sim::AntSnapshot* ant_of_world(const sim::WorldState& world, uint32_t id) {
+    for (const auto& a : world.ants) {
+        if (a.id == id) return &a;
+    }
+    return nullptr;
+}
+
+// What the picture of others = confirmed is made of, checked against the two engines themselves: every ant of another player is the confirmed engine's ant (and no other player's ant that the confirmed engine
+// does not have), every own ant the shown engine's. Returns how many other players' ants stand elsewhere in the shown engine (the predicted engine is ahead: the picture must not show that)
+bool picture_is_made_of_both(Application& app, uint8_t me, size_t& others_ahead) {
+    const sim::WorldState& world = app.shown_world();
+    const sim::WorldState& shown = app.view_sim().get_world_state();
+    const sim::WorldState& confirmed = app.sim().get_world_state();
+    for (const sim::AntSnapshot& a : world.ants) {
+        const sim::AntSnapshot* from = ant_of_world(a.player_id == me ? shown : confirmed, a.id);
+        if (from == nullptr || !same_ant(a, *from)) return false;
+    }
+    for (const sim::AntSnapshot& a : shown.ants) {
+        if (a.player_id == me && ant_of_world(world, a.id) == nullptr) return false;
+    }
+    for (const sim::AntSnapshot& a : confirmed.ants) {
+        if (a.player_id == me) continue;
+        const sim::AntSnapshot* drawn = ant_of_world(world, a.id);
+        if (drawn == nullptr) return false;
+        const sim::AntSnapshot* ahead = ant_of_world(shown, a.id);
+        if (ahead != nullptr && (ahead->px != a.px || ahead->py != a.py)) ++others_ahead;
+    }
+    return world.fog_of_war_enabled == confirmed.fog_of_war_enabled && world.fog_revealed == confirmed.fog_revealed && world.cells.size() == shown.cells.size() &&
+           world.match_time_remaining_ms == shown.match_time_remaining_ms;
 }
 
 }  // namespace
@@ -680,11 +723,14 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());                        // (drawing only: the confirmed engines are the same)
     } TEST_END();
 
-    TEST_CASE("PA10 The Frame Never Draws A Sliding Ant Of Another Team On Ground That The Fog Covers: With Fog Of War An Enemy Ant At The Edge Of The Explored Ground Whose Slide Began Two Tiles Into The Fog Is Drawn With The Part Of The Slide That Stays On Explored Ground (The Same Frame As That Shorter Slide, Nothing Where The Whole Slide Would Put It), And A Slide Over Explored Ground Is Drawn Whole") {
+    TEST_CASE("PA10 In The Plain Picture (--others predicted) The Frame Never Draws A Sliding Ant Of Another Team On Ground That The Fog Covers: With Fog Of War An Enemy Ant At The Edge Of The Explored Ground Whose Slide Began Two Tiles Into The Fog Is Drawn With The Part Of The Slide That Stays On Explored Ground (The Same Frame As That Shorter Slide, Nothing Where The Whole Slide Would Put It), And A Slide Over Explored Ground Is Drawn Whole") {
+        // (the plain picture, --others predicted, expires with v0.22.3 at the latest: this test goes with it, AGENTS.md rule 9)
         Application app;
         Peer bob;
         Duo duo{app, bob};
-        ASSERT_TRUE(begin_match(app, bob, duo, host_config(), true));
+        ApplicationConfig plain_picture = host_config();
+        plain_picture.others_confirmed = false;                                             // (the plain picture, --others predicted: it is the one in which another player's ant slides at all)
+        ASSERT_TRUE(begin_match(app, bob, duo, plain_picture, true));
         ASSERT_TRUE(duo.until([&]() { return app.net()->predicting() && app.sim().current_tick() > 40; }, 20000));
         ASSERT_TRUE(app.sim().is_fog_of_war_enabled() && app.view_sim().is_fog_of_war_enabled());
         const auto drawn_enemy = [&]() -> const sim::AntSnapshot* {                          // an ant of Bob's that the picture draws: it stands on ground that the application's team has explored
@@ -786,6 +832,483 @@ int main(int argc, char* argv[]) {
         duo.step(1500);
         ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());                        // (drawing only: the confirmed engines are the same)
         ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
+    } TEST_END();
+
+    TEST_CASE("PA12 Others = Confirmed (The Default) Draws The Other Player's Ants From The Confirmed Engine And The Player's Own From The Predicted One: With Bob's Ant Walking And The Two Engines A Lead Apart, The World Of The Frame Has Bob's Ant Where The Confirmed Engine Has It, Alice's Ants Where The Predicted Engine Has Them, The Frame Shows Bob's Ant At The Confirmed Engine's Place (The Frame Of The Confirmed Engine Alone Is The Same There, The Plain Predicted Frame Is Not), And --others predicted Draws Everything From The Predicted Engine As It Did") {
+        Application app;
+        Peer bob;
+        Duo duo{app, bob};
+        ASSERT_TRUE(predicting_match(app, bob, duo));
+        const std::vector<uint32_t> bobs = ants_of(app.sim(), 1);
+        ASSERT_FALSE(bobs.empty());
+        const uint32_t walker = bobs[0];
+        int16_t gx = 0;
+        int16_t gy = 0;
+        ASSERT_TRUE(far_goal(app.sim(), 1, gx, gy));
+        sim::Command go;
+        go.type = sim::CommandType::GroupMove;
+        go.issuer = 1;
+        go.tile_x = gx;
+        go.tile_y = gy;
+        go.ants.assign(1u, walker);
+        bob.net.submit(go);
+        const auto apart = [&]() {                                                         // Bob's ant walks and the predicted engine has it ahead of the confirmed one
+            const sim::AntSnapshot* p = ant_in(app.view_sim(), walker);
+            const sim::AntSnapshot* c = ant_in(app.sim(), walker);
+            return p != nullptr && c != nullptr && std::max(std::abs(p->px - c->px), std::abs(p->py - c->py)) >= 4;
+        };
+        ASSERT_TRUE(duo.until(apart, 8000));
+        app.net()->freeze();                                                               // (no tick between the frames: they are one frame of one pair of engines)
+        duo.step(400);
+        ASSERT_TRUE(app.net()->predicting() && apart());
+        // the default: the world is made of both engines (Bob's ant is behind the predicted engine's)
+        ASSERT_TRUE(app.others_view_active());
+        // the plain picture (--others predicted): the world of the frame is the shown engine's own, nothing is made
+        app.set_others_confirmed(false);
+        ASSERT_FALSE(app.others_view_active());
+        const uint64_t made_before_plain = app.others_worlds_made();
+        ASSERT_TRUE(&app.shown_world() == &app.view_sim().get_world_state());
+        ASSERT_EQ(app.others_worlds_made(), made_before_plain);
+        const sim::AntSnapshot p0 = *ant_in(app.view_sim(), walker);
+        const sim::AntSnapshot c0 = *ant_in(app.sim(), walker);
+        ASSERT_TRUE(place_camera(app, c0.px, c0.py, 110, 90));
+        int32_t psx = 0, psy = 0, csx = 0, csy = 0;
+        ASSERT_TRUE(app.renderer().camera().world_to_screen(p0.px, p0.py, psx, psy));
+        ASSERT_TRUE(app.renderer().camera().world_to_screen(c0.px, c0.py, csx, csy));
+        const int32_t rx = std::min(psx, csx) - 30;
+        const int32_t ry = std::min(psy, csy) - 44;
+        const int32_t rw = std::abs(psx - csx) + 60;
+        const int32_t rh = std::abs(psy - csy) + 70;
+        const LayoutRect view = app.layout().view();
+        SDL_MouseMotionEvent motion{};
+        motion.type = SDL_MOUSEMOTION;
+        motion.x = view.x + 30;
+        motion.y = view.y + view.h - 30;
+        app.handle_mouse_motion(motion);                                                   // (the pointer far from the ant, nothing selected: the interface is the same in every frame)
+        app.render_frame();
+        const std::vector<uint8_t> plain_predicted = canvas_region(app, rx, ry, rw, rh);
+        ASSERT_FALSE(plain_predicted.empty());
+        // the mode on: the world is made of both engines
+        app.set_others_confirmed(true);
+        ASSERT_TRUE(app.others_view_active());
+        size_t ahead = 0;
+        ASSERT_TRUE(picture_is_made_of_both(app, 0, ahead));
+        ASSERT_TRUE(ahead >= 1);                                                           // (the test is not empty: the predicted engine has Bob's ant ahead, and the picture does not)
+        const sim::WorldState& world = app.shown_world();
+        ASSERT_TRUE(&world != &app.view_sim().get_world_state());
+        ASSERT_TRUE(same_ant(*ant_of_world(world, walker), c0));                           // Bob's ant: the confirmed engine's, whole
+        ASSERT_FALSE(same_ant(*ant_of_world(world, walker), p0));
+        for (const uint32_t mine : ants_of(app.sim(), 0)) ASSERT_TRUE(same_ant(*ant_of_world(world, mine), *ant_in(app.view_sim(), mine)));      // Alice's: the predicted engine's, whole
+        uint64_t made = app.others_worlds_made();
+        ASSERT_EQ(&app.shown_world(), &world);                                             // (asked again in the same moment: the same world, not made again)
+        ASSERT_EQ(app.others_worlds_made(), made);
+        app.render_frame();
+        const std::vector<uint8_t> on = canvas_region(app, rx, ry, rw, rh);
+        ASSERT_TRUE(on != plain_predicted);                                                // the frame is not the predicted engine's where Bob's ant walks ...
+        app.render_frame();
+        ASSERT_TRUE(canvas_region(app, rx, ry, rw, rh) == on);                             // (a frame drawn again is the same frame)
+        // the pointer reads the world that is drawn: with an own ant selected, the cursor at the edge of the box that the predicted engine has Bob's ant in, away from the box of the ant as it is drawn,
+        // is the plain move cursor in this picture (nothing is drawn there) and the attack cursor in the plain one
+        const std::vector<uint32_t> alice = ants_of(app.sim(), 0);
+        ASSERT_FALSE(alice.empty());
+        app.hud().select_ant(alice[0]);
+        const int32_t away_x = p0.px - c0.px;
+        const int32_t away_y = p0.py - c0.py;
+        SDL_MouseMotionEvent edge{};
+        edge.type = SDL_MOUSEMOTION;
+        edge.x = std::abs(away_x) >= std::abs(away_y) ? psx + (away_x > 0 ? 19 : -20) : psx;
+        edge.y = std::abs(away_x) >= std::abs(away_y) ? psy : psy + (away_y > 0 ? 15 : -32);
+        app.handle_mouse_motion(edge);
+        app.render_frame();
+        ASSERT_TRUE(app.hud().current_cursor() == CursorType::Move);
+        app.set_others_confirmed(false);
+        app.render_frame();
+        ASSERT_TRUE(app.hud().current_cursor() == CursorType::Attack);
+        app.set_others_confirmed(true);
+        app.hud().handle_key_down(SDLK_ESCAPE, app.sim(), app.renderer().camera());        // (deselected, and the pointer back where it rested: the same interface as in the frames before)
+        app.handle_mouse_motion(motion);
+        app.render_frame();
+        ASSERT_TRUE(canvas_region(app, rx, ry, rw, rh) == on);
+        made = app.others_worlds_made();
+        // ... it is the confirmed engine's: with the prediction off (the screen is the confirmed engine alone) the same place of the frame is the same picture, Alice's ants being far from it
+        app.net()->set_prediction_enabled(false);
+        app.pump_network(0.0f);
+        ASSERT_FALSE(app.net()->predicting());
+        ASSERT_TRUE(&app.view_sim() == &app.sim() && !app.others_view_active());
+        ASSERT_TRUE(&app.shown_world() == &app.sim().get_world_state());                  // (nothing to compose: the picture is the one engine)
+        app.render_frame();
+        ASSERT_TRUE(canvas_region(app, rx, ry, rw, rh) == on);
+        ASSERT_EQ(app.others_worlds_made(), made);
+        app.set_others_confirmed(false);
+        duo.step(1500);
+        ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());                       // (drawing only: the confirmed engines are the same)
+        ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
+    } TEST_END();
+
+    TEST_CASE("PA17 The Player's Own Ants Are Drawn As They Are Today In Both Pictures, Pixel For Pixel: With An Own Ant Walking (The Two Engines Have It Apart, A Lead Of Walking) The Frame Of Others = Confirmed Has It Where The Predicted Engine Has It, The Plain Frame Is The Same There, And It Is Not Where The Confirmed Engine Has It") {
+        Application app;
+        Peer bob;
+        Duo duo{app, bob};
+        ASSERT_TRUE(predicting_match(app, bob, duo));
+        const uint32_t walker = walk_one_ant_ahead(app, bob, duo, 4);
+        ASSERT_TRUE(walker != 0);
+        app.net()->freeze();                                                               // (no tick between the frames)
+        duo.step(400);
+        ASSERT_TRUE(app.net()->predicting());
+        const sim::AntSnapshot p = *ant_in(app.view_sim(), walker);
+        const sim::AntSnapshot c = *ant_in(app.sim(), walker);
+        ASSERT_TRUE(p.px != c.px || p.py != c.py);
+        ASSERT_TRUE(place_camera(app, p.px, p.py, 110, 90));
+        int32_t psx = 0, psy = 0, csx = 0, csy = 0;
+        ASSERT_TRUE(app.renderer().camera().world_to_screen(p.px, p.py, psx, psy));
+        ASSERT_TRUE(app.renderer().camera().world_to_screen(c.px, c.py, csx, csy));
+        const int32_t rx = std::min(psx, csx) - 30;
+        const int32_t ry = std::min(psy, csy) - 44;
+        const int32_t rw = std::abs(psx - csx) + 60;
+        const int32_t rh = std::abs(psy - csy) + 70;
+        const LayoutRect view = app.layout().view();
+        SDL_MouseMotionEvent motion{};
+        motion.type = SDL_MOUSEMOTION;
+        motion.x = view.x + 30;
+        motion.y = view.y + view.h - 30;
+        app.handle_mouse_motion(motion);
+        app.hud().handle_key_down(SDLK_ESCAPE, app.sim(), app.renderer().camera());        // (nothing selected: the interface is the same in every frame)
+        app.set_others_confirmed(false);
+        app.render_frame();
+        const std::vector<uint8_t> plain = canvas_region(app, rx, ry, rw, rh);
+        app.set_others_confirmed(true);
+        app.render_frame();
+        const std::vector<uint8_t> on = canvas_region(app, rx, ry, rw, rh);
+        ASSERT_FALSE(plain.empty());
+        ASSERT_TRUE(on == plain);                                                          // the own ant is drawn where the predicted engine has it, in both
+        const sim::WorldState& world = app.shown_world();
+        ASSERT_TRUE(same_ant(*ant_of_world(world, walker), p) && !same_ant(*ant_of_world(world, walker), c));
+        app.net()->set_prediction_enabled(false);                                          // and without the prediction the same place of the frame shows the ant where the confirmed engine has it
+        app.pump_network(0.0f);
+        app.render_frame();
+        ASSERT_TRUE(canvas_region(app, rx, ry, rw, rh) != plain);
+        duo.step(1500);
+        ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+    } TEST_END();
+
+    TEST_CASE("PA13 Over A Whole Match No Other Player's Ant Is Ever Drawn Ahead Of The Confirmed Engine Or Anywhere It Is Not, Alice's Own Are Always The Predicted Engine's, The World That The Frame And The Pointer Share Is The One That A Fresh Composition Of The Two Engines Would Make At Every Step (Never A Stale One), And The Confirmed Engines End Identical: Two People Order Their Ants About For 40 s, With Fog Of War On And Off") {
+        for (const bool fog : {false, true}) {
+            Application app;
+            Peer bob;
+            Duo duo{app, bob};
+            ApplicationConfig cfg = host_config();
+            cfg.others_confirmed = true;
+            ASSERT_TRUE(begin_match(app, bob, duo, cfg, fog));
+            ASSERT_TRUE(duo.until([&]() { return app.net()->predicting() && app.sim().current_tick() > 40; }, 20000));
+            ASSERT_TRUE(app.others_view_active());
+            std::mt19937 rng(fog ? 9u : 4u);
+            const auto order = [&](bool alice) {
+                const std::vector<uint32_t> ants = alice ? ants_of(app.sim(), 0) : ants_of(bob.sim, 1);
+                if (ants.empty()) return;
+                sim::Command c;
+                c.type = rng() % 5u == 0u ? sim::CommandType::Stop : sim::CommandType::GroupMove;
+                c.issuer = alice ? 0 : 1;
+                c.tile_x = static_cast<int16_t>(4 + rng() % 30u);
+                c.tile_y = static_cast<int16_t>(4 + rng() % 30u);
+                c.ants.assign(1u, ants[rng() % ants.size()]);
+                if (alice) app.net()->submit(c);
+                else bob.net.submit(c);
+            };
+            size_t ahead_total = 0;
+            size_t checks = 0;
+            uint64_t elapsed = 0;
+            while (elapsed < 40000) {
+                if (elapsed % 250 == 0) order(elapsed % 500 == 0);
+                duo.step(10);
+                elapsed += 10;
+                if (!app.others_view_active()) continue;
+                size_t ahead = 0;
+                ASSERT_TRUE(picture_is_made_of_both(app, 0, ahead));
+                ahead_total += ahead;
+                ++checks;
+                // never stale: the world that stands is the world that a fresh composition of the two engines makes now
+                OthersView fresh;
+                const sim::WorldState& made = fresh.compose_now(app.view_sim().get_world_state(), app.sim().get_world_state(), 0);
+                const sim::WorldState& stands = app.shown_world();
+                ASSERT_EQ(stands.ants.size(), made.ants.size());
+                for (size_t i = 0; i < made.ants.size(); ++i) ASSERT_TRUE(same_ant(stands.ants[i], made.ants[i]));
+                ASSERT_TRUE(stands.effects.size() == made.effects.size() && stands.score_bubbles.size() == made.score_bubbles.size() && stands.player_scores == made.player_scores);
+                if (fog) {
+                    for (const sim::AntSnapshot& a : stands.ants) {                          // (the gate of the picture, asked of the world that is drawn: what it draws of another player is on ground that the confirmed engine has explored)
+                        if (a.player_id != 0 && health::ant_drawn(stands, 0, a)) ASSERT_TRUE(app.sim().get_world_state().is_tile_revealed(a.tile_x, a.tile_y));
+                    }
+                }
+            }
+            ASSERT_TRUE(checks > 3000);
+            ASSERT_TRUE(ahead_total > 100);                                                // (the test is not empty: the predicted engine had other players' ants ahead of the confirmed one in many steps, and the picture had none)
+            app.net()->freeze();
+            duo.step(1500);
+            ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());                   // (nothing of it reached the simulation)
+            ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
+        }
+    } TEST_END();
+
+    TEST_CASE("PA14 No Other Player's Ant Ever Slides In The Mode Of Others = Confirmed: A Turn Of Bob's That Moves His Ant In The Predicted Engine Slides It In The Plain Picture And Not In This One (It Is Drawn Where The Confirmed Engine Has It, Never Corrected), While The Player's Own Ants Slide When The Prediction Stops Or Begins As They Did; Both Pictures Are Drawn From The Same Match") {
+        size_t slid_plain = 0;
+        for (const bool others : {false, true}) {
+            Application app;
+            Peer bob;
+            Duo duo{app, bob};
+            ApplicationConfig cfg = host_config();
+            cfg.others_confirmed = others;
+            ASSERT_TRUE(begin_match(app, bob, duo, cfg));
+            ASSERT_TRUE(duo.until([&]() { return app.net()->predicting() && app.sim().current_tick() > 40; }, 20000));
+            const std::vector<uint32_t> bobs = ants_of(app.sim(), 1);
+            ASSERT_FALSE(bobs.empty());
+            const sim::AntSnapshot* start = ant_in(app.sim(), bobs[0]);
+            ASSERT_TRUE(start != nullptr);
+            ASSERT_TRUE(place_camera(app, start->px, start->py, 0, 0));
+            size_t slid_bobs = 0;
+            uint64_t elapsed = 0;
+            std::mt19937 rng(5);
+            while (elapsed < 12000) {
+                if (elapsed % 400 == 0) {                                                  // Bob steers a walking ant: a turn that the predicted engine did not have, so that it is rebuilt and moves his ant
+                    sim::Command c;
+                    c.type = sim::CommandType::GroupMove;
+                    c.issuer = 1;
+                    c.tile_x = static_cast<int16_t>(start->tile_x - 6 + static_cast<int>(rng() % 5u));
+                    c.tile_y = static_cast<int16_t>(start->tile_y + 2 + static_cast<int>(rng() % 6u));
+                    c.ants.assign(1u, bobs[rng() % std::min<size_t>(bobs.size(), 4u)]);
+                    bob.net.submit(c);
+                }
+                duo.step(10);
+                elapsed += 10;
+                if (elapsed % 30 != 0) continue;
+                app.render_frame();                                                        // (the frame is where the shifts of a rebuild are taken up)
+                for (const uint32_t id : bobs) {
+                    int32_t dx = 0, dy = 0;
+                    if (app.renderer().view_glide().offset_of(id, dx, dy)) ++slid_bobs;
+                }
+                if (others) {
+                    ASSERT_EQ(slid_bobs, 0u);                                              // not one frame of one ant of Bob's slides
+                }
+            }
+            if (!others) slid_plain = slid_bobs;
+            if (others) {
+                // the player's own ants slide when the prediction stops, as they do in the plain picture; Bob's still do not (they are where they were drawn: the confirmed engine's)
+                const std::vector<uint32_t> mine = ants_of(app.sim(), 0);
+                ASSERT_FALSE(mine.empty());
+                app.renderer().view_glide().clear();
+                const std::vector<uint32_t> own_ants = mine;
+                const sim::AntSnapshot* p = ant_in(app.view_sim(), own_ants[0]);
+                ASSERT_TRUE(p != nullptr);
+                sim::Command walk;                                                         // the player's own ant walks, so that the two engines have it apart
+                walk.type = sim::CommandType::GroupMove;
+                walk.issuer = 0;
+                int16_t gx = 0, gy = 0;
+                ASSERT_TRUE(far_goal(app.sim(), 0, gx, gy));
+                walk.tile_x = gx;
+                walk.tile_y = gy;
+                walk.ants = own_ants;
+                app.net()->submit(walk);
+                duo.step(900);
+                app.render_frame();
+                app.renderer().view_glide().clear();
+                app.set_page_hidden(true);                                                  // the prediction is suspended: the screen goes from the predicted engine back to the confirmed one, and the own ants are moved by the lead
+                app.pump_network(0.0f);
+                ASSERT_FALSE(app.net()->predicting());
+                ASSERT_TRUE(app.net()->prediction() != nullptr);
+                app.render_frame();
+                size_t own_slid = 0;
+                size_t bob_slid = 0;
+                for (const uint32_t id : own_ants) {
+                    int32_t dx = 0, dy = 0;
+                    own_slid += app.renderer().view_glide().offset_of(id, dx, dy) ? 1u : 0u;
+                }
+                for (const uint32_t id : bobs) {
+                    int32_t dx = 0, dy = 0;
+                    bob_slid += app.renderer().view_glide().offset_of(id, dx, dy) ? 1u : 0u;
+                }
+                ASSERT_TRUE(own_slid >= 1);                                                // the player's own ant is carried to where the confirmed engine has it ...
+                ASSERT_EQ(bob_slid, 0u);                                                   // ... and Bob's ants, which the picture drew from the confirmed engine all the time, did not move at all
+            }
+            app.net()->freeze();
+            duo.step(1500);
+            ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+        }
+        ASSERT_TRUE(slid_plain >= 3);                                                      // (the plain picture does slide Bob's ants when his turns arrive: the test is not empty)
+    } TEST_END();
+
+    TEST_CASE("PA15 With Fog Of War Nothing Of Another Player Is Drawn Earlier Than The Confirmed Engine Has It Where The Player Can See: An Ant Of Bob's That Walks Into The Ground That Alice Has Explored Is Drawn By The Plain Picture (The Predicted Engine Has It There A Lead Sooner) And Not Yet By This One, Which Waits For The Confirmed Engine; The Pointer Finds Nothing Where Nothing Is Drawn, And An Attack Aimed At The Predicted Tile Is Only Aimed There When The Picture Would Draw The Ant There") {
+        Application app;
+        Peer bob;
+        Duo duo{app, bob};
+        ApplicationConfig cfg = host_config();
+        cfg.others_confirmed = true;
+        ASSERT_TRUE(begin_match(app, bob, duo, cfg, true));
+        ASSERT_TRUE(duo.until([&]() { return app.net()->predicting() && app.sim().current_tick() > 40; }, 20000));
+        ASSERT_TRUE(app.sim().is_fog_of_war_enabled());
+        // Bob's ant walks to Alice's hill; the match is stopped at the first frame in which the predicted engine has it on ground that the confirmed engine has explored and the confirmed engine does not
+        const std::vector<uint32_t> bobs = ants_of(app.sim(), 1);
+        ASSERT_FALSE(bobs.empty());
+        int16_t gx = 0;
+        int16_t gy = 0;
+        ASSERT_TRUE(far_goal(app.sim(), 0, gx, gy, 3, 6));
+        sim::Command go;
+        go.type = sim::CommandType::GroupMove;
+        go.issuer = 1;
+        go.tile_x = gx;
+        go.tile_y = gy;
+        go.ants.assign(1u, bobs[0]);
+        bob.net.submit(go);
+        const uint32_t walker = bobs[0];
+        const auto crossing = [&]() {
+            const sim::WorldState& shown = app.view_sim().get_world_state();
+            const sim::WorldState& confirmed = app.sim().get_world_state();
+            const sim::AntSnapshot* p = ant_of_world(shown, walker);
+            const sim::AntSnapshot* c = ant_of_world(confirmed, walker);
+            return p != nullptr && c != nullptr && health::ant_drawn(shown, 0, *p) && !health::ant_drawn(confirmed, 0, *c);
+        };
+        ASSERT_TRUE(duo.until(crossing, 90000));
+        app.net()->freeze();                                                               // (no tick between the frames from here)
+        const sim::AntSnapshot p = *ant_in(app.view_sim(), walker);
+        const sim::AntSnapshot c = *ant_in(app.sim(), walker);
+        // the plain picture would draw the ant; this one does not (the ant of the world that is drawn stands on ground that is covered)
+        const sim::WorldState& world = app.shown_world();
+        const sim::AntSnapshot* in_world = ant_of_world(world, walker);
+        ASSERT_TRUE(in_world != nullptr && same_ant(*in_world, c));
+        ASSERT_FALSE(health::ant_drawn(world, 0, *in_world));
+        ASSERT_TRUE(health::ant_drawn(app.view_sim().get_world_state(), 0, p));
+        ASSERT_FALSE(world.is_tile_revealed(c.tile_x, c.tile_y));
+        ASSERT_TRUE(world.is_tile_revealed(p.tile_x, p.tile_y));                             // (the veil is the confirmed engine's in both: the predicted tile is explored)
+        // nothing is there for the pointer: with an own ant selected the cursor over the ant (the picture draws nothing there) is the plain move cursor, where the plain picture shows the ant under the attack
+        // cursor at the place that the predicted engine has it
+        const std::vector<uint32_t> alice = ants_of(app.sim(), 0);
+        ASSERT_FALSE(alice.empty());
+        app.hud().select_ant(alice[0]);
+        ASSERT_TRUE(place_camera(app, p.px, p.py, 40, 30));
+        int32_t csx = 0, csy = 0, psx = 0, psy = 0;
+        ASSERT_TRUE(app.renderer().camera().world_to_screen(c.px, c.py - 8, csx, csy));
+        ASSERT_TRUE(app.renderer().camera().world_to_screen(p.px, p.py - 8, psx, psy));
+        ASSERT_TRUE(app.hud().evaluate_cursor(csx, csy, world, app.view_sim().grid(), app.renderer().camera()) == CursorType::Move);       // (the pointer's own tile is covered: the cursor ignores the ant, as the original's does)
+        ASSERT_TRUE(app.hud().evaluate_cursor(psx, psy, app.view_sim().get_world_state(), app.view_sim().grid(), app.renderer().camera()) == CursorType::Attack);
+        // the aim: where the picture would draw the ant at the predicted tile the order is aimed there, where it would not it is not
+        sim::TileCoord tile{c.tile_x, c.tile_y};
+        ASSERT_TRUE(aim_at_predicted_ant(app.view_sim().get_world_state(), 0, c, tile));     // (the predicted tile is explored: a drawn ant of the confirmed engine would be aimed there)
+        ASSERT_TRUE(tile.x == p.tile_x && tile.y == p.tile_y);
+        duo.step(1500);
+        ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+    } TEST_END();
+
+    TEST_CASE("PA16 The Switch: Others = Confirmed Is On Unless The Command Line Says --others predicted (The Last Word Wins, A Value That Is No Choice Is Refused With The Reason), It Does Nothing Without The Prediction (Told Not To, Or In A Game Of One Machine), And Off It Changes Nothing: The Frame, The HUD And The Glide Are The Plain Ones, No World Is Made And The Match Ends In The Same State") {
+        // (the plain picture, --others predicted, expires with v0.22.3 at the latest: this test goes with it, AGENTS.md rule 9)
+        std::vector<std::string> args;
+        std::vector<char*> st;
+        const auto parse = [&](std::vector<std::string> a) {
+            args = std::move(a);
+            st.clear();
+            for (std::string& x : args) st.push_back(x.data());
+            st.push_back(nullptr);
+            return Application::parse_arguments(static_cast<int>(args.size()), st.data());
+        };
+        ApplicationConfig c = parse({"ants"});
+        ASSERT_TRUE(c.others_confirmed && c.startup_error.empty());         // on by default: the command line said nothing
+        c = parse({"ants", "--others", "confirmed"});
+        ASSERT_TRUE(c.others_confirmed && c.startup_error.empty());
+        c = parse({"ants", "--others", "predicted"});
+        ASSERT_TRUE(!c.others_confirmed && c.startup_error.empty());
+        c = parse({"ants", "--others", "maybe"});
+        ASSERT_EQ(c.startup_error, std::string("--others needs confirmed or predicted"));
+        c = parse({"ants", "--others"});
+        ASSERT_EQ(c.startup_error, std::string("--others needs confirmed or predicted"));
+        c = parse({"ants", "--others", "predicted", "--others", "confirmed"});
+        ASSERT_TRUE(c.others_confirmed);                                                   // the last one wins
+        c = parse({"ants", "--others", "confirmed", "--others", "predicted", "--no-prediction"});
+        ASSERT_TRUE(!c.others_confirmed && !c.prediction);                                 // (the two switches are independent: the picture is the plain one, and there is no prediction to draw)
+        // --others predicted: a whole match is the plain picture, the HUD is not told of another world, no world is made, and Bob's ants slide as before
+        {
+            ApplicationConfig cfg = host_config();
+            cfg.others_confirmed = false;
+            Application app;
+            Peer bob;
+            Duo duo{app, bob};
+            ASSERT_TRUE(predicting_match(app, bob, duo, cfg));
+            ASSERT_FALSE(app.others_view_active());
+            for (int i = 0; i < 40; ++i) {
+                duo.step(50);
+                ASSERT_TRUE(&app.shown_world() == &app.view_sim().get_world_state());
+                app.render_frame();
+            }
+            ASSERT_EQ(app.others_worlds_made(), 0u);
+            app.net()->freeze();
+            duo.step(1500);
+            ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+        }
+        // the default: a match that predicts is drawn from both engines, and nothing but the picture differs (the confirmed engines end alike)
+        {
+            Application app;
+            Peer bob;
+            Duo duo{app, bob};
+            ASSERT_TRUE(predicting_match(app, bob, duo));
+            ASSERT_TRUE(app.others_view_active());
+            for (int i = 0; i < 40; ++i) {
+                duo.step(50);
+                ASSERT_TRUE(&app.shown_world() != &app.view_sim().get_world_state());
+                app.render_frame();
+            }
+            ASSERT_TRUE(app.others_worlds_made() > 0u);
+            app.net()->freeze();
+            duo.step(1500);
+            ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+        }
+        // asked for (the default), with the prediction told off: nothing is made either (the picture is the confirmed engine alone)
+        {
+            ApplicationConfig cfg = host_config();
+            cfg.prediction = false;
+            Application app;
+            Peer bob;
+            Duo duo{app, bob};
+            ASSERT_TRUE(begin_match(app, bob, duo, cfg));
+            ASSERT_TRUE(duo.until([&]() { return app.sim().current_tick() > 60; }, 20000));
+            ASSERT_FALSE(app.net()->predicting() || app.others_view_active());
+            for (int i = 0; i < 20; ++i) {
+                duo.step(50);
+                ASSERT_TRUE(&app.shown_world() == &app.sim().get_world_state());
+                app.render_frame();
+            }
+            ASSERT_EQ(app.others_worlds_made(), 0u);
+            app.net()->freeze();
+            duo.step(1500);
+            ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+        }
+    } TEST_END();
+
+    TEST_CASE("PA18 The World Of Both Engines Is Let Go Of When A Match Ends And When A Match Begins, So That No Match Is Ever Shown The One Before's World For A Moment Whatever Its Stamp: It Stands, Shared By Every Ask Of A Moment, Until The Match Is Over (Or, For A New Match, Begins), And The Next Ask Makes It Again") {
+        {
+            Application app;
+            Peer bob;
+            Duo duo{app, bob};
+            ASSERT_TRUE(predicting_match(app, bob, duo));
+            ASSERT_TRUE(app.others_view_active());
+            app.shown_world();
+            ASSERT_TRUE(app.others_world_standing());                                      // the world of this moment is kept ...
+            const uint64_t made = app.others_worlds_made();
+            app.shown_world();
+            ASSERT_EQ(app.others_worlds_made(), made);                                     // ... and every ask of the moment shares it
+            sim::Command quit;                                                             // Bob leaves: the match is over
+            quit.type = sim::CommandType::Quit;
+            quit.issuer = 1;
+            ASSERT_EQ(bob.net.submit(quit).status, sim::CommandResult::Status::Applied);
+            ASSERT_TRUE(duo.until([&]() { return app.sim().is_match_over(); }, 15000));
+            ASSERT_FALSE(app.others_world_standing());                                     // the end let go of it
+        }
+        {
+            Application app;                                                               // a match begins (a game that this machine starts, after a match of the network that was left): the world
+            Peer bob;                                                                      // that the match before made is not the new match's
+            Duo duo{app, bob};
+            ASSERT_TRUE(predicting_match(app, bob, duo));
+            app.shown_world();
+            ASSERT_TRUE(app.others_world_standing());
+            app.return_to_map_select();                                                    // (a match that is left ends no match: nothing lets go of the world here)
+            ASSERT_TRUE(app.others_world_standing());
+            ASSERT_TRUE(app.start_game(maps_dir() + "SMALL.LVL"));
+            ASSERT_FALSE(app.others_world_standing());                                     // the start let go of it
+        }
     } TEST_END();
 
     TEST_CASE("PA5 A Hidden Page Shows Nothing: The Prediction Is Suspended While It Is Hidden (The Wake-Ups Step The Match, No Picture Needs The Predicted Engine) And Begins Again, With The Next Tick, When The Page Is Shown") {
