@@ -1,12 +1,12 @@
 #pragma once
 
-// The names of people on the wire (protocol 29, docs/NETWORK_PORT.md "Protocol 29"; docs/HUB_NICKNAMES.md is the whole story of the names). A name travels as UTF-8: printable ASCII (0x20 - 0x7E) and the
-// letters of the table in name_letters_data.inc (hub/name_letters.py is its home: the letters of the Latin and Cyrillic alphabets that the game's font draws, Vietnamese and the modern Cyrillic ones
+// The names of people on the wire (protocol 29, docs/NETWORK_PORT.md "Protocol 29"). A name travels as UTF-8: printable ASCII (0x20 - 0x7E) and the
+// letters of the table in name_letters_data.inc (made by tools/gen_name_letters.py: the letters of the Latin and Cyrillic alphabets that the game's font draws, Vietnamese and the modern Cyrillic ones
 // among them), at most kMaxNameChars characters and kMaxNameBytes bytes, and nothing else (no control character, no combining mark, no letter of another script, no byte that is not UTF-8). The page's
 // twin is web/front/name_letters.js; tests/scripts/web_name_letters_check.js and tests/test_net/test_lobby_names.cpp hold both to the same cases.
 //
 // A person's name is one of three kinds, and the room tells them apart by the name alone:
-//   * a PASS name: the hub signed it (docs/HUB_NICKNAMES.md, "The pass"): the nickname of a person who is logged in, with the tag before it when there is one ("[TAG] Nickname"), or the name that their login
+//   * a PASS name: the hub signed it (docs/NETWORK_PORT.md, "Protocol 29"): the nickname of a person who is logged in, with the tag before it when there is one ("[TAG] Nickname"), or the name that their login
 //     has when they chose no nickname. The server takes such a name as it is when a Hello or a NameMsg shows the pass, and only then (a dedicated server that was given the hub's key);
 //   * a GUEST name: everything else on such a server. "Wren (Guest)": the letters, digits, spaces and . _ - ' of the name cut to 16 characters, then " (Guest)" (guest_name). The one name without the
 //     suffix is the number that a page makes for a visitor who typed none, "Guest 482913" (is_guest_number);
@@ -59,7 +59,7 @@ bool is_guest_number(std::string_view text);
 /// A name with nothing left is `fallback` with the suffix.
 std::string guest_name(std::string_view raw, std::string_view fallback);
 
-/// Whether `pass` has the shape of a pass (kMaxPassChars at most, digits, a dot, 32 lower-case hex digits); the key and the clock decide whether it is a good one (ants_server/name_pass.hpp)
+/// Whether `pass` has the shape of a pass (kMaxPassChars at most, digits, a dot, 32 lower-case hex digits); the key and the clock decide whether it is a good one (the game server's name pass)
 bool valid_pass_shape(std::string_view pass);
 
 }  // namespace ants::net

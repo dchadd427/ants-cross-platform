@@ -910,7 +910,7 @@ void test_net_overlay() {
 
 // The network's share of the corner: "ping NN ms" next to the frame rate (latency_corner.hpp). The string, where the readout is drawn at all, the
 // layout on each screen at 640 x 480 (the recording renderer measures 6 px per character: the real font's geometry is checked with the application's renderer in
-// test_network_app) and the draw call: one text, in the frame rate's style and size, and nothing else.
+// the application tests with a real server) and the draw call: one text, in the frame rate's style and size, and nothing else.
 void test_latency_corner(const assets::AssetArchive& arc) {
     std::printf("[latency] ping next to the frame rate: string, which screens, layout, draw call\n");
     using NP = net::NetGame::Phase;

@@ -47,7 +47,7 @@ std::string lower_text(std::string s) {
     return s;
 }
 
-// The six maps of the original game, in the order of web/lobby.html (by size)
+// The six maps of the original game, in the order of the site's lobby page (by size)
 constexpr MenuMap kMaps[kMenuMapCount] = {
     {"tiny", "Tiny"}, {"small", "Small"}, {"medium", "Medium"}, {"gauntlet", "Gauntlet"}, {"treasure", "Treasure"}, {"islands", "Islands"},
 };
@@ -118,7 +118,7 @@ constexpr int32_t kHintY = 446;
 constexpr int32_t kHintH = 14;
 constexpr int32_t kTextX = 60;
 constexpr int32_t kTextW = 520;
-constexpr const char* kFillCaption = "Bots gather food, raid and fight back.";     // what the standard bot does (docs/BOTS.md "The standard bot"), under the seat rows here and on web/lobby.html
+constexpr const char* kFillCaption = "Bots gather food, raid and fight back.";     // what the standard bot does (docs/BOTS.md "The standard bot"), under the seat rows here and on the site's lobby page
 
 // The Host panel is a column of rows (a label at x = 60, a 380 px control at x = 200, 27 px high at a pitch of 29, 18 px text): the map, the players, a row for each seat after the leader's and, from three
 // players, the teams. What follows them (the caption, the name, Host, Back, the note or the error) moves with them, so every state fits the frame without a gap.

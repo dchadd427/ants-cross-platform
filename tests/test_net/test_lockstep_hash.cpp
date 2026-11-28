@@ -11,7 +11,7 @@
 //                  turn decides, and a turn that was let go stays let go; a seat that vouches, or one that is awaited, decides as before. The guards of the verdict (a seat that has run exactly the turn, two turns that
 //                  wait, the reports of a seat that is not at the table or that leaves, a report of a turn that every seat has passed, the referee's or a seat's, a late report after an answer). A whole room that
 //                  holds seats, with real machines, one of them behind a link whose acknowledgements run late
-// The Quit of the dropped seat in the turn stream and what it makes of the results, the history and the replay are tested in front of real rooms (test_server S3.250 - S3.258). The mutants of all of it:
+// The Quit of the dropped seat in the turn stream and what it makes of the results, the history and the replay are tested in front of real rooms (the game server's tests S3.250 - S3.258). The mutants of all of it:
 // tests/data/state_hash_mutants.json (tools/mutate.py), every one caught.
 #include "lockstep_fixtures.hpp"
 

@@ -6,8 +6,8 @@
 //
 // It only WATCHES: the collector is given to replay::play() as its hooks and reads what the engine already says, through the public readers (the counters, the world after every tick, the record of an ant
 // that is gone: the engine keeps it, with the team of the last damage, until the match is over) and the queues of cues. It changes nothing, so a played match ends in the same hashes with or without it
-// (tests/test_server/test_history_details.cpp checks it). No clock, no disk, no database, no thread: pure, like make_history_record(). The server turns what it found into the `details` of a match's record
-// (ants_server/history_details.hpp), in the same pass that counts the totals.
+// (a test of the game server's history checks it). No clock, no disk, no database, no thread: pure, like make_history_record(). The game server turns what it found into the `details` of a match's record
+// in the same pass that counts the totals.
 //
 // What this cannot tell (it needs an event sink in the engine, a later change): what caused each hit (a blow, a bomb, a fire wall) and the type of the ant that struck. The tile of every lost ant is read from the
 // same snapshot of the ants (the tile of its last look). The ants are read with SimulationEngine::get_ant_snapshots: the ants alone, so a catch-up that counts hundreds of turns a frame does not copy the map for each of them.
@@ -41,7 +41,7 @@ struct MatchStats {
     static const char* order_kind_name(OrderKind kind) noexcept;     // "move", "attack", "bomb", "fire", "bridge", "raid", "special", "stop", "hatch", "team"
 
     /// The kinds of event that the activity curve of the replay page counts (docs/HEATMAPS.md "The activity curve"; the counts are `action`): the Auto camera's big events that are a fight and not food or a bridge. The order is the one of the
-    /// keys of the stored field (ants_server/history_action.hpp).
+    /// keys of the stored field.
     enum class Action : uint8_t { Death, Bomb, Theft, Fire, Hit, Count };
     static constexpr size_t kActionKinds = static_cast<size_t>(Action::Count);
     static const char* action_name(Action kind) noexcept;        // "death", "bomb", "theft", "fire", "hit"
@@ -54,7 +54,7 @@ struct MatchStats {
         std::array<uint32_t, kSeats> killed{};
     };
     /// An ant that died. `killer` is the team of the last damage it took (kNoKiller: none, or its own: a team does not kill itself), `victim_type` the ant's own type (AntType as a number: a Worker until it takes a
-    /// power-up), `drowned` that it fell in the water, `tile_x` / `tile_y` the tile the ant stood on when the world last showed it (where it died: the map of deaths, ants_server/history_deaths.hpp).
+    /// power-up), `drowned` that it fell in the water, `tile_x` / `tile_y` the tile the ant stood on when the world last showed it (where it died: the map of deaths).
     struct Kill {
         uint32_t turn{0};
         uint8_t killer{kNoKiller};

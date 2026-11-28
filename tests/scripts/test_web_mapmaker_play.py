@@ -121,36 +121,36 @@ class ThePlayChecks(unittest.TestCase):
 
 class TheHeavyMapWarning(unittest.TestCase):
     def test_the_page_warns_above_the_number_that_the_server_marks(self):
-        """a map is heavy above include/ants_server/online_limits.hpp's kHeavyStartAnts start ants; the page's copy of the number must be the same"""
-        header = re.search(r"kHeavyStartAnts = (\d+);", read("include", "ants_server", "online_limits.hpp"))
+        """a map is heavy above include/ants_net/room_limits.hpp's kHeavyStartAnts start ants; the page's copy of the number must be the same"""
+        header = re.search(r"kHeavyStartAnts = (\d+);", read("include", "ants_net", "room_limits.hpp"))
         page = re.search(r"HEAVY_START_ANTS = (\d+);", read("web", "front", "mapmaker_play.js"))
         self.assertTrue(header and page)
         self.assertEqual(header.group(1), page.group(1))
 
     def test_the_page_refuses_above_the_number_that_the_server_refuses(self):
-        """a room plays at most include/ants_server/online_limits.hpp's kMaxStartAnts start ants; the page's copy of the number must be the same"""
-        header = re.search(r"kMaxStartAnts = (\d+);", read("include", "ants_server", "online_limits.hpp"))
+        """a room plays at most include/ants_net/room_limits.hpp's kMaxStartAnts start ants; the page's copy of the number must be the same"""
+        header = re.search(r"kMaxStartAnts = (\d+);", read("include", "ants_net", "room_limits.hpp"))
         page = re.search(r"MAX_ONLINE_ANTS = (\d+);", read("web", "front", "mapmaker_play.js"))
         self.assertTrue(header and page)
         self.assertEqual(header.group(1), page.group(1))
 
     def test_the_page_refuses_above_the_pairs_that_the_server_refuses(self):
-        """a room plays at most include/ants_server/online_limits.hpp's kMaxPlantWaypointPairs pairs of a plant and a waypoint; the page's copy of the number must be the same"""
-        header = re.search(r"kMaxPlantWaypointPairs = (\d+);", read("include", "ants_server", "online_limits.hpp"))
+        """a room plays at most include/ants_net/room_limits.hpp's kMaxPlantWaypointPairs pairs of a plant and a waypoint; the page's copy of the number must be the same"""
+        header = re.search(r"kMaxPlantWaypointPairs = (\d+);", read("include", "ants_net", "room_limits.hpp"))
         page = re.search(r"MAX_ONLINE_PAIRS = (\d+);", read("web", "front", "mapmaker_play.js"))
         self.assertTrue(header and page)
         self.assertEqual(header.group(1), page.group(1))
 
     def test_the_page_refuses_above_the_food_objects_that_the_server_refuses(self):
-        """a room plays at most include/ants_server/online_limits.hpp's kMaxFoodObjects food objects; the page's copy of the number must be the same"""
-        header = re.search(r"kMaxFoodObjects = (\d+);", read("include", "ants_server", "online_limits.hpp"))
+        """a room plays at most include/ants_net/room_limits.hpp's kMaxFoodObjects food objects; the page's copy of the number must be the same"""
+        header = re.search(r"kMaxFoodObjects = (\d+);", read("include", "ants_net", "room_limits.hpp"))
         page = re.search(r"MAX_ONLINE_FOOD = (\d+);", read("web", "front", "mapmaker_play.js"))
         self.assertTrue(header and page)
         self.assertEqual(header.group(1), page.group(1))
 
     def test_the_page_refuses_above_the_power_ups_that_the_server_refuses(self):
-        """a room plays at most include/ants_server/online_limits.hpp's kMaxPowerUps power-ups; the page's copy of the number must be the same"""
-        header = re.search(r"kMaxPowerUps = (\d+);", read("include", "ants_server", "online_limits.hpp"))
+        """a room plays at most include/ants_net/room_limits.hpp's kMaxPowerUps power-ups; the page's copy of the number must be the same"""
+        header = re.search(r"kMaxPowerUps = (\d+);", read("include", "ants_net", "room_limits.hpp"))
         page = re.search(r"MAX_ONLINE_POWERUPS = (\d+);", read("web", "front", "mapmaker_play.js"))
         self.assertTrue(header and page)
         self.assertEqual(header.group(1), page.group(1))

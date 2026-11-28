@@ -1,7 +1,6 @@
 // Whose slide it is (include/ants_app/view_glide.hpp). An ant that the picture draws from the confirmed engine (every other player's, with others = confirmed) is never corrected by the prediction, so the
 // only slide that it can have is the picture's own hop of a snap that the engine itself made (ViewGlide::follow: a new order, a stop): the slide begins in the frame in which the engine moved the ant by
-// about as much as the slide takes back. A correction of a rebuild would begin with no such move. Shared by the tests that hold "no correction of another player's ant is ever drawn" (test_prediction_link,
-// test_prediction_app).
+// about as much as the slide takes back. A correction of a rebuild would begin with no such move. Shared by the tests that hold "no correction of another player's ant is ever drawn" (test_prediction_app, and the same test against a real server).
 #pragma once
 
 #include "ants_sim/sim_engine.hpp"

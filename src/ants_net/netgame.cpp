@@ -93,7 +93,7 @@ constexpr bool kInBrowser = false;
 #endif
 
 // A Hello with a create block is one that the server makes the room of when somebody comes (the front page's card and the start menu send them): the server answers NoSuchRoom when it cannot,
-// so it is mostly a place that is missing (the cap of public rooms, the server's limit), or the server's limit of rooms for the sender's network address (docs/ADDRESS_LIMITS.md), which it answers the same
+// so it is mostly a place that is missing (the cap of public rooms, the server's limit), or the server's limit of rooms for the sender's network address, which it answers the same
 // way. The text is told only for a code that a block can make a room of (public_room_code): a code with a capital is the name of a room of the control interface, which a block never makes, and the answer for it is a room that does not exist (or is over)
 constexpr const char* kTextNoPlace = "The server cannot make a room now: it is busy, or your network made many rooms. Try again in a minute.";
 

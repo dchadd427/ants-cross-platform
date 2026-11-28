@@ -51,7 +51,7 @@
   },
   {
    "id": "online_limit_one_cell_more",
-   "file": "include/ants_server/online_limits.hpp",
+   "file": "include/ants_net/room_limits.hpp",
    "old": "static constexpr uint32_t kMaxCells = 256u * 256u;",
    "new": "static constexpr uint32_t kMaxCells = 256u * 256u + 1u;",
    "build": [
@@ -598,7 +598,7 @@
   },
   {
    "id": "heavy_from_2401_up_is_2400",
-   "file": "include/ants_server/online_limits.hpp",
+   "file": "include/ants_net/room_limits.hpp",
    "old": "static constexpr uint32_t kHeavyStartAnts = 2400;",
    "new": "static constexpr uint32_t kHeavyStartAnts = 2401;",
    "build": [
@@ -609,7 +609,7 @@
   },
   {
    "id": "heavy_from_2399",
-   "file": "include/ants_server/online_limits.hpp",
+   "file": "include/ants_net/room_limits.hpp",
    "old": "static constexpr uint32_t kHeavyStartAnts = 2400;",
    "new": "static constexpr uint32_t kHeavyStartAnts = 2399;",
    "build": [

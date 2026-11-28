@@ -72,7 +72,7 @@ std::shared_ptr<const SystemChain> system_chain() {
 }
 
 // The suites that are offered: authenticated encryption only (TLS 1.3, and TLS 1.2 with AES-GCM or ChaCha20-Poly1305 over ECDHE). The library's own list holds suites with a CBC mode and a SHA-1 MAC, CCM_8, Camellia and ARIA
-// that no server of the site needs; nginx's defaults (TLS 1.3, ECDHE with GCM and ChaCha20) are all in this list. The list lives as long as the program (the configuration keeps a pointer to it).
+// that no server of the site needs; the usual web servers' defaults (TLS 1.3, ECDHE with GCM and ChaCha20) are all in this list. The list lives as long as the program (the configuration keeps a pointer to it).
 const int kCipherSuites[] = {
     MBEDTLS_TLS1_3_AES_128_GCM_SHA256,
     MBEDTLS_TLS1_3_AES_256_GCM_SHA384,

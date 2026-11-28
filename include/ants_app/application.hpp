@@ -199,7 +199,7 @@ struct ApplicationConfig {
     /// --audio-focus: a window that does not have the input focus is silent (four games on one machine: you hear the one you play)
     bool audio_follows_focus{false};
     std::string player_name;                    // this player's name (--name); empty: the system user, or "Player" in a network game
-    std::string name_pass;                      // the hub's pass for that name (--name-pass; protocol 29, docs/HUB_NICKNAMES.md "The pass"): told in the Hello of a game on a server, which takes the name as it is only with it (else the name is a guest's)
+    std::string name_pass;                      // the hub's pass for that name (--name-pass; protocol 29, docs/NETWORK_PORT.md "Protocol 29"): told in the Hello of a game on a server, which takes the name as it is only with it (else the name is a guest's)
     std::array<std::string, 4> team_names{};    // names of the teams of a local game (-N<team><name> as in the original, --team-name)
     /// false: a local game shows a score label only for the teams that have a name (and the local player's own). The browser build sets it: there are no
     /// other players in it (no multiplayer yet), so the color words "Red:", "Blue:", "Black:" would only be placeholders. The original draws a label only for
@@ -597,10 +597,10 @@ public:
     /// SDL_GetPerformanceFrequency per second) so that every rule of the time is checked exactly and without waiting. Nothing: the real clock.
     void set_clock(std::function<uint64_t()> counter) { clock_ = std::move(counter); }
     /// Called once for each game on this computer, when its first tick runs (never for a match of the network, whichever machine it is): the web build tells its page, which has the server count
-    /// the game for the front page's numbers (web/shell.html antsReportLocalGame, docs/SERVER.md, "The site statistics, GET /stats and POST /stats/local"). A native game sets nothing and so reports nothing.
+    /// the game for the front page's numbers (web/shell.html antsReportLocalGame). A native game sets nothing and so reports nothing.
     void set_on_local_match_started(std::function<void()> hook) { on_local_match_started_ = std::move(hook); }
     /// The match of a server's room is over (check_match_over: once for each match, BEFORE the key of the seat is let go of): `fn` is told what the results show, as the text of match_over_json. The web build
-    /// tells its page (window.antsMatchOver, web/front/rematch.js), which holds the seat that the rematch of a lobby room keeps for this player and offers "Back to the room" and "Back to Ants & Uncles" (docs/SERVER.md "Lobby rooms");
+    /// tells its page (window.antsMatchOver, web/front/rematch.js), which holds the seat that the rematch of a lobby room keeps for this player and offers "Back to the room" and "Back to Ants & Uncles" (docs/NETWORK_PORT.md "Protocol 16");
     /// the tests give a function of their own. Never called for a game of one machine, a room of the local network (no room code) or a recording.
     void set_on_match_over(std::function<void(const std::string&)> fn) { on_match_over_ = std::move(fn); }
     /// The page that holds the game can take the player somewhere else at the end of a lobby room's match (the web build, on the page itself: connect_page_exits): `to_room` takes the tab back to the room and

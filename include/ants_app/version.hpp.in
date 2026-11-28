@@ -16,7 +16,7 @@ inline constexpr int VERSION_MINOR = @ANTS_VERSION_MINOR@;
 inline constexpr int VERSION_PATCH = @ANTS_VERSION_PATCH@;
 
 // Which build this is: the short git commit of a build made in a git checkout, else the build argument of the Docker images (-DANTS_BUILD_ID), else
-// "unknown". It is shown in `ants --version`, `ants_server --version` and the server's start-up line, never in the corner plate. Defined in a
+// "unknown". It is shown in `ants --version`, the game server's `--version` and its start-up line, never in the corner plate. Defined in a
 // generated source file (not here) so that a new commit recompiles one tiny file instead of everything that includes this header.
 extern const std::string_view BUILD_ID;
 

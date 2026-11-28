@@ -87,14 +87,14 @@ inline constexpr size_t kSeatChoiceCount = 4;
 /// "Empty", "Easy bot", "Medium bot", "Hard bot"
 const char* seat_choice_text(SeatChoice choice) noexcept;
 
-/// A map that a hosted match can be made on: the six maps of the original game, which the game server's public rooms offer (web/lobby.html offers the same)
+/// A map that a hosted match can be made on: the six maps of the original game, which the game server's public rooms offer (the site's lobby page offers the same)
 struct MenuMap {
     const char* key;       // the map's word ("small"; its file is the key in capitals and ".LVL": TINY.LVL ... ISLANDS.LVL)
     const char* name;      // what the screen shows ("Small")
 };
 inline constexpr size_t kMenuMapCount = 6;
 /// The map that the Host panel offers when the settings hold no choice (a `host_map` that was stored wins): Treasure, the map that is played most (requested: Treasure is the default
-/// of everything). The list keeps the order of web/lobby.html (by size), so its first entry, Tiny, is not the default; `kDefaultMenuMap` is Treasure's index (start_menu.cpp checks it).
+/// of everything). The list keeps the order of the site's lobby page (by size), so its first entry, Tiny, is not the default; `kDefaultMenuMap` is Treasure's index (start_menu.cpp checks it).
 inline constexpr int kDefaultMenuMap = 4;
 /// The map at `index`; an index that is not in the list gives the default map, Treasure
 const MenuMap& menu_map(size_t index) noexcept;
@@ -105,7 +105,7 @@ int menu_map_index(const std::string& key) noexcept;
 /// of a level that the server seats there when this player, the room's leader, presses START (network protocol 13: a level for each seat; the web page's `?fill=`):
 /// "Leave empty", "Easy bot", "Medium bot", "Hard bot"
 const char* fill_seat_text(net::FillLevel level) noexcept;
-/// The line under the seat rows on the Host panel (and under the choice on web/lobby.html): what the bots can do. "Bots gather food, raid and fight back."
+/// The line under the seat rows on the Host panel (and under the choice on the site's lobby page): what the bots can do. "Bots gather food, raid and fight back."
 const char* fill_choice_caption() noexcept;
 /// What the room's panel tells the leader about START, from the plan's levels of the seats 1 .. `players` - 1 (the leader has seat 0): "Empty seats stay empty." (no level),
 /// "Empty seats will be Medium bots." (the same level in every seat), else the seats one by one: "At START: Red gets an Easy bot, Black a Hard bot." (the short form "At START: Red Easy, Blue Medium,
@@ -115,7 +115,7 @@ std::string fill_choice_sentence(const net::FillPlan& plan, int players = 4);
 /// create block, so the room makes them for every start); "" for free for all
 std::string room_teams_sentence(const LocalTeams& teams, int players);
 
-/// The room code of a hosted match (protocol 15), made as web/lobby.html makes it: kRoomCodeChars (6) characters of kRoomCodeAlphabet (lower case letters without i, l and o, and the digits 2 - 9: no
+/// The room code of a hosted match (protocol 15), made as the site's lobby page makes it: kRoomCodeChars (6) characters of kRoomCodeAlphabet (lower case letters without i, l and o, and the digits 2 - 9: no
 /// look-alikes), 31 symbols, 8.9e8 codes. `random` gives 32 random bits at each call. The code is only a name: the map, the seats and the teams of the room are in the create block that the first
 /// Hello carries (make_create_block), and the server makes the room from that block when it has none of the code.
 inline constexpr const char* kRoomCodeAlphabet = "abcdefghjkmnpqrstuvwxyz23456789";

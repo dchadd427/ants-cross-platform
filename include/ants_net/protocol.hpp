@@ -12,7 +12,7 @@
 // shows the key in a new Hello and gets its seat back. Meanwhile the server tells the others who is missing and what the vote says (Presence), they vote (Vote: keep
 // waiting / continue without), and the player who returns is given the match from the server's turn log (CatchUp, then TurnBatch messages of consecutive turns, each as
 // big as a message may be) and reports its state hash when it has executed them all (CaughtUp). Old-layout Hellos (protocols 6 to 9: protocol 9 changed the rules of the match, not a message) are still answered "version mismatch":
-// decode_hello_prefix reads the version and the name, which lead every layout. Who sends what: the room's door takes a Hello with a key to the running room (ants_server, RoomManager), the host's session
+// decode_hello_prefix reads the version and the name, which lead every layout. Who sends what: the room's door takes a Hello with a key to the running room (the game server's RoomManager), the host's session
 // (HostSession::accept_rejoin, session.hpp) answers Welcome (flags 1), Start and CatchUp, or a Reject (a key that fits no seat is told MatchRunning, like a Hello without a key: nothing is revealed), and
 // the returning client's session (ClientSession, Mode::Rejoining / CatchingUp) answers Loaded, TurnAck and CaughtUp. A host that holds no seats (a LAN or direct host, a room without reconnect) never sends
 // Presence, CatchUp or TurnBatch and answers a key like any Hello.
@@ -389,15 +389,15 @@ inline constexpr const char* kNoticeGameLate = "'s game did not come in time.";
 inline constexpr const char* kNoticeGamesLate = "These games did not come in time: ";
 inline constexpr const char* kNoticeMapLost = "This map could not be loaded: choose another map.";
 inline constexpr const char* kNoticeMapColors = "This map cannot be played with these colours.";
-/// A map that is too big for a room (ants::server::OnlineLimits::kMaxCells = 65,536 cells): the leader who chose it is told, and the room keeps its map
+/// A map that is too big for a room (net::RoomLimits::kMaxCells = 65,536 cells): the leader who chose it is told, and the room keeps its map
 inline constexpr const char* kNoticeMapTooBig = "This map is too big to play online (65,536 cells at most, like 256 x 256): choose another map.";
-/// A map that starts more ants than a room plays (ants::server::OnlineLimits::kMaxStartAnts = 1,000, all four colors together): said in the same way and the room keeps its map
+/// A map that starts more ants than a room plays (net::RoomLimits::kMaxStartAnts = 1,000, all four colors together): said in the same way and the room keeps its map
 inline constexpr const char* kNoticeMapTooManyAnts = "This map starts too many ants to play online (1,000 at most): choose another map.";
-/// A map with more pairs of a plant and a waypoint than a room plays (ants::server::OnlineLimits::kMaxPlantWaypointPairs = 1,000,000): said in the same way and the room keeps its map
+/// A map with more pairs of a plant and a waypoint than a room plays (net::RoomLimits::kMaxPlantWaypointPairs = 1,000,000): said in the same way and the room keeps its map
 inline constexpr const char* kNoticeMapTooManyPairs = "This map has too many plant-waypoint pairs to play online (1,000,000 at most): choose another map.";
-/// A map with more food objects than a room plays (ants::server::OnlineLimits::kMaxFoodObjects = 250): said in the same way and the room keeps its map
+/// A map with more food objects than a room plays (net::RoomLimits::kMaxFoodObjects = 250): said in the same way and the room keeps its map
 inline constexpr const char* kNoticeMapTooManyFood = "This map has too many food objects to play online (250 at most): choose another map.";
-/// A map with more power-ups than a room plays (ants::server::OnlineLimits::kMaxPowerUps = 1,000 cells that hold one): said in the same way and the room keeps its map
+/// A map with more power-ups than a room plays (net::RoomLimits::kMaxPowerUps = 1,000 cells that hold one): said in the same way and the room keeps its map
 inline constexpr const char* kNoticeMapTooManyPowerUps = "This map has too many power-ups to play online (1,000 at most): choose another map.";
 inline constexpr const char* kNoticeNoPlace = "The server has no place for another match right now: try again in a minute.";
 /// A START that was cancelled because one person's game could not load the map (to the whole room and then, as the second line, to the leader): "<name>'s game is too old for this map: refresh the page or update
@@ -410,7 +410,7 @@ inline constexpr const char* kNoticeGameSlow = "'s game did not load the map in 
 inline constexpr const char* kNoticeRemoveBefore = "To start without ";
 inline constexpr const char* kNoticeRemoveAfter = ", press Remove on their color.";
 inline constexpr const char* kNoticeStartsFailed = "The match could not start a few times in a row: try again in a minute.";
-/// The rematch (docs/SERVER.md "Lobby rooms"): the leader's START of a lobby room that the server opened again after its match is not taken while a person of the match is not back ("Juniper is not back from
+/// The rematch (docs/NETWORK_PORT.md "Protocol 16"): the leader's START of a lobby room that the server opened again after its match is not taken while a person of the match is not back ("Juniper is not back from
 /// the match yet.", for several "These players are not back from the match yet: Juniper and Pip.")
 inline constexpr const char* kNoticeNotBack = " is not back from the match yet.";
 inline constexpr const char* kNoticeNotBackMany = "These players are not back from the match yet: ";
