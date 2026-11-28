@@ -80,7 +80,7 @@
 
 namespace ants::net {
 
-/// The defaults of the rules above (a room may choose others: ants_server)
+/// The defaults of the rules above (a room may choose others: the game server)
 inline constexpr uint32_t kVoteAfterMs = 30000;             // the vote opens for a seat that has been away this long in all
 inline constexpr uint32_t kCatchUpStallMs = 20000;          // a seat that is catching up and shows no progress for this long is absent again
 inline constexpr uint32_t kMinAbsenceMs = 5000;             // an absence that is over counts at least this much toward the seat's total away time, and toward the match's pauses
@@ -106,7 +106,7 @@ public:
         uint32_t catch_up_stall_ms = kCatchUpStallMs;
         uint32_t min_absence_ms = kMinAbsenceMs;
         uint32_t max_pause_ms = kMaxPauseMs;
-        uint32_t countdown_hold_ms = 0;                             // until begin_play(): the pauses may last this long in all, then every seat that is not present is dropped (0: no such limit; a room's is kCountdownHoldMs: ants_server)
+        uint32_t countdown_hold_ms = 0;                             // until begin_play(): the pauses may last this long in all, then every seat that is not present is dropped (0: no such limit; a room's is kCountdownHoldMs: the game server)
         uint32_t max_catch_up_ms = kMaxCatchUpMs;
         uint32_t rejoin_attempts = kRejoinAttempts;             // 1 .. kMaxRejoinAttempts
         uint32_t rejoin_window_ms = kRejoinWindowMs;
@@ -115,7 +115,7 @@ public:
         size_t stream_floor_bytes = kStreamFloorBytes;
         uint32_t flap_losses = kFlapLosses;                     // 2 .. kMaxFlapLosses
         uint32_t flap_window_ms = kFlapWindowMs;
-        uint32_t resume_countdown_ms = 0;                       // the library's default is no countdown (a room's is kResumeCountdownMs: ants_server)
+        uint32_t resume_countdown_ms = 0;                       // the library's default is no countdown (a room's is kResumeCountdownMs: the game server)
         uint32_t resume_min_pause_ms = kResumeMinPauseMs;
     };
     static constexpr uint32_t kMaxRejoinAttempts = 16;

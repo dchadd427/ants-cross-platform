@@ -325,20 +325,9 @@ void run_start_menu_hosting_tests() {
         ASSERT_TRUE(why.find("blank") != std::string::npos);
     } TEST_END();
 
-    TEST_CASE("M5.2 Room codes of a hosted match (protocol 15): six characters of the page's alphabet (read from web/front/lobby_rules.js), no map, no seats and no teams in them, a valid room code every time, different every time; the screens show them in two groups of three and a code of another length as it is") {
-        std::string page_alphabet;
-        {
-            std::ifstream page(std::string(ANTS_SOURCE_DIR) + "/web/front/lobby_rules.js");           // (by the source folder, not the working directory: it is read wherever the test is run from)
-            ASSERT_TRUE(page.good());                                                      // a page that cannot be read, or in which the variable is renamed, FAILS the test (it used to skip it)
-            std::stringstream text;
-            text << page.rdbuf();
-            const std::string html = text.str();
-            const size_t at = html.find("var CODE_CHARS = '");
-            ASSERT_TRUE(at != std::string::npos);
-            page_alphabet = html.substr(at + 18, html.find('\'', at + 18) - (at + 18));
-        }
-        ASSERT_FALSE(page_alphabet.empty());
-        ASSERT_EQ(page_alphabet, std::string(kRoomCodeAlphabet));                          // the same alphabet as the page's rules (web/front/lobby_rules.js, in the repository)
+    TEST_CASE("M5.2 Room codes of a hosted match (protocol 15): six characters of the alphabet that every client uses, no map, no seats and no teams in them, a valid room code every time, different every time; the screens show them in two groups of three and a code of another length as it is") {
+        // (the alphabet is the one of every client of the rooms: the site's lobby page keeps the same text, and a test of that page holds it equal to this one)
+        ASSERT_EQ(std::string(kRoomCodeAlphabet), std::string("abcdefghjkmnpqrstuvwxyz23456789"));
         ASSERT_EQ(std::string(kRoomCodeAlphabet).size(), static_cast<size_t>(31));
         ASSERT_EQ(kRoomCodeChars, static_cast<size_t>(6));
         for (const char look_alike : {'i', 'l', 'o', '0', '1'}) ASSERT_TRUE(std::string(kRoomCodeAlphabet).find(look_alike) == std::string::npos);      // (nothing to mistake when it is read out)
@@ -1128,7 +1117,7 @@ void run_start_menu_hosting_tests() {
             m.on_key(SDLK_RETURN, 0, false);
             ASSERT_EQ(m.panel(), MenuPanel::Single);
         }
-        // the mouse is not slowed by it (a click is two events, and its rest is the application's rule: test_start_menu_app)
+        // the mouse is not slowed by it (a click is two events, and its rest is the application's rule, tested against a real server)
         {
             Rig r;
             r.click(MenuId::Single);

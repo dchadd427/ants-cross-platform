@@ -1,6 +1,6 @@
 #pragma once
 
-// The little harness of the bot suites (the same TEST_CASE / ASSERT_* style as tests/test_net and tests/test_server) and the fixtures that more than one of the
+// The little harness of the bot suites (the same TEST_CASE / ASSERT_* style as tests/test_net) and the fixtures that more than one of the
 // suites needs: a match on a shipped map, a recording sink, a scripted bot.
 
 #include <cstdint>

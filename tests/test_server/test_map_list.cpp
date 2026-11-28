@@ -14,6 +14,7 @@
 #include "ants_server/online_limits.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "big_map_fixtures.hpp"
+#include "online_counts.hpp"
 #include "history_fixtures.hpp"
 
 static int g_test_count = 0;

@@ -6,7 +6,7 @@
 namespace ants::app {
 
 /// A player's name as the match screen shows it (the chat's headers, the score labels, the countdown card's rows): without the clan tag. The game holds one plain string for a name, "[TAG] Nickname"
-/// (docs/HUB_NICKNAMES.md), and a tag of up to five letters takes a third of a row that is made for the original's names, so what is shown is the nickname. A tag is square brackets round two to five
+/// (docs/NETWORK_PORT.md "Protocol 29"), and a tag of up to five letters takes a third of a row that is made for the original's names, so what is shown is the nickname. A tag is square brackets round two to five
 /// characters that are not spaces or brackets, then one space and at least one more character: "[ANTS1] Wolfgang" is "Wolfgang"; "[x] Zoe", "[ANT]Zoe", "[ANT] " and "Pip (bot, Hard)" stay as they are.
 /// The results, the replays and the pages keep the tag.
 inline std::string without_clan_tag(const std::string& name) {

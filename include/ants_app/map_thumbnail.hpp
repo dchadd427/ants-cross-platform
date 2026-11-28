@@ -1,9 +1,9 @@
 #pragma once
 
-// The picture of a map that the game server keeps for the maps of players (docs/MAP_SUBMISSIONS.md, "Pictures"): the picture that the setup screen shows in its preview box, which is also what the
+// The picture of a map that the game server keeps for the maps of players: the picture that the setup screen shows in its preview box, which is also what the
 // library's pictures (tools/map_previews.py) are cut from, so that a submitted map looks like every other map: the game's own drawing of the map (render_map_preview_world) reduced to the box,
 // centred on the box's dark floor. A map that cannot be drawn offscreen (too big for one image, or a renderer without render targets) gets what the setup screen shows for it, the picture in the
-// colors of the match screen's minimap (render_map_preview_in_box). Made by the program ants_thumb (src/ants_thumb/main.cpp); nothing here needs a window.
+// colors of the match screen's minimap (render_map_preview_in_box). Made by a small program that links this library; nothing here needs a window.
 
 #include <array>
 #include <cstdint>

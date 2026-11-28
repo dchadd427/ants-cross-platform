@@ -7,7 +7,7 @@
 
 #include "ants_ai/arena.hpp"
 #include "ants_ai/rng.hpp"
-#include "../test_server/big_map_fixtures.hpp"
+#include "big_map_fixtures.hpp"
 
 using namespace ai_test;
 using namespace ants;

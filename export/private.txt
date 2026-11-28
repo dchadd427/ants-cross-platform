@@ -154,6 +154,7 @@ tests/scripts/stack_command.py
 tests/scripts/submissions_server_check.py
 tests/scripts/test_ai_skills.py
 tests/scripts/test_ant_models.py
+tests/scripts/test_bot_names_blocklist.py
 tests/scripts/test_ants_server.sh
 tests/scripts/test_changelog_to_html.py
 tests/scripts/test_default_map.py
@@ -213,6 +214,7 @@ tests/scripts/testmaps_server_check.py
 tests/scripts/web_activity_check.js
 tests/scripts/web_admin_*
 tests/scripts/web_analytics_*
+tests/scripts/web_bot_names_blocklist_check.js
 tests/scripts/web_changelog_*
 tests/scripts/web_countdown_check.py
 tests/scripts/web_death_map_check.js

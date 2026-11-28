@@ -71,7 +71,7 @@ public:
         if (host_.submit_bot(seat_, c)) r.status = sim::CommandResult::Status::Applied;
         return r;
     }
-    /// What the sink of a room says (src/ants_server/room.cpp, Room::BotSink): the number of the turn that the sequencer seals next, which the engine executes at that tick
+    /// What the sink of a room says (the game server's room, Room::BotSink): the number of the turn that the sequencer seals next, which the engine executes at that tick
     uint64_t applied_at(uint64_t) const override { return host_.turns_sealed(); }
     std::vector<uint64_t> predicted;                         // applied_at at every submit
 

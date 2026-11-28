@@ -34,7 +34,7 @@
 //   write path non-blocking with an output buffer, like TcpConnection: never blocks, never SIGPIPE; when more than kWsMaxBacklogBytes (1 MB) are waiting
 //              the peer is stuck and the connection fails.
 //
-// The proxy side (TLS ends there; this code speaks plain ws on the loopback address, so listen with loopback_only = true). A minimal nginx example,
+// The proxy side (TLS ends there; this code speaks plain ws on the loopback address, so listen with loopback_only = true). A minimal example for a reverse proxy (in the syntax of a common web server),
 // with generic names only:
 //
 //     map $http_upgrade $connection_upgrade { default upgrade; '' close; }

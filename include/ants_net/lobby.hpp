@@ -9,7 +9,7 @@
 //   host:   Room broadcast on every change; start(): Start to all; all Loaded -> Begin; a failure or a leaver -> Cancel, back to the room
 //
 // A dedicated server's room (a host without a seat) has a LEADER (protocol 7): the first player who joined, and when it leaves the earliest of those who are left. The Room
-// message names it to everybody (RoomMsg::leader); it may send StartRequest, and the room (ants_server) then starts the match with the players who are there, when it can.
+// message names it to everybody (RoomMsg::leader); it may send StartRequest, and the room (the game server's) then starts the match with the players who are there, when it can.
 // A host that holds a seat (LAN / direct) has no leader and ignores StartRequest.
 //
 // Keys (protocol 10, docs/NETWORK_PORT.md "Reconnect"). A host that is given a key maker (HostLobby::Config::make_key: a dedicated server, which has the operating system's random
@@ -47,7 +47,7 @@
 // given the LeaderStart; a request that waits longer than `start_wait_ms`, or whose leader is not the leader any more, is dropped (the leader is told which game did not come in time). A held seat keeps its hold
 // while the request waits. (6) Any person can change the name they go by (NameMsg), and the leader can take another person out of the room (RemoveMsg: with the guard of a SeatMove, so that it acts on the person
 // that the leader's screen showed; the person is sent the rejection Kicked, their color is free at once and their key is forgotten; it is heard while the START waits too, for a person whose game never opens).
-// (7) The rematch (docs/SERVER.md "Lobby rooms"): a lobby room that the server opens again when its match is over (reopen(), with the match's rematch()) has the match's plan and a RESERVED seat for each of its
+// (7) The rematch (docs/NETWORK_PORT.md "Protocol 16"): a lobby room that the server opens again when its match is over (reopen(), with the match's rematch()) has the match's plan and a RESERVED seat for each of its
 // persons who played in a web browser: the seat keeps its name, color, key and place in the order of the Welcomes, counts as a game in the Room message (its person is on the game page's results screen), does not
 // lead, does not keep the room alive and holds the START back. A page's Hello with its key brings the person back (an ordinary guest from then on), and so does a game's Hello with it that asks for a color
 // (want_seat 0 - 3: the game page that the front page's "Rejoin" opens with a key that the match left behind: the person is back, as a game); a game's Hello with it that asks for none (255: the game page's
@@ -196,7 +196,7 @@ public:
         /// all zero, that equals the key of another guest, or a maker that returns false, gives the guest NO key (the zero key in its Welcome: no way back for it); the lobby tries a few
         /// times before it gives up. Unset (the default: a LAN or direct host): no guest has a key.
         std::function<bool(SeatKey&)> make_key;
-        /// Protocol 29: a dedicated server that has the hub's key (ants_server/name_pass.hpp) sets this: true when `pass` is a good pass for exactly `name`. A name that it does not vouch for is a guest's (accepted_name).
+        /// Protocol 29: a dedicated server that has the hub's key sets this: true when `pass` is a good pass for exactly `name`. A name that it does not vouch for is a guest's (accepted_name).
         /// Unset (the default: a LAN or direct host, a server with no key): every name that the wire takes is taken as it is.
         std::function<bool(const std::string& name, const std::string& pass)> name_gate;
     };
@@ -374,7 +374,7 @@ public:
     /// the place of such a room up when it needs it.
     uint32_t activity() const noexcept { return static_cast<uint32_t>(joins_ + seat_moves_ + plan_changes_ + renames_ + removals_ + start_arms_ + visibility_acts_ + ready_changes_ + chat_.total()); }
     /// The part of activity() that sets a room up: somebody is welcomed, a color moves, the plan or a name changes, a person is removed, a START is asked for. A line of chat, a Ready mark and a page that says
-    /// "public" again are not: a program can keep a room "used" with one of those every few minutes, and the server's early close of a crowded address's lobby asks for this one (docs/ADDRESS_LIMITS.md).
+    /// "public" again are not: a program can keep a room "used" with one of those every few minutes, and the server's early close of a crowded address's lobby asks for this one.
     uint32_t setup_activity() const noexcept { return static_cast<uint32_t>(joins_ + seat_moves_ + plan_changes_ + renames_ + removals_ + start_arms_); }
     /// Where the connection of the guest in this seat came from, as the door was told ("" for an empty seat and for a room that was brought back from a record: those keep no address)
     const std::string& seat_address(uint8_t seat) const noexcept {

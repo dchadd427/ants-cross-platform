@@ -8,7 +8,7 @@ come from the program's own source, and the files that the site serves at /ai/sk
 
 A generated block is the text between `<!-- generated:NAME begin ... -->` and `<!-- generated:NAME end -->` in a skill file. Its content is made here from the sources and is never typed twice
 (AGENTS.md, rule 9): the tile names from src/ants_assets/lvl_tile_names.inc, the palette, the teams, the food and the limits of the Map Maker (web/front/mapmaker_*.js), the limits of the map core
-(include/ants_assets/lvl_parser.hpp) and of an online room (include/ants_server/online_limits.hpp), the checker's codes (docs/MAP_FORMAT.md), the tools and their arguments (hub/aitools.py) and the six
+(include/ants_assets/lvl_parser.hpp) and of an online room (include/ants_net/room_limits.hpp), the checker's codes (docs/MAP_FORMAT.md), the tools and their arguments (hub/aitools.py) and the six
 original maps (Original-Ants/Maps/*.LVL, read here with a small reader of the file format: docs/MAP_FORMAT.md, "The layout"). The sources are read by `--check` and `--write` only: the image's build
 (`--build`) packs the files that are committed, so it needs none of them, and a test (tests/scripts/test_ai_skills.py) holds every block to its sources on every pull request.
 
@@ -133,7 +133,7 @@ def core_limits():
 
 
 def online_limits():
-    src = read("include", "ants_server", "online_limits.hpp")
+    src = read("include", "ants_net", "room_limits.hpp")
     return {name: number(re.search(r"%s = ([0-9u *]+);" % name, src).group(1)) for name in ("kMaxCells", "kMaxStartAnts", "kHeavyStartAnts")}
 
 

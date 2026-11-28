@@ -1354,7 +1354,7 @@ void c12_crop() {
 
 // ---- C13 ----
 // read_report's "plants" count (this module cannot link the simulation) against sim::movement::is_dropper_plant_tile, every tile id: a map of one block-1 record (team 255, never a start
-// marker) at each id in turn, read back. The two must agree at every id, or a room's cap on pairs of a plant and a waypoint (ants::server::OnlineLimits::kMaxPlantWaypointPairs) would not
+// marker) at each id in turn, read back. The two must agree at every id, or a room's cap on pairs of a plant and a waypoint (net::RoomLimits::kMaxPlantWaypointPairs) would not
 // be the cost that SimulationEngine::init pays.
 void c13_plant_tiles() {
     for (uint32_t id = 0; id < 1344; ++id) {

@@ -69,6 +69,13 @@ class TheFiles(unittest.TestCase):
         self.assertRegex(text, r"<script[^>]+src=\"front/lobby_net\.js\"", "... and front/lobby_net.js, which the rules do not need but the page does")
         self.assertLess(text.index("front/lobby_rules.js"), text.index("AntsLobbyRules"), "the script is loaded before the page's own code uses it")
 
+    def test_the_alphabet_of_the_room_codes_is_the_one_of_the_game(self):
+        """a room code that the page makes is read by the game, and the other way round: both keep the same alphabet (include/ants_app/start_menu.hpp kRoomCodeAlphabet)"""
+        page = re.search(r"var CODE_CHARS = '([^']*)';", read(RULES))
+        game = re.search(r'kRoomCodeAlphabet = "([^"]*)";', read(os.path.join(REPO, "include", "ants_app", "start_menu.hpp")))
+        self.assertTrue(page and game, "the alphabet is there in both")
+        self.assertEqual(page.group(1), game.group(1))
+
     def test_the_check_is_given_the_files_it_names(self):
         for path in (CHECK, RULES, NET, LOBBY, SHELL, PROTOCOL):
             self.assertTrue(os.path.isfile(path), path)

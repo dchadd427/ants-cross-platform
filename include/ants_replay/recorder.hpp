@@ -63,7 +63,7 @@ public:
     /// The match as it was after `shown_turns` ticks, as an incomplete file with the chunk `live` (encode_snapshot_until): what a viewer needs to watch a match that still runs, and no more than the viewer may see:
     /// nothing given or run after tick `shown_turns` is in it. `shown_turns` is at most turns(): the whole match so far is `snapshot(turns(), error)`; 0 is the match before its first tick (the head and the chunk
     /// `live` of 0). Empty, with `error`, when the recording failed, is finished, or `shown_turns` is more than the match has run. It changes nothing in the recorder (the engine is not read, and the recording goes on).
-    /// The server makes one at most once a second for a match (ants_server/live_board.hpp).
+    /// The game server makes one at most once a second for a match.
     std::vector<uint8_t> snapshot(uint32_t shown_turns, std::string& error) const;
 
     /// The seats whose orders went over their budget in this match (a bit for each seat; Header::heavy_orders): the room says so before finish(), which writes it into the head. Whatever the mask is, the commands

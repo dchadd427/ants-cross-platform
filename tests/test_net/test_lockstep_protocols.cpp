@@ -2015,7 +2015,7 @@ void run_protocol16_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N2.111 Protocol 16, 17, 22 And 27, The Lobby Page's Messages: tests/data/lobby_messages.txt Holds Byte For Byte What The Encoders Write For What A Lobby Page Sends (The Hello, The Color Move, The Plan, The Name, The Removal, START) And Hears (Welcome, Reject, Room, Chat, Ping); Each Line Is Made From Its Fields, Decodes And Encodes Again To The Same Bytes, And A Room's Guard Is Its seating_hash (The Page's Codec Is Held To The Same File By tests/scripts/web_lobby_net_check.js)") {
+    TEST_CASE("N2.111 Protocol 16, 17, 22 And 27, The Lobby Page's Messages: tests/data/lobby_messages.txt Holds Byte For Byte What The Encoders Write For What A Lobby Page Sends (The Hello, The Color Move, The Plan, The Name, The Removal, START) And Hears (Welcome, Reject, Room, Chat, Ping); Each Line Is Made From Its Fields, Decodes And Encodes Again To The Same Bytes, And A Room's Guard Is Its seating_hash (The Page's Codec Is Held To The Same File By The Page's Own Check)") {
         struct Sample {
             std::string kind;
             std::string name;

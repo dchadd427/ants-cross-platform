@@ -824,7 +824,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_set_page_fullscreen(int on) {
 // the code of the character at `index` of that line (net_overlay_probe: 0 past its end, -1 for no such line).
 // The picture of others = confirmed (docs/NETWORK_PORT.md), for the browser measurements: 87: 0 when the picture is not asked for (--others predicted), 1 while it is made of both engines, 2 when it is asked
 // for and the prediction is not running (the picture is the confirmed engine's); 88: how many worlds of both engines were made.
-// The seats of the match, for the page's browser check (tests/scripts/web_home_check.py): 20: the roster, bit s set when seat s plays (15: all four colonies, 1: a game for one) (-1 outside a match);
+// The seats of the match, for the page's browser check: 20: the roster, bit s set when seat s plays (15: all four colonies, 1: a game for one) (-1 outside a match);
 // 21 - 24: the ants of seat 0 - 3 that are alive now (-1 outside a match).
 // The picture's shape, for the page's browser check (tests/scripts/web_aspect_check.py): 40: the canvas's width, 41: its height (SDL's logical size), 42: the shape (its place in the shape table, ants_set_aspect's number), 43: where the picture on screen starts, x, 44: y, 45: its width, 46: its height (a page in a bigger canvas is centred in it).
 // The touch model, for the page's browser check (tests/scripts/web_touch_check.py): 30: the taps, 31: the holds, 32: the drags, 33: the two-finger gestures, 34: the fingers that are tracked, 35: what the model

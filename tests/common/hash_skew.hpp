@@ -1,6 +1,6 @@
 #pragma once
 
-// The links of machines whose reports are not their state (the tests of a dedicated server's verdict on the state hashes, test_lockstep S2.40 - S2.59 and test_server S3.250 and on): the machine itself is
+// The links of machines whose reports are not their state (the tests of a dedicated server's verdict on the state hashes, test_lockstep S2.40 - S2.59 and the game server's tests from S3.250 on): the machine itself is
 // sound and plays as any other. HashSkew: the Hash messages that it sends say another state, nothing else is changed. HashHold: its acknowledgements run behind, it reports nothing on its own, and
 // report_odd() says another state, once, for the newest turn it holds.
 #include <cstdint>

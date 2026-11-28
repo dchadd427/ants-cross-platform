@@ -13,6 +13,7 @@
 #include <set>
 
 #include "big_map_fixtures.hpp"
+#include "online_counts.hpp"
 #include "server_fixtures.hpp"
 #include "ants_server/online_limits.hpp"
 

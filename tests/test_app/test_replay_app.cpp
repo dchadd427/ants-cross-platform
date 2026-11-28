@@ -36,7 +36,7 @@
 #include <tuple>
 #include <vector>
 #include "../common/test_assert.hpp"
-#include "../test_server/big_map_fixtures.hpp"
+#include "big_map_fixtures.hpp"
 #include "../common/map_library.hpp"
 
 #if defined(_WIN32)
