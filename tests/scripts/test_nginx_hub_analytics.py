@@ -59,7 +59,7 @@ class TheText(unittest.TestCase):
 
     def test_nothing_is_logged_by_nginx(self):
         self.assertIn("access_log off;", DOOR)
-        self.assertIn("error_log /dev/stderr crit;", DOOR)                         # (the serious errors only: nginx writes the visitor's address into the line of a body that is too big)
+        self.assertIn("error_log /var/log/ants/web.log crit;", DOOR)                         # (the serious errors only: nginx writes the visitor's address into the line of a body that is too big)
 
     def test_the_body_is_as_big_as_the_hubs_and_not_bigger(self):
         self.assertEqual(re.search(r"client_max_body_size (\d+)k;", DOOR).group(1) + "k", "1k")

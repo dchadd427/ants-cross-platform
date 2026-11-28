@@ -131,13 +131,11 @@ class TheRoutesRun(unittest.TestCase):
         os.makedirs(html)
         os.makedirs(os.path.join(html, "front"))
         os.makedirs(os.path.join(html, "asset_catalog"))
-        os.makedirs(os.path.join(html, "test_3d"))
         for name, text in (("lobby.html", LOBBY_PAGE), ("matches.html", MATCHES_PAGE), ("match.html", MATCH_PAGE), ("matches.css", ":root { --won: #f6d058; }\n"), ("replay_stats.css", "body.embed { padding-top: 10px; }\n"), ("replay_page.js", "window.AntsReplay = {};\n"),
                            ("history_page.js", "window.AntsHistory = {};\n"), ("match_stats.js", "window.AntsMatchStats = {};\n"), ("match_stats.css", ".chips { display: grid; }\n"), ("death_map.js", "window.AntsDeathMap = {};\n"), ("death_map.css", ".dm-stage { position: relative; }\n"), ("index.html", GAME_PAGE), ("play.html", GAME_PAGE), ("changelog.html", CLASSIC_PAGE), ("legal.html", CLASSIC_PAGE), ("mapmaker.html", MAPMAKER_PAGE),
                            ("map_pages.css", ".grid { display: grid; }\n"), ("map_library.js", "window.ANTS_MAP_INDEX = {};\n"), ("map_plays.js", "window.ANTS_MAP_PLAYS = {};\n"), ("map_library_data.js", "window.ANTS_MAP_LIBRARY = {};\n"),         # (stand-ins: the real ones are put in below, with the pages)
                            ("404.html", read(os.path.join(REPO, "web", "404.html"))), ("50x.html", read(os.path.join(REPO, "web", "50x.html"))),         # (the real pages: the checks read their words)
                            (os.path.join("asset_catalog", "index.html"), CLASSIC_PAGE),
-                           (os.path.join("test_3d", "compare.html"), CLASSIC_PAGE), (os.path.join("test_3d", "viewer.html"), CLASSIC_PAGE),
                            (os.path.join("front", "classic.css"), ":root { --clay: #db4b13; }\n")):
             with open(os.path.join(html, name), "w", encoding="utf-8") as f:
                 f.write(text)
@@ -178,7 +176,8 @@ class TheRoutesRun(unittest.TestCase):
         cls.port = s.getsockname()[1]
         s.close()
         ran = subprocess.run(["docker", "run", "-d", "--rm", "--name", cls.name, "-p", "127.0.0.1:%d:80" % cls.port, "-v", conf + ":/etc/nginx/conf.d/default.conf:ro",
-                              "-v", html + ":/usr/share/nginx/html:ro", "-v", moved + ":/etc/nginx/ants-map-pages:ro", IMAGE], capture_output=True, text=True)
+                              "-v", html + ":/usr/share/nginx/html:ro", "-v", moved + ":/etc/nginx/ants-map-pages:ro", "-v", os.path.join(REPO, "docker", "web-log.sh") + ":/etc/nginx/ants-web-log.sh:ro", IMAGE,
+                              "sh", "/etc/nginx/ants-web-log.sh", "/docker-entrypoint.sh", "nginx", "-g", "daemon off;"], capture_output=True, text=True)       # (as the image's CMD starts it: the script makes the folder of the logs)
         if ran.returncode != 0:
             cls.why = "the container did not start: " + ran.stderr.strip()[:200]
             return

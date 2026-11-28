@@ -12,7 +12,6 @@ import glob
 import json
 import math
 import os
-import shutil
 import struct
 import subprocess
 import sys
@@ -1100,14 +1099,6 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
             self.assertNotEqual(m2["models_hash"], m1["models_hash"])
             self.assertEqual(m2["version"], "v-" + m2["build_hash"][:8])
 
-            # Dynamic viewer file discovery hashes all viewer*/compare* .html/.css/.js files present.
-            viewer_files = build_all._discover_viewer_files()
-            for fname in viewer_files:
-                self.assertTrue(fname.startswith(("viewer", "compare")))
-                self.assertTrue(fname.endswith((".html", ".css", ".js")))
-            if os.path.isfile(os.path.join(build_all.THIS_DIR, "viewer.html")):
-                self.assertIn("viewer.html", viewer_files)
-
 
 @unittest.skipUnless(HAS_PIL, "Pillow is needed")
 class OrigSpritesBundleTests(unittest.TestCase):
@@ -1187,8 +1178,8 @@ class SoftwarePreviewRenderer(unittest.TestCase):
         self.assertGreater(center_luma, edge_luma + 35.0)
 
 
-class All1998ClipsAndViewerTests(unittest.TestCase):
-    """Regression coverage for all 88 1998 glTF clips, hidden FX props, CI stdlib guards, and viewer JS."""
+class All1998ClipsTests(unittest.TestCase):
+    """Regression coverage for all 88 1998 glTF clips, hidden FX props, and CI stdlib guards."""
 
     _EXPECTED_CLIPS = {
         "worker": {
@@ -1346,56 +1337,6 @@ class All1998ClipsAndViewerTests(unittest.TestCase):
         proc = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=False)
         self.assertEqual(proc.returncode, 0, f"Pure-stdlib import failed:\n{proc.stderr}")
 
-    def test_extra_sprite_specs_match_viewer_actions_registry_and_js_syntax(self):
-        from tools.ant_models import orig_sprites
-
-        shared_extra_ids = {spec[0] for spec in orig_sprites.EXTRA_SHARED_SPECS}
-        class_extra_by_id = {}
-        for cls_name, specs in orig_sprites.EXTRA_CLASS_SPECS.items():
-            for spec in specs:
-                class_extra_by_id.setdefault(spec[0], []).append(cls_name)
-        all_orig_ids = set(orig_sprites.ACTIONS) | shared_extra_ids | set(class_extra_by_id.keys())
-        self.assertEqual(len(all_orig_ids), 22)
-
-        js_dir = os.path.join(REPO, "tools", "ant_models")
-        js_files = sorted(glob.glob(os.path.join(js_dir, "*.js")))
-        self.assertTrue(js_files, f"Expected viewer JS files under {js_dir}")
-
-        node = shutil.which("node")
-        if node is None:
-            self.skipTest("node is not installed; skipping viewer_actions.js execution and node --check")
-
-        for js_path in js_files:
-            chk = subprocess.run([node, "--check", js_path], capture_output=True, text=True, check=False)
-            self.assertEqual(chk.returncode, 0, f"node --check failed on {os.path.basename(js_path)}:\n{chk.stderr}")
-
-        # Execute viewer_actions.js in a minimal Node sandbox to cross-check live registry behavior.
-        actions_js = os.path.join(js_dir, "viewer_actions.js")
-        probe = (
-            "const fs = require('fs'), vm = require('vm');\n"
-            "const sandbox = { window: {} };\n"
-            f"vm.runInNewContext(fs.readFileSync({actions_js!r}, 'utf8'), sandbox);\n"
-            "const reg = sandbox.window.__antActions;\n"
-            "const near = reg.nearestAvailableAngle('201', ['301', '901', '701']);\n"
-            "console.log(JSON.stringify({ actions: reg.ACTIONS, quick: reg.QUICK_ACTIONS, near }));\n"
-        )
-        run = subprocess.run([node, "-e", probe], capture_output=True, text=True, check=False)
-        self.assertEqual(run.returncode, 0, f"viewer_actions.js execution failed:\n{run.stderr}")
-        payload = json.loads(run.stdout)
-        viewer_actions = payload["actions"]
-        viewer_ids = {a["id"] for a in viewer_actions}
-        self.assertEqual(viewer_ids, all_orig_ids)
-        self.assertEqual(payload["quick"], ["idle", "walk", "attack", "hit"])
-        self.assertIn(payload["near"]["angle"], ("301", "901"))
-        self.assertFalse(payload["near"]["exact"])
-
-        by_id = {a["id"]: a for a in viewer_actions}
-        self.assertNotIn("swimmer", by_id["drown"]["classes"])
-        for aid, classes in class_extra_by_id.items():
-            self.assertEqual(sorted(by_id[aid]["classes"]), sorted(classes), f"Class list mismatch for {aid!r}")
-        for aid in shared_extra_ids:
-            self.assertTrue(by_id[aid].get("extra"), f"Shared extra action {aid!r} must set extra=true")
-
     def test_orig_sprites_catalog_js_fallback_matches_docs_table(self):
         from pathlib import Path
         from tools.ant_models import orig_sprites
@@ -1431,7 +1372,7 @@ class All1998ClipsAndViewerTests(unittest.TestCase):
                     checked += 1
         self.assertGreaterEqual(checked, 200)
 
-        # Fallback activates automatically when DEFAULT_ANIM_JSON is absent (Docker / web_without_docker).
+        # Fallback activates automatically when DEFAULT_ANIM_JSON is absent.
         missing = Path("/nonexistent_docs_chd_table4_animations.json")
         old_default = orig_sprites.DEFAULT_ANIM_JSON
         try:

@@ -9,8 +9,8 @@
 //   3. a guest's sheet: the name is asked of the hub a moment after the last key (one frame, `guest: true`, no tag), the answer is said under the field, Save waits for a good answer, a good name is kept
 //      by the person and the chip changes, a name that the person refuses leaves the sheet open, an answer that is not the last question is not heard;
 //   4. a logged-in person's sheet: opened by the dock's tap, with the nickname and the tag that the account has; the check frame carries both fields and `save: false`, Save sends `save: true` and the sheet
-//      closes with the hub's `saved`; the preview shows "[TAG] Nickname"; a name that is the person's own now is "your name now" and cannot be saved again; a nickname that changed lately is locked with its
-//      dates; a refusal leaves Save off; no connection and a rate answer say so; a person who logs out closes the sheet;
+//      closes with the hub's `saved`; the preview shows "[TAG] Nickname"; a name that is the person's own now is "your name now" and cannot be saved again; a nickname that changed lately is said with how long until it can change again
+//      (a tag has no wait), and a wait never makes the box that is being typed in read only or takes its focus (a phone would close its keyboard); a refusal leaves Save off; no connection and a rate answer say so; a person who logs out closes the sheet;
 //   5. nothing is markup: a name that is HTML stays text, the page writes no innerHTML.
 // tests/scripts/test_web_home_names.py runs this with node (the quick tier). usage: node web_home_names_check.js web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
@@ -111,13 +111,14 @@ function rig(o) {
     r.tag = () => doc.body.findAll((e) => e.id === 'nm-tag')[0] || null;
     r.save = () => one(doc.body, 'nm-save');
     r.type = (input, text) => { input.value = text; input.fire('input', {}); };
+    r.userType = (input, text) => { input.focus(); if (input.readOnly) return false; r.type(input, text); return true; };       // (a person taps a box and types: a browser takes no key into a box that is read only)
     r.msgs = () => byClass(doc.body, 'nm-msg').filter((m) => !m.hidden).map((m) => m.textContent);
     r.preview = () => { const p = one(doc.body, 'nm-pn'); return p ? p.textContent : null; };
     r.last = () => sent[sent.length - 1];
     r.live = () => { state.live = true; r.tell('live', { login: !o.noLogin }); };
     return r;
 }
-const ME = (o) => Object.assign({ name: 'maple.leaf', nick: '', tag: '', nickat: 0, nickfree: 0, tagfree: 0 }, o);
+const ME = (o) => Object.assign({ name: 'maple.leaf', nick: '', tag: '', nickat: 0, nickfree: 0 }, o);
 const OK = { ok: true };
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -138,8 +139,9 @@ const OK = { ok: true };
     same('say: taken names the name that was asked and nobody else', [say('nick', { ok: false, why: 'taken' }, 'Zoe'), say('guest', { ok: false, why: 'taken' }, 'Zoe')], [{ text: 'Zoe is taken. Pick another one.', tone: 'bad' }, { text: 'Zoe is taken. Pick another one.', tone: 'bad' }]);
     const lookalike = say('nick', { ok: false, why: 'lookalike' }, 'Zoe');
     check('say: a lookalike is red and names nobody (not the name asked, not another)', lookalike.tone === 'bad' && lookalike.text.indexOf('Zoe') === -1 && /another name/.test(lookalike.text), lookalike.text);
-    same('say: a nickname that changed lately says when it changed and when it can again (30 days between); a tag says how long until it can change', [say('nick', { ok: false, why: 'soon', until: 1000000 }, 'Zoe'), say('tag', { ok: false, why: 'soon', until: 5000 }, 'ANT')],
-        [{ text: 'You changed your nickname on D' + (1000000 - 30 * DAY) + '. You can change it again on D1000000.', tone: 'lock' }, { text: 'You changed your tag today. You can change it again W5000.', tone: 'lock' }]);
+    same('say: a nickname that changed lately says how long until it can change again (a nickname changes once a day)', [say('nick', { ok: false, why: 'soon', until: 5000 }, 'Zoe')],
+        [{ text: 'You changed your nickname less than a day ago. You can change it again W5000.', tone: 'lock' }]);
+    same('say: a tag has no wait, so a "soon" for a tag is no sentence of the page (it is "could not check")', [say('tag', { ok: false, why: 'soon', until: 5000 }, 'ANT')], [{ text: Names.TEXT.offline, tone: 'bad' }]);
     const words = ['short', 'long', 'chars', 'script', 'alphabets', 'reserved', 'rude', 'lookalike', 'busy', 'rate'];
     const missing = words.filter((w) => !Names.WHY.nick[w] || !Names.WHY.guest[w]);
     same('WHY: every word of a nickname and of a guest name that the hub can say has a sentence', missing, []);
@@ -345,25 +347,41 @@ const OK = { ok: true };
     same('sheet: Save sends the same two fields with save: true and waits for the hub', [r.last(), r.save().disabled, !!r.sheet()], [{ t: 'name', r: 2, nick: 'Zo\u00eb', tag: '\u00c4NT', save: true }, true, true]);
     r.tell('name', { t: 'name', r: 2, ok: true, nick: OK, tag: OK, shown: '[\u00c4NT] Zo\u00eb', saved: true });
     check('sheet: the hub\'s "saved" closes it', r.sheet() === null);
-    r.state.you = ME({ nick: 'Zo\u00eb', tag: '\u00c4NT', nickat: T0 / 1000 - 2 * DAY, nickfree: T0 / 1000 + 28 * DAY, tagfree: T0 / 1000 + 3600 });
+    r.state.you = ME({ nick: 'Zo\u00eb', tag: '\u00c4NT', nickat: T0 / 1000 - 2 * 3600, nickfree: T0 / 1000 + 22 * 3600 });
     r.tell('you', {});
     r.tell('names');
     check('sheet: opened for a person who has a nickname, it has the nickname and the tag in its fields', r.nick().value === 'Zo\u00eb' && r.tag().value === '\u00c4NT');
-    check('sheet: its preview is "[TAG] Nickname", and it says since when it has been the nickname and when it can change again',
-        r.preview() === '[\u00c4NT] Zo\u00eb' && /^Your nickname since \d+ \w+\. You can change it again on \d+ \w+\.$/.test(one(r.sheet(), 'nm-ps').textContent), r.preview() + ' | ' + one(r.sheet(), 'nm-ps').textContent);
+    check('sheet: its preview is "[TAG] Nickname", and it says since when it has been the nickname and how long until it can change again',
+        r.preview() === '[\u00c4NT] Zo\u00eb' && /^Your nickname since \d+ \w+\. You can change it again in 22 hours\.$/.test(one(r.sheet(), 'nm-ps').textContent), r.preview() + ' | ' + one(r.sheet(), 'nm-ps').textContent);
+    const rules = byClass(r.sheet(), 'nm-rules')[0].children.map((li) => li.textContent).join(' | ');
+    check('sheet: the rules say that a nickname changes once a day and the old one stays yours for 7 days, and that a tag changes at any time', /once a day\. The old one stays yours for 7 days\./.test(rules) && /A tag can change at any time\./.test(rules) && !/30 days|capitals count/.test(rules), rules);
     r.advance(10);
     r.tell('name', { t: 'name', r: r.last().r, ok: true, nick: OK, tag: OK, shown: '[\u00c4NT] Zo\u00eb', saved: false });
     same('sheet: the person\'s own name is "your name now" and cannot be saved again', [r.msgs()[0], r.save().disabled], ['That is your name now.', true]);
-    check('... and the note under the preview is still the one of the nickname that the person has (since when, when it can change), not the first-time one', /^Your nickname since \d+ \w+\. You can change it again on \d+ \w+\.$/.test(one(r.sheet(), 'nm-ps').textContent), one(r.sheet(), 'nm-ps').textContent);
-    r.type(r.tag(), 'ZZ');
+    check('... and the note under the preview is still the one of the nickname that the person has (since when, when it can change), not the first-time one', /^Your nickname since \d+ \w+\. You can change it again in 22 hours\.$/.test(one(r.sheet(), 'nm-ps').textContent), one(r.sheet(), 'nm-ps').textContent);
+    // a tag changes at any time: erasing it (or typing another) is asked at once, the hub says it is fine, and the box that the person types in stays theirs (focus, no read only: a phone keeps its keyboard)
+    r.userType(r.tag(), '');
     r.advance(400);
-    r.tell('name', { t: 'name', r: r.last().r, ok: false, nick: OK, tag: { ok: false, why: 'soon', until: T0 / 1000 + 3600 }, shown: '', saved: false });
-    check('sheet: a tag that changed today is locked: the line says when, the field is read only and Save is off', /You changed your tag today\. You can change it again in 1 hour\./.test(r.msgs().join(' | ')) && r.tag().readOnly === true && r.save().disabled === true, r.msgs().join(' | '));
-    r.type(r.nick(), 'Fern');
-    r.type(r.tag(), '');
+    r.tell('name', { t: 'name', r: r.last().r, ok: true, nick: OK, tag: OK, shown: 'Zo\u00eb', saved: false });
+    check('sheet: a tag that the person erased is asked as none, and Save is on at once (a tag has no wait)', r.last().tag === '' && r.save().disabled === false && r.msgs().join('|') === 'That is your name now.');
+    check('sheet: ... the tag box keeps the focus and is not read only, and the person can go on typing in it', r.tag().readOnly !== true && r.doc.activeElement === r.tag() && r.userType(r.tag(), 'ZY') && r.tag().value === 'ZY');
+    r.userType(r.tag(), '\u00c4NT');
+    {
+        // a wait that has ended (the page still has the `nickfree` of an earlier `you`) is no wait: the note says that the nickname can change now
+        const later = rig({ you: ME({ nick: 'Zoe', nickat: T0 / 1000 - 3 * DAY, nickfree: T0 / 1000 - 2 * DAY }) });
+        later.tell('names');
+        check('sheet: a wait that is over is not said again: the note says that the nickname can change now', /You can change it now; after that you wait a day\./.test(one(later.sheet(), 'nm-ps').textContent), one(later.sheet(), 'nm-ps').textContent);
+    }
+    r.userType(r.nick(), 'Fern');
     r.advance(400);
-    r.tell('name', { t: 'name', r: r.last().r, ok: false, nick: { ok: false, why: 'soon', until: T0 / 1000 + 28 * DAY }, tag: null, shown: '', saved: false });
-    check('sheet: a nickname that changed lately says when it changed and when it can again, and is locked', /You changed your nickname on \d+ \w+\. You can change it again on \d+ \w+\./.test(r.msgs().join(' | ')) && r.nick().readOnly === true && r.save().disabled === true, r.msgs().join(' | '));
+    r.tell('name', { t: 'name', r: r.last().r, ok: false, nick: { ok: false, why: 'soon', until: T0 / 1000 + 22 * 3600 }, tag: null, shown: '', saved: false });
+    check('sheet: a nickname that changed lately says how long until it can change again, and Save is off', /You changed your nickname less than a day ago\. You can change it again in 22 hours\./.test(r.msgs().join(' | ')) && r.save().disabled === true, r.msgs().join(' | '));
+    check('sheet: ... the box that the person is typing in is not read only and keeps the focus (a phone keeps its keyboard)', r.nick().readOnly !== true && r.doc.activeElement === r.nick());
+    check('sheet: ... and the person can go on typing in it', r.userType(r.nick(), 'Fern2') && r.nick().value === 'Fern2' && (r.advance(400), r.last().nick === 'Fern2' && r.save().disabled === true), r.nick().value + ' | ' + JSON.stringify(r.last()));
+    r.userType(r.nick(), 'Zo\u00eb');
+    r.advance(400);
+    r.tell('name', { t: 'name', r: r.last().r, ok: true, nick: OK, tag: OK, shown: '[\u00c4NT] Zo\u00eb', saved: false });
+    same('sheet: ... and the old nickname typed back is the person\'s own name again (Save stays off)', [r.last().nick, r.msgs()[0], r.save().disabled], ['Zo\u00eb', 'That is your name now.', true]);
     r.type(r.nick(), 'Fern');
     r.advance(400);
     r.tell('name', { t: 'name', r: r.last().r, ok: false, nick: { ok: false, why: 'lookalike' }, tag: null, shown: '', saved: false });

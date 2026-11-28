@@ -6,7 +6,7 @@ A faithful, deterministic C++17 engine remake and port of the 1998 real-time str
 
 The engine loads the original game's data files (`ants.chd` and `Maps/*.LVL`) directly, without pre-conversion. The game's mechanics are re-derived from the disassembly of the original program, system by system ([the original program](docs/ORIGINAL_PROGRAM.md)); the network play, the computer players, the 16:9 picture, the zoom, the touch controls and the browser build are this project's own. It runs a deterministic 20 Hz simulation, with 32-channel spatial audio, MP3 music (the original's four pieces), TrueType text and an SDL2 2D renderer (hardware-accelerated, with a software fallback).
 
-**Current version: v0.22.1** (shown on screen next to the FPS meter; in the room and the match of a network game the same corner also shows **ping** when the setting **Show ping** is on, off by default, see [Network play](docs/MULTIPLAYER.md)). The releases since v0.16.7 are in the short **[What’s new](CHANGELOG.md)** (also published at **[beta.playants.org/changelog](https://beta.playants.org/changelog)**); the releases before v0.16.7 are only in git history. How work flows from a commit to a release: [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
+**Current version: v0.22.2** (shown on screen next to the FPS meter; in the room and the match of a network game the same corner also shows **ping** when the setting **Show ping** is on, off by default, see [Network play](docs/MULTIPLAYER.md)). The releases since v0.16.8 are in the short **[What’s new](CHANGELOG.md)** (also published at **[beta.playants.org/changelog](https://beta.playants.org/changelog)**); the releases before v0.16.8 are only in git history. How work flows from a commit to a release: [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
 
 ## Play
 
@@ -90,7 +90,7 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [`P2P_HINTS.md`](docs/P2P_HINTS.md): hints and direct channels between players (network protocol 26): another player's orders, and a computer player's, reach the prediction ahead of their sealed turns; the relay as the default and the switch for a direct connection
 - [`MATCH_COUNTDOWN.md`](docs/MATCH_COUNTDOWN.md): the 30 s countdown with the chat open before an online match: the Begin that tells it, the card, the Fullscreen button
 - [`BOT_NAMES.md`](docs/BOT_NAMES.md): the names of the computer players ("Pip (bot, Hard)"): the list, the picker, the label, the names a person may not take, network protocol 20
-- [`ANT_3D_MODELS.md`](docs/ANT_3D_MODELS.md): procedural 3D ant models (`.glb`), the 88 animation clips, the `/test_3d/` 1998 comparison viewer and 3D studio, and the separate Docker build stage
+- [`ANT_3D_MODELS.md`](docs/ANT_3D_MODELS.md): procedural 3D ant models (`.glb`) and their 88 animation clips, a parked generator (no page, not in the images)
 
 ## Reverse Engineering & Historical Preservation
 

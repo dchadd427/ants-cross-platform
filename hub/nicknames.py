@@ -5,12 +5,12 @@ the frames of the page's "Your name" sheet, and the pass that lets the game serv
 Up, from any socket (a reader may only check a guest's name): {"t":"name","r":n,"nick":"Zoe","tag":"ANT","save":false}, or {"t":"name","r":n,"guest":true,"nick":"Wren"}. Down, to the asking socket:
 {"t":"name","r":n,"ok":bool,"nick":{"ok":bool,"why":word,"until":seconds}|null,"tag":{...}|null,"shown":"[ANT] Zoe","saved":bool}: each field says whether it is fine (`why` is a word of hub/nickrules.py, or `taken`,
 `lookalike`, `soon` with `until`, the time when it may change again, or `rate`); `shown` is how the others will see the person; a field that is the same as the account has now is fine and changes nothing. `save` stores both
-fields at once or none (a nickname that is refused leaves the tag as it was); a saved name reaches every socket of the account as a whole `you` frame (hub/chat.py `you_of`: `nick`, `tag`, `nickat`, `nickfree`, `tagfree`).
+fields at once or none (a nickname that is refused leaves the tag as it was); a saved name reaches every socket of the account as a whole `you` frame (hub/chat.py `you_of`: `nick`, `tag`, `nickat`, `nickfree`).
 The page never learns whose nickname made a name a lookalike: `taken` is the same name in other letters or case, `lookalike` a name that reads like another (the two words, not the person).
 
 Who may. A nickname is the account's own: nobody else, guest or logged in, may take its letters in any case, nor a lookalike of it (text.squash: dots, accents, a digit for the letter it looks like, a Cyrillic letter drawn like
-a Latin one), nor a name that is a reserved word, a role or a placeholder. It may be changed once in 30 days; the old one is held for the account for 30 days, so that nobody takes it to pass for the person, and a person who
-changes back has their old name again (and the 30 days start again). A tag may change once a day (a change of its capitals alone is a change: "ANT" and "Ant" are two texts), is not unique and is not held. A moderator's /rename takes both away, and the account may choose again at once.
+a Latin one), nor a name that is a reserved word, a role or a placeholder. The first one is free; after that it may be changed once in 24 hours; the old one is held for the account for 7 days, so that nobody takes it to pass for the person, and a person who
+changes back has their old name again (and the 24 hours start again). A tag may change at any time (the saves of an account are rate limited, below), is not unique and is not held. A moderator's /rename takes both away, and the account may choose again at once.
 A guest's name may not copy a logged-in person's nickname (or a name that is held), has the same letters, length and word list, is kept in the guest's browser and is not reserved for the guest.
 
 The game server. `play_name` is the name that a person plays under: "[TAG] Nickname", the nickname, or, for a person who has chosen none, the name that the login has (the shown name, then the other names, then the
@@ -26,9 +26,8 @@ from .limits import RateByAccount, TokenBucket
 from .store import StoreError
 
 CLAIM_SECONDS = 30 * 86400                        # the login name of a person with no nickname is claimed for the game this long after the last pass
-NICK_WAIT_SECONDS = 30 * 86400                    # a nickname changes once in this long ...
-HOLD_SECONDS = 30 * 86400                         # ... and the old one is held for its person this long
-TAG_WAIT_SECONDS = 86400                          # a tag changes once a day
+NICK_WAIT_SECONDS = 86400                         # a nickname (after the first) changes once in this long (a tag changes at any time) ...
+HOLD_SECONDS = 7 * 86400                          # ... and the old one is held for its person this long
 CHECK_BURST, CHECK_REFILL_SECONDS = 12, 0.25      # the checks that one socket may ask: a burst, then four a second (the page waits a moment after the last key)
 SAVE_BURST, SAVE_REFILL_SECONDS = 3, 20.0         # the saves of one account, across all its tabs
 
@@ -61,7 +60,7 @@ class Nicknames:
         return self.chat.store.clock()
 
     def row(self, account):
-        """The account's nickname row (nick, key, nick_at, tag, tag_at) or None; a store that cannot answer is no nickname for now (the caller's frame goes on)."""
+        """The account's nickname row (nick, key, nick_at, tag) or None; a store that cannot answer is no nickname for now (the caller's frame goes on)."""
         try:
             return self.chat.store.nick_row(account)
         except StoreError as e:
@@ -91,7 +90,7 @@ class Nicknames:
         return who._replace(name=nickrules.login_shown(who.username), pick="username", other="", nick="", tag="")
 
     def state(self, who):
-        """What a page is told of the account's own name, for `you`: the nickname and the tag when there are some, when each was set, and the time when each may change again (only while it may not)."""
+        """What a page is told of the account's own name, for `you`: the nickname and the tag when there are some, when the nickname was set, and the time when it may change again (only while it may not)."""
         row = self.row(who.account_id)
         if row is None:
             return {}
@@ -101,8 +100,6 @@ class Nicknames:
             out["nickfree"] = row.nick_at + NICK_WAIT_SECONDS
         if row.tag:
             out["tag"] = row.tag
-        if row.tag_at and row.tag_at + TAG_WAIT_SECONDS > now:
-            out["tagfree"] = row.tag_at + TAG_WAIT_SECONDS
         return out
 
     # ---- the checks ---------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -125,15 +122,11 @@ class Nicknames:
             return field(False, "soon", row.nick_at + NICK_WAIT_SECONDS), None
         return field(True), nick
 
-    def check_tag(self, account, raw, nick, now):
+    def check_tag(self, raw, nick):
+        """(field, tag or None) of a tag: the rules of the text only (a tag changes at any time, and one that the account has now is as good as any)."""
         tag, why = nickrules.check_tag(raw, nick or "")
         if why:
             return field(False, why), None
-        row = self.row(account)
-        if row is not None and row.tag == tag:
-            return field(True), tag
-        if row is not None and row.tag_at and row.tag_at + TAG_WAIT_SECONDS > now:
-            return field(False, "soon", row.tag_at + TAG_WAIT_SECONDS), None
         return field(True), tag
 
     def guest_check(self, raw):
@@ -188,7 +181,7 @@ class Nicknames:
             return self.reply(peer, r, {"ok": False, "why": "rate"})
         nick_field, new_nick = self.check_nick(account, nick, now)
         row = self.row(account)
-        tag_field, new_tag = self.check_tag(account, tag, new_nick or (row.nick if row else ""), now) if new_nick or row else (None, None)
+        tag_field, new_tag = self.check_tag(tag, new_nick or (row.nick if row else "")) if new_nick or row else (None, None)
         if tag_field is None:
             tag_field = field(True) if not tag else field(False, "nick")        # (a tag needs a nickname to stand before)
         ok = nick_field["ok"] and tag_field["ok"]
@@ -207,9 +200,8 @@ class Nicknames:
         store = self.chat.store
         row = self.row(account)
         nick_at = row.nick_at if row is not None and row.nick == nick else int(now)
-        tag_at = row.tag_at if row is not None and row.tag == tag else (int(now) if tag or (row is not None and row.tag) else 0)
         try:
-            conflict = store.nick_put(account, nick, nick.casefold(), text.squash(nick), nick_at, tag, tag_at, int(now) + HOLD_SECONDS)
+            conflict = store.nick_put(account, nick, nick.casefold(), text.squash(nick), nick_at, tag, int(now) + HOLD_SECONDS)
         except StoreError as e:
             if self.chat.on_store_error:
                 self.chat.on_store_error(e)

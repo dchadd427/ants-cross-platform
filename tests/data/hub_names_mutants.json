@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the rules of nicknames, tags and guests' names and of the pass for the game server (hub/nickrules.py, hub/nicknames.py, hub/namepass.py, the nickname tables of hub/store/sqlite.py; docs/HUB_NICKNAMES.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/test_hub_names.py: the length of a nickname and a tag, one alphabet, the signs, reserved words and the lookalikes of them, the rude words as they are written and as a lookalike writes them, the labels of computer players, the nickname that is unique (taken, a lookalike, the own name), the waits (30 days, a day) and the holds, a guest that may not copy a nickname, the rates, both fields or none, the name that a login plays under, the words of the pass and its time, and what Forget me takes. Run from the checkout: python3 tools/mutate.py tests/data/hub_names_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught.",
+ "note": "Mutants of the rules of nicknames, tags and guests' names and of the pass for the game server (hub/nickrules.py, hub/nicknames.py, hub/namepass.py, the nickname tables of hub/store/sqlite.py; docs/HUB_NICKNAMES.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/test_hub_names.py: the length of a nickname and a tag, one alphabet, the signs, reserved words and the lookalikes of them, the rude words as they are written and as a lookalike writes them, the labels of computer players, the nickname that is unique (taken, a lookalike, the own name), the waits (a nickname 24 hours, a tag none) and the holds (7 days, and the holds of the old rule cut once), a guest that may not copy a nickname, the rates, both fields or none, the name that a login plays under, the words of the pass and its time, and what Forget me takes. Run from the checkout: python3 tools/mutate.py tests/data/hub_names_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught.",
  "defaults": {
   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest -f tests.scripts.test_hub_names"
  },
@@ -197,40 +197,16 @@
    "new": ""
   },
   {
-   "id": "a_nickname_waits_29_days",
+   "id": "a_nickname_waits_23_hours",
    "file": "hub/nicknames.py",
-   "old": "NICK_WAIT_SECONDS = 30 * 86400",
-   "new": "NICK_WAIT_SECONDS = 29 * 86400"
+   "old": "NICK_WAIT_SECONDS = 86400",
+   "new": "NICK_WAIT_SECONDS = 23 * 3600"
   },
   {
-   "id": "an_old_nickname_is_held_29_days",
+   "id": "an_old_nickname_is_held_6_days",
    "file": "hub/nicknames.py",
-   "old": "HOLD_SECONDS = 30 * 86400",
-   "new": "HOLD_SECONDS = 29 * 86400"
-  },
-  {
-   "id": "a_tag_waits_an_hour",
-   "file": "hub/nicknames.py",
-   "old": "TAG_WAIT_SECONDS = 86400",
-   "new": "TAG_WAIT_SECONDS = 3600"
-  },
-  {
-   "id": "a_tag_changes_at_once",
-   "file": "hub/nicknames.py",
-   "old": "if row is not None and row.tag_at and row.tag_at + TAG_WAIT_SECONDS > now:\n            return field(False, \"soon\", row.tag_at + TAG_WAIT_SECONDS), None",
-   "new": ""
-  },
-  {
-   "id": "a_change_of_capitals_alone_is_free",
-   "file": "hub/nicknames.py",
-   "old": "        if row is not None and row.tag == tag:\n            return field(True), tag",
-   "new": "        if row is not None and row.tag.casefold() == tag.casefold():\n            return field(True), tag"
-  },
-  {
-   "id": "a_change_of_capitals_alone_does_not_start_the_day",
-   "file": "hub/nicknames.py",
-   "old": "tag_at = row.tag_at if row is not None and row.tag == tag else",
-   "new": "tag_at = row.tag_at if row is not None and row.tag.casefold() == tag.casefold() else"
+   "old": "HOLD_SECONDS = 7 * 86400",
+   "new": "HOLD_SECONDS = 6 * 86400"
   },
   {
    "id": "a_guest_may_copy_a_nickname",
@@ -589,6 +565,30 @@
    "old": "re.sub(\"[ ._'\\u02bb\\u02bc\\u00b7-]\", \"\"",
    "new": "re.sub(\"[ ._'\\u02bb\\u02bc-]\", \"\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "the_old_holds_keep_their_30_days",
+   "file": "hub/store/sqlite.py",
+   "old": "UPDATE nick_hold SET until = until - ?\", (23 * 86400,))",
+   "new": "UPDATE nick_hold SET until = until - ?\", (0,))"
+  },
+  {
+   "id": "the_old_holds_are_cut_at_every_opening",
+   "file": "hub/store/sqlite.py",
+   "old": "if not self.nick_tables or self.db.execute(\"SELECT 1 FROM meta WHERE k = 'nick_hold_days'\").fetchone() is not None:",
+   "new": "if not self.nick_tables:"
+  },
+  {
+   "id": "the_old_holds_are_cut_by_too_little",
+   "file": "hub/store/sqlite.py",
+   "old": "(23 * 86400,))",
+   "new": "(22 * 86400,))"
+  },
+  {
+   "id": "a_new_database_has_no_note_that_its_holds_are_new",
+   "file": "hub/store/sqlite.py",
+   "old": "            INSERT OR IGNORE INTO meta (k, v) VALUES ('nick_hold_days', 7);\n            COMMIT;",
+   "new": "            COMMIT;"
   }
  ]
 }
