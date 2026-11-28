@@ -1254,6 +1254,15 @@ int main(int argc, char* argv[]) {
             world.fog_of_war_enabled = false;
             world.fog_revealed.assign(400, 1);
         }
+        {                                                                                  // an ant that ARRIVES is idle in the very tick that it stops walking: nothing is held (a move beyond a walk is slid, as it always was)
+            ViewGlide g;
+            frame(g, 50, walking(220, 112, 2), x, y);
+            frame(g, 50, stopped(208, 112, 2), x, y);
+            ASSERT_FALSE(g.held(7));
+            int32_t dx = 0;
+            int32_t dy = 0;
+            ASSERT_TRUE(g.offset_of(7, dx, dy) && dx == 12 && dy == 0);
+        }
         {                                                                                  // a hold of more than two tiles is no hold (a throw, a teleport): shown at once
             ViewGlide g;
             frame(g, 50, walking(300, 112, 2), x, y);

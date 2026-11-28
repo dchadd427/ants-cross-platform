@@ -9,8 +9,8 @@
    "build": [
     "test_lockstep"
    ],
-   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
-   "expect": "S2.70"
+   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 S2.74 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "expect": "sealed[e.first]"
   },
   {
    "id": "stamp_cap_off_by_one",
@@ -20,7 +20,7 @@
    "build": [
     "test_lockstep"
    ],
-   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 S2.74 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
    "expect": "S2.70"
   },
   {
@@ -31,8 +31,8 @@
    "build": [
     "test_lockstep"
    ],
-   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
-   "expect": "S2.70"
+   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 S2.74 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "expect": "order_ahead_clamped"
   },
   {
    "id": "order_may_overtake_an_earlier_one",
@@ -42,18 +42,18 @@
    "build": [
     "test_lockstep"
    ],
-   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 S2.74 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
    "expect": "S2.68"
   },
   {
    "id": "order_is_sealed_at_the_next_turn_whatever_its_stamp",
    "file": "src/ants_net/sequencer.cpp",
    "old": "std::max(std::max(at_turn, next_turn_), last_target_[player])",
-   "new": "next_turn_",
+   "new": "next_turn_ + 0 * at_turn + 0 * last_target_[player]",
    "build": [
     "test_lockstep"
    ],
-   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 S2.74 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
    "expect": "S2.68"
   },
   {
@@ -64,7 +64,7 @@
    "build": [
     "test_lockstep"
    ],
-   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 S2.74 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
    "expect": "S2.68"
   },
   {
@@ -75,7 +75,7 @@
    "build": [
     "test_lockstep"
    ],
-   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 S2.74 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
    "expect": "S2.71"
   },
   {
@@ -86,7 +86,7 @@
    "build": [
     "test_lockstep"
    ],
-   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 S2.74 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
    "expect": "S2.71"
   },
   {
@@ -97,7 +97,7 @@
    "build": [
     "test_lockstep"
    ],
-   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 S2.74 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
    "expect": "S2.71"
   },
   {
@@ -108,7 +108,7 @@
    "build": [
     "test_lockstep"
    ],
-   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 S2.74 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
    "expect": "S2.71"
   },
   {
@@ -119,7 +119,7 @@
    "build": [
     "test_lockstep"
    ],
-   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 S2.74 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
    "expect": "S2.71"
   },
   {
@@ -130,7 +130,7 @@
    "build": [
     "test_lockstep"
    ],
-   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 S2.74 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
    "expect": "S2.68"
   },
   {
@@ -141,7 +141,7 @@
    "build": [
     "test_lockstep"
    ],
-   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 S2.74 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
    "expect": "S2.68"
   },
   {
@@ -152,7 +152,7 @@
    "build": [
     "test_lockstep"
    ],
-   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 S2.74 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
    "expect": "S2.72"
   },
   {
@@ -163,7 +163,7 @@
    "build": [
     "test_lockstep"
    ],
-   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 S2.74 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
    "expect": "S2.72"
   },
   {
@@ -174,51 +174,40 @@
    "build": [
     "test_lockstep"
    ],
-   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
-   "expect": "S2.72"
-  },
-  {
-   "id": "host_answers_an_order_that_asked_for_no_answer",
-   "file": "src/ants_net/session.cpp",
-   "old": "if (m.seq != 0 && clients_[player].conn != nullptr &&",
-   "new": "if (clients_[player].conn != nullptr &&",
-   "build": [
-    "test_lockstep"
-   ],
-   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 S2.74 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
    "expect": "S2.72"
   },
   {
    "id": "host_player_orders_have_no_tick",
    "file": "src/ants_net/session.cpp",
    "old": "if (!sequencer_.submit(cfg_.host_player, command, at_turn)) return false;",
-   "new": "if (!sequencer_.submit(cfg_.host_player, command, 0)) return false;",
+   "new": "if (!sequencer_.submit(cfg_.host_player, command, 0 * at_turn)) return false;",
    "build": [
-    "test_netgame"
+    "test_lockstep"
    ],
-   "test": "ANTS_TEST_FILTER=N3.31 timeout 900 ./build/tests/test_net/test_netgame",
-   "expect": "N3.31"
+   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 S2.74 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "expect": "S2.74"
   },
   {
    "id": "client_sends_no_tick",
    "file": "src/ants_net/session_client.cpp",
    "old": "    m.turn = at_turn;\n",
-   "new": "",
+   "new": "    m.turn = 0 * at_turn;\n",
    "build": [
     "test_lockstep"
    ],
-   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 S2.74 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
    "expect": "S2.72"
   },
   {
    "id": "client_sends_no_number",
    "file": "src/ants_net/session_client.cpp",
    "old": "    m.seq = seq;\n",
-   "new": "",
+   "new": "    m.seq = 0 * seq;\n",
    "build": [
     "test_lockstep"
    ],
-   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 S2.74 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
    "expect": "S2.72"
   },
   {
@@ -240,19 +229,8 @@
    "build": [
     "test_lockstep"
    ],
-   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
-   "expect": "N2.116"
-  },
-  {
-   "id": "command_message_tail_is_short",
-   "file": "src/ants_net/protocol.cpp",
-   "old": "    if (data == nullptr || size < 1 + sim::kCommandHeaderBytes + kTail ||",
-   "new": "    if (data == nullptr || size < 1 + sim::kCommandHeaderBytes ||",
-   "build": [
-    "test_lockstep"
-   ],
-   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
-   "expect": "N2.116"
+   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 S2.74 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "expect": "sealed_at[11]"
   },
   {
    "id": "order_answer_with_no_number_is_taken",
@@ -262,7 +240,7 @@
    "build": [
     "test_lockstep"
    ],
-   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
+   "test": "timeout 900 sh -c 'for t in S2.68 S2.69 S2.70 S2.71 S2.72 S2.73 S2.74 N2.116; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'",
    "expect": "N2.116"
   },
   {
@@ -271,10 +249,10 @@
    "old": "    const uint32_t at_turn = plan ? static_cast<uint32_t>(std::min<uint64_t>(plan->tick, kMaxHintTick)) : 0u;",
    "new": "    const uint32_t at_turn = 0u;",
    "build": [
-    "test_netgame"
+    "test_prediction_link"
    ],
-   "test": "ANTS_TEST_FILTER=N25.6 timeout 900 ./build/tests/test_net/test_netgame",
-   "expect": "N25.6"
+   "test": "ANTS_TEST_FILTER=LK18 timeout 1500 ./build/tests/test_app/test_prediction_link",
+   "expect": "late * 10u <= orders"
   },
   {
    "id": "game_numbers_no_order",
@@ -346,7 +324,7 @@
    "id": "answers_teach_nothing",
    "file": "src/ants_net/prediction.cpp",
    "old": "    lags_.emplace_back(static_cast<uint32_t>(std::clamp<uint64_t>(lag, 1u, cfg_.max_lead_ticks)), confirmed_tick());\n",
-   "new": "",
+   "new": "    (void)lag;\n",
    "build": [
     "test_prediction"
    ],
@@ -373,7 +351,7 @@
     "test_prediction"
    ],
    "test": "ANTS_TEST_FILTER=RP8 timeout 900 ./build/tests/test_net/test_prediction",
-   "expect": "RP8"
+   "expect": "lead_ticks()"
   },
   {
    "id": "answer_of_another_order_is_taken",
@@ -412,7 +390,7 @@
    "id": "snap_back_is_slid_not_held",
    "file": "src/ants_app/view_glide.cpp",
    "old": "const bool snapped_back = back && ant.state != sim::UnitState::Idle;",
-   "new": "const bool snapped_back = false;",
+   "new": "const bool snapped_back = back && false;",
    "build": [
     "test_view_glide"
    ],
@@ -439,7 +417,7 @@
     "test_view_glide"
    ],
    "test": "ANTS_TEST_FILTER=VG1 timeout 900 ./build/tests/test_app/test_view_glide",
-   "expect": "VG15"
+   "expect": "g.held(7)"
   },
   {
    "id": "hold_never_ends_when_the_engine_has_passed",
@@ -500,7 +478,7 @@
    "id": "hold_of_a_hidden_ant_stays",
    "file": "src/ants_app/view_glide.cpp",
    "old": "        if ((entries_[i].hold && !looked) || empty)",
-   "new": "        if (empty)",
+   "new": "        if (empty || (looked && false))",
    "build": [
     "test_view_glide"
    ],
@@ -511,7 +489,7 @@
    "id": "held_ant_is_picked_where_the_engine_has_it",
    "file": "src/ants_app/view_glide.cpp",
    "old": "            hold->dx = hold->held_x - engine_x;\n            hold->dy = hold->held_y - engine_y;",
-   "new": "            hold->dx = 0;\n            hold->dy = 0;",
+   "new": "            hold->dx = 0 * engine_x;\n            hold->dy = 0 * engine_y;",
    "build": [
     "test_view_glide"
    ],

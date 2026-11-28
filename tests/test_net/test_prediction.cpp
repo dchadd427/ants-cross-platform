@@ -1432,6 +1432,34 @@ void run_cue_tests() {
         ASSERT_EQ(p.lead_ticks(), 3u);
     } TEST_END();
 
+    TEST_CASE("RP8.8 A Lag One Tick Longer Than The Lead Raises It At Once, Not After 40 Ticks Of Being Too Short: The Host's Answer Says That The Order Was Late, And The Next Order Is Stamped With The Longer Lead") {
+        Scenario sc;
+        sc.seed = 130;
+        sc.buffer_turns = 1;
+        sc.down_delay = 1;
+        sc.uplink = 1;                                                                           // the lag is 3
+        sc.lead_ms = 150;
+        sc.prediction.learn_lead = true;
+        sc.honor_stamps = true;
+        sc.prediction.lead_bias_ticks = 0;
+        sc.prediction.lag_fresh_ticks = 5000;
+        Rig rig(sc);
+        Lcg rng(130);
+        Prediction& p = *rig.prediction();
+        rig.run(16);
+        for (int i = 0; i < 3; ++i) {
+            rig.issue(random_order(rng, rig.ids, 0));
+            rig.run(26);
+        }
+        ASSERT_EQ(p.lead_ticks(), 3u);
+        rig.set_uplink(2);                                                                       // the lag is 4 now: the order is late (it is stamped with 3)
+        rig.issue(random_order(rng, rig.ids, 0));
+        rig.run(8);                                                                              // (sealed, answered: far fewer than the 40 ticks that an estimate waits for a rise of one tick)
+        ASSERT_EQ(p.learned_lag_ticks(), 4u);
+        ASSERT_EQ(p.lead_ticks(), 4u);
+        ASSERT_EQ(p.stats().order_acks_late, uint64_t{1});
+    } TEST_END();
+
     TEST_CASE("RP8.3 A Lag That Is Not Fresh Is Forgotten (lag_fresh_ticks): The Lead Goes Back To The Owner's Estimate Once The Orders Are Old, And The Orders That Come After A Quiet Spell Teach It Again") {
         Scenario sc;
         sc.seed = 121;

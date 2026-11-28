@@ -707,6 +707,17 @@ void run_order_tests() {
         }
         ASSERT_EQ(seat1, size_t{0});
         ASSERT_EQ(seat2, size_t{1});
+        {                                                                                        // the budget is charged when a held order arrives, not when it is sealed: a store of 5 takes 5 of 8 held orders
+            Sequencer::Config limited_config;
+            limited_config.order_burst = 5;
+            limited_config.orders_per_second = 1;
+            Sequencer limited(limited_config);
+            limited.set_active(1, true);
+            int taken_by_budget = 0;
+            for (int i = 0; i < 8; ++i) taken_by_budget += limited.submit_checked(1, group_move(1, static_cast<int16_t>(i)), 4) == Submit::Queued ? 1 : 0;
+            ASSERT_EQ(taken_by_budget, 5);
+            ASSERT_EQ(limited.dropped_over_budget(1), 3u);
+        }
         // a new host (host migration) starts with nothing held
         ASSERT_TRUE(seq.submit_checked(2, group_move(2, 2), 40) == Submit::Queued);
         seq.resume(100);
@@ -787,6 +798,46 @@ void run_order_tests() {
         ASSERT_TRUE(seat2_at != 0 && seat1_last != 0 && seat2_at < seat1_last);                                   // seat 2's order did not wait for the 16 turns that seat 1's were held
         ASSERT_TRUE(m.host->client_present(1));
         ASSERT_EQ(m.host->violations(1), 0u);
+        ASSERT_TRUE(m.host->desyncs().empty() && m.all_equal());
+    } TEST_END();
+
+    TEST_CASE("S2.74 Host Session With A Seat, The Tick Of The Host's Own Order: submit_local(command, at_turn, &open_turn) Seals The Order In The Turn That It Asks For When That Turn Is Open (And Says Which Turn Was The First Open One), A Late One In The First Open Turn; Every Machine Runs The Same Turns") {
+        Match m(9, 2, {10, 0});
+        m.run(3000, false);
+        const uint32_t base = m.host->turns_sealed();
+        ASSERT_TRUE(base > 10);
+        uint32_t open = 0;
+        ASSERT_TRUE(m.host->submit_local(cmd(CommandType::GroupMove, 0, 255, 21, 6, {m.ids.ants[0][0]}), base + 9, &open));         // nine turns ahead: open
+        ASSERT_EQ(open, base);                                                                                                    // (nothing was sealed between the two lines)
+        ASSERT_TRUE(m.host->submit_local(cmd(CommandType::GroupMove, 0, 255, 22, 6, {m.ids.ants[0][1]}), 1, &open));              // late: after the first one, so with it (a seat's orders keep their order)
+        ASSERT_TRUE(m.host->submit_local(cmd(CommandType::GroupMove, 0, 255, 23, 6, {m.ids.ants[0][2]})));                         // no tick: the same
+        m.run(2000, false);
+        std::map<int16_t, uint32_t> at;
+        for (uint32_t t = 0; t < m.host->turns_sealed(); ++t) {
+            const TurnMsg* turn = m.host->runner().logged_turn(t);
+            if (turn == nullptr) continue;
+            for (const Command& c : turn->commands) {
+                if (c.issuer == 0 && c.tile_y == 6) at[c.tile_x] = t;
+            }
+        }
+        ASSERT_EQ(at.size(), size_t{3});
+        ASSERT_EQ(at[21], base + 9);                                                                                                // honored: exactly the turn that it asked for
+        ASSERT_TRUE(at[22] == base + 9 && at[23] == base + 9);                                                                      // (the later orders of the seat are sealed with it, behind it)
+        // a late order of a seat that has nothing waiting: the first open turn
+        const uint32_t now_open = m.host->turns_sealed();
+        ASSERT_TRUE(m.host->submit_local(cmd(CommandType::GroupMove, 0, 255, 24, 6, {m.ids.ants[0][3]}), 2, &open));
+        ASSERT_EQ(open, now_open);
+        m.run(1000, false);
+        uint32_t late_at = 0;
+        for (uint32_t t = now_open; t < m.host->turns_sealed(); ++t) {
+            const TurnMsg* turn = m.host->runner().logged_turn(t);
+            if (turn == nullptr) continue;
+            for (const Command& c : turn->commands) {
+                if (c.issuer == 0 && c.tile_x == 24) late_at = t;
+            }
+        }
+        ASSERT_EQ(late_at, now_open);
+        m.settle();
         ASSERT_TRUE(m.host->desyncs().empty() && m.all_equal());
     } TEST_END();
 }
