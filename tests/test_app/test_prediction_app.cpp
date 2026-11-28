@@ -12,6 +12,7 @@
 // Real sockets on the loopback interface; one Application per test (SDL is initialised once per process).
 #include <SDL.h>
 
+#include "slide_cause.hpp"
 #include "ants_app/application.hpp"
 #include "ants_app/health_changes.hpp"
 #include "ants_app/hud.hpp"
@@ -1068,6 +1069,7 @@ int main(int argc, char* argv[]) {
             ASSERT_TRUE(start != nullptr);
             ASSERT_TRUE(place_camera(app, start->px, start->py, 0, 0));
             size_t slid_bobs = 0;
+            shaped::SlideCause cause;                                                      // (the one slide that an ant of Bob's can have is the hop of his own ant's snap: the engine moves it in the same frame)
             uint64_t elapsed = 0;
             std::mt19937 rng(5);
             while (elapsed < 12000) {
@@ -1086,10 +1088,18 @@ int main(int argc, char* argv[]) {
                 app.render_frame();                                                        // (the frame is where the shifts of a rebuild are taken up)
                 for (const uint32_t id : bobs) {
                     int32_t dx = 0, dy = 0;
-                    if (app.renderer().view_glide().offset_of(id, dx, dy)) ++slid_bobs;
-                }
-                if (others) {
-                    ASSERT_EQ(slid_bobs, 0u);                                              // not one frame of one ant of Bob's slides
+                    const bool slid = app.renderer().view_glide().offset_of(id, dx, dy);
+                    if (slid) ++slid_bobs;
+                    const sim::AntSnapshot* drawn = nullptr;
+                    for (const sim::AntSnapshot& a : app.shown_world().ants) {
+                        if (a.id == id) drawn = &a;
+                    }
+                    ASSERT_TRUE(drawn != nullptr);
+                    bool began = false;
+                    const bool unexplained = cause.unexplained(*drawn, dx, dy, slid, began);
+                    if (others) {
+                        ASSERT_FALSE(unexplained);                                         // not one frame of one ant of Bob's slides, but by the hop of its own snap: no correction is ever drawn
+                    }
                 }
             }
             if (!others) slid_plain = slid_bobs;

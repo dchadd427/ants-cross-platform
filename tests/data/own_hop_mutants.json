@@ -1,0 +1,131 @@
+{
+  "note": "Mutants of the hop of a re-order, for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the product rule that the glide and shaped-link tests hold. The engine puts an ant that walks and is given a new order (or a stop) on the middle of its tile at once, up to half a tile, as the original does; the picture draws that as the slide of ViewGlide::follow, never as a jump: only for an ant that was walking and now is not, that stands on the middle of a tile, and that moved by more than a walk of the time between two frames covers; from where the last frame drew it, with the clip's frames counted; for the ants of every player, in a game of one machine as much as in a network match; forgotten at clear(), and never across the fog.",
+  "mutants": [
+    {
+      "id": "hop_of_an_ant_that_was_not_walking",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "last->action == 1 && ant.action != 1 &&",
+      "new": "ant.action != 1 &&",
+      "build": ["test_view_glide"],
+      "test": "ANTS_TEST_FILTER=VG13 ./build/tests/test_app/test_view_glide",
+      "expect": "VG13"
+    },
+    {
+      "id": "hop_of_an_ant_that_still_walks",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "last->action == 1 && ant.action != 1 &&",
+      "new": "last->action == 1 &&",
+      "build": ["test_view_glide"],
+      "test": "ANTS_TEST_FILTER=VG13 ./build/tests/test_app/test_view_glide",
+      "expect": "VG13"
+    },
+    {
+      "id": "hop_of_an_ant_off_the_middle_of_a_tile_in_x",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "&& on_tile_middle(ant.px) && on_tile_middle(ant.py)) {",
+      "new": "&& (on_tile_middle(ant.px) || true) && on_tile_middle(ant.py)) {",
+      "build": ["test_view_glide"],
+      "test": "ANTS_TEST_FILTER=VG13 ./build/tests/test_app/test_view_glide",
+      "expect": "VG13"
+    },
+    {
+      "id": "hop_of_an_ant_off_the_middle_of_a_tile_in_y",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "&& on_tile_middle(ant.px) && on_tile_middle(ant.py)) {",
+      "new": "&& on_tile_middle(ant.px) && (on_tile_middle(ant.py) || true)) {",
+      "build": ["test_view_glide"],
+      "test": "ANTS_TEST_FILTER=VG13 ./build/tests/test_app/test_view_glide",
+      "expect": "VG13"
+    },
+    {
+      "id": "every_move_is_a_hop",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "> walk_px) {",
+      "new": "> 0 * walk_px) {",
+      "build": ["test_view_glide"],
+      "test": "ANTS_TEST_FILTER=VG1 ./build/tests/test_app/test_view_glide",
+      "expect": "VG1"
+    },
+    {
+      "id": "walk_of_the_time_between_frames_not_counted",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "(static_cast<int64_t>(kWalkPxPerSecond) * elapsed + 999) / 1000 + kStepPx;",
+      "new": "(static_cast<int64_t>(kWalkPxPerSecond) * 0 * elapsed + 999) / 1000 + kStepPx;",
+      "build": ["test_view_glide"],
+      "test": "ANTS_TEST_FILTER=VG1 ./build/tests/test_app/test_view_glide",
+      "expect": "VG1"
+    },
+    {
+      "id": "match_time_between_looks_not_counted",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "const uint32_t elapsed = std::max(since_follow_ms_, match_ms > kTickMs ? match_ms - kTickMs : 0u);",
+      "new": "const uint32_t elapsed = std::max(since_follow_ms_, 0u * match_ms);",
+      "build": ["test_view_glide"],
+      "test": "ANTS_TEST_FILTER=VG13 ./build/tests/test_app/test_view_glide",
+      "expect": "VG13"
+    },
+    {
+      "id": "hop_slid_the_wrong_way",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "add(ant.id, hop_x, hop_y);",
+      "new": "add(ant.id, -hop_x, -hop_y);",
+      "build": ["test_view_glide"],
+      "test": "ANTS_TEST_FILTER=VG1 ./build/tests/test_app/test_view_glide",
+      "expect": "VG1"
+    },
+    {
+      "id": "hop_from_where_the_engine_has_the_ant",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "            x = ant.px + gx + clip_x;\n            y = ant.py + gy + clip_y;",
+      "new": "            x = ant.px + gx;\n            y = ant.py + gy;",
+      "build": ["test_view_glide"],
+      "test": "ANTS_TEST_FILTER=VG13 ./build/tests/test_app/test_view_glide",
+      "expect": "VG13"
+    },
+    {
+      "id": "hop_slide_not_added_to_the_slide_that_is_left",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "            x = ant.px + gx + clip_x;",
+      "new": "            x = ant.px + clip_x;",
+      "build": ["test_view_glide"],
+      "test": "ANTS_TEST_FILTER=VG13 ./build/tests/test_app/test_view_glide",
+      "expect": "VG13"
+    },
+    {
+      "id": "last_places_kept_by_clear",
+      "file": "include/ants_app/view_glide.hpp",
+      "old": "        entries_.clear();\n        seen_.clear();",
+      "new": "        entries_.clear();",
+      "build": ["test_view_glide"],
+      "test": "ANTS_TEST_FILTER=VG13 ./build/tests/test_app/test_view_glide",
+      "expect": "VG13"
+    },
+    {
+      "id": "ant_in_the_fog_is_followed",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "        if (!health::ant_drawn(world, viewer_team, ant)) continue;       // (an ant of the fog is not looked at: when it is drawn again it has no last place)\n",
+      "new": "",
+      "build": ["test_view_glide"],
+      "test": "ANTS_TEST_FILTER=VG13 ./build/tests/test_app/test_view_glide",
+      "expect": "VG13"
+    },
+    {
+      "id": "hop_not_slid_in_the_frame",
+      "file": "src/ants_app/renderer_units.cpp",
+      "old": "    view_glide_.follow(world, hud_team_id_,",
+      "new": "    if (false) view_glide_.follow(world, hud_team_id_,",
+      "build": ["test_prediction_link"],
+      "test": "ANTS_TEST_FILTER=LK17 ./build/tests/test_app/test_prediction_link",
+      "expect": "LK17"
+    },
+    {
+      "id": "glide_cleared_in_a_game_of_one_machine",
+      "file": "src/ants_app/application_sim.cpp",
+      "old": "    if (prediction == nullptr) return;                    // (a game that has no prediction has no shifts to slide: the slide of a hop is the frame's own, view_glide.hpp)",
+      "new": "    if (prediction == nullptr) {\n        renderer_->view_glide().clear();\n        return;\n    }",
+      "build": ["test_prediction_link"],
+      "test": "ANTS_TEST_FILTER=LK17 ./build/tests/test_app/test_prediction_link",
+      "expect": "LK17"
+    }
+  ]
+}

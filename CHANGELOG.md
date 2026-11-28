@@ -29,6 +29,7 @@ Work that is not released yet is written in the same template under a heading th
 ## Next
 
 **For players:**
+- An ant that walks and is given a new order no longer hops by up to half a tile in the picture: the game puts it on the middle of its tile at once, as the original does, and the picture now carries it there in a moment instead of jumping, for your own ants and everybody else's, in a game on one computer and online.
 - In a match the chat, the score labels and the countdown card show your name without the clan tag, so a long name fits (the tag stays on the results and on the pages).
 - **A settings menu in the game itself.** In the desktop game, Esc (when there is nothing to cancel), Ctrl+O and the Options button open a menu drawn in the game's own clay and steel, with the same sections and rows as the browser's: Sound, Video, Controls, Game and the new Quick Chat. The original's options window is gone, and every setting it had is a row of the menu with the same name and numbers.
 - **Quick Chat.** The four texts that F9 to F12 say are edited in the menu's new Quick Chat tab (in the browser too, where a phone's own keyboard opens for them).
