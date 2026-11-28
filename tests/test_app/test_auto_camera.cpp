@@ -1074,7 +1074,7 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(Cam::kSmoothMs, 600.0);                                            // "about 0.6 s to arrive"
         ASSERT_EQ(Cam::kEvalMs, 100.0);                                              // "every tenth of a second"
         ASSERT_EQ(Cam::kBigOnlySpeed, 4.0f);                                         // "from 4x up only the big events count"
-        // (the activity curve of the replay page is weighted by kDeath, kBomb, kTheft, kFire and kHit: web/replay_activity.js, whose own check, tests/scripts/web_activity_check.js, holds the same five numbers)
+        // (the activity curve of the replay page is weighted by kDeath, kBomb, kTheft, kFire and kHit: the replay page's script keeps the same five numbers, and its own check holds them equal)
         ASSERT_EQ(Cam::kDeath, 14.0f);                                               // "a kill 14, a bomb 10, a fire 5 for each of its two cues, a theft or a hill losing points 6, a hit 2, a blow 1, banked food 2"
         ASSERT_EQ(Cam::kBomb, 10.0f);
         ASSERT_EQ(Cam::kFire, 5.0f);

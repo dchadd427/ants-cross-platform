@@ -3,7 +3,7 @@
  "mutants": [
   {
    "id": "pairs_cap_one_more",
-   "file": "include/ants_server/online_limits.hpp",
+   "file": "include/ants_net/room_limits.hpp",
    "old": "kMaxPlantWaypointPairs = 1000000;",
    "new": "kMaxPlantWaypointPairs = 1000001;",
    "build": [
@@ -17,7 +17,7 @@
   },
   {
    "id": "pairs_cap_one_less",
-   "file": "include/ants_server/online_limits.hpp",
+   "file": "include/ants_net/room_limits.hpp",
    "old": "kMaxPlantWaypointPairs = 1000000;",
    "new": "kMaxPlantWaypointPairs = 999999;",
    "build": [

@@ -3,8 +3,7 @@
 
 The list is ONE file; tools/gen_bot_names.py makes the C++ table (src/ants_ai/bot_names_data.inc) and the JavaScript table (the generated block of web/front/bot_names.js) from it.
   - TheGenerator: the committed outputs are what the generator makes (`--check`), the generator refuses a list that breaks a rule, and `--check` fails on an output that was edited by hand.
-  - TheList: all printable ASCII letters, 3 to 8 of them, unique in any case, none of the blocklist (tests/data/bot_names_blocklist.txt, and the matcher itself is tested on made-up words),
-    240 to 260 names.
+  - TheList: all printable ASCII letters, 3 to 8 of them, unique in any case, 240 to 260 names (the words that a name must not be or hold are held by a test of their own).
   - TheScript: web/front/bot_names.js is a plain ES5 script that node and a page can load.
   - TheJavaScript: tests/scripts/web_bot_names_check.js runs it against the tables that the C++ test (tests/test_ai/test_ai_names.cpp) is held to as well (golden vectors, the digests of
     10,000 keys, the cases of the label, the parser and the reserved-name rule); a third, independent implementation of the picker in this file must agree with it on 3,000 keys; and
@@ -27,7 +26,6 @@ import gen_bot_names  # noqa: E402
 CHECK = os.path.join(REPO, "tests", "scripts", "web_bot_names_check.js")
 LIB = os.path.join(REPO, "web", "front", "bot_names.js")
 LIST = os.path.join(REPO, "tools", "bot_names.txt")
-BLOCKLIST = os.path.join(REPO, "tests", "data", "bot_names_blocklist.txt")
 GENERATOR = os.path.join(REPO, "tools", "gen_bot_names.py")
 NODE = shutil.which("node")
 M64 = (1 << 64) - 1
@@ -40,16 +38,6 @@ def read(path):
 
 def names_of_list():
     return gen_bot_names.read_names(read(LIST))
-
-
-def blocklist():
-    return [w.strip() for w in read(BLOCKLIST).splitlines() if w.strip() and not w.strip().startswith("#")]
-
-
-def blocked(name, words):
-    """The words of the blocklist that a name is, or holds: `=word` only as the whole name, `word` anywhere inside it (case ignored)."""
-    low = name.lower()
-    return [w for w in words if (low == w[1:] if w.startswith("=") else w in low)]
 
 
 def mix64(z):
@@ -148,29 +136,6 @@ class TheList(unittest.TestCase):
             self.assertTrue(n.isascii() and n.isprintable())
         self.assertEqual(len({n.lower() for n in names}), len(names), "unique in any case")
 
-    def test_no_name_is_or_holds_a_word_of_the_blocklist(self):
-        words = blocklist()
-        self.assertGreaterEqual(len(words), 100)
-        found = {n: blocked(n, words) for n in names_of_list() if blocked(n, words)}
-        self.assertEqual(found, {})
-
-    def test_the_blocklist_matcher_finds_what_it_should(self):
-        words = ["=ass", "=hell", "dick", "nazi"]
-        self.assertEqual(blocked("Ass", words), ["=ass"])
-        self.assertEqual(blocked("Cassie", words), [])                           # (a whole-name word is not found inside a name)
-        self.assertEqual(blocked("Hello", words), [])
-        self.assertEqual(blocked("Hell", words), ["=hell"])
-        self.assertEqual(blocked("Dickens", words), ["dick"])                    # (a plain word is found anywhere, in any case)
-        self.assertEqual(blocked("Panama", words), [])
-        self.assertEqual(blocked("Banazit", words), ["nazi"])
-
-    def test_the_blocklist_file_is_well_formed_and_the_list_is_clean_of_it_by_reading_too(self):
-        words = blocklist()
-        for w in words:
-            self.assertRegex(w, r"^=?[a-z]{2,}$", w)
-        self.assertEqual(len(set(words)), len(words), "a line twice")
-        self.assertTrue({"fuck", "shit", "=ass", "nigg", "hitler", "=admin"} <= set(words))
-
 
 class TheScript(unittest.TestCase):
     def test_it_is_a_plain_es5_script_with_no_dependency(self):
@@ -188,9 +153,9 @@ class TheScript(unittest.TestCase):
         self.assertIn('#include "bot_names_data.inc"', read(os.path.join(REPO, "src", "ants_ai", "bot_names.cpp")))
         self.assertIn("bot_names.cpp", read(os.path.join(REPO, "src", "ants_ai", "CMakeLists.txt")))
         self.assertIn("test_ai_names.cpp", read(os.path.join(REPO, "tests", "test_ai", "CMakeLists.txt")))
-        for table in ("bot_names_golden.txt", "bot_label_cases.tsv", "bot_names_blocklist.txt"):
+        for table in ("bot_names_golden.txt", "bot_label_cases.tsv"):
             self.assertIn(table, read(os.path.join(REPO, "tests", "test_ai", "test_ai_names.cpp")), "the C++ test reads " + table)
-        for table in ("bot_names_golden.txt", "bot_label_cases.tsv", "bot_names_blocklist.txt"):
+        for table in ("bot_names_golden.txt", "bot_label_cases.tsv"):
             self.assertIn(table, read(CHECK), "the JavaScript check reads " + table)
 
     def test_the_scripts_header_documents_the_key_forms(self):
@@ -323,8 +288,7 @@ class TheMutants(unittest.TestCase):
                 return run_check(lib)
 
         self.assertEqual(with_names(names)[0], 0)
-        for what, new in (("a name on the blocklist", names[:-1] + ["Nazi"]), ("a name inside which a blocked word stands", names[:-1] + ["Dickens"]), ("a whole-name word", names[:-1] + ["Admin"]),
-                          ("a placeholder of the page", names[:-1] + ["Maple"]), ("the same name in another case", names[:-1] + [names[0].lower()]), ("a name of nine letters", names[:-1] + ["Abcdefghi"]), ("a name that was taken out", names[:-1] + ["Warden"]), ("a name that was taken out", names[:-1] + ["Atta"]),
+        for what, new in (("a placeholder of the page", names[:-1] + ["Maple"]), ("the same name in another case", names[:-1] + [names[0].lower()]), ("a name of nine letters", names[:-1] + ["Abcdefghi"]), ("a name that was taken out", names[:-1] + ["Warden"]), ("a name that was taken out", names[:-1] + ["Atta"]),
                           ("too few names", names[:239]), ("a name with a blank", names[:-1] + ["Ant Hill"]), ("a digit", names[:-1] + ["Ant7"])):
             code, out = with_names(new)
             self.assertNotEqual(code, 0, "the check did not notice " + what)

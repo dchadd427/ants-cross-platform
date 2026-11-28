@@ -18,7 +18,7 @@
 // a room that was made to fill its log up (a hostile client) holds nothing of it afterwards.
 //
 // The server's budget. A server holds the logs of many rooms, and each of them may grow to its own limit: a LogBudget is the memory that all the logs of a server may take together
-// (ants_server: 256 MiB). A log takes from the budget what its vectors have ALLOCATED (their capacity, not the bytes in them: capacity_bytes(); a vector that grows by doubling holds up to
+// (the game server: 256 MiB). A log takes from the budget what its vectors have ALLOCATED (their capacity, not the bytes in them: capacity_bytes(); a vector that grows by doubling holds up to
 // twice what it stores, so counting the size would let the logs take up to twice the budget) and gives all of it back when it is destroyed, released or dead. The log grows its vectors
 // itself, by doubling, and an append whose growth the budget refuses tries a growth of a quarter before it gives up; an append that the budget refuses stores nothing and makes the
 // log dead, exactly as the log's own limit does, so a server that is full of logs falls back to dropping a lost seat at once in the rooms that cannot log (and says so in their status) and

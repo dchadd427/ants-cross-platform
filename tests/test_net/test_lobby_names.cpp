@@ -1,4 +1,4 @@
-// Tests of the names of people in a room (network protocol 29, docs/NETWORK_PORT.md "Protocol 29", docs/HUB_NICKNAMES.md): what a name may hold on the wire (printable ASCII and the letters of the table, as UTF-8), the guest's form
+// Tests of the names of people in a room (network protocol 29, docs/NETWORK_PORT.md "Protocol 29"): what a name may hold on the wire (printable ASCII and the letters of the table, as UTF-8), the guest's form
 // "Name (Guest)", the hub's pass that a server with the hub's key asks for, a rename, and the room's own notices that name people (N4.70 - N4.75)
 #include "lobby_fixtures.hpp"
 

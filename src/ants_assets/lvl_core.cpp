@@ -167,9 +167,9 @@ Result read_report_impl(const uint8_t* data, size_t size, Profile profile) {
     out += ',';
     put_number(out, "waypoints", static_cast<long long>(level.waypoints.size()));
     out += ',';
-    put_number(out, "plants", static_cast<long long>(plants));          // block 1 records with the dropper-plant flag: plants x waypoints is the cost of setting the map up (OnlineLimits::kMaxPlantWaypointPairs)
+    put_number(out, "plants", static_cast<long long>(plants));          // block 1 records with the dropper-plant flag: plants x waypoints is the cost of setting the map up (net::RoomLimits::kMaxPlantWaypointPairs)
     out += ',';
-    put_number(out, "powerups", static_cast<long long>(powerups));          // layer-2 cells with a power-up tile (OnlineLimits::kMaxPowerUps)
+    put_number(out, "powerups", static_cast<long long>(powerups));          // layer-2 cells with a power-up tile (net::RoomLimits::kMaxPowerUps)
     out += ",\n";
     put_key(out, "teams");
     out += '[';

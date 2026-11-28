@@ -1,4 +1,4 @@
-// Tests of the room before a match: the rematch of a lobby room (docs/SERVER.md "Lobby rooms", net::HostLobby (7)): what a lobby room's match gives for the lobby that follows it, the reserved seats of
+// Tests of the room before a match: the rematch of a lobby room (docs/NETWORK_PORT.md "Protocol 16", net::HostLobby (7)): what a lobby room's match gives for the lobby that follows it, the reserved seats of
 // that lobby and the way back into them (N4.41 - N4.49b)
 #include "lobby_fixtures.hpp"
 

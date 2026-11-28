@@ -1,7 +1,7 @@
 // The desktop start menu, as a model (include/ants_app/start_menu.hpp): navigation by the keys and the mouse, the text fields, the seats of the single-player panel and the
 // rule-8 line, the join and host panels, the room's code and the clipboard, the servers, the room codes and the names that the menu accepts, the remembered settings, where
 // every control lies on the 640 x 480 screen, what is drawn and how long texts are cut, and which command-line options show or skip the menu. No window, no sockets: the
-// application's paths against a real server are in test_start_menu_app.
+// application's paths against a real server are in the application tests that run one.
 #include "start_menu_fixtures.hpp"
 
 int main(int argc, char* argv[]) {

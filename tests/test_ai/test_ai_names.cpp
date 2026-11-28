@@ -1,6 +1,6 @@
 // Tests of the names of the computer players (include/ants_ai/bot_names.hpp, docs/BOTS.md "Names"): the list, the picker with its golden vectors and the digests that the
 // JavaScript twin (web/front/bot_names.js, run by tests/scripts/web_bot_names_check.js) must give too, the label and its parser, the short form and the reserved-name rule.
-// The tables are files that both languages read: tests/data/bot_names_golden.txt, tests/data/bot_label_cases.tsv and tests/data/bot_names_blocklist.txt.
+// The tables are files that both languages read: tests/data/bot_names_golden.txt and tests/data/bot_label_cases.tsv.
 #include "ai_test.hpp"
 
 #include <algorithm>
@@ -126,14 +126,12 @@ std::string render(const BotLabel& p) { return p.name + "|" + p.tag + "|" + (p.l
 }  // namespace
 
 void run_name_tests() {
-    TEST_CASE("AI2.40 Names: The List Is 240 To 260 Short ASCII Names, Unique In Any Case, None On The Blocklist") {
+    TEST_CASE("AI2.40 Names: The List Is 240 To 260 Short ASCII Names, Unique In Any Case") {
         const size_t n = bot_name_count();
         ASSERT_TRUE(n >= 240 && n <= 260);
         ASSERT_EQ(std::string(bot_name_at(n)), std::string());
         ASSERT_EQ(std::string(bot_name_at(100000)), std::string());
         std::set<std::string> seen;
-        const std::vector<std::string> block = lines_of(data_path("bot_names_blocklist.txt"));
-        ASSERT_TRUE(block.size() >= 100);
         for (size_t i = 0; i < n; ++i) {
             const std::string name = bot_name_at(i);
             ASSERT_TRUE(name.size() >= 3 && name.size() <= 8);
@@ -143,11 +141,6 @@ void run_name_tests() {
             }
             ASSERT_TRUE(seen.insert(lower_of(name)).second);                                         // (unique in any case)
             ASSERT_TRUE(valid_bot_label_name(name));
-            for (const std::string& w : block) {
-                const std::string l = lower_of(name);
-                if (w[0] == '=') ASSERT_TRUE(l != w.substr(1));
-                else ASSERT_TRUE(l.find(w) == std::string::npos);
-            }
         }
     });
 

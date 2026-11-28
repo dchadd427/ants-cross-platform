@@ -44,8 +44,8 @@ finish() {      # finish true|false REASON
 is_light() {    # is_light PATH: 0 when the path is one of the light kinds and no program of the macOS and Windows jobs reads it
     case "$1" in
         # ---- of the light kinds, and read or run by the jobs that a light pull request skips ----
-        # ctest, on all three systems: the alphabet of the room codes (test_start_menu_hosting) and the pictures of the six original maps
-        # (test_map_list: they must exist)
+        # the pictures of the six original maps (ctest, on all three systems: test_map_list needs them) and the rules of the lobby page (the server script of the macOS job:
+        # a grep and the page harness)
         web/front/lobby_rules.js | web/front/preview_*.png) return 1 ;;
         # the server script of the macOS job (tests/scripts/test_ants_server.sh): it reads the two pages, web_fill_check.js runs their code, and web_lobby_server_check.js and
         # web_lobby_handoff_check.js run the lobby page against the real server and the native game, and web_lobby_four_colors_check.js plays its four colors (with web_home_games_rig.js), in the fake browser of web_page_harness.js (shapes.js; the scripts of front/ and home/ that the

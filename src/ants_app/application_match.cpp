@@ -12,7 +12,7 @@
 #if defined(__EMSCRIPTEN__)
   #include <emscripten.h>
 
-// Whether this game is a frame of another page (web/lobby.html's seats): it has no menu of its own, the page that holds it does
+// Whether this game is a frame of another page (the site's lobby page seats): it has no menu of its own, the page that holds it does
 extern "C" {
 EM_JS(int, ants_page_is_a_frame, (), {
     try { return window.top !== window ? 1 : 0; } catch (e) { return 1; }
@@ -413,7 +413,7 @@ void Application::quit() {
     if (menu_enabled_) start_menu_.flush();                    // (a name that was typed and not written yet)
 #if defined(__EMSCRIPTEN__)
     // The browser leaves a game for the site's front page, where the page's Menu button goes too: a room is left at once (the seat is dropped, not held for a page that is gone). A game in a frame of
-    // another page (web/lobby.html) has no menu to go to: it is back at its setup screen (return_to_map_select leaves the room), or the frame loads again.
+    // another page (the site's lobby page) has no menu to go to: it is back at its setup screen (return_to_map_select leaves the room), or the frame loads again.
     // The results screen of a lobby room's match is the exception: its "Back to the room" (and, on the original's page, Leave Game) goes back to the room (the seat is kept for the rematch: the page hands it to the
     // front page, as the strip's own button does); its "Back to Ants & Uncles" is back_to_hub.
     if (!ants_page_is_a_frame()) {

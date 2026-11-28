@@ -27,6 +27,7 @@
 #include "ants_server/test_maps_http.hpp"
 #include "ants_server/test_maps_rooms.hpp"
 #include "big_map_fixtures.hpp"
+#include "online_counts.hpp"
 #include "history_fixtures.hpp"
 
 static int g_test_count = 0;

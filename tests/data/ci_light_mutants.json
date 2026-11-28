@@ -17,7 +17,7 @@
    "test": "python3 tests/scripts/test_ci_light.py"
   },
   {
-   "id": "ctest_reads_lobby_rules_and_it_is_light",
+   "id": "the_rules_of_the_lobby_page_are_light",
    "file": "tools/ci_light.sh",
    "old": "web/front/lobby_rules.js | web/front/preview_*.png) return 1 ;;",
    "new": "web/front/preview_*.png) return 1 ;;",

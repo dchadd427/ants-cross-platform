@@ -3,7 +3,7 @@
  "mutants": [
   {
    "id": "cap_one_more",
-   "file": "include/ants_server/online_limits.hpp",
+   "file": "include/ants_net/room_limits.hpp",
    "old": "kMaxStartAnts = 1000;",
    "new": "kMaxStartAnts = 1001;",
    "build": [
@@ -17,7 +17,7 @@
   },
   {
    "id": "cap_one_less",
-   "file": "include/ants_server/online_limits.hpp",
+   "file": "include/ants_net/room_limits.hpp",
    "old": "kMaxStartAnts = 1000;",
    "new": "kMaxStartAnts = 999;",
    "build": [
@@ -31,7 +31,7 @@
   },
   {
    "id": "cap_back_to_8000",
-   "file": "include/ants_server/online_limits.hpp",
+   "file": "include/ants_net/room_limits.hpp",
    "old": "kMaxStartAnts = 1000;",
    "new": "kMaxStartAnts = 8000;",
    "build": [
@@ -45,7 +45,7 @@
   },
   {
    "id": "cap_under_the_largest_library_map",
-   "file": "include/ants_server/online_limits.hpp",
+   "file": "include/ants_net/room_limits.hpp",
    "old": "kMaxStartAnts = 1000;",
    "new": "kMaxStartAnts = 247;",
    "build": [
