@@ -313,7 +313,7 @@ class Rig:
             return
         cls.front = "ants-stats-front-" + tag
         ran = subprocess.run(["docker", "run", "-d", "--rm", "--name", cls.front, "--network", cls.network, "-p", "127.0.0.1:%d:80" % cls.port, "-v", conf + ":/etc/nginx/conf.d/default.conf:ro",
-                              "-v", html + ":/usr/share/nginx/html:ro", IMAGE] + KEEP, capture_output=True, text=True)
+                              "--tmpfs", "/var/log/ants", "-v", html + ":/usr/share/nginx/html:ro", IMAGE] + KEEP, capture_output=True, text=True)
         if ran.returncode != 0:
             raise RuntimeError("the container of the page did not start: " + ran.stderr.strip()[:300])
         for _ in range(100):
@@ -854,7 +854,7 @@ class TheRealServerBehindTheFile(unittest.TestCase):
         with open(conf, "w", encoding="utf-8") as f:
             f.write(text)
         cls.front = "ants-stats-real-" + uuid.uuid4().hex[:8]
-        ran = subprocess.run(["docker", "run", "-d", "--rm", "--name", cls.front, "--network", "host", "-v", conf + ":/etc/nginx/conf.d/default.conf:ro", "-v", html + ":/usr/share/nginx/html:ro", IMAGE],
+        ran = subprocess.run(["docker", "run", "-d", "--rm", "--name", cls.front, "--network", "host", "-v", conf + ":/etc/nginx/conf.d/default.conf:ro", "--tmpfs", "/var/log/ants", "-v", html + ":/usr/share/nginx/html:ro", IMAGE],
                              capture_output=True, text=True)
         if ran.returncode != 0:
             cls.front = ""

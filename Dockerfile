@@ -192,42 +192,7 @@ COPY tools/make_ai_skills.py /src/tools/make_ai_skills.py
 RUN python3 tools/make_ai_skills.py --build ai_site && test -s ai_site/ai/skills/index.json && test -s ai_site/ai/skills/all.zip && test -s ai_site/ai/skills/ants-map-guide/SKILL.md
 
 # =============================================================================
-# Stage 3: Stylized 3D Ant Models & 1998 Comparison Viewer (/test_3d/)
-# =============================================================================
-# Kept in its own small stage so Emscripten's warm and builder stages stay untouched.
-# Pinned by tag and digest (same Debian base as Dockerfile.server; Dependabot updates it weekly).
-FROM debian:13-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS ant-models-env
-
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends python3 python3-numpy python3-pil && \
-    rm -rf /var/lib/apt/lists/*
-
-FROM ant-models-env AS ant-models
-
-WORKDIR /src
-
-# Only the inputs the 3D builder reads: the original sprite archive, the public animation table (never docs/), the CHD decoder, and the 3D model/viewer sources.
-COPY Original-Ants/ants.chd /src/Original-Ants/ants.chd
-COPY asset_catalog/catalog_data.js /src/asset_catalog/catalog_data.js
-COPY tools/front_page_art/artlib.py /src/tools/front_page_art/artlib.py
-COPY tools/ant_models/ /src/tools/ant_models/
-RUN mkdir -p test_3d/models && \
-    python3 -m tools.ant_models.build_all --out test_3d/models && \
-    cp tools/ant_models/compare.html tools/ant_models/viewer.html tools/ant_models/viewer.css \
-       tools/ant_models/compare.js tools/ant_models/viewer.js tools/ant_models/viewer_actions.js \
-       tools/ant_models/viewer_gltf.js tools/ant_models/viewer_render.js \
-       tools/ant_models/viewer_version.js test_3d/ && \
-    python3 -c 'import gzip, pathlib; [p.with_name(p.name+".gz").write_bytes(gzip.compress(p.read_bytes(), compresslevel=9, mtime=0)) for p in sorted(pathlib.Path("test_3d/models").iterdir()) if p.suffix in (".glb", ".json")]' && \
-    test -s test_3d/compare.html && test -s test_3d/viewer.html && \
-    test -s test_3d/models/manifest.json && test -s test_3d/models/orig_sprites.json && \
-    for c in worker combat thief bomber swimmer fire; do \
-        test -s "test_3d/models/${c}.glb" && test -s "test_3d/models/${c}.glb.gz" && \
-        test -s "test_3d/models/orig_sprites_extra_${c}.json" && \
-        test -s "test_3d/models/orig_sprites_extra_${c}.json.gz" || exit 1; \
-    done
-
-# =============================================================================
-# Stage 4: High-Performance Lightweight Nginx Web Server
+# Stage 3: High-Performance Lightweight Nginx Web Server
 # =============================================================================
 # Pinned by tag and digest, like the base image of the first stage.
 FROM nginx:alpine@sha256:fb4658584bd9a916ffb6f6e365f97c25cfdb2923801f551ea08356e695f14ff7 AS runner
@@ -364,9 +329,6 @@ COPY --from=builder /src/sitemap-library.xml /usr/share/nginx/html/
 # Copy Asset Catalog & Viewer for reference on beta site
 COPY asset_catalog/ /usr/share/nginx/html/asset_catalog/
 
-# 3D Ant Models & 1998 Comparison Viewer (/test_3d/, Compare 1998 default + 3D Studio toggle)
-COPY --from=ant-models /src/test_3d/ /usr/share/nginx/html/test_3d/
-
 # The admin page (docs/MAP_SUBMISSIONS.md "The admin page"): the address /admin is typed, nothing links to it; its API and the logon are paths of docker/nginx.conf
 COPY --from=builder /src/web/admin.html /usr/share/nginx/html/admin.html
 COPY web/admin.css /usr/share/nginx/html/admin.css
@@ -381,9 +343,14 @@ COPY web/admin_page.js /usr/share/nginx/html/admin_page.js
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker/trusted-proxies.conf /etc/nginx/ants-trusted-proxies/proxies.conf
 
+# The web server's logs (the access log and the error log of the requests: both name the visitor's address) are one file that nginx writes itself, in /var/log/ants/, and are kept for 14 days and then deleted: the server
+# runs through this script, which makes the folder (so that `nginx -t` in the image is `sh /etc/nginx/ants-web-log.sh nginx -t`), cuts and deletes the files and then becomes the server (docs/BUILD_AND_RUN.md
+# "The web server's logs"). The image's own entry point still starts nginx, so that what it does before nginx (nothing, for this image) is done as before.
+COPY docker/web-log.sh /etc/nginx/ants-web-log.sh
+
 EXPOSE 80
 
 HEALTHCHECK --interval=10s --timeout=3s --start-period=3s --retries=3 \
     CMD wget -q -O /dev/null http://127.0.0.1/ || exit 1
 
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["sh", "/etc/nginx/ants-web-log.sh", "/docker-entrypoint.sh", "nginx", "-g", "daemon off;"]

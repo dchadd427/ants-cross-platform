@@ -104,7 +104,7 @@ class TheRoutesRun(unittest.TestCase):
         cls.port = s.getsockname()[1]
         s.close()
         ran = subprocess.run(["docker", "run", "-d", "--rm", "--name", cls.name, "-p", "127.0.0.1:%d:80" % cls.port, "-v", conf + ":/etc/nginx/conf.d/default.conf:ro", "-v", html + ":/usr/share/nginx/html:ro",
-                              "-v", cls.moved + ":/etc/nginx/ants-map-pages:ro", routes.IMAGE], capture_output=True, text=True)
+                              "-v", cls.moved + ":/etc/nginx/ants-map-pages:ro", "--tmpfs", "/var/log/ants", routes.IMAGE], capture_output=True, text=True)
         if ran.returncode != 0:
             cls.why = "the container did not start: " + ran.stderr.strip()[:200]
             return
@@ -213,7 +213,7 @@ class TheRoutesRun(unittest.TestCase):
         try:
             text = routes.read(CONF)
             write(os.path.join(bare, "default.conf"), text.encode())
-            once = subprocess.run(["docker", "run", "--rm", "-v", os.path.join(bare, "default.conf") + ":/etc/nginx/conf.d/default.conf:ro", routes.IMAGE, "nginx", "-t"], capture_output=True, text=True)
+            once = subprocess.run(["docker", "run", "--rm", "-v", os.path.join(bare, "default.conf") + ":/etc/nginx/conf.d/default.conf:ro", "--tmpfs", "/var/log/ants", routes.IMAGE, "nginx", "-t"], capture_output=True, text=True)
             self.assertEqual(once.returncode, 0, once.stdout + once.stderr)                     # (no folder at all: the glob matches nothing, which is no error)
         finally:
             shutil.rmtree(bare, ignore_errors=True)
