@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="robots" content="noindex">
+  <title>Audio A/B Soundboard — Ants (1998) vs Remastered 44.1 kHz</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23183825'/%3E%3Ccircle cx='16' cy='12' r='5' fill='%23e0b029'/%3E%3Ccircle cx='16' cy='21' r='6' fill='%23297040'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="viewer.css">
+  <style>
+    .ab-shell { display: flex; flex-direction: column; min-block-size: 100dvh; background: var(--bg-page); color: var(--ink-primary); }
+    .ab-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 16px; background: var(--bg-chrome); border-bottom: 1px solid var(--border-subtle); position: sticky; top: 0; z-index: 10; }
+    .ab-bar h1 { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+    .ab-search { flex: 1 1 180px; max-width: 280px; padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--bg-surface); color: var(--ink-primary); font: inherit; }
+    .ab-btn { padding: 6px 11px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--bg-surface); color: var(--ink-primary); font: 600 12.5px/1.2 var(--font-sans); cursor: pointer; transition: background 120ms, border-color 120ms; }
+    .ab-btn:hover { background: var(--bg-surface-hover); }
+    .ab-btn[aria-pressed="true"], .ab-btn.primary { background: var(--bg-pressed); border-color: var(--border-pressed); color: var(--ink-pressed); }
+    .ab-btn.classic { border-color: #c2822a; color: #c2822a; }
+    .ab-btn.classic:hover { background: rgba(194, 130, 42, 0.14); }
+    .ab-cats { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 16px; background: var(--bg-tray); border-bottom: 1px solid var(--border-subtle); }
+    .ab-stage { padding: 14px 16px 32px; max-width: 1380px; width: 100%; margin: 0 auto; }
+    .ab-deck { display: grid; grid-template-columns: minmax(220px, 1fr) 2fr; gap: 12px; padding: 12px 14px; margin-bottom: 14px; border-radius: var(--radius-md); background: var(--bg-chrome); border: 1px solid var(--border-subtle); box-shadow: var(--shadow-card); align-items: center; }
+    .ab-wave { width: 100%; height: 74px; border-radius: var(--radius-sm); background: var(--bg-stage); display: block; }
+    .ab-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(295px, 1fr)); gap: 10px; }
+    .ab-card { display: flex; flex-direction: column; gap: 8px; padding: 11px 12px; border-radius: var(--radius-md); background: var(--bg-chrome); border: 1px solid var(--border-subtle); box-shadow: var(--shadow-card); }
+    .ab-card.active { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent); }
+    .ab-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .ab-name { font-weight: 700; font-size: 13.5px; }
+    .ab-id { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-muted); }
+    .ab-meta { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-secondary); display: flex; flex-wrap: wrap; gap: 6px 10px; }
+    .ab-pill { display: inline-block; padding: 2px 7px; border-radius: 999px; background: var(--bg-badge); color: var(--ink-secondary); font-size: 11px; font-weight: 600; }
+    .ab-pill.voice { background: color-mix(in srgb, var(--accent) 16%, var(--bg-badge)); color: var(--accent); }
+    .ab-actions { display: flex; gap: 6px; margin-top: auto; }
+    .ab-actions .ab-btn { flex: 1; text-align: center; }
+    .ab-hint { font-size: 12px; color: var(--ink-muted); margin-left: auto; }
+    @media (max-width: 720px) { .ab-deck { grid-template-columns: 1fr; } .ab-hint { display: none; } }
+  </style>
+  <script src="play_audio.js" defer></script>
+</head>
+<body>
+  <div class="ab-shell">
+    <header class="ab-bar">
+      <h1>Ants Audio A/B</h1>
+      <nav class="segmented view-tabs" aria-label="Viewer pages">
+        <a class="view-tab" href="./">Compare 1998</a>
+        <a class="view-tab" href="demo.html">Map Demo</a>
+        <a class="view-tab" href="audio_compare.html" aria-current="page">Audio A/B</a>
+      </nav>
+      <input class="ab-search" id="ab-search" type="search" placeholder="Filter by name, id, or voice role..." aria-label="Filter sound effects">
+      <button type="button" class="ab-btn" id="btn-music" aria-pressed="false" title="Toggle original backyard music">Music: Off</button>
+      <button type="button" class="ab-btn" id="btn-stop" title="Stop all playing sounds">Stop</button>
+      <span class="ab-hint" id="ab-status">Keys: [O] Original &middot; [R] Remastered &middot; [Space] Toggle A/B</span>
+    </header>
+
+    <div class="ab-cats" id="ab-cats" role="tablist" aria-label="Sound categories"></div>
+
+    <main class="ab-stage">
+      <section class="ab-deck" aria-live="polite">
+        <div>
+          <div class="ab-name" id="deck-title">Click any sound card to audition</div>
+          <div class="ab-meta" id="deck-meta">44.1 kHz 16-bit Remastered vs 1998 8-bit Original</div>
+        </div>
+        <canvas class="ab-wave" id="deck-wave" width="760" height="148" aria-label="Waveform comparison"></canvas>
+      </section>
+      <section class="ab-grid" id="ab-grid" aria-label="All 91 sound effects"></section>
+    </main>
+  </div>
+
+  <script>
+  window.addEventListener("DOMContentLoaded", async () => {
+    const audio = window.__playAudio;
+    const $ = (id) => document.getElementById(id);
+    const state = { manifest: null, cat: "all", query: "", selectedId: 4, lastToggle: "classic" };
+    const waveCache = new Map();
+
+    const manifest = await audio.init("models/audio/manifest.json");
+    if (!manifest || !manifest.sounds) {
+      $("deck-title").textContent = "Audio manifest not built yet";
+      $("deck-meta").textContent = "Run: python3 tools/ant_models/remaster_audio.py";
+      return;
+    }
+    state.manifest = manifest;
+    $("ab-status").textContent = `${manifest.count} sounds · ${manifest.version} · Keys: [O] Classic · [R] Remastered · [Space] A/B`;
+
+    function renderCats() {
+      const wrap = $("ab-cats");
+      wrap.innerHTML = "";
+      const items = [{ id: "all", label: "All", count: manifest.count }, ...(manifest.categories || [])];
+      items.forEach((c) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "ab-btn";
+        b.setAttribute("aria-pressed", String(state.cat === c.id));
+        b.textContent = `${c.label} (${c.count})`;
+        b.addEventListener("click", () => { state.cat = c.id; renderCats(); renderGrid(); });
+        wrap.appendChild(b);
+      });
+    }
+
+    async function loadPeaks(url) {
+      if (waveCache.has(url)) return waveCache.get(url);
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) return null;
+        const buf = await resp.arrayBuffer();
+        const dv = new DataView(buf);
+        const ch = dv.getUint16(22, true);
+        const bits = dv.getUint16(34, true);
+        let off = 12;
+        while (off + 8 < buf.byteLength) {
+          const id = String.fromCharCode(dv.getUint8(off), dv.getUint8(off + 1), dv.getUint8(off + 2), dv.getUint8(off + 3));
+          const sz = dv.getUint32(off + 4, true);
+          if (id === "data") { off += 8; break; }
+          off += 8 + sz + (sz & 1);
+        }
+        const bytesPer = (bits / 8) * ch;
+        const frames = Math.max(1, Math.floor((buf.byteLength - off) / bytesPer));
+        const bins = 180;
+        const step = Math.max(1, Math.floor(frames / bins));
+        const peaks = new Float32Array(bins);
+        for (let b = 0; b < bins; b++) {
+          let pk = 0;
+          const s0 = b * step;
+          const s1 = Math.min(frames, s0 + step);
+          const stride = Math.max(1, Math.floor((s1 - s0) / 16));
+          for (let i = s0; i < s1; i += stride) {
+            const p = off + i * bytesPer;
+            const v = bits === 8 ? (dv.getUint8(p) - 128) / 128 : dv.getInt16(p, true) / 32768;
+            if (Math.abs(v) > pk) pk = Math.abs(v);
+          }
+          peaks[b] = pk;
+        }
+        waveCache.set(url, peaks);
+        return peaks;
+      } catch (_err) {
+        return null;
+      }
+    }
+
+    async function drawWave(entry, activeMode) {
+      const cvs = $("deck-wave");
+      const g = cvs.getContext("2d");
+      const w = cvs.width, h = cvs.height;
+      g.clearRect(0, 0, w, h);
+      const [pOrig, pRem] = await Promise.all([
+        loadPeaks("models/audio/" + entry.classic_url),
+        loadPeaks("models/audio/" + entry.remastered_url),
+      ]);
+      const midTop = h * 0.27, midBot = h * 0.74, amp = h * 0.21;
+      const drawTrack = (peaks, cy, stroke, label) => {
+        g.fillStyle = "rgba(130, 148, 170, 0.75)";
+        g.font = "600 18px system-ui, sans-serif";
+        g.fillText(label, 12, cy - amp + 14);
+        if (!peaks) return;
+        g.strokeStyle = stroke;
+        g.lineWidth = 2.4;
+        g.beginPath();
+        for (let i = 0; i < peaks.length; i++) {
+          const x = 10 + (i / (peaks.length - 1)) * (w - 20);
+          const v = peaks[i] * amp;
+          g.moveTo(x, cy - v);
+          g.lineTo(x, cy + v);
+        }
+        g.stroke();
+      };
+      drawTrack(pOrig, midTop, activeMode === "classic" ? "#e09b32" : "rgba(224,155,50,0.45)", "1998 Original (8-bit)");
+      drawTrack(pRem, midBot, activeMode === "remastered" ? "#3ea876" : "rgba(62,168,118,0.45)", "Remastered (44.1 kHz 16-bit)");
+    }
+
+    function audition(entry, mode) {
+      state.selectedId = entry.id;
+      state.lastToggle = mode;
+      audio.unlock();
+      audio.play(entry.id, 0, 0, 0, 0, { mode, force: true, nonSpatial: true, pitchJitter: 0 });
+      const o = entry.original, r = entry.remastered;
+      const vp = entry.voice_profile ? ` · ${entry.voice_profile.role} (${entry.voice_profile.semitones >= 0 ? "+" : ""}${entry.voice_profile.semitones.toFixed(2)} st)` : "";
+      $("deck-title").textContent = `#${String(entry.id).padStart(3, "0")} ${entry.name} — Playing ${mode === "classic" ? "Original 1998" : "Remastered 44.1 kHz"}${vp}`;
+      $("deck-meta").textContent = `Orig: ${o.sample_rate} Hz ${o.bits}-bit (${o.duration_ms} ms, RMS ${o.rms}, DC ${o.dc})  |  Rem: ${r.sample_rate} Hz ${r.bits}-bit (${r.duration_ms} ms, RMS ${r.rms}, Pk ${r.peak}, Corr ${r.env_corr})`;
+      drawWave(entry, mode);
+      document.querySelectorAll(".ab-card").forEach((el) => el.classList.toggle("active", Number(el.dataset.id) === entry.id));
+    }
+
+    function filteredSounds() {
+      const q = state.query.trim().toLowerCase();
+      return manifest.sounds.filter((s) => {
+        if (state.cat !== "all" && s.category !== state.cat) return false;
+        if (!q) return true;
+        const vp = s.voice_profile ? `${s.voice_profile.role} ${s.voice_profile.note}`.toLowerCase() : "";
+        return s.name.toLowerCase().includes(q) || String(s.id).includes(q) || s.category_label.toLowerCase().includes(q) || vp.includes(q);
+      });
+    }
+
+    function renderGrid() {
+      const grid = $("ab-grid");
+      grid.innerHTML = "";
+      filteredSounds().forEach((s) => {
+        const card = document.createElement("article");
+        card.className = "ab-card" + (s.id === state.selectedId ? " active" : "");
+        card.dataset.id = String(s.id);
+        const vpHtml = s.voice_profile
+          ? `<span class="ab-pill voice">${s.voice_profile.role} ${s.voice_profile.semitones >= 0 ? "+" : ""}${s.voice_profile.semitones.toFixed(2)} st &middot; ${s.voice_profile.note}</span>`
+          : `<span class="ab-pill">${s.category_label}</span>`;
+        card.innerHTML = `
+          <div class="ab-card-head">
+            <span class="ab-name">${s.name}</span>
+            <span class="ab-id">#${String(s.id).padStart(3, "0")} &middot; ${s.original.duration_ms} ms</span>
+          </div>
+          <div>${vpHtml}</div>
+          <div class="ab-meta">
+            <span>${s.original.sample_rate / 1000}k 8b &rarr; 44.1k 16b</span>
+            <span>Pk ${s.remastered.peak}</span>
+            <span>Corr ${s.remastered.env_corr}</span>
+          </div>
+          <div class="ab-actions">
+            <button type="button" class="ab-btn classic" data-play="classic">1998 Orig</button>
+            <button type="button" class="ab-btn primary" data-play="remastered">Remastered</button>
+          </div>`;
+        card.querySelector('[data-play="classic"]').addEventListener("click", () => audition(s, "classic"));
+        card.querySelector('[data-play="remastered"]').addEventListener("click", () => audition(s, "remastered"));
+        grid.appendChild(card);
+      });
+    }
+
+    $("ab-search").addEventListener("input", (e) => { state.query = e.target.value; renderGrid(); });
+    $("btn-stop").addEventListener("click", () => audio.stopAll());
+    $("btn-music").addEventListener("click", () => {
+      audio.unlock();
+      const on = audio.setMusic(!audio.isMusicEnabled());
+      $("btn-music").setAttribute("aria-pressed", String(on));
+      $("btn-music").textContent = on ? "Music: On" : "Music: Off";
+    });
+
+    window.addEventListener("keydown", (e) => {
+      if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
+      const entry = manifest.sounds.find((s) => s.id === state.selectedId) || manifest.sounds[0];
+      if (!entry) return;
+      if (e.key === "o" || e.key === "O" || e.key === "1") audition(entry, "classic");
+      else if (e.key === "r" || e.key === "R" || e.key === "2") audition(entry, "remastered");
+      else if (e.code === "Space") {
+        e.preventDefault();
+        audition(entry, state.lastToggle === "classic" ? "remastered" : "classic");
+      }
+    });
+
+    renderCats();
+    renderGrid();
+    const initial = manifest.sounds.find((s) => s.id === 4) || manifest.sounds[0];
+    if (initial) drawWave(initial, "remastered");
+  });
+  </script>
+</body>
+</html>
