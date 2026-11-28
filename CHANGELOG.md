@@ -26,7 +26,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.22.3 - 2026-11-27 - Tags any time, nicknames once a day, web logs kept 14 days
 
 **For players:**
 - **Names: tags change any time, nicknames once a day.** A tag can now be changed as often as you like (it waited a day before, and a change of capitals counted). A nickname changes once every 24 hours after the first (it was once in 30 days), and the old one stays yours for 7 days (it was 30), so that nobody takes it to pass for you. Someone who changed their nickname within the last 30 days may change it again 24 hours after that change.
@@ -38,6 +38,8 @@ Work that is not released yet is written in the same template under a heading th
 **For operators:**
 - The web server's logs (access and error, which name the visitor's address) are deleted after 14 days, as the Legal page says: nginx writes them in `/var/log/ants/` and the image cuts them (`docker logs ants-beta` shows no request; [how](docs/BUILD_AND_RUN.md#what-the-images-nginx-sends-checks-and-logs)).
 - The hub holds a name that was given up for 7 days, no longer 30: the first time it opens a database that the earlier hub made it cuts the holds it finds to 7 days from the day each name was given up (a note in `meta` says that it is done), and a `you` frame no longer has `tagfree`; the table `nicknames` keeps its column `tag_at`, which nothing writes or reads any more ([`docs/HUB_NICKNAMES.md`](docs/HUB_NICKNAMES.md#the-rules)).
+
+**Details:** [commits](https://github.com/dchadd427/ants-server/compare/f3ed14f2...1177b255)
 
 ## v0.22.2 - 2026-11-27 - Other players' ants drawn smoothly, site analytics
 
