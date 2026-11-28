@@ -64,6 +64,7 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [What the test suites cover](docs/TESTING_SUITES.md): the table of the C++ suites by number and what each one checks
 - [The python tests](docs/TESTING_PYTHON.md): suite 5.2: what the scripts of `tests/scripts` cover
 - [Workflow](docs/WORKFLOW.md): branches, pull requests, releases and the deploy; the rules for contributors are in [`AGENTS.md`](AGENTS.md)
+- [The export lists](export/README.md): which files go to the public repository and which stay private, the check that every file is on exactly one list (suite 5.3), and which list a new file goes on
 
 **How it works**
 
