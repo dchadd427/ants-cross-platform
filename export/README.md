@@ -39,7 +39,7 @@ The exported tree has no server, so the build and the test runners of the public
 
 | Private file | Read by | What it holds |
 |---|---|---|
-| `cmake/private.cmake` | `CMakeLists.txt` (`include(cmake/private.cmake OPTIONAL)`, at its end) | the game server's libraries, programs and tests: SQLite, the database layer, the control interface, the server, the history service, the picture maker, `tests/test_db`, `test_ctl`, `test_server` |
+| `cmake/private.cmake` | `CMakeLists.txt` (`include(cmake/private.cmake OPTIONAL)`, at its end) | the game server's libraries, programs and tests: SQLite, the database layer, the control interface, the server, the history service, the picture maker, `tests/test_db`, `test_ctl`, `test_server`, and `test_app_server` (the application tests that run a real room manager) |
 | `tests/suites_server.sh` | `run_tests.sh` (`define_suites`, before the E2E suite) | the `suite` lines of the server's tests and scripts; `--fast` and the tier options select them like any other |
 | `tests/scripts/costs_private.py` | `tests/scripts/run_python_tests.py` (at import) | the `COSTS`, `SHARDS` and `LINUX_ONLY` entries of the python tests that the exported tree does not have |
 

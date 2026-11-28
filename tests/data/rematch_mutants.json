@@ -175,7 +175,7 @@
    "old": "    if (on_match_over_ && network_active() && !net_->join_target().room.empty() && net_->my_seat() < sim::MAX_PLAYERS) {      // (a server's room: the page may offer the rematch, with the key that is still kept)\n        const std::function<void(const std::string&)> fn = on_match_over_;\n        fn(match_over_json(net_->join_target().room, net_->my_seat(), net_->start_info(), world.match_result));\n    }\n    if (net_) net_->freeze();",
    "new": "    if (net_) net_->freeze();\n    if (on_match_over_ && network_active() && !net_->join_target().room.empty() && net_->my_seat() < sim::MAX_PLAYERS) {      // (a server's room: the page may offer the rematch, with the key that is still kept)\n        const std::function<void(const std::string&)> fn = on_match_over_;\n        fn(match_over_json(net_->join_target().room, net_->my_seat(), net_->start_info(), world.match_result));\n    }",
    "build": "test_network_app",
-   "test": "timeout 600 env ANTS_TEST_FILTER=N5.9 ./build/tests/test_app/test_network_app"
+   "test": "timeout 600 env ANTS_TEST_FILTER=N5.9 ./build/tests/test_app_server/test_network_app"
   },
   {
    "id": "app_page_never_told",
@@ -183,7 +183,7 @@
    "old": "        fn(match_over_json(net_->join_target().room, net_->my_seat(), net_->start_info(), world.match_result));",
    "new": "",
    "build": "test_network_app",
-   "test": "timeout 600 env ANTS_TEST_FILTER=N5.9 ./build/tests/test_app/test_network_app"
+   "test": "timeout 600 env ANTS_TEST_FILTER=N5.9 ./build/tests/test_app_server/test_network_app"
   },
   {
    "id": "app_json_one_winner_of_a_tie",
@@ -191,7 +191,7 @@
    "old": "(result.is_winner(r.first) ? \"true\" : \"false\")",
    "new": "(i == 0 ? \"true\" : \"false\")",
    "build": "test_network_app",
-   "test": "timeout 600 env ANTS_TEST_FILTER=N5.9 ./build/tests/test_app/test_network_app"
+   "test": "timeout 600 env ANTS_TEST_FILTER=N5.9 ./build/tests/test_app_server/test_network_app"
   },
   {
    "id": "app_json_names_of_seats_that_did_not_play",
@@ -199,7 +199,7 @@
    "old": "json_text(((start.roster >> p) & 1u) != 0 ? start.names[p] : std::string())",
    "new": "json_text(start.names[p])",
    "build": "test_network_app",
-   "test": "timeout 600 env ANTS_TEST_FILTER=N5.9 ./build/tests/test_app/test_network_app"
+   "test": "timeout 600 env ANTS_TEST_FILTER=N5.9 ./build/tests/test_app_server/test_network_app"
   },
   {
    "id": "app_json_rows_of_the_local_seat",
@@ -207,7 +207,7 @@
    "old": "result.rows(sim::PLAYER_NEUTRAL)",
    "new": "result.rows(static_cast<uint8_t>((seat + 1) % 4))",
    "build": "test_network_app",
-   "test": "timeout 600 env ANTS_TEST_FILTER=N5.9 ./build/tests/test_app/test_network_app"
+   "test": "timeout 600 env ANTS_TEST_FILTER=N5.9 ./build/tests/test_app_server/test_network_app"
   },
   {
    "id": "page_desktop_on_the_results_screen",
@@ -1065,7 +1065,7 @@
    "old": "return on_back_to_room_ && on_back_to_hub_ && network_active() && !net_->join_target().room.empty() && net_->my_seat() < sim::MAX_PLAYERS;",
    "new": "return network_active() && !net_->join_target().room.empty() && net_->my_seat() < sim::MAX_PLAYERS;",
    "build": "test_network_app",
-   "test": "timeout 600 env ANTS_TEST_FILTER=N5.105 ./build/tests/test_app/test_network_app"
+   "test": "timeout 600 env ANTS_TEST_FILTER=N5.105 ./build/tests/test_app_server/test_network_app"
   },
   {
    "id": "app_front_page_button_keeps_the_seat",
@@ -1073,7 +1073,7 @@
    "old": "void Application::back_to_hub() {\n    leave_network_match();\n",
    "new": "void Application::back_to_hub() {\n",
    "build": "test_network_app",
-   "test": "timeout 600 env ANTS_TEST_FILTER=N5.105 ./build/tests/test_app/test_network_app"
+   "test": "timeout 600 env ANTS_TEST_FILTER=N5.105 ./build/tests/test_app_server/test_network_app"
   },
   {
    "id": "app_room_button_gives_the_seat_up",
@@ -1081,7 +1081,7 @@
    "old": "if (on_back_to_room_ && on_back_to_room_()) return;        // (the page took the tab to the room: the seat is kept there for the rematch)",
    "new": "if (on_back_to_room_ && on_back_to_room_()) { leave_network_match(); return; }        // (the page took the tab to the room: the seat is kept there for the rematch)",
    "build": "test_network_app",
-   "test": "timeout 600 env ANTS_TEST_FILTER=N5.105 ./build/tests/test_app/test_network_app"
+   "test": "timeout 600 env ANTS_TEST_FILTER=N5.105 ./build/tests/test_app_server/test_network_app"
   },
   {
    "id": "app_room_button_without_a_seat_stays",
@@ -1089,7 +1089,7 @@
    "old": "    back_to_hub();                                             // (no seat is kept for this player",
    "new": "    return;                                                    // (no seat is kept for this player",
    "build": "test_network_app",
-   "test": "timeout 600 env ANTS_TEST_FILTER=N5.105 ./build/tests/test_app/test_network_app"
+   "test": "timeout 600 env ANTS_TEST_FILTER=N5.105 ./build/tests/test_app_server/test_network_app"
   },
   {
    "id": "app_front_page_button_asks_for_the_room",
@@ -1097,7 +1097,7 @@
    "old": "    if (on_back_to_hub_) on_back_to_hub_();\n}",
    "new": "    if (on_back_to_room_) on_back_to_room_();\n}",
    "build": "test_network_app",
-   "test": "timeout 600 env ANTS_TEST_FILTER=N5.105 ./build/tests/test_app/test_network_app"
+   "test": "timeout 600 env ANTS_TEST_FILTER=N5.105 ./build/tests/test_app_server/test_network_app"
   },
   {
    "id": "the_front_page_button_keeps_the_seat",

@@ -250,15 +250,8 @@ tests/scripts/web_routes_check.py
 tests/scripts/web_site_*
 tests/scripts/web_stats_check.js
 
-# tests/test_app: tests of the server, the hub, the site, the stack
-tests/test_app/network_app_fixtures.hpp
-tests/test_app/shaped_link_fixtures.hpp
-tests/test_app/start_menu_app_fixtures.hpp
-tests/test_app/test_network_*
-tests/test_app/test_prediction_link.cpp
-tests/test_app/test_rejoin_app.cpp
-tests/test_app/test_start_menu_app.cpp
-tests/test_app/test_start_menu_app_*
+# tests/test_app_server: the application's tests that run a real room manager (built by cmake/private.cmake)
+tests/test_app_server/**
 
 # tests/test_ctl: tests of the server, the hub, the site, the stack
 tests/test_ctl/**
@@ -324,10 +317,9 @@ web/replay_plays.js
 web/replay_stats.css
 web/site_*
 
-# planned new files of the split: the private halves of pure-move document splits, the hook files that the public CMake and run_tests.sh include when present, the moved server-linked app tests, the private halves of split mutant files
+# planned new files of the split: the private halves of pure-move document splits, the hook files that the public CMake and run_tests.sh include when present, the private halves of split mutant files
 cmake/private.cmake
 tests/suites_server.sh
-tests/test_app_server/**
 tests/private/**
 docs/private/**
 web/site/**

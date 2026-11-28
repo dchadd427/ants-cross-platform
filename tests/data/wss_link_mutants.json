@@ -251,7 +251,7 @@
    "build": [
     "test_rejoin_app"
    ],
-   "test": "./build/tests/test_app/test_rejoin_app",
+   "test": "./build/tests/test_app_server/test_rejoin_app",
    "expect": "RA4.2"
   },
   {
@@ -262,7 +262,7 @@
    "build": [
     "test_rejoin_app"
    ],
-   "test": "./build/tests/test_app/test_rejoin_app",
+   "test": "./build/tests/test_app_server/test_rejoin_app",
    "expect": "RA4.2"
   },
   {
