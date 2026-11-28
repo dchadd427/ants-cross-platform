@@ -41,7 +41,7 @@ inline constexpr uint32_t kMaxHintTick = 0x7FFFFFFFu;
 
 struct HintMsg {
     uint32_t seq{0};            // the sender's number for this order, 1, 2, 3 ...: a copy of a hint has the same one
-    uint32_t tick{0};           // the turn that the sender expects the server to seal it in (Prediction::last_order_hint_tick)
+    uint32_t tick{0};           // the turn that the sender stamped its order with, which the server seals it into when that turn is still open (Prediction::last_order_tick)
     sim::Command command;       // the order; the issuer is the sender's seat
 };
 struct P2pConfigMsg {

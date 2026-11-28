@@ -10,6 +10,11 @@
 // The same slide carries the hop of a re-order (`follow`). The engine's own GoTo (the original's, FUN_0101fc50, docs/GAME_REVERSE_ENGINEERING.md "Orders") puts a walking ant that is given a new order on the
 // middle of the tile that it is on, at once: up to 12 px back or 16 px forward, in a game of one machine as much as in a network match and for every ant, the player's own and every other's. That is the
 // engine and it stays (the snap is what "humping" on mud is made of); the picture draws it as the same slide instead of a jump.
+//
+// A snap that goes BACK along the way the ant walks (the ant was past the middle of its tile and the order sends it on the same way) is not slid back: the drawn ant would step backward while the engine's ant
+// stands for its first ticks, and that reads as a rubber band. The picture HOLDS the ant where the last frame drew it until the engine's ant, which starts walking again after three ticks of standing, has passed that
+// place in the direction that it walks (the new order's heading: the engine turns the ant at the end of those ticks), and then goes on with the engine. An ant that does not walk again (a Stop, an order that cannot
+// be carried out) is carried to the middle of its tile as before, by the same slide, when the hold ends (the engine says the ant stands, or kHoldMaxMs have passed).
 
 #include <cstddef>
 #include <cstdint>
@@ -36,6 +41,9 @@ public:
     static constexpr int32_t kTilePx = 32;
     /// A tick of the engine (ms)
     static constexpr uint32_t kTickMs = 50;
+    /// The longest that a held ant stays where it is drawn (ms): the engine's three ticks of standing, its first steps of the new walk (the half tile of a snap is three of them) and a little more. Then it is
+    /// carried to the engine's place by the slide, whatever the engine's ant does
+    static constexpr uint32_t kHoldMaxMs = 600;
 
     /// The time that a shift of (dx, dy) pixels takes: its length (along the line, so a diagonal is carried at the pace of a walk too) at kWalkPxPerSecond, between kMinDurationMs and kMaxDurationMs
     static uint32_t duration_ms(int32_t dx, int32_t dy) noexcept;
@@ -45,8 +53,10 @@ public:
     void add(uint32_t ant, int32_t dx, int32_t dy);
     /// `ms` of the slide have passed (a frame)
     void advance(uint32_t ms);
-    /// What is added to the ant's engine position in the picture now (pixels); false (and 0, 0) when the ant is not sliding
+    /// What is added to the ant's engine position in the picture now (pixels); false (and 0, 0) when the ant is not sliding or held
     bool offset_of(uint32_t ant, int32_t& dx, int32_t& dy) const;
+    /// True while the picture holds the ant where it was drawn (a snap that went back along its walk, see above)
+    bool held(uint32_t ant) const;
     /// Nothing slides and nothing is remembered (the prediction is off, or the page was away: the picture is the confirmed engine's, and the ants have not been seen for a while)
     void clear() noexcept {
         entries_.clear();
@@ -71,7 +81,16 @@ private:
         int32_t dy{0};
         uint32_t left_ms{0};        // ... the time that is left of it ...
         uint32_t total_ms{0};       // ... and the time that it takes in all (duration_ms of the offset): the offset now is (dx, dy) * left / total
+        // A hold (an ant that is kept where it is drawn): (dx, dy) is where it is drawn less where the engine's ant is drawn (the engine's place and the clip's frames), made new at every look; it does not slide
+        // (left_ms == total_ms), it ages, and it ends when the engine's ant has passed `held_x`, `held_y` in the direction that it walks, or when it stands, or at kHoldMaxMs
+        bool hold{false};
+        int32_t held_x{0};
+        int32_t held_y{0};
+        uint32_t age_ms{0};
     };
+    Entry* hold_of(uint32_t ant);
+    /// A hold ends: the ant is carried from where it is drawn to the engine's place by a slide (at once: nothing when it is there already)
+    void end_hold(Entry& e);
     /// What the last look saw of an ant: the engine's place and action, and the place where the frame drew it (the engine's place, the slide and the clip's frames)
     struct Seen {
         uint32_t ant{0};

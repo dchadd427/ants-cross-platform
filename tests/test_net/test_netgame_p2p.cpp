@@ -98,7 +98,7 @@ void run_hint_netgame_tests() {
         ASSERT_TRUE(m.guest->net.predicting());
         const uint32_t ant = m.own_ant();
         ASSERT_EQ(m.guest->net.submit(order(1, ant, 12, 12)).status, sim::CommandResult::Status::Applied);
-        const uint64_t named_at = m.guest->net.prediction()->last_order_hint_tick();
+        const uint64_t named_at = m.guest->net.prediction()->last_order_tick();
         m.t.run(300);
         ASSERT_EQ(m.guest->net.submit(order(1, ant, 14, 12)).status, sim::CommandResult::Status::Applied);
         m.t.run(300);
@@ -213,30 +213,33 @@ void run_hint_netgame_tests() {
         m.guest->net.leave();
         ASSERT_EQ(m.channels.closed, 1);
     } TEST_END();
-    TEST_CASE("N25.6 The Game Gives The Prediction Its Clock: After A Few Seconds Of Turns And A Few Orders The Hints Name The Turn That The Phase Of The Seals Gives, And Every Hint Carries The Tick That The Prediction Named, Which Is Not Always The Screen's") {
+    TEST_CASE("N25.6 The Game Stamps Its Orders (Protocol 30): Every Hint Carries The Tick That The Order Was Stamped With, The Host Answers Every Order, And The Host Executes The Order At That Tick When It Is Still Open (A Lead That The Answers Have Raised Covers The Lag)") {
         HintMatch m;
         ASSERT_TRUE(m.ok);
-        m.t.run(2500);                                                                   // (turns arrive: the phase is known)
+        m.t.run(2500);                                                                   // (turns arrive)
         ASSERT_TRUE(m.guest->net.predicting());
         const uint32_t ant = m.own_ant();
-        std::vector<uint64_t> named;
-        size_t differing = 0;
+        std::vector<uint64_t> stamped;
         for (uint32_t j = 0; j < 18; ++j) {
-            if (j >= 12) m.guest->net.prediction()->set_time_ms(m.t.now + 100);          // (a clock two ticks ahead for this order: the phase names a later turn than the screen's tick)
             ASSERT_EQ(m.guest->net.submit(order(1, ant, static_cast<int16_t>(10 + j), 12)).status, sim::CommandResult::Status::Applied);
-            named.push_back(m.guest->net.prediction()->last_order_hint_tick());
-            differing += named.back() != m.guest->net.prediction()->last_order_tick() ? 1u : 0u;
+            stamped.push_back(m.guest->net.prediction()->last_order_tick());
             m.t.run(230 + 31 * (j % 3));                                                 // (the orders are given at different moments of the tick)
         }
         m.t.run(500);
-        ASSERT_TRUE(m.guest->net.prediction()->stats().order_hints_phase >= 8u);
-        ASSERT_TRUE(differing >= 3u);
-        ASSERT_EQ(m.channels.sent_hints.size(), named.size());
-        for (size_t i = 0; i < named.size(); ++i) {
+        ASSERT_EQ(m.channels.sent_hints.size(), stamped.size());
+        for (size_t i = 0; i < stamped.size(); ++i) {
             HintMsg h;
             ASSERT_TRUE(decode(m.channels.sent_hints[i], h));
-            ASSERT_EQ(uint64_t{h.tick}, named[i]);
+            ASSERT_EQ(uint64_t{h.tick}, stamped[i]);                                     // (the hint names the stamp)
         }
+        ASSERT_EQ(m.guest->net.prediction()->stats().order_acks, uint64_t{18});          // (the host answered every order)
+        size_t at_stamp = 0;
+        for (size_t i = 0; i < stamped.size(); ++i) {
+            for (const auto& executed : m.host->applied) {
+                if (executed.second.issuer == 1 && executed.second.tile_x == static_cast<int16_t>(10 + i) && executed.first == stamped[i]) ++at_stamp;
+            }
+        }
+        ASSERT_TRUE(at_stamp >= 14u);                                                    // (the first orders may be late, before the answers have taught the lead)
     } TEST_END();
 
     TEST_CASE("N25.7 The Game Reports The Round Trip Over The Channel To Each Other Player In Milliseconds; No Number (-1) Without A Transport, For The Player's Own Seat, For A Seat That Is Not One, For A Channel With No Answer, And From A Transport That Measures Nothing") {
@@ -252,6 +255,56 @@ void run_hint_netgame_tests() {
         ASSERT_EQ(m.host->net.peer_rtt_ms(1), -1);                       // (the host has no transport)
         MutePage mute;
         ASSERT_EQ(static_cast<const P2pTransport&>(mute).rtt_ms(0), -1);
+    } TEST_END();
+
+    TEST_CASE("N25.8 A Hosting Game Stamps Its Own Orders Too (The Sequencer Is Its Own Host: Its Answer Is Given At Once): Every Order Of The Host's Player Is Answered, The Prediction Learns The Lag From It, And The Order Is Executed At The Tick That It Was Stamped With Once The Lead Covers The Lag") {
+        HintMatch m;
+        ASSERT_TRUE(m.ok);
+        m.t.run(2500);
+        ASSERT_TRUE(m.host->net.predicting());
+        const uint32_t ant = first_ant(*m.host, 0);
+        std::vector<uint64_t> stamped;
+        for (uint32_t j = 0; j < 14; ++j) {
+            ASSERT_EQ(m.host->net.submit(order(0, ant, static_cast<int16_t>(10 + j), 12)).status, sim::CommandResult::Status::Applied);
+            stamped.push_back(m.host->net.prediction()->last_order_tick());
+            m.t.run(230 + 31 * (j % 3));
+        }
+        m.t.run(500);
+        const Prediction::Stats& st = m.host->net.prediction()->stats();
+        ASSERT_EQ(st.order_acks, uint64_t{14});                                          // (every order was answered, at once)
+        ASSERT_TRUE(m.host->net.prediction()->learned_lag_ticks() >= 1u);                // (and the lag is learned from the answers)
+        size_t at_stamp = 0;
+        for (size_t i = 0; i < stamped.size(); ++i) {
+            for (const auto& executed : m.host->applied) {
+                if (executed.second.issuer == 0 && executed.second.tile_x == static_cast<int16_t>(10 + i) && executed.first == stamped[i]) ++at_stamp;
+            }
+        }
+        ASSERT_TRUE(at_stamp >= 11u);                                                    // (the first orders may be late, before the answers have taught the lead)
+    } TEST_END();
+
+    TEST_CASE("N25.9 The Numbers Of The Orders Go On When The Prediction Is Made Again In The Same Match (Switched Off And On): The Answer That Was On Its Way When It Went Off Is About An Order Of The Old Prediction, And No Order Of The New One Has Its Number; Only The Orders Of The Match Are Counted") {
+        HintMatch m;
+        ASSERT_TRUE(m.ok);
+        m.t.run(2500);
+        ASSERT_TRUE(m.guest->net.predicting());
+        const uint32_t ant = m.own_ant();
+        for (int16_t j = 0; j < 3; ++j) {
+            ASSERT_EQ(m.guest->net.submit(order(1, ant, static_cast<int16_t>(10 + j), 12)).status, sim::CommandResult::Status::Applied);
+            m.t.run(200);
+        }
+        ASSERT_EQ(m.guest->net.prediction()->last_order_seq(), 3u);
+        m.guest->net.set_prediction_enabled(false);                                      // (the player switches it off: the prediction is gone, and so is its count)
+        m.t.run(300);
+        ASSERT_TRUE(m.guest->net.prediction() == nullptr);
+        ASSERT_EQ(m.guest->net.submit(order(1, ant, 20, 12)).status, sim::CommandResult::Status::Applied);       // (an order with no prediction carries no number)
+        m.t.run(200);
+        m.guest->net.set_prediction_enabled(true);
+        m.t.run(600);
+        ASSERT_TRUE(m.guest->net.predicting());
+        ASSERT_EQ(m.guest->net.submit(order(1, ant, 21, 12)).status, sim::CommandResult::Status::Applied);
+        ASSERT_EQ(m.guest->net.prediction()->last_order_seq(), 4u);                      // the number after the last one of the old prediction, not 1 again
+        m.t.run(400);
+        ASSERT_EQ(m.guest->net.prediction()->stats().order_acks, uint64_t{1});          // (and the host's answer to it is the only one that this prediction took)
     } TEST_END();
 }
 

@@ -13,6 +13,10 @@ namespace ants::net {
 
 using session_detail::bit;
 
+namespace {
+constexpr size_t kMaxUnsealedOrders = 1024;          // the orders that are kept to be sent again after a host change: a seat's host takes no more than this many that wait (Sequencer::Config::max_carried_commands)
+}  // namespace
+
 // ------------------------------------------------------------------------------------------------
 // ClientSession
 // ------------------------------------------------------------------------------------------------
@@ -44,14 +48,73 @@ void ClientSession::start(uint32_t now_ms) {
     if (cfg_.rejoin) mode_ = Mode::CatchingUp;       // this machine starts from nothing: the server gives it the match (CatchUp, TurnBatch) over the link that its lobby used
 }
 
-bool ClientSession::submit(sim::Command command) {
+bool ClientSession::submit(sim::Command command, uint32_t at_turn, uint32_t seq) {
     if (!started_ || mode_ != Mode::Normal || !connected() || paused()) return false;
     command.issuer = cfg_.player;
     CommandMsg m;
     m.command = std::move(command);
+    m.turn = at_turn;
+    m.seq = seq;
     if (!conn_->send(encode(m))) return false;
     delay_.on_sent(m.command);                       // measured from now to the tick that applies it (its send time is the clock of the frame that sends it)
+    unsealed_.push_back(SentOrder{m.command, m.turn, m.seq, last_ms_});
+    while (unsealed_.size() > kMaxUnsealedOrders) unsealed_.pop_front();
     return true;
+}
+
+namespace {
+// The host takes ants out of an order that names ants it cannot be given (another player's, ids that cannot exist, repeats: HostSession::vet_ants) and changes nothing else: the order that a turn carries is the one that was
+// sent, or the one that was sent with some of its ants taken out
+bool is_the_order_sent(const sim::Command& sent, const sim::Command& sealed) {
+    if (sent.type != sealed.type || sent.issuer != sealed.issuer || sent.other_player != sealed.other_player || sent.tile_x != sealed.tile_x || sent.tile_y != sealed.tile_y) return false;
+    size_t next = 0;
+    for (const uint32_t id : sealed.ants) {
+        while (next < sent.ants.size() && sent.ants[next] != id) ++next;
+        if (next == sent.ants.size()) return false;
+        ++next;
+    }
+    return true;
+}
+}  // namespace
+
+// A turn from the host (or, in an election, from the guest that got furthest) goes to the runner; the orders of this player that it carries are sealed: they leave the list of the unsealed ones, and so do the orders before
+// them (the host seals a seat's orders in the order sent, so one that is not in a turn when a later one is was not taken: over its budget, naming no ant)
+bool ClientSession::take_turn(TurnMsg turn) {
+    std::vector<sim::Command> mine;
+    if (!unsealed_.empty()) {
+        for (const sim::Command& c : turn.commands) {
+            if (c.issuer == cfg_.player) mine.push_back(c);
+        }
+    }
+    if (!runner_->on_turn(std::move(turn))) return false;
+    settle_orders(mine);
+    return true;
+}
+
+void ClientSession::settle_orders(const std::vector<sim::Command>& sealed) {
+    for (const sim::Command& c : sealed) {
+        const auto it = std::find_if(unsealed_.begin(), unsealed_.end(), [&c](const SentOrder& o) { return is_the_order_sent(o.command, c); });
+        if (it != unsealed_.end()) unsealed_.erase(unsealed_.begin(), it + 1);
+    }
+}
+
+void ClientSession::forget_old_orders(uint32_t now_ms) {
+    while (!unsealed_.empty() && now_ms - unsealed_.front().at_ms > cfg_.resend_window_ms) unsealed_.pop_front();
+}
+
+// The new host has said Resume and the turns that it holds and this machine lacks are here: what the old host sealed is in them (and left the list as they came), so the orders that are still in it were sealed by
+// nobody. They go to the new host again, as they were sent (the stamp and the number: the host seals them by the rule of every order, in the turn that the stamp names when it is still open, else in the first open
+// one, and answers them), in the order sent, before anything that this player gives from now on. An order that the old host sealed in a turn that nobody else got is lost with that turn, and sealed again here.
+void ClientSession::resend_unsealed(uint32_t now_ms) {
+    resend_due_ = false;
+    forget_old_orders(now_ms);
+    for (const SentOrder& o : unsealed_) {
+        CommandMsg m;
+        m.command = o.command;
+        m.turn = o.turn;
+        m.seq = o.seq;
+        if (conn_ == nullptr || !conn_->send(encode(m))) break;      // (a link that fails is handled as every failure of the host link is)
+    }
 }
 
 void ClientSession::leave() {
@@ -149,7 +212,7 @@ void ClientSession::poll_host(uint32_t now_ms) {
         switch (peek_type(msg)) {
             case MsgType::Turn: {
                 TurnMsg t;
-                if (decode(msg, t)) runner_->on_turn(std::move(t));
+                if (decode(msg, t)) take_turn(std::move(t));
                 break;
             }
             case MsgType::Desync: {
@@ -163,6 +226,11 @@ void ClientSession::poll_host(uint32_t now_ms) {
             case MsgType::Chat: {
                 ChatMsg c;
                 if (decode(msg, c) && on_chat_) on_chat_(c);
+                break;
+            }
+            case MsgType::OrderAck: {
+                OrderAckMsg a;
+                if (decode(msg, a) && on_order_ack_) on_order_ack_(a);
                 break;
             }
             case MsgType::Pong: {
@@ -268,7 +336,7 @@ void ClientSession::handle_peer_message(uint8_t seat, const std::vector<uint8_t>
         }
         case MsgType::Turn: {                        // the turns a candidate fetched from the guest that got furthest
             TurnMsg t;
-            if (mode_ == Mode::Fetching && seat == fetch_from_ && decode(msg, t) && runner_->on_turn(std::move(t))) fetch_progress_ms_ = now_ms;
+            if (mode_ == Mode::Fetching && seat == fetch_from_ && decode(msg, t) && take_turn(std::move(t))) fetch_progress_ms_ = now_ms;
             return;
         }
         default:
@@ -335,6 +403,8 @@ void ClientSession::on_resume(uint8_t seat, const ResumeMsg& m, uint32_t now_ms)
     last_heard_ms_ = now_ms;
     asked_ = false;
     next_ping_ms_ = now_ms;
+    resend_due_ = true;                              // (the turns that the new host holds and this machine lacks follow the Resume: update() sends the orders when they are here)
+    resend_from_turn_ = m.resume_turn;
 }
 
 // ---- the election --------------------------------------------------------------------------------------------------------------------------------
@@ -355,6 +425,7 @@ void ClientSession::begin_election(uint32_t now_ms) {
     mode_ = Mode::Electing;
     elect_start_ms_ = now_ms;
     wait_start_ms_ = now_ms;
+    resend_due_ = false;
 }
 
 bool ClientSession::all_answered(uint32_t) const {
@@ -459,6 +530,8 @@ void ClientSession::promote() {
     promotion_.epoch = election_epoch();
     promotion_.old_host = old_host_;
     promotion_.resume_turn = runner_->next_turn_expected();
+    forget_old_orders(last_ms_);
+    promotion_.unsealed.assign(unsealed_.begin(), unsealed_.end());
     for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
         const bool follows = (expected_mask_ & bit(s)) != 0 && answers_[s].accepted && !dead_[s] && peers_[s] != nullptr && peers_[s]->is_open();
         if (!follows) continue;
@@ -512,6 +585,8 @@ void ClientSession::update(uint32_t now_ms) {
     if (mode_ == Mode::Normal) poll_host(now_ms);    // first: a host whose link has closed must be known as gone before a peer's proposal is judged
     poll_peers(now_ms);
     if (mode_ == Mode::Normal) poll_host(now_ms);    // and again: what the new host sent behind its Resume, or what arrived meanwhile
+    if (resend_due_ && mode_ == Mode::Normal && runner_->next_turn_expected() >= resend_from_turn_) resend_unsealed(now_ms);
+    forget_old_orders(now_ms);
     if (mode_ == Mode::Rejoining || mode_ == Mode::CatchingUp) poll_new_link(now_ms);
     if (cfg_.reconnect && mode_ == Mode::Normal) poll_host(now_ms);          // what came behind the Presence that ended a catch-up
     if ((mode_ == Mode::Reconnecting || mode_ == Mode::Rejoining) && now_ms - reconnect_since_ms_ > give_up_ms()) go_lost();      // the way back is closed for good
@@ -607,6 +682,7 @@ std::unique_ptr<HostSession> promote_to_host(ClientSession& client, sim::Simulat
     auto host = std::make_unique<HostSession>(sim, config, std::move(runner));
     if (prepare) prepare(*host);                     // hooks are in place before the first drop is announced
     host->resume(now_ms, p.resume_turn, p.old_host, p.survivors);
+    for (const ClientSession::SentOrder& o : p.unsealed) host->submit_local(o.command, o.turn);       // (this machine's own orders that the old host did not seal: the new host's sequencer takes them as it takes any order of its own)
     return host;
 }
 

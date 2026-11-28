@@ -554,4 +554,565 @@ void run_order_tests() {
         ASSERT_EQ(seq.heavy_seats(), 1u << 1);                                                  // (marked now, for the commands that were over the budget and only for those)
         ASSERT_EQ(seq.dropped_over_budget(1), fate.dropped);
     } TEST_END();
+
+    // ---- the tick of an order (protocol 30, docs/NETWORK_PORT.md "The tick of an order") ------------------------------------------------------------------------------------------
+
+    TEST_CASE("S2.68 Sequencer, The Tick Of An Order: An Order Stamped With A Turn That Is Still Open Is Sealed In Exactly That Turn; One Stamped With The Next Turn Or With 0 Is Sealed In The Next; One That Is Late (A Turn That Is Sealed Already) Goes Into The First Open Turn, Never Into The Past; A Seat's Orders Keep The Order They Were Sent In, So An Order Never Overtakes An Earlier One; Seats Do Not Wait For Each Other") {
+        Sequencer seq;
+        for (uint8_t seat = 0; seat < 3; ++seat) seq.set_active(seat, true);
+        for (int i = 0; i < 10; ++i) seq.seal();                                                 // the first open turn is 10
+        ASSERT_EQ(seq.next_turn(), 10u);
+        // seat 2: a late stamp (turn 3 is sealed since long), no preference, the next turn, and one turn beyond
+        ASSERT_TRUE(seq.submit_checked(2, group_move(2, 1), 3) == Submit::Queued);
+        ASSERT_TRUE(seq.submit_checked(2, group_move(2, 2), 0) == Submit::Queued);
+        ASSERT_TRUE(seq.submit_checked(2, group_move(2, 3), 10) == Submit::Queued);
+        ASSERT_TRUE(seq.submit_checked(2, group_move(2, 4), 11) == Submit::Queued);
+        ASSERT_EQ(seq.held_ahead(2), size_t{1});                                                 // (only the last one waits for a turn that is not the next)
+        // seat 1: an order for turn 13, and three that were sent after it with earlier stamps (they are sealed with it, behind it, in the order sent)
+        ASSERT_TRUE(seq.submit_checked(1, group_move(1, 1), 13) == Submit::Queued);
+        ASSERT_TRUE(seq.submit_checked(1, group_move(1, 2), 10) == Submit::Queued);
+        ASSERT_TRUE(seq.submit_checked(1, group_move(1, 3), 0) == Submit::Queued);
+        ASSERT_TRUE(seq.submit_checked(1, group_move(1, 4), 3) == Submit::Queued);
+        ASSERT_EQ(seq.held_ahead(1), size_t{4});
+        ASSERT_TRUE(seq.submit_checked(0, group_move(0, 5), 12) == Submit::Queued);              // seat 0's order does not wait for seat 1's
+        std::vector<std::pair<uint32_t, int16_t>> by_seat[3];                                    // (turn, tile) of each seat's orders
+        for (uint32_t t = 10; t < 16; ++t) {
+            const TurnMsg turn = seq.seal();
+            ASSERT_EQ(turn.turn, t);
+            for (const Command& c : turn.commands) by_seat[c.issuer].emplace_back(t, c.tile_x);
+        }
+        ASSERT_EQ(by_seat[2].size(), size_t{4});
+        ASSERT_TRUE(by_seat[2][0] == std::make_pair(10u, int16_t{1}) && by_seat[2][1] == std::make_pair(10u, int16_t{2}) && by_seat[2][2] == std::make_pair(10u, int16_t{3}) && by_seat[2][3] == std::make_pair(11u, int16_t{4}));
+        ASSERT_EQ(by_seat[1].size(), size_t{4});
+        for (size_t i = 0; i < 4; ++i) ASSERT_TRUE(by_seat[1][i] == std::make_pair(13u, static_cast<int16_t>(i + 1)));
+        ASSERT_TRUE(by_seat[0].size() == 1 && by_seat[0][0] == std::make_pair(12u, int16_t{5}));
+        ASSERT_EQ(seq.held_ahead(1) + seq.held_ahead(2) + seq.held_ahead(0), size_t{0});
+        ASSERT_EQ(seq.order_ahead_clamped(1) + seq.order_ahead_clamped(2), 0u);
+    } TEST_END();
+
+    TEST_CASE("S2.69 Sequencer, The Rule Of The Turn, Written Down Again And Held To Random Play: Every Order Of Two Seats Is Sealed In The Turn max(its stamp, the first open turn when it came, the turn of the seat's last order), At Most 16 Beyond The First Open Turn, And In No Other; Nothing Is Left Waiting Afterwards") {
+        Sequencer seq;
+        seq.set_active(1, true);
+        seq.set_active(2, true);
+        std::map<int16_t, uint32_t> expected;                                                    // tile -> the turn the rule says
+        uint32_t last[3] = {0, 0, 0};
+        Lcg rng(69);
+        int16_t tile = 0;
+        std::map<int16_t, uint32_t> sealed;
+        const auto seal_one = [&]() {
+            const TurnMsg turn = seq.seal();
+            for (const Command& c : turn.commands) sealed[c.tile_x] = turn.turn;
+        };
+        for (uint32_t t = 0; t < 60; ++t) {
+            for (int i = 0; i < 3; ++i) {
+                const uint8_t seat = static_cast<uint8_t>(1 + rng.below(2));
+                const uint32_t stamp = rng.below(4) == 0 ? rng.below(t + 1) : seq.next_turn() + rng.below(24);      // (now and then a late one, mostly ahead, some beyond the cap)
+                uint32_t turn = std::max(std::max(stamp, seq.next_turn()), last[seat]);
+                turn = std::min(turn, seq.next_turn() + 16u);
+                last[seat] = turn;
+                expected[tile] = turn;
+                ASSERT_TRUE(seq.submit_checked(seat, group_move(seat, tile), stamp) == Submit::Queued);
+                ++tile;
+            }
+            seal_one();
+        }
+        for (int i = 0; i < 20; ++i) seal_one();
+        ASSERT_EQ(sealed.size(), expected.size());
+        for (const auto& e : expected) {
+            ASSERT_TRUE(sealed.count(e.first) == 1);
+            ASSERT_EQ(sealed[e.first], e.second);
+        }
+        ASSERT_EQ(seq.held_ahead(1) + seq.held_ahead(2), size_t{0});
+        ASSERT_TRUE(seq.order_ahead_clamped(1) + seq.order_ahead_clamped(2) > 0u);               // (the cut was met: the test covered it)
+    } TEST_END();
+
+    TEST_CASE("S2.70 Sequencer, The Cap: An Order Is Held At Most Config::max_order_ahead_turns (16) Beyond The First Open Turn, A Stamp Beyond It Is Cut To It And Counted, Never An Offence; A Stamp Exactly At The Cap Is Not; An Honest Client's Stamp (Its Lead, 12 Ticks At The Most, Beyond The Turns It Holds) Never Touches It; The Cap Follows The Turns That Are Sealed") {
+        Sequencer::Config cfg;
+        ASSERT_EQ(cfg.max_order_ahead_turns, 16u);
+        Sequencer seq(cfg);
+        seq.set_active(1, true);
+        for (int i = 0; i < 100; ++i) seq.seal();
+        ASSERT_TRUE(seq.submit_checked(1, group_move(1, 1), 100 + 16) == Submit::Queued);        // at the cap: held, not cut
+        ASSERT_EQ(seq.order_ahead_clamped(1), 0u);
+        ASSERT_TRUE(seq.submit_checked(1, group_move(1, 2), 100 + 17) == Submit::Queued);        // one beyond: cut to the cap
+        ASSERT_EQ(seq.order_ahead_clamped(1), 1u);
+        ASSERT_TRUE(seq.submit_checked(1, group_move(1, 3), 0xFFFFFFFFu) == Submit::Queued);     // the largest number that a message can carry: cut to the cap, no overflow
+        ASSERT_EQ(seq.order_ahead_clamped(1), 2u);
+        ASSERT_EQ(seq.held_ahead(1), size_t{3});
+        std::vector<uint32_t> turns_with_orders;
+        for (uint32_t t = 100; t < 130; ++t) {
+            if (!seq.seal().commands.empty()) turns_with_orders.push_back(t);
+        }
+        ASSERT_EQ(turns_with_orders.size(), size_t{1});
+        ASSERT_EQ(turns_with_orders[0], 116u);                                                   // all three are in the turn at the cap, and in none beyond it
+        // an honest stamp: the turns that the client holds are sealed already (they are before the first open turn), and its lead is at most 12 ticks beyond the confirmed tick
+        for (uint32_t held = 0; held <= 12; ++held) {
+            Sequencer honest(cfg);
+            honest.set_active(1, true);
+            for (int i = 0; i < 50; ++i) honest.seal();
+            const uint32_t confirmed = 50 - held;                                                // the client has run `held` turns fewer than the host has sealed
+            ASSERT_TRUE(honest.submit_checked(1, group_move(1, 1), confirmed + 12) == Submit::Queued);
+            ASSERT_EQ(honest.order_ahead_clamped(1), 0u);
+        }
+        // the cap is counted from the first open turn: as the host seals, the same stamp is not cut any more
+        Sequencer later(cfg);
+        later.set_active(1, true);
+        ASSERT_TRUE(later.submit_checked(1, group_move(1, 1), 40) == Submit::Queued);
+        ASSERT_EQ(later.order_ahead_clamped(1), 1u);                                             // (turn 0 is open: 40 is 24 beyond)
+        for (int i = 0; i < 30; ++i) later.seal();
+        ASSERT_TRUE(later.submit_checked(1, group_move(1, 2), 40) == Submit::Queued);            // (turn 30 is open now: 40 is 10 beyond)
+        ASSERT_EQ(later.order_ahead_clamped(1), 1u);
+    } TEST_END();
+
+    TEST_CASE("S2.71 Sequencer, What Is Held Ahead Is Bounded And Belongs To The Seat: It Counts With The Carried Commands Against max_carried_commands (A Flood Of Stamped Orders Is Dropped, Not Piled Up), Each Turn Takes At Most max_commands_per_turn Of A Seat And The Rest Waits For The Next, The Budget Is Charged When The Order Arrives, A Seat That Leaves Takes Its Held Orders With It, And A New Host Starts With None") {
+        Sequencer::Config cfg;
+        cfg.max_carried_commands = 20;
+        cfg.max_commands_per_turn = 8;
+        cfg.order_burst = 100;
+        cfg.orders_per_second = 12;
+        Sequencer seq(cfg);
+        seq.set_active(1, true);
+        seq.set_active(2, true);
+        int taken = 0;
+        int over = 0;
+        for (int i = 0; i < 40; ++i) {                                                           // 40 orders for the turn 5 ahead, from a seat whose turn takes 8 and whose bound is 20
+            const Submit s = seq.submit_checked(1, group_move(1, static_cast<int16_t>(i)), 5);
+            if (s == Submit::Queued) ++taken;
+            else if (s == Submit::OverBudget) ++over;
+        }
+        ASSERT_EQ(taken, 20);                                                                    // (20 are held)
+        ASSERT_EQ(over, 20);                                                                     // (the rest is dropped, and counted: a flood is not an offence)
+        ASSERT_EQ(seq.held_ahead(1), size_t{20});
+        ASSERT_TRUE(seq.submit_checked(2, group_move(2, 1), 5) == Submit::Queued);              // another seat has its own bound
+        std::vector<size_t> per_turn;
+        for (uint32_t t = 0; t < 12; ++t) {
+            size_t n = 0;
+            for (const Command& c : seq.seal().commands) n += c.issuer == 1 ? 1u : 0u;
+            per_turn.push_back(n);
+        }
+        ASSERT_TRUE(per_turn[5] == 8 && per_turn[6] == 8 && per_turn[7] == 4);                   // turn 5 takes 8 of the seat's 20, the next ones the rest, in the order sent
+        for (size_t t = 0; t < 12; ++t) {
+            if (t < 5 || t > 7) ASSERT_EQ(per_turn[t], size_t{0});
+        }
+        ASSERT_EQ(seq.held_ahead(1), size_t{0});
+        // a seat that leaves takes what it held with it
+        for (int i = 0; i < 5; ++i) ASSERT_TRUE(seq.submit_checked(1, group_move(1, static_cast<int16_t>(i)), 20) == Submit::Queued);
+        ASSERT_TRUE(seq.submit_checked(2, group_move(2, 1), 20) == Submit::Queued);
+        seq.set_active(1, false);
+        ASSERT_EQ(seq.held_ahead(1), size_t{0});
+        size_t seat1 = 0;
+        size_t seat2 = 0;
+        for (uint32_t t = 12; t < 30; ++t) {
+            for (const Command& c : seq.seal().commands) (c.issuer == 1 ? seat1 : seat2) += 1u;
+        }
+        ASSERT_EQ(seat1, size_t{0});
+        ASSERT_EQ(seat2, size_t{1});
+        {                                                                                        // the budget is charged when a held order arrives, not when it is sealed: a store of 5 takes 5 of 8 held orders
+            Sequencer::Config limited_config;
+            limited_config.order_burst = 5;
+            limited_config.orders_per_second = 1;
+            Sequencer limited(limited_config);
+            limited.set_active(1, true);
+            int taken_by_budget = 0;
+            for (int i = 0; i < 8; ++i) taken_by_budget += limited.submit_checked(1, group_move(1, static_cast<int16_t>(i)), 4) == Submit::Queued ? 1 : 0;
+            ASSERT_EQ(taken_by_budget, 5);
+            ASSERT_EQ(limited.dropped_over_budget(1), 3u);
+        }
+        // a new host (host migration) starts with nothing held
+        ASSERT_TRUE(seq.submit_checked(2, group_move(2, 2), 40) == Submit::Queued);
+        seq.resume(100);
+        seq.set_active(2, true);
+        ASSERT_EQ(seq.held_ahead(2), size_t{0});
+        for (uint32_t t = 100; t < 130; ++t) ASSERT_TRUE(seq.seal().commands.empty());
+    } TEST_END();
+
+    TEST_CASE("S2.72 Host Session, The Tick Of An Order On The Wire: A Client's Order That Is Stamped With A Turn That Is Open Is Sealed In That Turn And Run By Every Machine At That Tick, A Late One In The First Open Turn, One Far Ahead At The Cap; The Host Answers Every Order That Carries A Number With The First Turn That Was Open When It Arrived, And Answers None That Carries No Number; Every Machine Runs The Same Turns") {
+        ServerMatch m(7, 3, {30, 0});
+        std::vector<OrderAckMsg> acks;
+        m.clients[1]->set_on_order_ack([&](const OrderAckMsg& a) { acks.push_back(a); });
+        m.run(6000, false);                                                                      // (the match plays: the first turns are sealed)
+        const uint32_t base = m.host->turns_sealed();
+        ASSERT_TRUE(base > 20);
+        const uint32_t ahead = base + 12;                                                        // (far enough ahead to be open when the order arrives, a link's few turns later)
+        // sent in this order (a seat's orders keep it): a late one, one that asks for a turn that is open, one far beyond the cap, and one that asks for nothing
+        ASSERT_TRUE(m.clients[1]->submit(cmd(CommandType::GroupMove, 1, 255, 12, 4, {m.ids.ants[1][1]}), 2, 1));
+        ASSERT_TRUE(m.clients[1]->submit(cmd(CommandType::GroupMove, 1, 255, 11, 4, {m.ids.ants[1][0]}), ahead, 2));
+        ASSERT_TRUE(m.clients[1]->submit(cmd(CommandType::GroupMove, 1, 255, 13, 4, {m.ids.ants[1][2]}), base + 5000, 3));
+        ASSERT_TRUE(m.clients[1]->submit(cmd(CommandType::GroupMove, 1, 255, 14, 4, {m.ids.ants[1][3]}), 0, 0));
+        m.run(3000, false);
+        m.settle();
+        ASSERT_EQ(acks.size(), size_t{3});                                                       // (the order without a number was not answered)
+        ASSERT_TRUE(acks[0].seq == 1 && acks[1].seq == 2 && acks[2].seq == 3);
+        const uint32_t open = acks[0].open_turn;                                                 // the first turn that was open as the orders arrived (together: one message after the other)
+        ASSERT_TRUE(acks[1].open_turn == open && acks[2].open_turn == open);
+        ASSERT_TRUE(open >= base && open < ahead);                                               // (the second order's stamp was still open)
+        std::map<int16_t, uint32_t> sealed_at;
+        for (uint32_t t = 0; t < m.host->turns_sealed(); ++t) {
+            const TurnMsg* turn = m.host->runner().logged_turn(t);
+            if (turn == nullptr) continue;
+            for (const Command& c : turn->commands) {
+                if (c.issuer == 1 && c.type == CommandType::GroupMove && c.tile_y == 4) sealed_at[c.tile_x] = t;
+            }
+        }
+        ASSERT_EQ(sealed_at.size(), size_t{4});
+        ASSERT_EQ(sealed_at[12], open);                                                          // late: the first open turn, not the past
+        ASSERT_EQ(sealed_at[11], ahead);                                                         // honored: exactly the stamp
+        ASSERT_EQ(sealed_at[13], open + 16u);                                                    // far ahead: at the cap from the first open turn
+        ASSERT_EQ(sealed_at[14], open + 16u);                                                    // (the order that asked for nothing comes after the one that was held: a seat's orders keep their order)
+        ASSERT_EQ(m.host->violations(1), 0u);
+        ASSERT_TRUE(m.host->desyncs().empty() && m.all_equal());                                 // every machine ran the same turns
+        // every machine ran the order of the stamp at that tick
+        for (size_t seat = 0; seat < m.clients.size(); ++seat) {
+            const TurnMsg* turn = m.clients[seat]->runner().logged_turn(ahead);
+            ASSERT_TRUE(turn != nullptr);
+            bool found = false;
+            for (const Command& c : turn->commands) found = found || (c.issuer == 1 && c.tile_x == 11);
+            ASSERT_TRUE(found);
+        }
+    } TEST_END();
+
+    TEST_CASE("S2.73 Host Session, A Seat's Orders That Wait For A Later Turn Do Not Make Another Seat's Wait, An Order That Names No Ant Is Answered With The Open Turn Too (The Lag Is What The Sender Learns) And Reaches No Turn, And A Client That Sends Stamps Beyond The Cap Over And Over Is Neither Dropped Nor Charged With An Offence") {
+        ServerMatch m(8, 3, {20, 0});
+        std::vector<OrderAckMsg> acks;
+        m.clients[1]->set_on_order_ack([&](const OrderAckMsg& a) { acks.push_back(a); });
+        m.run(6000, false);
+        uint32_t seq = 0;
+        for (int i = 0; i < 40; ++i) ASSERT_TRUE(m.clients[1]->submit(cmd(CommandType::GroupMove, 1, 255, 20, static_cast<int16_t>(i % 50), {m.ids.ants[1][0]}), 0xFFFFFFFFu, ++seq));      // far beyond the cap, each time
+        ASSERT_TRUE(m.clients[1]->submit(cmd(CommandType::GroupMove, 1, 255, 30, 30, {999999}), 0, ++seq));        // an ant that does not exist: no order, but an answer
+        ASSERT_TRUE(m.clients[2]->submit(cmd(CommandType::GroupMove, 2, 255, 40, 5, {m.ids.ants[2][0]}), 0, 1));   // another seat: no wait for the first seat's orders
+        m.run(3000, false);
+        m.settle();
+        ASSERT_EQ(acks.size(), size_t{41});
+        for (size_t i = 1; i < acks.size(); ++i) ASSERT_TRUE(acks[i].open_turn >= acks[i - 1].open_turn);          // (the answers come in the order that the orders were sent, and the turns only go on)
+        uint32_t seat2_at = 0;
+        uint32_t seat1_last = 0;
+        for (uint32_t t = 0; t < m.host->turns_sealed(); ++t) {
+            const TurnMsg* turn = m.host->runner().logged_turn(t);
+            if (turn == nullptr) continue;
+            for (const Command& c : turn->commands) {
+                if (c.issuer == 2 && c.tile_x == 40) seat2_at = t;
+                if (c.issuer == 1 && c.tile_x == 20) seat1_last = t;
+                ASSERT_FALSE(c.issuer == 1 && c.tile_x == 30);                                                    // (the order that names no ant of the seat is in no turn)
+            }
+        }
+        ASSERT_TRUE(seat2_at != 0 && seat1_last != 0 && seat2_at < seat1_last);                                   // seat 2's order did not wait for the 16 turns that seat 1's were held
+        ASSERT_TRUE(m.host->client_present(1));
+        ASSERT_EQ(m.host->violations(1), 0u);
+        ASSERT_TRUE(m.host->desyncs().empty() && m.all_equal());
+    } TEST_END();
+
+    TEST_CASE("S2.74 Host Session With A Seat, The Tick Of The Host's Own Order: submit_local(command, at_turn, &open_turn) Seals The Order In The Turn That It Asks For When That Turn Is Open (And Says Which Turn Was The First Open One), A Late One In The First Open Turn; Every Machine Runs The Same Turns") {
+        Match m(9, 2, {10, 0});
+        m.run(3000, false);
+        const uint32_t base = m.host->turns_sealed();
+        ASSERT_TRUE(base > 10);
+        uint32_t open = 0;
+        ASSERT_TRUE(m.host->submit_local(cmd(CommandType::GroupMove, 0, 255, 21, 6, {m.ids.ants[0][0]}), base + 9, &open));         // nine turns ahead: open
+        ASSERT_EQ(open, base);                                                                                                    // (nothing was sealed between the two lines)
+        ASSERT_TRUE(m.host->submit_local(cmd(CommandType::GroupMove, 0, 255, 22, 6, {m.ids.ants[0][1]}), 1, &open));              // late: after the first one, so with it (a seat's orders keep their order)
+        ASSERT_TRUE(m.host->submit_local(cmd(CommandType::GroupMove, 0, 255, 23, 6, {m.ids.ants[0][2]})));                         // no tick: the same
+        m.run(2000, false);
+        std::map<int16_t, uint32_t> at;
+        for (uint32_t t = 0; t < m.host->turns_sealed(); ++t) {
+            const TurnMsg* turn = m.host->runner().logged_turn(t);
+            if (turn == nullptr) continue;
+            for (const Command& c : turn->commands) {
+                if (c.issuer == 0 && c.tile_y == 6) at[c.tile_x] = t;
+            }
+        }
+        ASSERT_EQ(at.size(), size_t{3});
+        ASSERT_EQ(at[21], base + 9);                                                                                                // honored: exactly the turn that it asked for
+        ASSERT_TRUE(at[22] == base + 9 && at[23] == base + 9);                                                                      // (the later orders of the seat are sealed with it, behind it)
+        // a late order of a seat that has nothing waiting: the first open turn
+        const uint32_t now_open = m.host->turns_sealed();
+        ASSERT_TRUE(m.host->submit_local(cmd(CommandType::GroupMove, 0, 255, 24, 6, {m.ids.ants[0][3]}), 2, &open));
+        ASSERT_EQ(open, now_open);
+        m.run(1000, false);
+        uint32_t late_at = 0;
+        for (uint32_t t = now_open; t < m.host->turns_sealed(); ++t) {
+            const TurnMsg* turn = m.host->runner().logged_turn(t);
+            if (turn == nullptr) continue;
+            for (const Command& c : turn->commands) {
+                if (c.issuer == 0 && c.tile_x == 24) late_at = t;
+            }
+        }
+        ASSERT_EQ(late_at, now_open);
+        m.settle();
+        ASSERT_TRUE(m.host->desyncs().empty() && m.all_equal());
+    } TEST_END();
+
+    TEST_CASE("S2.75 Host Session, A Seat That Is Over Its Budget Is Not Answered: The Orders That The Budget Takes (5 Of 12) Are Answered With The Open Turn, The Orders That It Drops Are Not (A Flooder's Own Lag Is Not The Link's: Its Lead Learns Nothing From What The Host Dropped), And Another Seat Is Answered For Every Order; Nobody Is Dropped Or Charged With An Offence") {
+        HostSession::Config hc;
+        hc.sequencer.order_burst = 5;
+        hc.sequencer.orders_per_second = 1;
+        ServerMatch m(11, 3, {20, 0}, hc);
+        std::vector<OrderAckMsg> acks1;
+        std::vector<OrderAckMsg> acks2;
+        m.clients[1]->set_on_order_ack([&](const OrderAckMsg& a) { acks1.push_back(a); });
+        m.clients[2]->set_on_order_ack([&](const OrderAckMsg& a) { acks2.push_back(a); });
+        m.run(3000, false);
+        for (uint32_t i = 1; i <= 12; ++i) ASSERT_TRUE(m.clients[1]->submit(cmd(CommandType::GroupMove, 1, 255, static_cast<int16_t>(20 + i), 9, {m.ids.ants[1][0]}), 0, i));
+        for (uint32_t i = 1; i <= 3; ++i) ASSERT_TRUE(m.clients[2]->submit(cmd(CommandType::GroupMove, 2, 255, static_cast<int16_t>(40 + i), 9, {m.ids.ants[2][0]}), 0, i));
+        m.run(2000, false);
+        m.settle();
+        ASSERT_EQ(m.host->orders_over_budget(1), 7u);
+        ASSERT_EQ(acks1.size(), size_t{5});                                                      // the five that the budget took
+        for (size_t i = 0; i < acks1.size(); ++i) ASSERT_EQ(acks1[i].seq, static_cast<uint32_t>(i + 1));
+        ASSERT_EQ(acks2.size(), size_t{3});
+        ASSERT_TRUE(m.host->client_present(1) && m.host->client_present(2));
+        ASSERT_EQ(m.host->violations(1), 0u);
+        ASSERT_TRUE(m.host->desyncs().empty() && m.all_equal());
+    } TEST_END();
+
+    TEST_CASE("S2.76 Sequencer, A Seat That Is Held (Its Link Is Lost, It May Come Back) Keeps What The Host Accepted From It: The Orders Held For A Later Turn And The Commands Carried Beyond A Turn's Limit Are Sealed In Their Turns, Its Commands Are Refused Meanwhile, And Its Budget Is Not Given Back; A Seat That Is Dropped After All Takes Them With It, And So Does One That Is Held And Then Dropped") {
+        Sequencer::Config cfg;
+        cfg.max_commands_per_turn = 2;
+        Sequencer seq(cfg);
+        seq.set_active(1, true);
+        seq.set_active(2, true);
+        const uint8_t seats[2] = {1, 2};
+        for (const uint8_t seat : seats) {
+            for (int i = 0; i < 5; ++i) ASSERT_TRUE(seq.submit_checked(seat, group_move(seat, static_cast<int16_t>(i))) == Submit::Queued);          // 2 for the next turn, 3 carried
+            for (int i = 0; i < 3; ++i) ASSERT_TRUE(seq.submit_checked(seat, group_move(seat, static_cast<int16_t>(10 + i)), 6) == Submit::Queued);   // held for turn 6
+        }
+        ASSERT_EQ(seq.carried(1), size_t{3});
+        ASSERT_EQ(seq.held_ahead(1), size_t{3});
+        seq.hold(1);                                                                             // the link of seat 1 is lost
+        ASSERT_FALSE(seq.is_active(1));
+        ASSERT_EQ(seq.carried(1), size_t{3});
+        ASSERT_EQ(seq.held_ahead(1), size_t{3});
+        ASSERT_TRUE(seq.submit_checked(1, group_move(1, 99)) == Submit::Refused);                // (nothing new while it is away)
+        seq.set_active(2, false);                                                                // seat 2 is gone for good
+        ASSERT_EQ(seq.carried(2), size_t{0});
+        ASSERT_EQ(seq.held_ahead(2), size_t{0});
+        std::map<uint32_t, size_t> seat1_in;
+        size_t seat2 = 0;
+        for (uint32_t t = 0; t < 12; ++t) {
+            for (const Command& c : seq.seal().commands) {
+                if (c.issuer == 1) ++seat1_in[t];
+                if (c.issuer == 2) ++seat2;
+            }
+        }
+        ASSERT_TRUE(seat1_in[0] == 2 && seat1_in[1] == 2 && seat1_in[2] == 1);                   // the carried commands, as ever
+        ASSERT_EQ(seat1_in[6], size_t{2});                                                       // the held orders: their turn takes two of the seat's three, the next one the other
+        ASSERT_EQ(seat1_in[7], size_t{1});
+        ASSERT_EQ(seat2, size_t{2});                                                             // (what seat 2 had in the next turn went with the turn: it was accepted, as ever)
+        ASSERT_EQ(seq.held_ahead(1), size_t{0});
+        // the seat comes back: its orders are asked for again, and what it had held is where it was
+        Sequencer back(cfg);
+        back.set_active(1, true);
+        for (int i = 0; i < 3; ++i) ASSERT_TRUE(back.submit_checked(1, group_move(1, static_cast<int16_t>(i)), 4) == Submit::Queued);
+        back.hold(1);
+        back.set_active(1, true);
+        ASSERT_EQ(back.held_ahead(1), size_t{3});
+        size_t sealed_at_4 = 0;
+        for (uint32_t t = 0; t < 8; ++t) {
+            for (const Command& c : back.seal().commands) {
+                if (c.issuer == 1) sealed_at_4 += t == 4 ? 1u : 0u;
+            }
+        }
+        ASSERT_EQ(sealed_at_4, size_t{2});                                                       // (turn 4 takes two of the three, the next turn the third)
+        // held, then dropped after all (the others voted it out, the cap on the pauses): nothing of it is sealed afterwards
+        Sequencer gone(cfg);
+        gone.set_active(1, true);
+        for (int i = 0; i < 5; ++i) gone.submit_checked(1, group_move(1, static_cast<int16_t>(i)), 3);
+        gone.hold(1);
+        gone.set_active(1, false);
+        ASSERT_EQ(gone.held_ahead(1), size_t{0});
+        for (uint32_t t = 0; t < 10; ++t) {
+            for (const Command& c : gone.seal().commands) ASSERT_FALSE(c.issuer == 1);
+        }
+    } TEST_END();
+
+    TEST_CASE("S2.77 Host Session, A Seat Whose Link Is Lost Keeps Its Orders That Wait For A Later Turn: An Order Stamped 14 Turns Ahead That The Host Holds When The Link Goes Is Sealed In That Very Turn When The Seat Is Back And The Match Goes On, On Every Machine; A Seat That Is Voted Out Or Reaches The Cap Instead Leaves Its Held Orders Behind, And Nothing Of Them Is Sealed After Its Drop") {
+        {
+            HoldOptions o;
+            o.link = {20, 0};
+            HoldMatch m(3, o);
+            m.run(3000, false);
+            const uint32_t base = m.sealed();
+            ASSERT_TRUE(m.clients[1]->submit(cmd(CommandType::GroupMove, 1, 255, 16, 5, {m.ids.ants[1][0]}), base + 14, 1));
+            m.run(80, false);                                                                    // (the host has it: held for a turn that is far off)
+            ASSERT_TRUE(m.sealed() < base + 12);
+            m.cut(1);
+            ASSERT_TRUE(m.until([&]() { return m.host->paused(); }, 3000));
+            ASSERT_TRUE(m.sealed() < base + 12);
+            ASSERT_TRUE(m.until([&]() { return !m.host->paused() && m.host->client_present(1) && m.sealed() > base + 24; }, 90000));      // (the machine comes back by itself with its key)
+            uint32_t at = 0;
+            uint32_t times = 0;
+            for (uint32_t t = 0; t < m.sealed(); ++t) {
+                const TurnMsg* turn = m.host->runner().logged_turn(t);
+                if (turn == nullptr) continue;
+                for (const Command& c : turn->commands) {
+                    if (c.issuer == 1 && c.tile_x == 16 && c.tile_y == 5) {
+                        at = t;
+                        ++times;
+                    }
+                }
+            }
+            ASSERT_EQ(times, 1u);
+            ASSERT_EQ(at, base + 14);                                                            // the turn that the order was stamped with: nothing was sealed while the seat was away
+            m.settle();
+            ASSERT_TRUE(m.host->desyncs().empty() && m.all_equal());
+        }
+        {
+            HoldOptions o;
+            o.link = {20, 0};
+            o.host.attendance.max_pause_ms = 12000;
+            HoldMatch m(3, o);
+            m.run(3000, false);
+            const uint32_t base = m.sealed();
+            ASSERT_TRUE(m.clients[1]->submit(cmd(CommandType::GroupMove, 1, 255, 16, 5, {m.ids.ants[1][0]}), base + 14, 1));
+            m.run(80, false);
+            m.auto_reconnect[1] = false;                                                         // (this machine never comes back)
+            m.cut(1);
+            ASSERT_TRUE(m.until([&]() { return m.host->paused(); }, 3000));
+            ASSERT_TRUE(m.until([&]() { return !m.host->paused() && m.sealed() > base + 60; }, 40000));      // the cap drops the seat, the match goes on with the others
+            ASSERT_EQ(m.host->attendance().state(1), Attendance::State::Dropped);
+            m.run(3000);
+            for (uint32_t t = 0; t < m.sealed(); ++t) {
+                const TurnMsg* turn = m.host->runner().logged_turn(t);
+                if (turn == nullptr) continue;
+                for (const Command& c : turn->commands) ASSERT_FALSE(c.issuer == 1 && c.tile_x == 16 && c.tile_y == 5);        // (its order that was held is in no turn)
+            }
+            m.settle();
+            ASSERT_TRUE(m.host->desyncs().empty() && m.all_equal());
+        }
+    } TEST_END();
+
+    TEST_CASE("S2.78 Host Migration, The Orders That The Old Host Did Not Seal: A Guest's Order That The Old Host Held (Stamped Ahead) When It Died Is Sent Again To The New Host With Its Stamp And Number And Sealed Once, In The Turn Of Its Stamp, On Every Machine; An Order That The Old Host Sealed And Only Some Of The Survivors Got Is Not Sent Again (The Turns That The New Host Gives Carry It); The New Host's Own Unsealed Order Is Sealed By Itself; An Order Older Than The Window Is Not Brought Back") {
+        const auto in_turns = [](const LockstepRunner& runner, uint8_t issuer, int16_t x, std::vector<uint32_t>& turns_of) {
+            size_t found = 0;
+            for (uint32_t t = 0; t < runner.next_turn_expected(); ++t) {
+                const TurnMsg* turn = runner.logged_turn(t);
+                if (turn == nullptr) continue;
+                for (const Command& c : turn->commands) {
+                    if (c.issuer == issuer && c.type == CommandType::GroupMove && c.tile_x == x && c.tile_y == 7) {
+                        ++found;
+                        turns_of.push_back(t);
+                    }
+                }
+            }
+            return found;
+        };
+        // how many times the order is in the turns of each survivor (every survivor must have exactly `times`), and the turn of each
+        const auto count_in_logs = [&in_turns](Mesh& m, int16_t x, uint8_t issuer, std::vector<uint32_t>& turns_of) {
+            turns_of.clear();
+            size_t most = 0;
+            size_t least = SIZE_MAX;
+            for (uint8_t s = 1; s < m.players; ++s) {
+                const size_t n = in_turns(m.hosts[s] ? m.hosts[s]->runner() : m.clients[s]->runner(), issuer, x, turns_of);
+                most = std::max(most, n);
+                least = std::min(least, n);
+            }
+            return most == least ? most : SIZE_MAX;                                              // (survivors that disagree: no number)
+        };
+        {                                                                                        // a guest's order that the old host held: sent again, sealed once at its stamp
+            Mesh m(21, 4, same_link({30, 0}));
+            std::vector<OrderAckMsg> acks;
+            m.clients[3]->set_on_order_ack([&](const OrderAckMsg& a) { acks.push_back(a); });
+            m.run(4000, false);
+            const uint32_t base = m.hosts[0]->turns_sealed();
+            ASSERT_TRUE(m.clients[3]->submit(cmd(CommandType::GroupMove, 3, 255, 21, 7, {m.ids.ants[3][0]}), base + 12, 5));
+            m.run(70, false);
+            ASSERT_TRUE(m.hosts[0]->turns_sealed() < base + 10);                                 // (the host holds it: its turn is far off)
+            m.kill(0);
+            m.run(10000, false);
+            ASSERT_EQ(m.promotions, 1);
+            ASSERT_TRUE(m.hosts[1] != nullptr);
+            m.settle();
+            std::vector<uint32_t> at;
+            ASSERT_EQ(count_in_logs(m, 21, 3, at), size_t{1});                               // once, in every survivor's turns
+            ASSERT_EQ(at.size(), size_t{3});
+            ASSERT_TRUE(at[0] == base + 12 && at[1] == base + 12 && at[2] == base + 12);        // in the turn of its stamp
+            ASSERT_EQ(acks.size(), size_t{2});                                                   // the old host answered it, and so did the new one, with the number it was sent with
+            ASSERT_TRUE(acks[0].seq == 5 && acks[1].seq == 5 && acks[1].open_turn >= acks[0].open_turn);
+            ASSERT_TRUE(m.survivors_equal());
+        }
+        {                                                                                        // the old host sealed it, one survivor lacks the turn: the new host gives it, and it is not sent again
+            const LinkFn links = [](uint8_t a, uint8_t b) {
+                return (a == 0 && b == 3) ? LoopbackNetwork::Link{300, 0} : LoopbackNetwork::Link{30, 0};
+            };
+            Mesh m(22, 4, links);
+            ResumeThenNothing from_seat_1(m.link[3][1]);                                         // (what the new host sends behind its Resume reaches seat 3 an update after it)
+            m.clients[3]->set_peer(1, &from_seat_1);
+            m.run(4000, false);
+            ASSERT_TRUE(m.clients[3]->submit(cmd(CommandType::GroupMove, 3, 255, 22, 7, {m.ids.ants[3][1]}), 0, 9));
+            std::vector<uint32_t> ignore;
+            bool sealed_by_the_old_host = false;
+            for (uint32_t waited = 0; waited < 3000 && !sealed_by_the_old_host; waited += 10) {
+                m.run(10, false);
+                sealed_by_the_old_host = in_turns(m.clients[1]->runner(), 3, 22, ignore) != 0;
+            }
+            ASSERT_TRUE(sealed_by_the_old_host);                                                 // (seat 1 has the turn; seat 3's copy is 270 ms behind, and goes with the link)
+            ASSERT_EQ(in_turns(m.clients[3]->runner(), 3, 22, ignore), size_t{0});
+            m.kill(0);
+            m.run(10000, false);
+            ASSERT_EQ(m.promotions, 1);
+            m.settle();
+            std::vector<uint32_t> at;
+            ASSERT_EQ(count_in_logs(m, 22, 3, at), size_t{1});                                   // once: the turn that the old host sealed, on all three machines, and no second one
+            ASSERT_EQ(at.size(), size_t{3});
+            ASSERT_TRUE(at[0] == at[1] && at[1] == at[2]);
+            ASSERT_TRUE(m.survivors_equal());
+        }
+        {                                                                                        // the new host's own order
+            Mesh m(23, 3, same_link({30, 0}));
+            m.run(4000, false);
+            const uint32_t base = m.hosts[0]->turns_sealed();
+            ASSERT_TRUE(m.clients[1]->submit(cmd(CommandType::GroupMove, 1, 255, 23, 7, {m.ids.ants[1][0]}), base + 12, 3));
+            m.run(70, false);
+            m.kill(0);
+            m.run(10000, false);
+            ASSERT_EQ(m.promotions, 1);
+            ASSERT_TRUE(m.hosts[1] != nullptr);                                                  // (seat 1 is the new host: its order was in the old host's hands)
+            m.settle();
+            std::vector<uint32_t> at;
+            ASSERT_EQ(count_in_logs(m, 23, 1, at), size_t{1});
+            ASSERT_TRUE(at[0] == base + 12 && at[1] == base + 12);
+            ASSERT_TRUE(m.survivors_equal());
+        }
+        {                                                                                        // an order that is older than the window by the time the new host is there is not brought back
+            ClientSession::Config cc;
+            cc.resend_window_ms = 1;
+            Mesh m(24, 3, same_link({30, 0}), cc);
+            m.run(4000, false);
+            const uint32_t base = m.hosts[0]->turns_sealed();
+            ASSERT_TRUE(m.clients[2]->submit(cmd(CommandType::GroupMove, 2, 255, 24, 7, {m.ids.ants[2][0]}), base + 12, 4));
+            m.run(70, false);
+            m.kill(0);
+            m.run(10000, false);
+            ASSERT_EQ(m.promotions, 1);
+            m.settle();
+            std::vector<uint32_t> at;
+            ASSERT_EQ(count_in_logs(m, 24, 2, at), size_t{0});
+            ASSERT_TRUE(m.survivors_equal());
+        }
+        {                                                                                        // what the old host did not take is not brought back, and an order that it sealed with fewer ants is the one that was sent
+            Mesh m(25, 3, same_link({30, 0}));
+            std::vector<OrderAckMsg> acks;
+            m.clients[2]->set_on_order_ack([&](const OrderAckMsg& a) { acks.push_back(a); });
+            m.run(4000, false);
+            ASSERT_TRUE(m.clients[2]->submit(cmd(CommandType::GroupMove, 2, 255, 25, 7, {999999}), 0, 7));                                   // names no ant: the host drops it (and answers)
+            ASSERT_TRUE(m.clients[2]->submit(cmd(CommandType::GroupMove, 2, 255, 26, 7, {m.ids.ants[2][0], m.ids.ants[0][0]}), 0, 8));      // names an ant of seat 0 too: the host takes it out
+            std::vector<uint32_t> ignore;
+            bool sealed = false;
+            for (uint32_t waited = 0; waited < 2000 && !sealed; waited += 10) {
+                m.run(10, false);
+                sealed = in_turns(m.clients[2]->runner(), 2, 26, ignore) != 0;
+            }
+            ASSERT_TRUE(sealed);
+            ASSERT_EQ(acks.size(), size_t{2});
+            m.kill(0);
+            m.run(10000, false);
+            ASSERT_EQ(m.promotions, 1);
+            m.settle();
+            std::vector<uint32_t> at;
+            ASSERT_EQ(count_in_logs(m, 26, 2, at), size_t{1});                                   // sealed once (with its own ant only), not again
+            ASSERT_EQ(count_in_logs(m, 25, 2, at), size_t{0});
+            ASSERT_EQ(acks.size(), size_t{2});                                                   // the new host was sent nothing: the order before the sealed one was not taken, and is not sent again
+            ASSERT_TRUE(m.survivors_equal());
+        }
+    } TEST_END();
+
 }

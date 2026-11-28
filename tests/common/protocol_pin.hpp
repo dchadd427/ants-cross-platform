@@ -6,5 +6,5 @@
 #include <cstdint>
 
 namespace ants_test {
-inline constexpr uint16_t kPinnedProtocol = 29;
+inline constexpr uint16_t kPinnedProtocol = 30;
 }  // namespace ants_test

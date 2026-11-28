@@ -9,7 +9,7 @@
 //   delay  the real time from the moment one of the player's own commands is sent (a guest: written to the link; the host: handed to the sequencer) to the moment the
 //          tick that applies it is executed on this machine, the median of the last five commands. It is the sum of everything between the click and its effect:
 //          the way to the host, the wait for the next 50 ms turn to be sealed, the way back and the jitter buffer of the lock-step runner (lockstep.hpp). It is not shown to the
-//          player: the prediction sizes its lead with it (NetGame::expected_command_delay_ms) and the browser measurement reads it. It is empty when the last command was applied
+//          player: the browser measurement reads it (the prediction does not: since protocol 30 an order is sealed at the tick that it is stamped with, so this delay is the stamp's and the lead's, not the link's). It is empty when the last command was applied
 //          more than ten seconds ago: orders are given now and then, so its limit is longer than the ping's.
 //
 // Pure logic like the sequencer: no clock, no sockets, no simulation. Every call is given the time it needs, the game's millisecond clock (clock.hpp: the differences

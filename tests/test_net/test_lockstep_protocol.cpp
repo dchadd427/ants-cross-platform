@@ -7,7 +7,7 @@ void run_protocol_tests() {
         ASSERT_EQ(kProtocolVersion, ants_test::kPinnedProtocol);                                 // 7: the room leader's START; 8: turns of 50 ms, one tick each, the adaptive buffer and the Lag message (type 25); 9: the community-map rules; 10: keys, presence, votes and the catch-up stream (types 26 - 30); 11: the leader's START carries a fill level, chat in the waiting room; 12: the match clock waits for the start dialog (the first turn is sealed kMatchStartDelayMs after the match began, a dialog ends with the first turn that executes: no message changed); 13: a level for each seat of the fill and the teams (StartRequest is seven bytes, Start ends with the two team bytes); 14: the leader moves the colors (SeatMove, type 31, three bytes); 15: a room is made by its first Hello's create block, the platform byte (Hello, Room slots, Start), the room's teams and rules in the Room message; 16: lobby rooms (the Hello's client kind, the create block's kCreateLobby, the Welcome's kWelcomeCreated, the Room message's plan and games, the PlanMsg, type 32; 17: the game mode, one byte at the end of the Start, Room and Plan messages)
         ASSERT_TRUE(kTurnMs == 50 && kTicksPerTurn == 1 && kTurnsPerSecond == 20 && kHashEveryTurns == 20);     // a hash every 20 ticks, one second, as before
         ASSERT_TRUE(turns_for_ms(0) == 0 && turns_for_ms(1) == 1 && turns_for_ms(50) == 1 && turns_for_ms(51) == 2 && turns_for_ms(3000) == 60);
-        ASSERT_EQ(static_cast<int>(MsgType::Last), static_cast<int>(MsgType::Ready));
+        ASSERT_EQ(static_cast<int>(MsgType::Last), static_cast<int>(MsgType::OrderAck));
         LagMsg lag;
         lag.seat = 2;
         lag.behind_ms = 12345;
@@ -247,7 +247,7 @@ void run_protocol_tests() {
         bad_lag.seat = 255;
         ASSERT_FALSE(decode(encode(bad_lag), lag2));
         // unknown types (24 was one until protocol 7 gave it to StartRequest, 25 until protocol 8 gave it to Lag, 26 - 30 until protocol 10 gave them to Presence, Vote, CatchUp, TurnBatch, CaughtUp, 31 until protocol 14 gave it to SeatMove, 32 until protocol 16 gave it to Plan, 33 until protocol 16 gave it to Name, and 34 until protocol 16 gave it to Remove)
-        for (uint8_t type : std::vector<uint8_t>{0, 42, 100, 255}) {
+        for (uint8_t type : std::vector<uint8_t>{0, 43, 100, 255}) {
             const std::vector<uint8_t> m = {type, 0, 0, 0, 0};
             ASSERT_EQ(peek_type(m), MsgType::None);
         }
@@ -259,7 +259,7 @@ void run_protocol_tests() {
         ASSERT_EQ(peek_type(std::vector<uint8_t>{32}), MsgType::Plan);
         ASSERT_EQ(peek_type(std::vector<uint8_t>{33}), MsgType::Name);
         ASSERT_EQ(peek_type(std::vector<uint8_t>{34}), MsgType::Remove);
-        ASSERT_EQ(static_cast<int>(MsgType::Last), 41);
+        ASSERT_EQ(static_cast<int>(MsgType::Last), 42);
         ASSERT_EQ(peek_type(std::vector<uint8_t>{}), MsgType::None);
     } TEST_END();
 
@@ -346,7 +346,7 @@ void run_protocol_tests() {
             if (i % 3 == 0) {
                 buf.resize(rng.below(80));
                 for (auto& x : buf) x = static_cast<uint8_t>(rng.below(256));
-                if (!buf.empty()) buf[0] = static_cast<uint8_t>(1 + rng.below(41));    // a plausible type byte (1 .. MsgType::Last)
+                if (!buf.empty()) buf[0] = static_cast<uint8_t>(1 + rng.below(42));    // a plausible type byte (1 .. MsgType::Last = 42)
             } else {
                 buf = seeds[rng.below(static_cast<uint32_t>(seeds.size()))];
                 for (uint32_t m = 1 + rng.below(3); m > 0; --m) buf[rng.below(static_cast<uint32_t>(buf.size()))] = static_cast<uint8_t>(rng.below(256));
@@ -567,13 +567,13 @@ void run_protocol_tests() {
         // ---- the numbers ----
         ASSERT_EQ(kProtocolVersion, ants_test::kPinnedProtocol);                                 // (the layouts of protocol 10 below are still the layouts of protocols 11 to 17: 11 and 13 changed the StartRequest (13 the Start too), 12 no message, 14 added the SeatMove; 15 changed the Hello, the Room and the Start, and 16 the Hello, the Welcome's flags, the Room and added the PlanMsg, and 17 the mode byte at the end of the Room, the Start and the PlanMsg, which this test reads where it says so)
         ASSERT_TRUE(static_cast<int>(MsgType::Presence) == 26 && static_cast<int>(MsgType::Vote) == 27 && static_cast<int>(MsgType::CatchUp) == 28 &&
-                    static_cast<int>(MsgType::TurnBatch) == 29 && static_cast<int>(MsgType::CaughtUp) == 30 && static_cast<int>(MsgType::SeatMove) == 31 && static_cast<int>(MsgType::Plan) == 32 && static_cast<int>(MsgType::Name) == 33 && static_cast<int>(MsgType::Remove) == 34 && static_cast<int>(MsgType::Visibility) == 35 && static_cast<int>(MsgType::Hint) == 36 && static_cast<int>(MsgType::Signal) == 40 && static_cast<int>(MsgType::Ready) == 41 && static_cast<int>(MsgType::Last) == 41);
+                    static_cast<int>(MsgType::TurnBatch) == 29 && static_cast<int>(MsgType::CaughtUp) == 30 && static_cast<int>(MsgType::SeatMove) == 31 && static_cast<int>(MsgType::Plan) == 32 && static_cast<int>(MsgType::Name) == 33 && static_cast<int>(MsgType::Remove) == 34 && static_cast<int>(MsgType::Visibility) == 35 && static_cast<int>(MsgType::Hint) == 36 && static_cast<int>(MsgType::Signal) == 40 && static_cast<int>(MsgType::Ready) == 41 && static_cast<int>(MsgType::Last) == 42);
         ASSERT_TRUE(static_cast<int>(RejectReason::Dropped) == 7 && static_cast<int>(RejectReason::RejoinFailed) == 8 && static_cast<int>(RejectReason::Superseded) == 9);
         ASSERT_TRUE(kKeyBytes == 16 && kMaxBatchTurns == 4096 && kBatchBytes == 48 * 1024 && kBatchHeaderBytes == 7 && kWelcomeRejoin == 1 && kCapSecondsMore == 0xFFFF);
         for (const MsgType t : {MsgType::Presence, MsgType::Vote, MsgType::CatchUp, MsgType::TurnBatch, MsgType::CaughtUp}) {
             ASSERT_EQ(peek_type(std::vector<uint8_t>{static_cast<uint8_t>(t)}), t);
         }
-        ASSERT_EQ(peek_type(std::vector<uint8_t>{42}), MsgType::None);                  // (35 is the Visibility of protocol 22, N2.113; 31 is the SeatMove of protocol 14, N2.101; 32 the PlanMsg, 33 the NameMsg and 34 the RemoveMsg of protocol 16, N2.106, N2.108 and N2.110)
+        ASSERT_EQ(peek_type(std::vector<uint8_t>{43}), MsgType::None);                  // (35 is the Visibility of protocol 22, N2.113; 31 is the SeatMove of protocol 14, N2.101; 32 the PlanMsg, 33 the NameMsg and 34 the RemoveMsg of protocol 16, N2.106, N2.108 and N2.110)
 
         // ---- the keys: zero is no key, a key matches only itself, and never "no key" ----
         {
@@ -1759,147 +1759,6 @@ void run_dropout_tests() {
         ASSERT_EQ(commands[3].first, CommandType::Stop);
     } TEST_END();
 }
-
-namespace {
-
-
-// ---------------------------------------------------------------------------------------------------------------------------------
-// Host migration (docs/NETWORK_PORT.md): the guests are linked to each other as well, so the game outlives its host
-// ---------------------------------------------------------------------------------------------------------------------------------
-
-using LinkFn = std::function<LoopbackNetwork::Link(uint8_t, uint8_t)>;
-
-LinkFn same_link(LoopbackNetwork::Link link) {
-    return [link](uint8_t, uint8_t) { return link; };
-}
-
-// A match of `players` machines: seat 0 hosts, every guest is linked to the host and to every other guest
-struct Mesh {
-    LoopbackNetwork net;
-    std::vector<std::unique_ptr<sim::SimulationEngine>> sims;
-    Ids ids;
-    std::vector<std::unique_ptr<HostSession>> hosts;         // by seat: the first host, and every guest that took over
-    std::vector<std::unique_ptr<ClientSession>> clients;     // by seat; reset when the seat took over
-    std::vector<std::vector<Connection*>> link;              // link[a][b]: the endpoint that seat a holds of its link to seat b
-    std::vector<bool> alive;                                 // a machine that is not alive is no longer updated
-    std::vector<std::pair<uint8_t, uint8_t>> left;           // (host seat, player) of every drop-out a host announced
-    std::vector<std::vector<ChatMsg>> chats;                 // what each machine's chat callback saw
-    uint32_t now{0};
-    uint32_t seed{1};
-    uint8_t players{4};
-    int promotions{0};
-
-    Mesh(uint32_t seed_, uint8_t players_, const LinkFn& link_of, ClientSession::Config cc = {}) : net(seed_ * 17u), seed(seed_), players(players_) {
-        for (uint8_t p = 0; p < players; ++p) {
-            sims.push_back(std::make_unique<sim::SimulationEngine>());
-            ids = build_world(*sims.back(), seed);
-        }
-        hosts.resize(players);
-        clients.resize(players);
-        alive.assign(players, true);
-        chats.resize(players);
-        link.assign(players, std::vector<Connection*>(players, nullptr));
-        hosts[0] = std::make_unique<HostSession>(*sims[0], HostSession::Config{});
-        hosts[0]->set_on_player_left([this](uint8_t p) { left.emplace_back(0, p); });
-        hosts[0]->set_on_chat([this](const ChatMsg& c) { chats[0].push_back(c); });
-        for (uint8_t p = 1; p < players; ++p) {
-            ClientSession::Config c = cc;
-            c.player = p;
-            c.host = 0;
-            clients[p] = std::make_unique<ClientSession>(*sims[p], c);
-            clients[p]->set_on_chat([this, p](const ChatMsg& m) { chats[p].push_back(m); });
-            auto ends = net.connect(link_of(0, p));
-            link[0][p] = ends.first;
-            link[p][0] = ends.second;
-            hosts[0]->add_client(p, ends.first);
-            clients[p]->set_connection(ends.second);
-        }
-        for (uint8_t a = 1; a < players; ++a) {
-            for (uint8_t b = static_cast<uint8_t>(a + 1); b < players; ++b) {
-                auto ends = net.connect(link_of(a, b));
-                link[a][b] = ends.first;
-                link[b][a] = ends.second;
-                clients[a]->set_peer(b, ends.first);
-                clients[b]->set_peer(a, ends.second);
-            }
-        }
-        hosts[0]->start(0);
-        for (uint8_t p = 1; p < players; ++p) clients[p]->start(0);
-    }
-
-    // The machine of `seat` dies: its links are cut at once (abrupt), or it simply stops answering while its links stay open (a frozen process)
-    void kill(uint8_t seat, bool abrupt = true) {
-        alive[seat] = false;
-        if (abrupt) isolate(seat);
-    }
-    // Every link of the seat is cut, but the machine goes on (a partition)
-    void isolate(uint8_t seat) {
-        for (uint8_t o = 0; o < players; ++o) {
-            if (o != seat && link[seat][o] != nullptr) net.cut(link[seat][o]);
-        }
-    }
-    void cut_link(uint8_t a, uint8_t b) { net.cut(link[a][b]); }
-
-    void step_promotions() {
-        for (uint8_t s = 0; s < players; ++s) {
-            if (!alive[s] || !clients[s] || !clients[s]->promoted()) continue;
-            hosts[s] = promote_to_host(*clients[s], *sims[s], HostSession::Config{}, now, [this, s](HostSession& h) {
-                h.set_on_player_left([this, s](uint8_t p) { left.emplace_back(s, p); });
-                h.set_on_chat([this, s](const ChatMsg& c) { chats[s].push_back(c); });
-            });
-            clients[s].reset();
-            ++promotions;
-        }
-    }
-
-    // Advances virtual time by `ms` in 10 ms steps; every machine that plays issues its scripted commands when `scripted`
-    void run(uint32_t ms, bool scripted = true, const std::function<void(uint32_t)>& each_step = {}) {
-        const uint32_t end = now + ms;
-        while (now < end) {
-            now += 10;
-            net.set_time(now);
-            for (uint8_t s = 0; s < players; ++s) {
-                Command c;
-                if (!alive[s] || !scripted || !script(ids, seed, now, s, c)) continue;
-                if (hosts[s]) hosts[s]->submit_local(c);
-                else if (clients[s]) clients[s]->submit(c);
-            }
-            if (each_step) each_step(now);
-            for (uint8_t s = 0; s < players; ++s) {
-                if (!alive[s]) continue;
-                if (hosts[s]) hosts[s]->update(now);
-                else if (clients[s]) clients[s]->update(now);
-            }
-            step_promotions();
-        }
-    }
-    bool playing(uint8_t s) const { return alive[s] && (hosts[s] != nullptr || (clients[s] && !clients[s]->lost())); }
-    void settle(uint32_t ms = 3000) {
-        for (uint8_t s = 0; s < players; ++s) {
-            if (alive[s] && hosts[s]) hosts[s]->freeze();
-        }
-        run(ms, false);
-    }
-    // Every machine that still plays holds the same state (the hosts' desync detectors stayed silent as well)
-    bool survivors_equal(uint8_t except = 255) const {
-        const sim::StateHash* first = nullptr;
-        sim::StateHash hash;
-        for (uint8_t s = 0; s < players; ++s) {
-            if (!playing(s) || s == except) continue;
-            if (hosts[s] && !hosts[s]->desyncs().empty()) return false;
-            hash = sims[s]->state_hash();
-            if (first == nullptr) {
-                first = &hash;
-                continue;
-            }
-            if (hash != *first) return false;
-        }
-        return true;
-    }
-    uint32_t tick(uint8_t s) const { return static_cast<uint32_t>(sims[s]->current_tick()); }
-};
-
-}  // namespace
 
 void run_migration_tests() {
     TEST_CASE("N2.22 Host Migration: The Host Dies, The Lowest Guest Takes Over, The Others Follow, Every Survivor Stays Identical And The Game Goes On") {

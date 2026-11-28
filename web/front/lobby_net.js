@@ -12,7 +12,7 @@
     'use strict';
 
     var NL = (typeof self !== 'undefined' && self.AntsNameLetters) || (typeof globalThis !== 'undefined' && globalThis.AntsNameLetters) || null;       // (front/name_letters.js: a script tag before this one; the node checks set the global first)
-    var PROTOCOL = 29;                                             // kProtocolVersion
+    var PROTOCOL = 30;                                             // kProtocolVersion
     var LAST_GAME_MODE = 1;                                        // sim::kLastGameMode: 0 the original's highest score, 1 "187"; a byte above it is refused, never played as another mode
     var MAX_NAME = 32, MAX_ROOM_CODE = 32, MAX_MAP_NAME = 64, MAX_CHAT = 100, MAX_NOTICE_BYTES = 240;     // (net::kMaxNameChars, kMaxRoomCodeChars, kMaxMapNameChars, kMaxChatChars, kMaxNoticeBytes)
     var PLAYERS = 4;                                               // sim::MAX_PLAYERS

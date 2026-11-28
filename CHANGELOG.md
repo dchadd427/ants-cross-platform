@@ -35,6 +35,9 @@ Work that is not released yet is written in the same template under a heading th
 - **Quick Chat.** The four texts that F9 to F12 say are edited in the menu's new Quick Chat tab (in the browser too, where a phone's own keyboard opens for them).
 - **Show FPS.** The frame rate and its graph in the corner are now a setting in Video, off by default (the version stays; `--show-fps on` for one run). With it off, the ping takes the frame rate's place beside the version.
 - A name that does not fit its score label is set smaller (14, then 12, then 10 pixels) before any of it is cut.
+- Your own ants no longer slide back after you give an order. The game tells the server which tick it applied the order at and the server runs it there: at round trips of 0 to 210 ms with jitter, orders that were corrected fell from 20 - 67 % to under 3 %. An ant that walks on after a new order waits where it was drawn until the game's ant has caught up, instead of stepping back.
+
+**Rules / network:** network protocol 30, a v0.22 game cannot join: an order carries the tick it was applied at, which the server seals it into when still open (at most 0.8 s ahead) and answers.
 
 **Fixes:**
 - A recording or a live match that you watch has no chat to write in any more (the input box is covered and the Send to buttons are gone; the players' lines stay readable): what a watcher typed showed in its own log under the name of the first player, and went nowhere else.

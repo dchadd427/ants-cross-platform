@@ -898,6 +898,7 @@ int main(int argc, char* argv[]) {
         int snap_px{0};                   // the largest move of the engine's ant in one frame after the order
         int drawn_px{0};                  // ... of the drawn ant
         int walk_px{0};                   // ... of the drawn ant before the order (a walk)
+        int retreat_px{0};                // how far WEST of the place where the last frame before the order drew it (back along the way that it walks) the drawn ant has been at any frame after the order
         bool ended_on_engine{false};      // a second after the order nothing slides and the drawn ant is the engine's
         bool slid{false};
         bool ok{false};
@@ -927,6 +928,7 @@ int main(int argc, char* argv[]) {
         int32_t last_engine = 0;
         bool have_last = false;
         bool ordered = false;
+        int32_t order_drawn = 0;
         uint32_t since_order = 0;
         const int32_t order_after = 10 * 50 + phase_ticks * 50;                           // (ms of the match)
         int32_t clock = 0;
@@ -949,6 +951,7 @@ int main(int argc, char* argv[]) {
                 const int engine_jump = std::abs(a.px - last_engine);
                 if (ordered) {
                     out.drawn_px = std::max(out.drawn_px, jump);
+                    out.retreat_px = std::max(out.retreat_px, order_drawn - drawn);
                     out.snap_px = std::max(out.snap_px, engine_jump);
                 } else {
                     out.walk_px = std::max(out.walk_px, jump);
@@ -962,6 +965,7 @@ int main(int argc, char* argv[]) {
         while (clock < order_after) frame_step();
         if (snap().action != 1) return out;
         ordered = true;
+        order_drawn = last_drawn;
         if (how == 2) sim.stop_ant(ant);
         else sim.issue_move_order(ant, sim::TileCoord{how == 0 ? 55 : 2, 10});
         while (since_order < 1000) {
@@ -995,6 +999,7 @@ int main(int argc, char* argv[]) {
                     const double share = 16.0 * frame_ms / static_cast<double>(ViewGlide::kMinDurationMs);       // (the slide's own part of a frame: the largest hop, 16 px, in the shortest time)
                     ASSERT_TRUE(r.drawn_px <= walk + share + 2.0);
                     ASSERT_TRUE(r.ended_on_engine);                                            // (a second later the picture is the engine's)
+                    if (how == 0) ASSERT_TRUE(r.retreat_px <= 4);                              // a goal further on, the way that the ant walks: the drawn ant is held where it was while the engine's ant passes it, never drawn falling back by the engine's snap (up to 12 px: only a snap of a step, 4 px, which is no snap, is left)
                 }
             }
             ASSERT_TRUE(runs == 48 && hops > 10);                                              // (the engine does snap an ant by 10 px and more in a third of the phases: the check is not empty)
@@ -1075,6 +1080,196 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(cursor(engine.px - 15, engine.py - 8) == CursorType::Move);              // the engine's far side: the picture shows open ground there
         glide.clear();
         ASSERT_TRUE(cursor(engine.px - 15, engine.py - 8) == CursorType::Attack);            // (without the slide the engine's box is the ant's)
+    } TEST_END();
+
+    TEST_CASE("VG16 A Snap That Goes BACK Along The Way The Ant Walks Is Not Slid Back: The Picture Holds The Ant Where The Last Frame Drew It Until The Engine's Ant, Which Stands For Its First Ticks And Then Walks The New Order's Way, Has Passed That Place, And Then Goes On With The Engine; A Snap Forward Is Slid As Before; An Ant That Turns The Other Way, Goes Another Way Or Stops Is Carried To The Engine's Place By The Slide; A Hold Ends After 600 ms Whatever Happens") {
+        using ants::app::ViewGlide;
+        ants::sim::WorldState world;
+        world.width = 20;
+        world.height = 20;
+        world.fog_revealed.assign(400, 1);
+        world.player_alliances.fill(255);
+        // facing: 0 north, 2 east, 4 south, 6 west (clockwise by eighths); state: 1 walking, 0 idle
+        const auto ant_at = [](int32_t px, int32_t py, uint8_t action, uint8_t facing, ants::sim::UnitState state) {
+            ants::sim::AntSnapshot a;
+            a.id = 7;
+            a.player_id = 0;
+            a.px = px;
+            a.py = py;
+            a.tile_x = px / 32;
+            a.tile_y = py / 32;
+            a.action = action;
+            a.facing = facing;
+            a.state = state;
+            return a;
+        };
+        const auto walking = [&](int32_t px, int32_t py, uint8_t facing) { return ant_at(px, py, 1, facing, ants::sim::UnitState::Walking); };
+        const auto standing = [&](int32_t px, int32_t py, uint8_t facing) { return ant_at(px, py, 0, facing, ants::sim::UnitState::Walking); };     // (the engine's three ticks of standing: it still shows the old way and the walking state)
+        const auto stopped = [&](int32_t px, int32_t py, uint8_t facing) { return ant_at(px, py, 0, facing, ants::sim::UnitState::Idle); };
+        const auto no_clip = [](const ants::sim::AntSnapshot&, int32_t& dx, int32_t& dy) {
+            dx = 0;
+            dy = 0;
+        };
+        // one frame of `ms`: the look, and where the picture draws the ant (the engine's place and what is left of the glide)
+        const auto frame = [&](ViewGlide& g, uint32_t ms, const ants::sim::AntSnapshot& a, int32_t& drawn_x, int32_t& drawn_y) {
+            world.ants = {a};
+            g.advance(ms);
+            g.follow(world, 0, no_clip);
+            const ants::sim::AntSnapshot d = ants::app::glided_ant(g, world, 0, a);
+            drawn_x = d.px;
+            drawn_y = d.py;
+        };
+        int32_t x = 0;
+        int32_t y = 0;
+        {                                                                                  // walking east at 220 on the tile whose middle is 208: the order sends it on east, the snap puts it back on 208
+            ViewGlide g;
+            frame(g, 50, walking(220, 112, 2), x, y);
+            ASSERT_EQ(x, 220);
+            frame(g, 50, standing(208, 112, 2), x, y);                                     // (+1: the snap; the engine has not turned the ant yet: it still shows the old way)
+            ASSERT_TRUE(g.held(7));
+            ASSERT_EQ(x, 220);                                                             // held where the last frame drew it: no step back
+            frame(g, 50, standing(208, 112, 2), x, y);
+            frame(g, 50, standing(208, 112, 2), x, y);
+            ASSERT_EQ(x, 220);
+            frame(g, 50, walking(208, 112, 2), x, y);                                      // (+4: it walks again, the new order's way: east; the engine's ant has not moved yet)
+            ASSERT_TRUE(g.held(7));
+            ASSERT_EQ(x, 220);
+            frame(g, 50, walking(208, 112, 2), x, y);
+            ASSERT_EQ(x, 220);
+            frame(g, 50, walking(212, 112, 2), x, y);                                      // (+6: its first steps)
+            frame(g, 50, walking(216, 112, 2), x, y);
+            ASSERT_TRUE(g.held(7));
+            ASSERT_EQ(x, 220);                                                             // (still behind the place where it is held)
+            frame(g, 50, walking(220, 112, 2), x, y);                                      // the engine's ant is where the picture holds the ant: the hold is over
+            ASSERT_FALSE(g.held(7));
+            ASSERT_EQ(x, 220);
+            frame(g, 50, walking(224, 112, 2), x, y);                                      // ... and the picture goes on with the engine
+            ASSERT_EQ(x, 224);
+            ASSERT_EQ(g.size(), 0u);
+        }
+        {                                                                                  // forward: a snap that puts the ant on ahead of the place where it was drawn is slid, as before
+            ViewGlide g;
+            frame(g, 50, walking(228, 112, 2), x, y);
+            frame(g, 50, standing(240, 112, 2), x, y);
+            ASSERT_FALSE(g.held(7));
+            ASSERT_EQ(x, 228);
+            int32_t dx = 0;
+            int32_t dy = 0;
+            ASSERT_TRUE(g.offset_of(7, dx, dy) && dx == -12 && dy == 0);
+        }
+        {                                                                                  // the ant turns the other way: the snap went back along the way that it WAS walking, and forward along the new one: the hold ends when the engine turns the ant, and the slide carries it west
+            ViewGlide g;
+            frame(g, 50, walking(220, 112, 2), x, y);
+            frame(g, 50, standing(208, 112, 2), x, y);
+            ASSERT_TRUE(g.held(7));
+            frame(g, 50, standing(208, 112, 2), x, y);
+            frame(g, 50, standing(208, 112, 2), x, y);
+            ASSERT_EQ(x, 220);
+            frame(g, 50, walking(208, 112, 6), x, y);                                      // (it walks west now: the place that was held is behind the engine's ant)
+            ASSERT_FALSE(g.held(7));
+            ASSERT_EQ(x, 220);                                                             // (drawn where it was: the slide starts from there)
+            int32_t dx = 0;
+            int32_t dy = 0;
+            ASSERT_TRUE(g.offset_of(7, dx, dy) && dx == 12 && dy == 0);
+            frame(g, 100, walking(208, 112, 6), x, y);
+            ASSERT_TRUE(x < 220 && x >= 208);                                              // (west, toward the engine's ant: the way that it walks)
+        }
+        {                                                                                  // another way (north): the held place is neither ahead of nor behind the engine's ant along it: the slide
+            ViewGlide g;
+            frame(g, 50, walking(220, 112, 2), x, y);
+            frame(g, 50, standing(208, 112, 2), x, y);
+            ASSERT_TRUE(g.held(7));
+            frame(g, 50, walking(208, 112, 0), x, y);
+            ASSERT_FALSE(g.held(7));
+            ASSERT_EQ(x, 220);
+        }
+        {                                                                                  // a diagonal (south east): held while the engine's ant has not got past the place along the way, and the hold ends once it has
+            ViewGlide g;
+            frame(g, 50, walking(220, 112, 3), x, y);
+            frame(g, 50, standing(208, 112, 3), x, y);
+            ASSERT_TRUE(g.held(7));
+            frame(g, 50, walking(208, 112, 3), x, y);
+            ASSERT_TRUE(g.held(7));
+            frame(g, 50, walking(212, 116, 3), x, y);
+            ASSERT_TRUE(g.held(7));
+            ASSERT_TRUE(x == 220 && y == 112);
+            frame(g, 50, walking(216, 120, 3), x, y);
+            frame(g, 50, walking(220, 124, 3), x, y);
+            ASSERT_FALSE(g.held(7));
+            ASSERT_TRUE(x >= 220 && y >= 112);                                             // (never back)
+        }
+        {                                                                                  // a Stop: the engine's ant stands (the walking state ends after its three ticks): the hold ends and the ant is carried to the middle of its tile by the slide
+            ViewGlide g;
+            frame(g, 50, walking(220, 112, 2), x, y);
+            frame(g, 50, standing(208, 112, 2), x, y);
+            ASSERT_TRUE(g.held(7));
+            frame(g, 50, standing(208, 112, 2), x, y);
+            frame(g, 50, standing(208, 112, 2), x, y);
+            ASSERT_TRUE(g.held(7));
+            ASSERT_EQ(x, 220);
+            frame(g, 50, stopped(208, 112, 2), x, y);
+            ASSERT_FALSE(g.held(7));
+            ASSERT_EQ(x, 220);
+            int32_t dx = 0;
+            int32_t dy = 0;
+            ASSERT_TRUE(g.offset_of(7, dx, dy) && dx == 12 && dy == 0);
+            frame(g, ViewGlide::duration_ms(12, 0), stopped(208, 112, 2), x, y);
+            ASSERT_EQ(x, 208);
+            ASSERT_EQ(g.size(), 0u);
+        }
+        {                                                                                  // an ant that never walks again (an order that cannot be carried out) is held for 600 ms and then carried to the engine's place
+            ViewGlide g;
+            frame(g, 50, walking(220, 112, 2), x, y);
+            frame(g, 50, standing(208, 112, 2), x, y);
+            for (int i = 0; i < 11; ++i) frame(g, 50, standing(208, 112, 2), x, y);        // (550 ms)
+            ASSERT_TRUE(g.held(7));
+            ASSERT_EQ(x, 220);
+            frame(g, 50, standing(208, 112, 2), x, y);                                     // (600 ms)
+            ASSERT_FALSE(g.held(7));
+            ASSERT_EQ(x, 220);
+            frame(g, 200, standing(208, 112, 2), x, y);
+            ASSERT_EQ(x, 208);
+            ASSERT_EQ(g.size(), 0u);
+        }
+        {                                                                                  // the hold is the picture's alone: the pointer picks the ant where it is drawn (glided_ant), and clear() and a fog that hides the ant end it
+            ViewGlide g;
+            frame(g, 50, walking(220, 112, 2), x, y);
+            frame(g, 50, standing(208, 112, 2), x, y);
+            ASSERT_TRUE(g.held(7));
+            world.ants = {standing(208, 112, 2)};
+            ASSERT_EQ(ants::app::glided_ant(g, world, 0, world.ants[0]).px, 220);
+            g.clear();
+            ASSERT_FALSE(g.held(7));
+            ASSERT_EQ(g.size(), 0u);
+            frame(g, 50, walking(220, 112, 2), x, y);
+            frame(g, 50, standing(208, 112, 2), x, y);
+            ASSERT_TRUE(g.held(7));
+            world.fog_of_war_enabled = true;
+            world.fog_revealed.assign(400, 0);
+            world.ants = {ant_at(208, 112, 0, 2, ants::sim::UnitState::Walking)};
+            world.ants[0].player_id = 1;                                                   // (an ant of another team on covered ground is not drawn, so it is not looked at)
+            g.advance(50);
+            g.follow(world, 0, no_clip);
+            ASSERT_FALSE(g.held(7));
+            world.fog_of_war_enabled = false;
+            world.fog_revealed.assign(400, 1);
+        }
+        {                                                                                  // an ant that ARRIVES is idle in the very tick that it stops walking: nothing is held (a move beyond a walk is slid, as it always was)
+            ViewGlide g;
+            frame(g, 50, walking(220, 112, 2), x, y);
+            frame(g, 50, stopped(208, 112, 2), x, y);
+            ASSERT_FALSE(g.held(7));
+            int32_t dx = 0;
+            int32_t dy = 0;
+            ASSERT_TRUE(g.offset_of(7, dx, dy) && dx == 12 && dy == 0);
+        }
+        {                                                                                  // a hold of more than two tiles is no hold (a throw, a teleport): shown at once
+            ViewGlide g;
+            frame(g, 50, walking(300, 112, 2), x, y);
+            frame(g, 50, standing(208, 112, 2), x, y);
+            ASSERT_FALSE(g.held(7));
+            ASSERT_EQ(g.size(), 0u);
+        }
     } TEST_END();
 
     std::cout << "\n=======================================================\n"

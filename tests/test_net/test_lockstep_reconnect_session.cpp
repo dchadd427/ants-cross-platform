@@ -386,6 +386,9 @@ void run_reconnect_session_tests() {
         ASSERT_EQ(answer(close_call), static_cast<int>(RejectReason::MatchRunning));
         ASSERT_FALSE(m.host->paused());
         // a second window with the key of seat 1, whose own link is alive (a duplicated tab, a Wi-Fi switch that the host has not noticed)
+        ASSERT_TRUE(m.clients[1]->submit(cmd(CommandType::GroupMove, 1, 255, 14, 5, {m.ids.ants[1][0]}), m.sealed() + 16, 1));      // (the first window has an order that the host holds for a later turn)
+        m.run(100);
+        ASSERT_EQ(m.host->orders_held(1), size_t{1});
         Connection* second = raw(m.keys[1], m.sealed());
         m.run(400);
         ASSERT_TRUE(m.host->paused());                                                   // the seat is away from now: the match waits for the new window
@@ -394,6 +397,7 @@ void run_reconnect_session_tests() {
         ASSERT_FALSE(m.host->client_present(1));
         ASSERT_TRUE(m.clients[1]->lost() && m.clients[1]->rejected() && m.clients[1]->reject_reason() == RejectReason::Superseded);      // the first window was told, and stops trying
         ASSERT_FALSE(m.clients[1]->wants_connection(m.now));
+        ASSERT_EQ(m.host->orders_held(1), size_t{1});                                    // the same player on a newer link: what the host accepted from the first window is kept
         std::vector<uint8_t> msg;
         bool welcome = false, catch_up = false;
         while (second->poll(msg)) {

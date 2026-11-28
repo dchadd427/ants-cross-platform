@@ -1,6 +1,7 @@
 #include "ants_net/sequencer.hpp"
 
 #include <algorithm>
+#include <iterator>
 
 namespace ants::net {
 
@@ -21,21 +22,37 @@ Sequencer::Sequencer(Config config) : cfg_(config) {
 
 void Sequencer::set_active(uint8_t player, bool active) {
     if (player >= sim::MAX_PLAYERS) return;
-    active_[player] = active;
     if (!active) {
-        carry_[player].clear();                        // a player that is gone has no commands waiting for a later turn
-        if (host_player_ >= sim::MAX_PLAYERS) {        // (a seat that leaves the table of a dedicated server takes its reports with it: they were made in a stay that is over)
-            for (auto& entry : have_report_) entry.second[player] = false;
-        }
+        hold(player);
+        carry_[player].clear();                        // a player that is gone for good has no commands waiting for a later turn
+        drop_ahead(player);
+        return;
     }
+    active_[player] = true;
     // a player that joins is level with the sequencer: it has "executed" everything before the current turn (and was not at the table for any of them)
-    if (active) {
-        acked_[player] = next_turn_;
-        joined_[player] = next_turn_;
+    acked_[player] = next_turn_;
+    joined_[player] = next_turn_;
+}
+
+void Sequencer::hold(uint8_t player) {
+    if (player >= sim::MAX_PLAYERS) return;
+    active_[player] = false;
+    if (host_player_ >= sim::MAX_PLAYERS) {            // (a seat that leaves the table of a dedicated server takes its reports with it: they were made in a stay that is over)
+        for (auto& entry : have_report_) entry.second[player] = false;
     }
 }
 
-Submit Sequencer::submit_checked(uint8_t player, sim::Command command) {
+void Sequencer::drop_ahead(uint8_t player) {
+    for (auto it = ahead_.begin(); it != ahead_.end();) {
+        auto& list = it->second;
+        list.erase(std::remove_if(list.begin(), list.end(), [player](const sim::Command& c) { return c.issuer == player; }), list.end());
+        it = list.empty() ? ahead_.erase(it) : std::next(it);
+    }
+    ahead_count_[player] = 0;
+    last_target_[player] = 0;
+}
+
+Submit Sequencer::submit_checked(uint8_t player, sim::Command command, uint32_t at_turn) {
     if (player >= sim::MAX_PLAYERS || !active_[player]) return Submit::Refused;
     if (!sim::is_client_command(command.type)) return Submit::Refused;     // Drop and unknown types are not for clients
     command.issuer = player;                       // the connection decides who speaks, not the payload
@@ -58,6 +75,22 @@ Submit Sequencer::submit_checked(uint8_t player, sim::Command command) {
         return Submit::OverBudget;
     };
     if (store != nullptr && *store < kMilli) return over();
+    // The turn it goes into (protocol 30): the one that the sender named when that is still open, else the first open one; never before a command that the seat sent earlier; at most max_order_ahead_turns beyond the first open
+    // turn. Beyond the next turn it waits in ahead_ and joins the queue when that turn is next.
+    uint32_t target = std::max(std::max(at_turn, next_turn_), last_target_[player]);
+    if (target > next_turn_ + cfg_.max_order_ahead_turns) {
+        target = next_turn_ + cfg_.max_order_ahead_turns;
+        ++ahead_clamped_[player];
+    }
+    last_target_[player] = target;
+    if (target > next_turn_) {
+        if (carry_[player].size() + ahead_count_[player] >= cfg_.max_carried_commands && !first_quit) return store != nullptr ? over() : Submit::Refused;
+        ahead_[target].push_back(std::move(command));
+        ++ahead_count_[player];
+        if (store != nullptr) *store -= kMilli;
+        if (first_quit) quit_sent_[player] = true;
+        return Submit::Queued;
+    }
     // A command that does not fit into the turn waits for the next ones, behind the commands of the same player that wait already (what was sent first is run first: a player
     // that has commands waiting has a full turn, so a new one never finds room in front of them). A burst that a stuck uplink delivers at last is carried into the turns that
     // follow; a peer with more waiting than the bound is a flood (a seat that has a budget is not refused for it: the store of its orders is bigger than what can wait, and the rest is dropped).
@@ -65,7 +98,7 @@ Submit Sequencer::submit_checked(uint8_t player, sim::Command command) {
         ++queued_by_[player];
         queue_.push_back(std::move(command));
     } else {
-        if (carry_[player].size() >= cfg_.max_carried_commands && !first_quit) return store != nullptr ? over() : Submit::Refused;       // (the first Quit waits behind the others, however many they are)
+        if (carry_[player].size() + ahead_count_[player] >= cfg_.max_carried_commands && !first_quit) return store != nullptr ? over() : Submit::Refused;       // (the first Quit waits behind the others, however many they are)
         carry_[player].push_back(std::move(command));
     }
     if (store != nullptr) *store -= kMilli;
@@ -83,6 +116,9 @@ void Sequencer::resume(uint32_t next_turn) {
     queue_.clear();
     queued_by_.fill(0);
     for (auto& c : carry_) c.clear();
+    ahead_.clear();
+    ahead_count_.fill(0);
+    last_target_.fill(0);
     reports_.clear();
     have_report_.clear();
     referee_.clear();
@@ -269,6 +305,19 @@ TurnMsg Sequencer::seal() {
             carry_[p].pop_front();
             ++queued_by_[p];
         }
+    }
+    while (!ahead_.empty() && ahead_.begin()->first <= next_turn_) {      // the commands that were stamped with the turn that is next now (each seat's keep their order, behind what that seat has carried over)
+        for (sim::Command& c : ahead_.begin()->second) {
+            const uint8_t p = c.issuer;
+            if (ahead_count_[p] > 0) --ahead_count_[p];
+            if (queued_by_[p] < cfg_.max_commands_per_turn) {
+                ++queued_by_[p];
+                queue_.push_back(std::move(c));
+            } else {
+                carry_[p].push_back(std::move(c));
+            }
+        }
+        ahead_.erase(ahead_.begin());
     }
     return t;
 }

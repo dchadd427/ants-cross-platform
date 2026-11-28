@@ -782,6 +782,7 @@ struct HopRun {
     int engine_snap{0};             // the largest move of the engine's ant between two frames after the order (px, the larger of the two axes): the snap
     int walk_max{0};                // the largest move of the DRAWN ant between two frames before the order (a walk)
     int after_max{0};               // ... and after it, over the next 700 ms (the order's hop and the walk that follows)
+    int back_max{0};                // the most that the drawn ant moved WEST (against the way that it walks) in one frame after the order
     int pick_tried{0};              // a click that picks the ant where the frame draws it, made while it slides (a slide of 8 px or more)
     int pick_ok{0};                 // ... that picked it
     int pick_foil_ok{0};            // a click on the engine's side of it, outside the drawn ant's box: picked nothing
@@ -862,7 +863,10 @@ HopRun hop_once(Session& s, uint8_t seat, uint32_t ant, uint32_t phase, int kind
     for (size_t i = 1; i < path.size(); ++i) {
         const int jump = std::max(std::abs(path[i].x - path[i - 1].x), std::abs(path[i].y - path[i - 1].y));
         if (i < before) out.walk_max = std::max(out.walk_max, jump);
-        else if (i < before + 45) out.after_max = std::max(out.after_max, jump);                // (the 700 ms after the order: about 42 frames)
+        else if (i < before + 45) {
+            out.after_max = std::max(out.after_max, jump);                                      // (the 700 ms after the order: about 42 frames)
+            out.back_max = std::max(out.back_max, path[i - 1].x - path[i].x);
+        }
     }
     int32_t gx = 0;
     int32_t gy = 0;
@@ -877,6 +881,7 @@ struct HopSweep {
     int snap_worst{0};
     int walk_worst{0};
     int after_worst{0};
+    int back_worst{0};
     int pick_tried{0};
     int pick_ok{0};
     int pick_foil_ok{0};
@@ -899,6 +904,7 @@ HopSweep hop_sweep(const Params& p, uint8_t seat, int kind) {
         out.snap_worst = std::max(out.snap_worst, r.engine_snap);
         out.walk_worst = std::max(out.walk_worst, r.walk_max);
         out.after_worst = std::max(out.after_worst, r.after_max);
+        out.back_worst = std::max(out.back_worst, r.back_max);
         out.pick_tried += r.pick_tried;
         out.pick_ok += r.pick_ok;
         out.pick_foil_ok += r.pick_foil_ok;
@@ -1760,11 +1766,57 @@ int main(int argc, char* argv[]) {
             ASSERT_TRUE(r.walk_worst <= 4);                                                    // (a walk: a step of 4 px a frame at most)
             ASSERT_TRUE(r.after_worst <= r.walk_worst + 1);                                    // the order's hop is not drawn: no frame moves the ant by more than its walk (and a pixel for the slide's rounding)
             ASSERT_EQ(r.unclean, 0);                                                           // (and a second later nothing of it is left)
+            if (m.kind == 0) ASSERT_EQ(r.back_worst, 0);                                       // an ant that walks on and is given a goal further on is never drawn stepping BACK, whatever the engine's snap does: the picture holds it until the engine's ant has passed
             ASSERT_EQ(r.pick_ok, r.pick_tried);                                                // the pointer picks the ant where the frame draws it ...
             ASSERT_EQ(r.pick_foil_ok, r.pick_tried);                                           // ... and not where the engine has it
             if (m.scene.seat == 0) ASSERT_TRUE(r.pick_tried >= 3);                             // (the click of the player's own ant: slides of 8 px and more were met)
         }
         std::printf("\n");
+    } TEST_END();
+
+    TEST_CASE("LK18 The Player's Own Corrections Per Order (The Cause Of A Rubber Band In One's Own Ants): A Person Orders His Ants For 75 s After A Warm-Up Of 15 s Over Round Trips Of 2 To 210 ms With Jitter, Nobody Else Orders; The Orders That The Host Seals At Another Tick Than The One The Screen Applied Them At, The Rebuilds That They Cause And What The Rebuilds Move On The Screen Are Counted; The Host Seals An Order At The Tick It Is Stamped With, So Hardly One Is Corrected") {
+        struct Row {
+            uint32_t rtt;
+            uint32_t jitter;
+            bool four;                                                                        // four people in the room (the owner's test with four windows): the three others order too
+        };
+        const std::vector<Row> rows = table_wanted() ? std::vector<Row>{{2, 0, false}, {30, 10, false}, {60, 20, false}, {100, 30, false}, {150, 30, false}, {210, 30, false}, {210, 60, false}, {100, 30, true}, {210, 30, true}}
+                                                     : std::vector<Row>{{2, 0, false}, {60, 20, false}, {150, 30, false}, {210, 30, false}, {150, 30, true}};
+        std::printf("\n    own orders after a warm-up of 15 s (a person's clicks; nobody else orders, but in the rows of four people): orders / sealed at another tick than applied / rebuilds / corrections that moved an ant / ants moved (px mean) / lead at the end\n");
+        for (const Row& row : rows) {
+            Params p;
+            p.link.rtt_ms = row.rtt;
+            p.link.jitter_ms = row.jitter;
+            p.seed = 18u + seed_offset() + row.rtt;
+            if (row.four) {
+                p.seats = 4;
+                p.peers = 3;
+                p.peer_link.rtt_ms = 60;
+                p.peer_link.jitter_ms = 20;
+            }
+            Session s(p);
+            ASSERT_TRUE(s.begin());
+            Players players(s);
+            players.peer = row.four;
+            players.play(15000);
+            ASSERT_TRUE(s.app().net()->prediction() != nullptr);
+            net::Prediction& pred = *s.app().net()->prediction();
+            pred.set_measure_corrections(true);
+            const net::Prediction::Stats warm = pred.stats();
+            players.play(75000);
+            const net::Prediction::Stats& st = pred.stats();
+            const uint64_t orders = st.commands_predicted - warm.commands_predicted;
+            const uint64_t late = (st.sealed_late - warm.sealed_late) + (st.sealed_early - warm.sealed_early);
+            const uint64_t rebuilds = st.rebuilds - warm.rebuilds;
+            std::printf("    rtt %3u jitter %2u%s: %3llu orders / %3llu later or earlier (%4.1f %%) / %3llu rebuilds / %3llu moved an ant / %.1f px mean / lead %u\n", row.rtt, row.jitter, row.four ? " four people" : "",
+                        static_cast<unsigned long long>(orders), static_cast<unsigned long long>(late), orders != 0 ? 100.0 * static_cast<double>(late) / static_cast<double>(orders) : 0.0, static_cast<unsigned long long>(rebuilds),
+                        static_cast<unsigned long long>(st.corrections_visible), st.ants_moved != 0 ? static_cast<double>(st.move_px_total) / static_cast<double>(st.ants_moved) : 0.0, pred.lead_ticks());
+            ASSERT_TRUE(orders >= 30);
+            ASSERT_EQ(st.commands_lost, 0u);
+            ASSERT_TRUE(st.order_acks + 8u >= st.commands_predicted);                         // (the host answered the orders: the lead was learned from the answers)
+            ASSERT_TRUE(late * 10u <= orders);                                                // at most one order in ten is sealed at another tick than the screen applied it at, on every link (the first orders of a match are the late ones: before the lead has the lag)
+            if (row.jitter <= 20) ASSERT_TRUE(late * 25u <= orders);                          // and at most one in 25 where the link scatters its packets by a fifth of a tick or less
+        }
     } TEST_END();
 
     std::cout << "\n=======================================================\n"

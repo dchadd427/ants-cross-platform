@@ -189,10 +189,11 @@ void HostSession::send_turns(Connection* conn, uint32_t from_turn, uint32_t to_t
     }
 }
 
-bool HostSession::submit_local(sim::Command command) {
+bool HostSession::submit_local(sim::Command command, uint32_t at_turn, uint32_t* open_turn) {
     if (!started_ || seatless()) return false;
     command.issuer = cfg_.host_player;
-    if (!sequencer_.submit(cfg_.host_player, command)) return false;                // (a refused command never reaches a turn: nothing to measure, nothing to predict)
+    if (open_turn != nullptr) *open_turn = sequencer_.next_turn();
+    if (!sequencer_.submit(cfg_.host_player, command, at_turn)) return false;       // (a refused command never reaches a turn: nothing to measure, nothing to predict)
     delay_.on_sent(command);
     return true;
 }
@@ -234,6 +235,7 @@ void HostSession::broadcast(const std::vector<uint8_t>& msg, uint8_t except) {
 }
 
 void HostSession::announce_drop(uint8_t player, bool as_quit) {
+    sequencer_.set_active(player, false);            // gone for good (a seat that was held leaves what it handed in for a later turn behind: nothing of it is sealed after its Drop)
     sim::Command gone;                               // FUN_0100d03b on every machine, in the same turn (as_quit: FUN_0101453f, the quit, which ranks the seat last and ends a match of two sides)
     gone.type = as_quit ? sim::CommandType::Quit : sim::CommandType::Drop;
     gone.issuer = player;
@@ -270,7 +272,7 @@ void HostSession::lose(uint8_t player) {
     if (!attendance_.lost(player, last_ms_)) return drop(player);
     clients_[player].present = false;
     if (clients_[player].conn != nullptr && clients_[player].conn->is_open()) clients_[player].conn->close();
-    sequencer_.set_active(player, false);            // its acknowledgements no longer matter, and its commands are refused
+    sequencer_.hold(player);                         // its acknowledgements no longer matter, and its commands are refused; what the host accepted from it stays (the player may come back)
     presence_dirty_ = true;
 }
 
@@ -325,7 +327,11 @@ void HostSession::handle_message(uint8_t player, const std::vector<uint8_t>& msg
                                                      // clicks on would reach the limit of commands per turn, which no turn resets): discarded, no violation
             if (cfg_.start_delay_ms != 0 && sequencer_.next_turn() == 0) return;     // no turn is sealed yet in a match that waits for its start dialog (protocol 12): an honest client sends nothing (its dialog takes every
                                                      // click and key until its first turn has run), and a command now would run at the first tick, ahead of every person's: discarded, no violation
-            if (sequencer_.submit_checked(player, std::move(m.command)) == Submit::Refused) violation(player);      // (a command over the budget, or without an ant to order, is dropped: not an offence)
+            const uint32_t open_turn = sequencer_.next_turn();       // (protocol 30: the first turn that is still open as this order arrives: what its sender learns its lag from)
+            const Submit verdict = sequencer_.submit_checked(player, std::move(m.command), m.turn);
+            if (verdict == Submit::Refused) return violation(player);      // (a command over the budget, or without an ant to order, is dropped: not an offence)
+            if (verdict == Submit::OverBudget) return;                     // (a seat that has used up its budget is flooding: its lead learns nothing from the answers to what it sent and the host dropped, and a flooder's own lag is not the link's)
+            if (m.seq != 0 && clients_[player].conn != nullptr && !clients_[player].conn->send(encode(OrderAckMsg{m.seq, open_turn}))) lose(player);      // (an order that names no ant of the seat is answered: the lag is what the sender learns)
             return;
         }
         case MsgType::Vote: {
@@ -689,7 +695,7 @@ bool HostSession::accept_rejoin(Connection* conn, const HelloMsg& hello, uint32_
             old.conn->close();
         }
         old.present = false;
-        sequencer_.set_active(seat, false);
+        sequencer_.hold(seat);                       // (the same player on a newer link: what the host accepted from the older one stays)
     }
     for (size_t i = 0; i < rejoiners_.size();) {
         if (rejoiners_[i].seat != seat) {

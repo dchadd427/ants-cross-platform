@@ -351,7 +351,7 @@
   {
    "id": "turn_of_the_return_not_remembered",
    "file": "src/ants_net/sequencer.cpp",
-   "old": "        joined_[player] = next_turn_;\n",
+   "old": "    joined_[player] = next_turn_;\n",
    "new": "",
    "build": [
     "test_lockstep"
@@ -491,7 +491,7 @@
   {
    "id": "machines_forget_the_turn_of_a_return",
    "file": "src/ants_net/sequencer.cpp",
-   "old": "        joined_[player] = next_turn_;\n",
+   "old": "    joined_[player] = next_turn_;\n",
    "new": "",
    "build": [
     "test_lockstep"
@@ -501,7 +501,7 @@
   {
    "id": "room_forgets_the_turn_of_a_return",
    "file": "src/ants_net/sequencer.cpp",
-   "old": "        joined_[player] = next_turn_;\n",
+   "old": "    joined_[player] = next_turn_;\n",
    "new": "",
    "build": [
     "test_server"

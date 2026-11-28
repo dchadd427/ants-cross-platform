@@ -68,6 +68,7 @@ Prediction::Prediction(const sim::SimulationEngine& confirmed, const LockstepRun
     cfg_.min_lead_ticks = std::min(cfg_.min_lead_ticks, cfg_.max_lead_ticks);
     lead_ = target_lead_ = std::clamp<uint32_t>(estimate_lag_ + cfg_.lead_bias_ticks, cfg_.min_lead_ticks, cfg_.max_lead_ticks);
     cooldown_next_ = std::min(cfg_.cooldown_ticks, cfg_.cooldown_max_ticks);
+    next_seq_ = std::max<uint32_t>(cfg_.first_seq, 1u);
 }
 
 const std::vector<sim::Command>& Prediction::applied_at_display() const noexcept {
@@ -149,11 +150,13 @@ void Prediction::set_expected_delay_ms(uint32_t ms) {
 
 uint32_t Prediction::learned_lag_ticks() const noexcept {
     const uint64_t c = confirmed_tick();
-    uint32_t lowest = 0;
+    std::vector<uint32_t> fresh;
     for (const auto& lag : lags_) {
-        if (c <= lag.second + cfg_.lag_fresh_ticks && (lowest == 0 || lag.first < lowest)) lowest = lag.first;
+        if (c <= lag.second + cfg_.lag_fresh_ticks) fresh.push_back(lag.first);
     }
-    return lowest;                                                    // (the shortest of them: see Config::learn_lead)
+    if (fresh.empty()) return 0;
+    std::sort(fresh.begin(), fresh.end());
+    return std::min(fresh.back(), fresh[fresh.size() / 2] + cfg_.lag_spike_cap_ticks);       // (the longest of them, no more than the cap above their middle: see Config::learn_lead)
 }
 
 uint32_t Prediction::wanted_lead() const noexcept {
@@ -161,9 +164,9 @@ uint32_t Prediction::wanted_lead() const noexcept {
     return std::clamp<uint32_t>((learned != 0 ? learned : estimate_lag_) + cfg_.lead_bias_ticks, cfg_.min_lead_ticks, cfg_.max_lead_ticks);
 }
 
-// The lead falls one tick at a time, the first tick at once and each further one lead_fall_every_ticks later (a lead that is too long is the worse mistake: the order is sealed BEFORE the tick
-// that the player aimed at; but the picture stands still for every tick that the lead falls by, and it must never stand for more than one). It rises at once by two ticks and more (the link
-// has changed); a rise of one tick waits until the delay has asked for it for lead_rise_after_ticks, so that the picture does not move back and forth by a tick with the phase of the host's seals
+// The lead falls one tick at a time, the first tick at once and each further one lead_fall_every_ticks later (the picture stands still for every tick that the lead falls by, and it must never stand for more than
+// one). It rises at once by two ticks and more (the link has changed); a rise of one tick waits until the delay has asked for it for lead_rise_after_ticks, so that the picture does not move back and forth by a
+// tick with the rounding of a ping. (What the host's answers teach rises at once, in on_order_ack(): an order that was late is the answer, and the next one is stamped with the longer lead.)
 void Prediction::update_lead() {
     target_lead_ = wanted_lead();
     if (lead_fall_wait_ > 0) --lead_fall_wait_;
@@ -250,7 +253,8 @@ void Prediction::stop() {
     audio_.clear();
     news_.clear();
     lags_.clear();                                                   // (what the orders taught is about the link and the buffer as they were: a host change, a rejoin or a pause may end with another lag)
-    phase_.clear();                                                  // (so is the phase of the seals and the delay)
+    sent_.clear();                                                   // (and the answers that are still on their way are about orders of a prediction that is gone)
+    planned_.reset();                                                // (a plan that was not used: its number stays taken, and no order has it)
 }
 
 sim::SimulationEngine& Prediction::engine() {
@@ -454,43 +458,73 @@ void Prediction::drop_lost_orders(uint64_t confirmed_tick_now) {
     }
 }
 
-bool Prediction::submit(const sim::Command& command, sim::CommandResult& result) {
+// The state that an order is given to: the one that the screen shows, brought up to date. That state is never behind a turn that is in hand (such a turn was sealed before this order existed), so the prediction
+// first runs up to the turns that it knows (it does so anyway when the buffer is deeper than the lead: the buffer is longer than the delay that was measured, a moment after a burst of turns). False when the
+// order cannot be predicted (off, another seat's, a kind that waits) or the work of bringing the engine up to date was the strike that ended the prediction.
+bool Prediction::ready_for(const sim::Command& command) {
     if (!running_ || suspended_ || command.issuer != cfg_.seat || !predicts(command.type)) return false;
     if (stale_) rebuild(std::max<uint64_t>(display_, confirmed_tick() + lead_), false);
     if (!running_) return false;                                     // (the rebuild went over the budget once too often: the prediction is over)
-    // The order is given to the state that the screen shows. That state is never behind a turn that is in hand (such a turn was sealed before this order existed), so the prediction first runs
-    // up to the turns that it knows (it does so anyway when the buffer is deeper than the lead: the buffer is longer than the delay that was measured, a moment after a burst of turns)
     const uint64_t next_receive = runner_->next_turn_expected();
     if (display_ < next_receive) advance_to(next_receive);
-    if (!running_) return false;
+    return running_;
+}
+
+uint32_t Prediction::take_seq() noexcept {
+    const uint32_t seq = next_seq_++;
+    if (next_seq_ == 0) next_seq_ = 1;                               // (a number is never 0: the host answers an order that carries one)
+    return seq;
+}
+
+std::optional<Prediction::OrderPlan> Prediction::plan_order(const sim::Command& command) {
+    if (!ready_for(command)) return std::nullopt;
+    if (planned_ && planned_->command == command) {                  // the same order again before it was submitted (the first was not sent): the number that it has is still unused
+        planned_->plan.tick = display_;
+        return planned_->plan;
+    }
+    planned_ = Planned{command, OrderPlan{display_, take_seq()}};
+    return planned_->plan;
+}
+
+bool Prediction::submit(const sim::Command& command, sim::CommandResult& result) {
+    const std::optional<Planned> plan = std::move(planned_);         // (whatever happens next, the number that was planned is used up: it may have been sent)
+    planned_.reset();
+    if (!ready_for(command)) return false;
     result = pred_.apply_command(command);
     assumed_.back().push_back(command);
     pending_.push_back(Pending{command, display_, confirmed_tick(), display_});
-    last_order_tick_ = display_;
-    // The tick that a hint of this order names: where the server will seal it, when the phase of its seals says (one more or less than the tick that this screen applies it at is the usual
-    // difference, and a hint a tick off is a whole step of a walking ant); never in a turn that has arrived, and never far from the display tick (then the phase is wrong, not the order)
-    Pending& given = pending_.back();
-    last_order_hint_tick_ = display_;
-    if (time_known_) {
-        given.given_ms = now_ms_;
-        given.timed = true;
-        if (const std::optional<uint64_t> sealed = phase_.sealed_turn_for(now_ms_)) {
-            if (*sealed + 2u >= display_ && *sealed <= display_ + 3u) {
-                const uint64_t k = std::max<uint64_t>(*sealed, next_receive);
-                given.phased = true;
-                given.hint_tick = k;
-                last_order_hint_tick_ = k;
-                ++stats_.order_hints_phase;
-            }
-        }
-    }
+    last_order_tick_ = display_;                                     // (the tick that the order is stamped with, and the tick that a hint of it names: the host seals it there when that turn is still open)
+    last_order_seq_ = plan && plan->command == command ? plan->plan.seq : take_seq();
+    sent_.push_back(Sent{last_order_seq_, confirmed_tick(), display_});
+    while (sent_.size() > 64u) sent_.pop_front();                    // (an answer that is not here by now is not coming)
     ++stats_.commands_predicted;
     return true;
 }
 
+void Prediction::on_order_ack(uint32_t seq, uint64_t open_turn) {
+    const auto it = std::find_if(sent_.begin(), sent_.end(), [seq](const Sent& s) { return s.seq == seq; });
+    if (it == sent_.end()) return;
+    const Sent order = *it;
+    sent_.erase(it);
+    ++stats_.order_acks;
+    if (open_turn > order.stamp) ++stats_.order_acks_late;
+    if (!cfg_.learn_lead) return;
+    const uint64_t lag = open_turn > order.born ? open_turn - order.born : 0u;      // the ticks from the confirmed tick at which the order was given to the first turn that was still open when it arrived
+    const uint32_t learned = static_cast<uint32_t>(std::clamp<uint64_t>(lag, 1u, cfg_.max_lead_ticks));
+    // An answer at the link's own pace ends a stall: the older lags that stand far above it were the stall's, which a second of orders fills the twelve with (Config::lag_forget_ticks)
+    lags_.erase(std::remove_if(lags_.begin(), lags_.end(), [&](const std::pair<uint32_t, uint64_t>& s) { return s.first > learned + cfg_.lag_forget_ticks; }), lags_.end());
+    lags_.emplace_back(learned, confirmed_tick());
+    while (lags_.size() > cfg_.lag_samples) lags_.pop_front();
+    target_lead_ = wanted_lead();
+    if (running_ && !suspended_ && target_lead_ > lead_) {           // (a lag that is longer than the lead raises it at once: the next tick runs the display on, and the next order is stamped with the longer lead)
+        lead_ = target_lead_;
+        ++stats_.lead_changes;
+        lead_high_ticks_ = 0;
+    }
+}
+
 // A live turn is in the queue now. If the prediction has already started its tick, the turn must carry exactly what the prediction applied there.
 void Prediction::on_turn(const TurnMsg& turn) {
-    if (time_known_) phase_.note_arrival(turn.turn, now_ms_);
     if (!running_ || suspended_) return;
     ++stats_.turns_checked;
     const uint64_t n = turn.turn;
@@ -508,12 +542,6 @@ void Prediction::on_turn(const TurnMsg& turn) {
         size_t i = 0;
         while (i < pending_.size() && !(pending_[i].command == cmd)) ++i;
         if (i == pending_.size()) continue;                          // (an order of a kind that is not predicted, or one that was given while the prediction was off)
-        if (cfg_.learn_lead) {                                       // what the lead should have been for this order: the ticks from the confirmed tick that it was given at to its own
-            lags_.emplace_back(static_cast<uint32_t>(std::min<uint64_t>(n >= pending_[i].born ? n - pending_[i].born : 0u, cfg_.max_lead_ticks)), confirmed_tick());
-            while (lags_.size() > cfg_.lag_samples) lags_.pop_front();
-        }
-        if (pending_[i].timed) phase_.note_order(pending_[i].given_ms, n);
-        if (pending_[i].phased && n == pending_[i].hint_tick) ++stats_.order_hints_exact;
         if (pending_[i].tick != n) own_timing = true;                // sealed at another tick than the one at which the prediction applied it
         ++(n == pending_[i].first_tick ? stats_.sealed_exact : n < pending_[i].first_tick ? stats_.sealed_early : stats_.sealed_late);
         if (i > 0) {                                                 // the orders before it were given earlier and have not been sealed: the host did not take them
@@ -534,15 +562,15 @@ void Prediction::on_turn(const TurnMsg& turn) {
         stale_foreign_ = stale_foreign_ || (foreign && !own_timing);
         stale_own_timing_ = stale_own_timing_ || own_timing;
     }
-    // The orders that this turn should have carried and did not are sealed later. The first time that happens to an order it is expected in the NEXT turn (an order is most often one tick
-    // off, by the phase of the host's seals: the lead is the shortest lag of the last orders); an order that the next turn does not carry either stands at the display tick, as if it had
+    // The orders that this turn should have carried and did not are sealed later. The first time that happens to an order it is expected in the NEXT turn (an order that was late is most
+    // often one tick late: the host seals it in the first turn that was open, which is the next one when the lag has grown by a tick); an order that the next turn does not carry either stands at the display tick, as if it had
     // just been given (a correction that left it where it was would be repeated by every turn that comes: one rebuild a turn until it is sealed)
     for (Pending& p : pending_) {
         if (p.tick > n) continue;
         p.tick = p.misses == 0 ? n + 1u : display_;                  // (a rebuild puts it no later than the display tick and never behind a turn in hand)
         ++p.misses;
     }
-    // A hint is a guess: the first turn that comes without it moves it to the next tick (the sealed tick of an order is most often one off), the second one drops it: the sealed stream wins
+    // A hint is a guess: the first turn that comes without it moves it to the next tick (a late order is most often one tick late), the second one drops it: the sealed stream wins
     for (size_t i = 0; i < hints_.size();) {
         if (hints_[i].tick > n) {
             ++i;
@@ -648,6 +676,7 @@ void Prediction::on_tick() {
         base_tick_ = c;
     }
     drop_lost_orders(c);
+    while (!sent_.empty() && c > sent_.front().born + cfg_.pending_timeout_ticks) sent_.pop_front();     // (an order that the host never answered: it was refused, or a host change lost it)
     update_lead();
     if (stale_) return;                                              // (rebuilt when asked for: engine(), submit(): once, with the turns as they are by then)
     advance_to(c + lead_);

@@ -1132,7 +1132,7 @@ void run_prediction_tests() {
         ASSERT_FALSE(bob.net.desynced() || host.net.desynced());
     } TEST_END();
 
-    TEST_CASE("N3.31 Prediction: The Lead Begins At The Lag That The Jitter Buffer And The Round Trip Promise (One Tick Less Than The Delay Counts), Then Learns The Lag Of The Orders That Really Came Back: Twelve Orders Of A Guest, The Lead Is The Lag Itself, An Order Is Put Where The Host Runs It (Hardly One Is Corrected), Nothing Is Lost Or Chased, And The Machines End Identical") {
+    TEST_CASE("N3.31 Prediction: The Lead Begins At The Delay That The Jitter Buffer And The Round Trip Promise, Then Learns The Lag Of The Orders From The Host's Answers (Protocol 30): Twelve Orders Of A Guest, The Lead Is The Lag Itself, An Order Is Put Where The Host Runs It (Hardly One Is Corrected), Nothing Is Lost Or Chased, And The Machines End Identical") {
         Table t;
         ASSERT_TRUE(make_room(t, 1));
         t.keep_up = true;                                                                        // (the jitter buffer and the lag below are those of a link with no lateness: a late loopback would grow the buffer)
@@ -1145,12 +1145,12 @@ void run_prediction_tests() {
         ASSERT_TRUE(t.run_until([&]() { return everybody_running(t) && bob.net.predicting(); }, kUntilRunning));
         t.run(1000);
         Prediction& p = *bob.net.prediction();
-        // before the first order: the promise. The jitter buffer holds one turn and the round trip of a loopback is a few ms: the delay that an order is going to have is 25 + 50 + the ping,
-        // 50 ms of which are the tick that the delay counts and the lag does not: the lag is one tick, and so is the lead
+        // before the first order: the promise. The jitter buffer holds one turn and the round trip of a loopback is a few ms: the delay that an order is going to have is 25 + 50 + the ping, which is two ticks
+        // (the lead starts at the whole of it: the first orders are stamped with a tick that the host has not sealed yet, rather than hoping for the shortest lag)
         ASSERT_TRUE(bob.net.runner() != nullptr && bob.net.runner()->buffer_turns() == 1u);
         ASSERT_TRUE(bob.net.ping_ms().value_or(0u) < 30u);
         ASSERT_EQ(p.learned_lag_ticks(), 0u);
-        ASSERT_EQ(p.lead_ticks(), 1u);
+        ASSERT_EQ(p.lead_ticks(), 2u);
         // twelve orders, 400 ms apart, to the ants of Bob's in turn
         std::vector<uint32_t> ants;
         for (const auto& a : bob.sim.get_world_state().ants) {
@@ -1171,7 +1171,8 @@ void run_prediction_tests() {
         const Prediction::Stats& st = p.stats();
         ASSERT_EQ(st.commands_lost, 0u);
         ASSERT_TRUE(st.commands_predicted >= 12u);
-        ASSERT_TRUE(st.rebuilds <= 3u);                                                          // an order lands where the host runs it (a lead of one bias would make one rebuild an order: twelve)
+        ASSERT_TRUE(st.rebuilds <= 3u);                                                          // an order lands where the host runs it (the host seals it at the tick that it was stamped with)
+        ASSERT_TRUE(st.order_acks >= 11u);                                                       // (the host answered the orders: the lag was learned from the answers)
         host.net.freeze();
         t.run(3000);
         ASSERT_TRUE(all_equal(t));
