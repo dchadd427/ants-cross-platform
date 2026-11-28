@@ -26,6 +26,19 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- **Names: tags change any time, nicknames once a day.** A tag can now be changed as often as you like (it waited a day before, and a change of capitals counted). A nickname changes once every 24 hours after the first (it was once in 30 days), and the old one stays yours for 7 days (it was 30), so that nobody takes it to pass for you. Someone who changed their nickname within the last 30 days may change it again 24 hours after that change.
+- The 3D ant test page /test_3d is gone.
+
+**Fixes:**
+- In Home's "Your name" sheet, a box that you are typing in is never locked, so erasing the text of a box no longer closes the phone's keyboard: when the nickname changed lately, the line still says when it can change again and Save stays off, but you can keep typing or type your old nickname back.
+
+**For operators:**
+- The web server's logs (access and error, which name the visitor's address) are deleted after 14 days, as the Legal page says: nginx writes them in `/var/log/ants/` and the image cuts them (`docker logs ants-beta` shows no request; [how](docs/BUILD_AND_RUN.md#what-the-images-nginx-sends-checks-and-logs)).
+- The hub holds a name that was given up for 7 days, no longer 30: the first time it opens a database that the earlier hub made it cuts the holds it finds to 7 days from the day each name was given up (a note in `meta` says that it is done), and a `you` frame no longer has `tagfree`; the table `nicknames` keeps its column `tag_at`, which nothing writes or reads any more ([`docs/HUB_NICKNAMES.md`](docs/HUB_NICKNAMES.md#the-rules)).
+
 ## v0.22.2 - 2026-11-27 - Other players' ants drawn smoothly, site analytics
 
 **For players:**
@@ -546,19 +559,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f6d76998...1b43c0b5)
 
-## v0.16.7 - 2026-11-14 - Phone hotkey buttons, damage and heal numbers, Automatic picture shape
+## Older versions (v0.16.7 and before)
 
-**For players:**
-- **Hotkey buttons on a phone.** While you play, a phone shows buttons for the game's keys, All ants first, then Stop, Home, Next and None, and a More button for the other keys. Held sideways they form a rail beside the picture, held upright a row under it. The "Touch buttons" row of the game's Settings turns them off.
-- **Damage and heal numbers over the ants.** A small -N shows over an ant that loses hit points and a +N over an ant that is healed at its hill. They are on by default, never shown under fog of war, and the "Damage & heal numbers" row of the game's Settings (Video) switches them off.
-- **Automatic picture shape.** The Picture shape list starts with "Automatic": the shape nearest your screen when the phone is held sideways, 16:9 when held upright, following the way you hold it. A shape you pick is kept for the way the phone was held; every browser starts on Automatic once.
-- **The countdown card's Fullscreen button fits the card on a phone.** It takes the size and place of the card's own button and stays inside the card.
-- **Quick host, My room and Join use your Discord name when you are logged in.** A guest answer is no longer kept until the page is reloaded.
-
-**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.6 page or game still joins. Under the hood: the numbers change nothing in a match.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f9011b41...a795f86a)
-
-## Older versions (v0.16.6 and before)
-
-Every release before v0.16.7, and the long notes of v0.16.6, v0.16.5, v0.16.4, v0.16.3, v0.16.2, v0.16.1, v0.16.0, v0.15.1, v0.15.0, v0.14.1, v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.16.8, and the long notes of v0.16.7, v0.16.6, v0.16.5, v0.16.4, v0.16.3, v0.16.2, v0.16.1, v0.16.0, v0.15.1, v0.15.0, v0.14.1, v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

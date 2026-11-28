@@ -142,6 +142,7 @@ class Store(StoreBase):
         # (the follows, the private messages and the reports of them are additive tables made the same way, by the first follow and the first message; docs/HUB_PEOPLE.md, docs/HUB_MESSAGES.md)
         self.follow_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'follows'").fetchone() is not None
         self.nick_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'login_claim'").fetchone() is not None       # (the nicknames are additive tables as well, made by the first nickname; docs/HUB_NICKNAMES.md)
+        self.shorten_old_holds()
         self.dm_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'dms'").fetchone() is not None
         self.report_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'reports'").fetchone() is not None
         # (the keys of a person's AI and the log of their calls are additive tables as well, made when the first key is made, so a hub that never has a key holds nothing of them: an older hub never looks at
@@ -548,19 +549,30 @@ class Store(StoreBase):
     def ensure_nicknames(self):
         if self.has_nicknames():
             return
+        # (tag_at is written by no one and read by no rule any more, since a tag changes at any time: the column stays so that a hub that is rolled back still reads the table)
         self.db.executescript("""
             BEGIN;
             CREATE TABLE IF NOT EXISTS nicknames (account TEXT PRIMARY KEY, nick TEXT NOT NULL, folded TEXT NOT NULL, key TEXT NOT NULL UNIQUE, nick_at INTEGER NOT NULL, tag TEXT NOT NULL DEFAULT '', tag_at INTEGER NOT NULL DEFAULT 0);
             CREATE TABLE IF NOT EXISTS nick_hold (key TEXT PRIMARY KEY, folded TEXT NOT NULL, account TEXT NOT NULL, until INTEGER NOT NULL);
             CREATE INDEX IF NOT EXISTS nick_hold_account ON nick_hold (account);
             CREATE TABLE IF NOT EXISTS login_claim (account TEXT PRIMARY KEY, key TEXT NOT NULL UNIQUE, until INTEGER NOT NULL);
+            INSERT OR IGNORE INTO meta (k, v) VALUES ('nick_hold_days', 7);
             COMMIT;""")
         self.nick_tables = True
+
+    def shorten_old_holds(self):
+        """Once, when a hub opens a database that its predecessor made: that hub held a name that was given up for 30 days (a row's `until` is the day it was given up plus 30 days), this one holds it for 7. The rows of the old
+        rule lose 23 days (the ones that end by that are no hold any more: nick_owner reads `until`); the note in `meta` says that it is done (a database that this hub made has it from the start), so a second opening changes nothing."""
+        if not self.nick_tables or self.db.execute("SELECT 1 FROM meta WHERE k = 'nick_hold_days'").fetchone() is not None:
+            return
+        with self.transaction():
+            self.db.execute("UPDATE nick_hold SET until = until - ?", (23 * 86400,))
+            self.db.execute("INSERT OR IGNORE INTO meta (k, v) VALUES ('nick_hold_days', 7)")
 
     def nick_row(self, account):
         if not self.has_nicknames():
             return None
-        row = self.db.execute("SELECT nick, key, nick_at, tag, tag_at FROM nicknames WHERE account = ?", (account,)).fetchone()
+        row = self.db.execute("SELECT nick, key, nick_at, tag FROM nicknames WHERE account = ?", (account,)).fetchone()
         return Nick(*row) if row else None
 
     def nick_owner(self, key):
@@ -571,7 +583,7 @@ class Store(StoreBase):
             row = self.db.execute("SELECT account, folded FROM nick_hold WHERE key = ? AND until > ?", (key, int(self.clock()))).fetchone()
         return (row[0], row[1]) if row else None
 
-    def nick_put(self, account, nick, folded, key, nick_at, tag, tag_at, hold_until):
+    def nick_put(self, account, nick, folded, key, nick_at, tag, hold_until):
         for value in (account, nick, folded, key, tag):
             if not isinstance(value, str):
                 raise ValueError("not a nickname")
@@ -588,8 +600,8 @@ class Store(StoreBase):
             if old is not None and old[0] != key and hold_until > now:
                 self.db.execute("INSERT OR REPLACE INTO nick_hold (key, folded, account, until) VALUES (?, ?, ?, ?)", (old[0], old[1], account, int(hold_until)))
             self.db.execute("DELETE FROM nick_hold WHERE key = ? AND account = ?", (key, account))
-            self.db.execute("INSERT INTO nicknames (account, nick, folded, key, nick_at, tag, tag_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (account) DO UPDATE SET nick = excluded.nick, folded = excluded.folded, "
-                            "key = excluded.key, nick_at = excluded.nick_at, tag = excluded.tag, tag_at = excluded.tag_at", (account, nick, folded, key, int(nick_at), tag, int(tag_at)))
+            self.db.execute("INSERT INTO nicknames (account, nick, folded, key, nick_at, tag) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (account) DO UPDATE SET nick = excluded.nick, folded = excluded.folded, "
+                            "key = excluded.key, nick_at = excluded.nick_at, tag = excluded.tag", (account, nick, folded, key, int(nick_at), tag))
         return None
 
     def login_claim(self, account, key, until):

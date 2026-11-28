@@ -42,7 +42,7 @@ PAGES = [("/play", "play.html"), ("/changelog", "changelog.html"), ("/legal", "l
 # every path that the file hands to the game server, the chat hub or the admin page, and one under each prefix: none of them may be a page
 OTHER_PATHS = ["/ws", "/busy", "/stats", "/stats/local", "/replays", "/replays/x.antsrep", "/live", "/live/R-20260101-000000Z", "/lobbies", "/history", "/history/deaths", "/history/x", "/maps", "/maps/all", "/maps/files/A.LVL",
                "/maps/previews/a.webp", "/submissions", "/submissions/abc", "/test-maps", "/admin", "/admin/", "/admin/api/me", "/admin/api/", "/hub/ws", "/hub/login", "/hub/callback", "/hub/me", "/hub/logout", "/hub/forget",
-               "/sprites/a.png", "/sounds/a.wav", "/asset_catalog/", "/asset_catalog/index.html", "/test_3d", "/test_3d/", "/test_3d/compare.html", "/mapmaker_atlas/atlas.json", "/favicon.ico", "/favicon.png", "/catalog", "/viewer", "/front/classic.css", "/home/home.js",
+               "/sprites/a.png", "/sounds/a.wav", "/asset_catalog/", "/asset_catalog/index.html", "/mapmaker_atlas/atlas.json", "/favicon.ico", "/favicon.png", "/catalog", "/viewer", "/front/classic.css", "/home/home.js",
                "/index.wasm", "/index.data", "/index.js", "/lvl_core.wasm"]
 
 
@@ -120,7 +120,7 @@ class TheText(unittest.TestCase):
         body = stats.block_of(HEAD, "map $uri $ants_clean_address ")
         rules = dict(re.findall(r"^\s*(/\S*)\s+(/\S*);", body, re.M))
         want = {"/%s" % name: clean for clean, name in PAGES if clean not in KEPT_FILES}
-        want.update({"/index.html": "/", "/lobby.html": "/", "/watch.html": "/matches", "/asset_catalog/index.html": "/asset_catalog/", "/test_3d/compare.html": "/test_3d/"})      # (every page but the three kept files has its old address in the map)
+        want.update({"/index.html": "/", "/lobby.html": "/", "/watch.html": "/matches", "/asset_catalog/index.html": "/asset_catalog/"})      # (every page but the three kept files has its old address in the map)
         self.assertEqual(rules, want)
         self.assertEqual(re.findall(r"^\s*default\s+(\S+);", body, re.M), ['""'])
         regex = re.findall(r'^\s*"(~[^"]*)"\s+(\S+);', body, re.M)
@@ -254,10 +254,6 @@ class TheRealPagesRun(unittest.TestCase):
             os.makedirs(os.path.join(docroot, "asset_catalog"))
             with open(os.path.join(docroot, "asset_catalog", "index.html"), "w", encoding="utf-8") as f:
                 f.write(classic)
-            os.makedirs(os.path.join(docroot, "test_3d"))
-            for name in ("compare.html", "viewer.html"):
-                with open(os.path.join(docroot, "test_3d", name), "w", encoding="utf-8") as f:
-                    f.write(classic)
             os.makedirs(os.path.join(docroot, "mapmaker_atlas"))
             for name, data in (("atlas.json", b'{"v":1}'), ("ground.png", b"\x89PNG\r\n\x1a\n a stand-in"), ("objects.png", b"\x89PNG\r\n\x1a\n a stand-in")):
                 with open(os.path.join(docroot, "mapmaker_atlas", name), "wb") as f:
@@ -274,7 +270,7 @@ class TheRealPagesRun(unittest.TestCase):
             text = text.replace("/usr/share/nginx/html", docroot).replace("/srv/community-maps", maps).replace("/etc/nginx/ants-map-pages", moved)
             text = text.replace("/var/cache/nginx/ants_stats", folder + "/cache_stats").replace("/var/cache/nginx/ants_history", folder + "/cache_history").replace("/var/cache/nginx/ants_hub_pics", folder + "/cache_hub_pics")
             text = re.sub(r"set \$(\w+) [a-z-]+:\d+;", lambda m: "set $%s 127.0.0.1:%d;" % (m.group(1), dead), text)
-            text = text.replace("access_log /dev/stdout ants_noquery;", "access_log %s/access.log ants_noquery;" % folder).replace("error_log /dev/stderr crit;", "error_log %s/loc.log crit;" % folder)
+            text = text.replace("access_log /var/log/ants/web.log ants_noquery;", "access_log %s/access.log ants_noquery;" % folder).replace("error_log /var/log/ants/web.log", "error_log %s/loc.log" % folder)
             with open(os.path.join(folder, "site.conf"), "w", encoding="utf-8") as f:
                 f.write(text)
             with open(os.path.join(folder, "nginx.conf"), "w", encoding="utf-8") as f:
@@ -354,7 +350,7 @@ class TheRealPagesRun(unittest.TestCase):
         self.assertEqual(self.ask("/watch.html")[0], 301)
 
     def test_every_old_address_with_dot_html_but_three_is_a_301_to_the_clean_address_with_the_query_and_the_clean_address_is_200(self):
-        olds = [("/" + name, clean) for clean, name in PAGES if clean not in KEPT_FILES] + [("/index.html", "/"), ("/lobby.html", "/"), ("/watch.html", "/matches"), ("/asset_catalog/index.html", "/asset_catalog/"), ("/test_3d/compare.html", "/test_3d/")]
+        olds = [("/" + name, clean) for clean, name in PAGES if clean not in KEPT_FILES] + [("/index.html", "/"), ("/lobby.html", "/"), ("/watch.html", "/matches"), ("/asset_catalog/index.html", "/asset_catalog/")]
         for old, clean in olds:
             for query in ("", "?x=1", "?live=ants-X-20260101-000000Z&embed=1", "?q=a%20b"):
                 answer = self.ask(old + query)

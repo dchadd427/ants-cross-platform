@@ -348,7 +348,7 @@
   {
    "id": "the_warm_stage_is_replayed",
    "file": "tools/web_without_docker.py",
-   "old": "SKIPPED_STAGES = (\"emsdk-warm\", \"ant-models-env\")",
+   "old": "SKIPPED_STAGES = (\"emsdk-warm\",)",
    "new": "SKIPPED_STAGES = ()",
    "test": "python3 tests/scripts/test_web_without_docker.py TheReplay",
    "expect": "test_the_stage_that_only_prepares_the_compiler_is_not_played_and_a_cache_mount_is_run_without_the_mount"
