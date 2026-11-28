@@ -261,10 +261,9 @@
     if (hex.length >= total * 2) {
       for (let i = 0; i < total; i++) bits[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16) ? 1 : 0;
     } else {
-      for (let i = 0; i < total; i++) {
-        const ni = i >> 2;
-        if (ni >= hex.length) break;
-        bits[i] = ((parseInt(hex[ni], 16) || 0) >> (i & 3)) & 1;
+      for (let b = 0, i = 0; i < total && b * 2 + 1 < hex.length; b++) {
+        const byte = parseInt(hex.slice(b * 2, b * 2 + 2), 16) || 0;
+        for (let bit = 0; bit < 8 && i < total; bit++, i++) bits[i] = (byte >> bit) & 1;
       }
     }
     return bits;
@@ -299,10 +298,10 @@
     uiState.fog = Boolean(m.fog); uiState.paused = Boolean(m.paused); uiState.bots = m.bots || "medium";
     hud.setFog(uiState.fog); hud.setPaused(uiState.paused); hud.setMapsList(msg.maps, m);
 
-    renderer.uploadMapGrid(cols, rows, tiles);
     if (typeof renderer.buildMaskFromAtlas === "function" && atlasMaskImg) {
       renderer.buildMaskFromAtlas(cols, rows, tiles, atlasMaskImg);
     } else {
+      renderer.uploadMapGrid(cols, rows, tiles, true);
       let ok = false;
       if (m.id) {
         try {
@@ -412,7 +411,8 @@
     }
     for (const id of antStates.keys()) if (!seen.has(id)) { antStates.delete(id); selectedIds.delete(id); }
     for (const ev of (msg.sfx || [])) {
-      hud.sound.play(ev[0], ev.length >= 3 && ev[1] ? ev[1] / 32 : NaN, ev.length >= 3 && ev[2] ? ev[2] / 32 : NaN, cam.target);
+      const hasPos = ev.length >= 3 && (ev[1] > 0 || ev[2] > 0);
+      hud.sound.play(ev[0], hasPos ? ev[1] / 32 : NaN, hasPos ? ev[2] / 32 : NaN, cam.target);
     }
     hud.updateTick(msg, uiState.seat, uiState.activeSeats);
   }
@@ -594,19 +594,21 @@
       const tx = clamp(Math.floor(w[0]), 0, activeWorld.cols - 1), ty = clamp(Math.floor(w[1]), 0, activeWorld.rows - 1);
       sendCommand({ type: "special", ants: ids, tx, ty });
       localMarkers.push({ kind: "special", x: tx + 0.5, z: ty + 0.5, t0: uiState.simTime });
-      hud.sound.playVoice("ability", leadCls); uiState.abilityMode = false; return;
+      if (uiState.mode !== "live") hud.sound.playVoice("ability", leadCls);
+      uiState.abilityMode = false; return;
     }
     const enemy = pickAntAt(cx, cy, "enemy");
     if (enemy) {
       sendCommand({ type: "attack", ants: ids, target_id: enemy.id });
       localMarkers.push({ kind: "attack", x: enemy.rx, z: enemy.rz, t0: uiState.simTime });
-      hud.sound.playVoice("attack", leadCls); return;
+      if (uiState.mode !== "live") hud.sound.playVoice("attack", leadCls);
+      return;
     }
     const w = screenToWorldXZ(cx, cy, 0); if (!w) return;
     const tx = clamp(Math.floor(w[0]), 0, activeWorld.cols - 1), ty = clamp(Math.floor(w[1]), 0, activeWorld.rows - 1);
     sendCommand({ type: "move", ants: ids, tx, ty });
     localMarkers.push({ kind: "move", x: tx + 0.5, z: ty + 0.5, t0: uiState.simTime });
-    hud.sound.playVoice("move", leadCls);
+    if (uiState.mode !== "live") hud.sound.playVoice("move", leadCls);
   }
 
   function selectByMarquee(x0, y0, x1, y1, additive) {

@@ -813,6 +813,34 @@ body {
   line-height: 1.4;
 }
 
+.modal-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-block-start: 4px;
+}
+
+.modal-nav-link {
+  display: inline-flex;
+  align-items: center;
+  block-size: 28px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink-mid);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+
+.modal-nav-link:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--ink-hi);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
 .modal-foot,
 .loading-actions {
   display: flex;

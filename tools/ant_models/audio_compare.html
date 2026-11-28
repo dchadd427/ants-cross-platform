@@ -7,7 +7,7 @@
   <meta name="robots" content="noindex">
   <title>Audio A/B Soundboard — Ants (1998) vs Remastered 44.1 kHz</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23183825'/%3E%3Ccircle cx='16' cy='12' r='5' fill='%23e0b029'/%3E%3Ccircle cx='16' cy='21' r='6' fill='%23297040'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="viewer.css">
+  <link rel="stylesheet" href="viewer.css?v=30">
   <style>
     .ab-shell { display: flex; flex-direction: column; min-block-size: 100dvh; background: var(--bg-page); color: var(--ink-primary); }
     .ab-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 16px; background: var(--bg-chrome); border-bottom: 1px solid var(--border-subtle); position: sticky; top: 0; z-index: 10; }
@@ -36,7 +36,7 @@
     .ab-hint { font-size: 12px; color: var(--ink-muted); margin-left: auto; }
     @media (max-width: 720px) { .ab-deck { grid-template-columns: 1fr; } .ab-hint { display: none; } }
   </style>
-  <script src="play_audio.js" defer></script>
+  <script src="play_audio.js?v=30" defer></script>
 </head>
 <body>
   <div class="ab-shell">
@@ -45,6 +45,7 @@
       <nav class="segmented view-tabs" aria-label="Viewer pages">
         <a class="view-tab" href="./">Compare 1998</a>
         <a class="view-tab" href="demo.html">Map Demo</a>
+        <a class="view-tab" href="play.html">Play 3D</a>
         <a class="view-tab" href="audio_compare.html" aria-current="page">Audio A/B</a>
       </nav>
       <input class="ab-search" id="ab-search" type="search" placeholder="Filter by name, id, or voice role..." aria-label="Filter sound effects">

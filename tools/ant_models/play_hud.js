@@ -163,6 +163,7 @@
       if (Number.isInteger(id)) play(id, NaN, NaN, null);
     }
 
+    ensureExt();
     return { unlock, play, playVoice, getMode: () => mode, setMode };
   }
 
@@ -536,7 +537,11 @@
         disk(gHill.col + 1, gHill.row + 1, 7.5);
         for (const a of st.ants) if (a.team === seat) disk(a.px / 32, a.py / 32, 6.2);
         const hc = [];
-        for (let i = 0; i < rev.length; i += 4) hc.push(((rev[i] || 0) | ((rev[i + 1] || 0) << 1) | ((rev[i + 2] || 0) << 2) | ((rev[i + 3] || 0) << 3)).toString(16));
+        for (let i = 0; i < rev.length; i += 8) {
+          let v = 0;
+          for (let bit = 0; bit < 8 && i + bit < rev.length; bit++) if (rev[i + bit]) v |= (1 << bit);
+          hc.push(v.toString(16).padStart(2, "0"));
+        }
         fogHex = hc.join("");
       }
       onTick({
@@ -753,7 +758,14 @@
         sel.appendChild(opt);
       }
       if (curMap) {
-        if (curMap.file) sel.value = curMap.file;
+        if (curMap.file) {
+          if (!Array.from(sel.options).some((o) => o.value === curMap.file)) {
+            const opt = document.createElement("option");
+            opt.value = curMap.file; opt.textContent = `${curMap.label || curMap.file} (${curMap.file})`;
+            sel.insertBefore(opt, sel.firstChild);
+          }
+          sel.value = curMap.file;
+        }
         if (curMap.bots) $("sel-bots").value = curMap.bots;
         if (Number.isFinite(curMap.seat)) $("sel-seat").value = String(curMap.seat);
         $("chk-fog").checked = Boolean(curMap.fog);
